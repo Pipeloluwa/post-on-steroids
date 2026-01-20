@@ -1,0 +1,8 @@
+<div class="w-screen h-screen flex overflow-hidden transition-colors duration-300"
+    style="background-color: var(--postonsteroids-bg-primary);">
+    <app-menu-component />
+    <div class="flex-1 transition-colors duration-300"
+        style="background-color: var(--postonsteroids-bg-primary); color: var(--postonsteroids-text-primary);">
+        <ng-container *ngComponentOutlet="jsonComponent()" />
+    </div>
+</div>
