@@ -5,7 +5,7 @@ import { MainLayout } from './layouts/main.layout/main.layout';
 @Component({
   standalone: true,
   selector: 'app-root',
-  imports: [MainLayout, RouterOutlet],
+  imports: [RouterOutlet],
   templateUrl: './app.html'
 })
 export class App {

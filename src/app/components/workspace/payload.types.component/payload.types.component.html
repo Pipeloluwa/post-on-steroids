@@ -1,0 +1,9 @@
+<ul class="h-[30px] flex items-center justify-start gap-x-6">
+    @for (type of payloadTypes; track type) {
+    <li>
+        <input type="button" [id]="type" [value]="type" class="cursor-pointer capitalize"
+        [style.borderBottom]="payloadType() === type ? '2px solid var(--postonsteroids-accent)' : '2px solid transparent'"
+        (click)="payloadType.set(type)" />
+    </li>
+    }
+</ul>

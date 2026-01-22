@@ -1,0 +1,32 @@
+@if (show()) {
+<div (click)="onClose.emit()"
+    class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200">
+    <div (click)="$event.stopPropagation()"
+        class="w-full max-w-[440px] bg-(--postonsteroids-bg-secondary) rounded-xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+        <div class="p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-bold text-(--postonsteroids-text-primary) uppercase tracking-wider">Share
+                    Collection</h3>
+                <button (click)="onClose.emit()"
+                    class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                    <mat-icon class="text-[20px] w-[20px] h-[20px] leading-[20px]">close</mat-icon>
+                </button>
+            </div>
+
+            <p class="text-[12px] text-(--postonsteroids-text-secondary) mb-4">Anyone with this link can view and import
+                a copy of this collection.</p>
+
+            <div
+                class="flex items-center gap-x-2 p-2 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-lg">
+                <input readonly [value]="link()"
+                    class="flex-1 bg-transparent border-none outline-none text-[13px] text-(--postonsteroids-text-primary) px-2 overflow-hidden truncate" />
+                <button (click)="onCopy.emit()"
+                    class="flex items-center gap-x-1.5 px-3 py-1.5 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white text-[12px] font-bold rounded-md transition-all cursor-pointer">
+                    <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px]">content_copy</mat-icon>
+                    Copy
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+}

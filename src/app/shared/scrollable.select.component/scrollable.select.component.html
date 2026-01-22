@@ -1,0 +1,42 @@
+<div [tabIndex]="0" (focusout)="onBlur($event)" class="w-full relative cursor-pointer">
+
+  <div (click)="toggleScrollableSelectState(!scrollableSelectState())" (focusout)="onBlur($event)">
+    <ng-content></ng-content>
+  </div>
+
+  @if (scrollableSelectState()) {
+  <div (click)="eventHelpers.preventPropagation($event)" [style.top.px]="verticalPosition()"
+    class="p-2 absolute space-y-1 rounded-[5px] z-20 overflow-hidden flex flex-col" style="background-color: var(--postonsteroids-bg-secondary); 
+        color: var(--postonsteroids-text-primary);
+        border: 1px solid var(--postonsteroids-border);" [style.width.px]="modalWidth()"
+    [style.left.px]="absoluteStartLeft() ? 0 : 'auto'" [style.right.px]="absoluteStartLeft() ? 'auto' : 0">
+
+    @if (searchable()) {
+    <div class="px-2 py-1 mb-1 flex items-center border-b border-(--postonsteroids-border) gap-2">
+      <mat-icon
+        class="text-[14px] w-[14px] h-[14px] leading-[14px] text-(--postonsteroids-text-muted)">search</mat-icon>
+      <input type="text" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Search..."
+        class="bg-transparent border-none outline-none text-[12px] w-full text-(--postonsteroids-text-primary)"
+        (click)="eventHelpers.preventPropagation($event)">
+    </div>
+    }
+
+    <ul class="overflow-auto space-y-1" [style.max-height.px]="modalHeight()">
+      @for (item of filteredOptions(); track $index) {
+      <li (click)="setActiveValue(item)" class="scrollable-select-item cursor-pointer px-2 py-[6px] rounded-[5px]"
+        [style.backgroundColor]="activeValue() === item ? 'var(--postonsteroids-accent)' : 'var(--postonsteroids-bg-tertiary)'"
+        [style.color]="itemColor()(item)">
+        <span class="text-[12px] truncate block">{{item}}</span>
+      </li>
+      } @empty {
+      <li class="px-2 py-[6px] text-[12px] text-(--postonsteroids-text-muted)">
+        No results found
+      </li>
+      }
+    </ul>
+
+  </div>
+  }
+
+
+</div>

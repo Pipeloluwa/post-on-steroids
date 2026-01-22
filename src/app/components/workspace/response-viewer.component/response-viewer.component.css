@@ -1,0 +1,30 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 250px;
+    background-color: var(--postonsteroids-bg-primary);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Custom scrollbar for the content area */
+div::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+div::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+div::-webkit-scrollbar-thumb {
+    background: var(--postonsteroids-border);
+    border-radius: 3px;
+}
+
+div::-webkit-scrollbar-thumb:hover {
+    background: var(--postonsteroids-text-muted);
+}

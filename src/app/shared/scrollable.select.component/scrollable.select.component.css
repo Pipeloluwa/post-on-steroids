@@ -1,0 +1,10 @@
+
+
+  /* Scrollable select item hover */
+  .scrollable-select-item {
+    transition: background-color 0.2s ease;
+  }
+
+  .scrollable-select-item:hover {
+    background-color: var(--postonsteroids-bg-hover) !important;
+  }

@@ -1,0 +1,94 @@
+<div class="w-full h-full flex flex-col">
+    <!-- Tabs and Status -->
+    <div class="flex items-center justify-between px-2 h-[32px]">
+        <div class="flex items-center h-full gap-x-6">
+            @for (tab of tabs; track tab.name) {
+            <div (click)="setTab(tab.name)"
+                class="h-full flex items-center gap-x-1 cursor-pointer relative transition-colors duration-200"
+                [class.text-(--postonsteroids-text-primary)]="activeTab() === tab.name"
+                [class.text-(--postonsteroids-text-secondary)]="activeTab() !== tab.name">
+                <span class="text-[12px] font-medium">{{ tab.name }}</span>
+                @if (tab.count !== null) {
+                <span class="text-[11px] font-semibold text-green-500">({{ tab.count }})</span>
+                }
+                @if (activeTab() === tab.name) {
+                <div class="absolute -bottom-[2px] left-0 right-0 h-[2px] bg-(--postonsteroids-accent)"></div>
+                }
+            </div>
+            }
+        </div>
+
+        <div class="flex items-center gap-x-3 text-[11px] font-medium">
+            <div class="flex items-center gap-x-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-500">
+                <span>200 OK</span>
+            </div>
+            <span class="text-(--postonsteroids-text-muted)">•</span>
+            <span class="text-(--postonsteroids-text-muted)">264 ms</span>
+            <span class="text-(--postonsteroids-text-muted)">•</span>
+            <span class="text-(--postonsteroids-text-muted)">304 B</span>
+        </div>
+    </div>
+
+    <!-- Actions Bar -->
+    <div class="flex items-center justify-between px-2 py-2 border-b border-(--postonsteroids-border)/50">
+        <div class="flex items-center gap-x-1">
+            <div
+                class="flex p-0.5 rounded bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30">
+                <button (click)="setMode('Pretty')"
+                    class="px-4 py-1 text-[11px] rounded transition-all duration-200 cursor-pointer font-medium"
+                    [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Pretty'"
+                    [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Pretty'"
+                    [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Pretty'">
+                    Pretty
+                </button>
+                <button (click)="setMode('Raw')"
+                    class="px-4 py-1 text-[11px] rounded transition-all duration-200 cursor-pointer font-medium"
+                    [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Raw'"
+                    [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Raw'"
+                    [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Raw'">
+                    Raw
+                </button>
+            </div>
+
+            @if (activeMode() === 'Pretty') {
+            <div class="ml-2">
+                <app-scrollable-select-component [activeValue]="responseType()" [optionValues]="responseTypes()"
+                    [verticalPosition]="28" [modalWidth]="100" (outputSelectedValue)="setResponseType($event)">
+                    <div
+                        class="flex items-center gap-x-1.5 px-3 py-1.5 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors">
+                        <span class="text-[11px] font-bold text-(--postonsteroids-text-secondary)">{{ responseType()
+                            }}</span>
+                        <mat-icon
+                            class="text-[14px] w-[14px] h-[14px] leading-[14px] text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                    </div>
+                </app-scrollable-select-component>
+            </div>
+            }
+        </div>
+
+        <div class="flex items-center cursor-pointer" [title]="'Copy Response'" (click)="copyResponse()">
+            <button
+                class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+            </button>
+        </div>
+    </div>
+
+    <!-- Content Area -->
+    <div class="h-full flex overflow-hidden bg-(--postonsteroids-bg-primary)">
+        @if (activeTab() === 'Body' && activeMode() === 'Pretty') {
+        <div class="w-full h-full">
+            <ng-container
+                *ngComponentOutlet="jsonComponent(); inputs: { data: mockResponse(), readOnly: true }"></ng-container>
+        </div>
+        } @else if (activeTab() === 'Body' && activeMode() === 'Raw') {
+        <div class="p-4 font-mono text-[12px] text-(--postonsteroids-text-secondary) break-all cursor-text">
+            {{ mockResponse() | json }}
+        </div>
+        } @else {
+        <div class="flex items-center justify-center h-full text-(--postonsteroids-text-muted)">
+            {{ activeTab() }} content will be here
+        </div>
+        }
+    </div>
+</div>

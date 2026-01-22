@@ -1,65 +1,47 @@
-import { afterNextRender, Component, signal, ViewChild, ViewContainerRef } from '@angular/core';
+import { Component, inject, input, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { JsonEditorComponent, JsonEditorOptions } from 'ang-jsoneditor';
 
 @Component({
   selector: 'app-json-component',
-  imports: [JsonEditorComponent],
+  imports: [JsonEditorComponent, ReactiveFormsModule],
   templateUrl: './json.component.html',
   styleUrl: './json.component.css',
 })
-export class JsonComponent {
-  public editorOptions!: JsonEditorOptions;
-  public data: any = signal({});
-  // optional
-  @ViewChild(JsonEditorComponent, { static: false })
-  editor!: JsonEditorComponent;
+export class JsonComponent implements OnInit {
 
-  constructor() {
-    this.data.set({ "products": [{ "name": "car", "product": [{ "name": "honda", "model": [{ "id": "civic", "name": "civic" }, { "id": "accord", "name": "accord" }, { "id": "crv", "name": "crv" }, { "id": "pilot", "name": "pilot" }, { "id": "odyssey", "name": "odyssey" }] }] }] });
-
-    afterNextRender(async () => {
-      // Wait for fonts to be ready
-      if ('fonts' in document) {
-        try {
-          await (document as any).fonts.ready;
-        } catch (e) {
-          console.warn('Font loading check failed:', e);
-        }
-      }
-
-      // Small delay to ensure browser has rendered fonts
-      setTimeout(() => {
-        if (this.editor && this.editor.getEditor) {
-          try {
-            const aceEditor = this.editor.getEditor();
-            // Force re-calculation of character widths
-            aceEditor.setOptions({
-              fontFamily: "'Source Code Pro', 'Fira Code', monospace",
-              fontSize: "12px"
-            });
-            // Critical for font loading issues
-            (aceEditor.renderer as any).updateCharacterSize();
-            aceEditor.resize(true);
-            aceEditor.renderer.updateFull();
-          } catch (e) {
-            console.warn('Could not resize editor:', e);
-          }
-        }
-      }, 300);
-    });
+  ngOnInit(): void {
+    this.createFormInput();
+    this.makeOptions();
   }
 
-  makeOptions = () => {
-    this.editorOptions = new JsonEditorOptions()
-    // this.editorOptions.modes = ['code', 'text', 'tree', 'view']; // set all allowed modes
+
+  public editorOptions!: JsonEditorOptions;
+  data = input<any>();
+  readOnly = input<boolean>(false);
+
+  private readonly formBuilder = inject(FormBuilder);
+
+  formInput!: FormGroup;
+  createFormInput() {
+    this.formInput = this.formBuilder.group({
+      dataInput: [this.data()]
+    })
+  }
+
+  makeOptions() {
+    this.editorOptions = new JsonEditorOptions();
     this.editorOptions.mode = 'code';
     this.editorOptions.mainMenuBar = false;
-
+    this.editorOptions.onEditable = () => !this.readOnly();
     return this.editorOptions;
   }
 
   getData(event: any) {
-    console.log(event);
+    // console.log(event);
   }
 
+  submitData() {
+    console.log(this.formInput.value);
+  }
 }

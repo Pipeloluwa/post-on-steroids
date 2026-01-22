@@ -1,8 +1,22 @@
-<div class="w-screen h-screen flex overflow-hidden transition-colors duration-300"
-    style="background-color: var(--postonsteroids-bg-primary);">
-    <app-menu-component />
-    <div class="flex-1 transition-colors duration-300"
-        style="background-color: var(--postonsteroids-bg-primary); color: var(--postonsteroids-text-primary);">
-        <ng-container *ngComponentOutlet="jsonComponent()" />
+<div
+    class="w-full h-full flex flex-col overflow-hidden bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) transition-colors duration-300">
+
+    <app-navbar-component [title]="title()" [isLoggedIn]="authService.isLoggedIn()"
+        [userEmail]="authService.userEmail()" (onToggleAuth)="toggleAuthModal()" />
+
+    <div class="h-full flex overflow-hidden">
+        <app-menu-component />
+
+        <div class="w-full h-full flex flex-col overflow-hidden main-content-area">
+            <router-outlet />
+        </div>
     </div>
+
+    <!-- Modals & Notifications -->
+    <app-auth-modal-component [show]="authService.showAuthModal()" [isOtpSent]="authService.isOtpSent()"
+        [isAuthenticating]="authService.isAuthenticating()" [(userEmail)]="authService.userEmail"
+        [(otp)]="authService.otp" (onClose)="toggleAuthModal()" (onSendOtp)="sendOtp()"
+        (onAuthenticate)="authenticate()" (onBackToEmail)="authService.isOtpSent.set(false)" />
+
+    <app-notification-component [show]="notificationService.show()" [message]="notificationService.message()" />
 </div>

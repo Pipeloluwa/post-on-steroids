@@ -1,0 +1,32 @@
+<div class="flex items-center gap-x-2 w-full h-[40px]">
+    <!-- Method and URL Input Container -->
+    <div class="flex-1 flex items-center h-full border rounded-[4px] px-2"
+        style="background-color: var(--postonsteroids-bg-secondary); border-color: var(--postonsteroids-border);">
+
+        <!-- Method Selector -->
+        <div class="h-full flex items-center pr-2" style="border-right: 1px solid var(--postonsteroids-border);">
+            <app-scrollable-select-component [activeValue]="selectedMethod()" [optionValues]="methods"
+                [verticalPosition]="35" [modalWidth]="120" (outputSelectedValue)="setMethod($event)">
+
+                <div class="flex items-center gap-x-1 cursor-pointer">
+                    <span class="font-bold text-[13px] uppercase" [style.color]="getMethodColor(selectedMethod())">
+                        {{ selectedMethod() }}
+                    </span>
+                    <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px] opacity-60">expand_more</mat-icon>
+                </div>
+            </app-scrollable-select-component>
+        </div>
+
+        <!-- URL Input -->
+        <input type="text" [(ngModel)]="url" placeholder="Enter request URL"
+            class="flex-1 bg-transparent border-none outline-none px-3 text-[13px] h-full text-[var(--postonsteroids-text-primary)]" />
+    </div>
+
+    <!-- Send Button Group -->
+    <div class="flex h-full rounded-[4px] overflow-hidden">
+        <button
+            class="bg-[#097BED] hover:bg-[#0766C6] text-white px-10 font-bold text-[13px] flex items-center h-full transition-colors duration-200 cursor-pointer">
+            Send
+        </button>
+    </div>
+</div>

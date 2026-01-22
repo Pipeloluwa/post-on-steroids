@@ -1,4 +1,5 @@
-<div class="block h-full transition-colors duration-300" style="background-color: var(--postonsteroids-bg-primary);">
-    <json-editor [options]="makeOptions()" [data]="data()" (change)="getData($event)">
+<form [formGroup]="formInput" (ngSubmit)="submitData()" class="w-full h-full transition-colors duration-300"
+    [style.background-color]="'var(--postonsteroids-bg-primary)'">
+    <json-editor formControlName="dataInput" [options]="editorOptions" (change)="getData($event)">
     </json-editor>
-</div>
+</form>

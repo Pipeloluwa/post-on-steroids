@@ -1,0 +1,20 @@
+<div class="p-6 h-full bg-(--postonsteroids-bg-primary)">
+    <h2 class="text-xl font-bold text-(--postonsteroids-text-primary) mb-8">Export Data</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div (click)="exportAsJson()"
+            class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group">
+            <div class="flex items-center gap-x-4">
+                <div
+                    class="size-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-all">
+                    <mat-icon class="text-[24px]">code</mat-icon>
+                </div>
+                <div>
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Export as JSON</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Download your collections
+                        in JSON format.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

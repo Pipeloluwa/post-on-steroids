@@ -1,0 +1,50 @@
+<nav
+    class="w-full h-[48px] shrink-0 flex items-center justify-between px-4 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/80 backdrop-blur-md z-40 relative">
+    <!-- Left Section: Spacer -->
+    <div class="flex items-center z-10 w-[40px]"></div>
+
+    <!-- Center Section: Logo & Title -->
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none gap-x-3">
+        <div
+            class="flex items-center gap-x-1.5 px-2 py-1 rounded-lg bg-(--postonsteroids-accent) shadow-lg shadow-(--postonsteroids-accent)/30 select-none pointer-events-auto">
+            <mat-icon class="text-white text-[18px] w-[18px] h-[18px] leading-[18px]">bolt</mat-icon>
+        </div>
+        <span
+            class="text-[16px] font-black tracking-widest bg-linear-to-r from-(--postonsteroids-text-primary) via-(--postonsteroids-text-primary) to-(--postonsteroids-text-muted) bg-clip-text text-transparent select-none">
+            PostOnSteroids
+        </span>
+    </div>
+
+    <!-- Right Section: Auth -->
+    <div class="flex items-center gap-x-4 z-10">
+        <button (click)="onToggleAuth.emit()"
+            class="flex items-center gap-x-2 px-2 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-300 cursor-pointer group">
+            @if (isLoggedIn()) {
+            <div class="flex items-center gap-x-2 pl-1 pr-2">
+                <div
+                    class="size-8 tracking-widest rounded-full bg-linear-to-br from-(--postonsteroids-accent) to-(--postonsteroids-accent-hover) flex items-center justify-center text-[11px] font-bold text-white shadow-inner">
+                    {{ userInitials() }}
+                </div>
+                <div class="flex items-center gap-x-1">
+                    <span
+                        class="text-xs font-bold text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary) transition-colors max-w-[120px] truncate">
+                        {{ userEmail().split('@')[0] }}
+                    </span>
+                    <div
+                        class="pt-1 w-4 h-4 flex items-center justify-center rounded-full bg-green-500 shadow-sm shadow-green-500/50">
+                        <mat-icon
+                            class="text-[10px]! w-4! h-4! flex items-center justify-center text-white font-black">check</mat-icon>
+                    </div>
+                </div>
+            </div>
+            } @else {
+            <div class="flex items-center gap-x-2 px-2 py-0.5">
+                <mat-icon
+                    class="text-[20px] w-[20px] h-[20px] leading-[20px] text-(--postonsteroids-text-secondary)">account_circle</mat-icon>
+                <span
+                    class="text-[12px] font-bold text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary)">Login</span>
+            </div>
+            }
+        </button>
+    </div>
+</nav>

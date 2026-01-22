@@ -1,11 +1,12 @@
 <nav class="w-20 h-full flex flex-col transition-colors duration-300"
     style="background-color: var(--postonsteroids-bg-secondary); border-right: 1px solid var(--postonsteroids-border);">
     <ul class="flex flex-col gap-y-2 p-1">
-        @for (item of menu(); track item) {
-        <li
-            class="menu-item-hover h-[55px] py-1 capitalize flex flex-col justify-center items-center gap-1 rounded-[10px] cursor-pointer transition-all duration-200">
+        @for (item of menu(); track item.name) {
+        <li [routerLink]="item.path"
+            routerLinkActive="bg-(--postonsteroids-accent) text-white shadow-lg shadow-(--postonsteroids-accent)/30"
+            class="h-[55px] py-1 capitalize flex flex-col justify-center items-center gap-1 rounded-[10px] cursor-pointer transition-all duration-300 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">
             <mat-icon class="text-[18px]! size-[18px]!">{{ item.icon }}</mat-icon>
-            <span class="text-[10px]">{{ item.name }}</span>
+            <span class="text-[10px] font-black tracking-tight">{{ item.name }}</span>
         </li>
         }
     </ul>

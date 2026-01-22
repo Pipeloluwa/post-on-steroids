@@ -1,0 +1,31 @@
+<div class="p-6 h-full flex flex-col bg-(--postonsteroids-bg-primary)">
+    <div class="flex items-center justify-between mb-8">
+        <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">History</h2>
+        <button (click)="clearHistory()"
+            class="text-[12px] text-red-500 hover:text-red-400 font-bold transition-colors cursor-pointer">
+            Clear All
+        </button>
+    </div>
+
+    <div class="flex-1 overflow-auto space-y-3">
+        @for (item of history(); track item.id) {
+        <div
+            class="flex items-center gap-x-4 p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/30 transition-all cursor-pointer group">
+            <span [style.color]="getMethodColor(item.method)" class="text-[11px] font-black w-[40px] shrink-0">
+                {{ item.method }}
+            </span>
+            <span class="text-[13px] text-(--postonsteroids-text-primary) flex-1 truncate">
+                {{ item.url }}
+            </span>
+            <span class="text-[11px] text-(--postonsteroids-text-muted)">
+                {{ item.time }}
+            </span>
+        </div>
+        } @empty {
+        <div class="h-full flex flex-col items-center justify-center text-(--postonsteroids-text-muted) opacity-50">
+            <mat-icon class="text-[48px] size-[48px] mb-2">history</mat-icon>
+            <p>No history yet</p>
+        </div>
+        }
+    </div>
+</div>

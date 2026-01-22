@@ -1,0 +1,8 @@
+:host {
+    display: block;
+    width: 100%;
+}
+
+input::placeholder {
+    color: var(--postonsteroids-text-muted);
+}

@@ -1,0 +1,18 @@
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+/* Ensure tabs don't shrink too much */
+.min-w-fit {
+    min-width: fit-content;
+}
+
+/* Optional: Add a subtle shadow or gradient to indicate more tabs exist if scrolling */
+.flex-1 {
+    position: relative;
+}

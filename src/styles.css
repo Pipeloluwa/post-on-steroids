@@ -1,4 +1,5 @@
 /* You can add global styles to this file, and also import other style files */
+/* In Angular, styles in a component's CSS file (even with ::ng-deep) are scoped to the component's tree */
 @import "tailwindcss";
 @import "jsoneditor/dist/jsoneditor.min.css";
 
@@ -51,54 +52,23 @@
 }
 
 body {
-  font-size: 12px;
-  font-family: 'Source Code Pro', 'Fira Code', 'JetBrains Mono', monospace !important;
+  font-size: 13px;
+  font-family: 'Inter', 'Outfit', 'Roboto', system-ui, -apple-system, sans-serif !important;
   background-color: var(--postonsteroids-bg-primary);
   color: var(--postonsteroids-text-primary);
   margin: 0;
   padding: 0;
   transition: background-color 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure buttons and inputs use the standard font, but not the code editor */
+button, input, select, textarea, span, div:not(.ace_editor):not(.ace_editor *) {
+    font-family: inherit;
 }
 
 @layer components {
-  .big-button {
-    @apply h-[60px] min-w-[168px] p-[10px] rounded-[10px] cursor-pointer text-[19px] font-bold;
-    background-color: var(--postonsteroids-accent);
-    color: #FFFFFF;
-    box-shadow: 0 2px 4px var(--postonsteroids-shadow);
-    transition: background-color 0.2s ease;
-  }
-  
-  .big-button:hover {
-    background-color: var(--postonsteroids-accent-hover);
-  }
-
-  .medium-button {
-    @apply h-[40px] min-w-[90px] p-[10px] rounded-[7px] cursor-pointer text-[14px];
-    background-color: var(--postonsteroids-bg-tertiary);
-    color: var(--postonsteroids-text-primary);
-    border: 1px solid var(--postonsteroids-border);
-    box-shadow: 0 1px 2px var(--postonsteroids-shadow);
-    transition: background-color 0.2s ease;
-  }
-  
-  .medium-button:hover {
-    background-color: var(--postonsteroids-bg-hover);
-  }
-
-  .small-button {
-    @apply h-[30px] min-w-[60px] p-[10px] rounded-[5px] cursor-pointer text-[12px];
-    background-color: var(--postonsteroids-bg-tertiary);
-    color: var(--postonsteroids-text-primary);
-    border: 1px solid var(--postonsteroids-border);
-    box-shadow: 0 1px 2px var(--postonsteroids-shadow);
-    transition: background-color 0.2s ease;
-  }
-  
-  .small-button:hover {
-    background-color: var(--postonsteroids-bg-hover);
-  }
-
   /* Menu item hover styles */
   .menu-item-hover {
     color: var(--postonsteroids-text-secondary);
@@ -122,4 +92,11 @@ body {
     color: #FFFFFF;
     transform: scale(1.05);
   }
+
+}
+
+/* Global override to hide "Editing is disabled" tooltip from Ace Editor/JsonEditor */
+.ace_tooltip {
+  display: none !important;
+  visibility: hidden !important;
 }

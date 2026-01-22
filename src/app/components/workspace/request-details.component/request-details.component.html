@@ -1,0 +1,67 @@
+<div class="flex items-center justify-between w-full h-[32px] mb-2">
+    <!-- Left Section: Icon, Name/URL and Collection -->
+    <div class="flex items-center gap-x-3 flex-1">
+        <!-- HTTP Icon (Placeholder style from image) -->
+        <div
+            class="flex items-center justify-center w-6 h-6 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border)">
+            <mat-icon
+                class="text-[14px] w-[14px] h-[14px] leading-[14px] text-(--postonsteroids-accent)">swap_horiz</mat-icon>
+        </div>
+
+        <!-- Request Name Input (styled like the text in image) -->
+        <input type="text" [(ngModel)]="requestName"
+            class="bg-transparent border-none outline-none font-bold text-[13px] text-(--postonsteroids-text-primary) min-w-[200px] flex-1 truncate"
+            placeholder="Request Name" />
+
+        <!-- Collection Selection Dropdown -->
+        <div class="flex items-center gap-x-1 px-2 h-full border-l border-(--postonsteroids-border)">
+            <span class="text-[11px] uppercase font-semibold text-(--postonsteroids-text-muted)">
+                In:
+            </span>
+            <app-scrollable-select-component [activeValue]="selectedCollection()" [optionValues]="collections()"
+                [verticalPosition]="28" [modalWidth]="180" (outputSelectedValue)="setCollection($event)">
+
+                <div
+                    class="flex items-center gap-x-1 cursor-pointer hover:bg-(--postonsteroids-bg-hover) px-2 py-1 rounded transition-colors duration-200">
+                    <span class="text-[12px] text-(--postonsteroids-text-secondary)">
+                        {{ selectedCollection() }}
+                    </span>
+                    <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px] opacity-60">expand_more</mat-icon>
+                </div>
+            </app-scrollable-select-component>
+        </div>
+
+        <!-- Share Collection Button -->
+        <div class="flex items-center ml-2">
+            <button (click)="shareCollection()"
+                class="flex items-center gap-x-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) rounded transition-all duration-200 cursor-pointer">
+                <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px]">share</mat-icon>
+                Share
+            </button>
+        </div>
+    </div>
+
+    <!-- Right Section: Save Button Group -->
+    <div class="flex items-center gap-x-2">
+        <div
+            class="flex h-[30px] rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)">
+            <button
+                class="px-3 flex items-center gap-x-2 text-[12px] font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer">
+                <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px]">save</mat-icon>
+                Save
+            </button>
+
+            <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="120"
+                [absoluteStartLeft]="false" (outputSelectedValue)="onSaveOptionSelected($event)">
+                <div
+                    class="px-1 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center">
+                    <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px]">expand_more</mat-icon>
+                </div>
+            </app-scrollable-select-component>
+        </div>
+    </div>
+
+    <!-- Share Link Modal -->
+    <app-share-modal-component [show]="showShareModal()" [link]="generatedLink()" (onClose)="showShareModal.set(false)"
+        (onCopy)="copyLink()" />
+</div>

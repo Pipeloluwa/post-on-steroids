@@ -1,0 +1,28 @@
+<ul class="h-[30px] flex items-center justify-start gap-x-2">
+    @for (type of bodyTypes; track type) {
+    <li class="h-full px-2 flex items-center justify-center gap-x-1 text-xs">
+        <input type="radio" [id]="type" [value]="type" [(ngModel)]="bodyType" class="cursor-pointer">
+        <label [for]="type" class="cursor-pointer capitalize" style="color: var(--postonsteroids-text-primary);">
+            {{ type }}
+        </label>
+    </li>
+    }
+
+    @if (bodyType() === 'raw') {
+    <li class="w-[100px] flex items-center gap-x-1 text-xs text-blue-400 px-2 py-1 rounded">
+        <!-- Trigger Button -->
+
+
+        <app-scrollable-select-component [activeValue]="rawType()" [optionValues]="rawTypes" [verticalPosition]="30"
+            (outputSelectedValue)="selectRawType($event)" [modalWidth]="150" [absoluteStartLeft]="true">
+
+            <p class="capitalize flex items-center gap-x-1 hover:opacity-80 transition-colors duration-300">
+                {{ rawType() }}
+                <mat-icon style="color: #b4b4b4;">
+                    keyboard_arrow_down
+                </mat-icon>
+            </p>
+        </app-scrollable-select-component>
+    </li>
+    }
+</ul>

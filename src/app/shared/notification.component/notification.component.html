@@ -1,0 +1,11 @@
+@if (show()) {
+<div
+    class="fixed top-6 left-1/2 -translate-x-1/2 z-200 flex items-center gap-x-3 px-4 py-3 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300">
+    <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500/20">
+        <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px] text-green-500">check_circle</mat-icon>
+    </div>
+    <span class="text-[13px] font-medium text-(--postonsteroids-text-primary)">
+        {{ message() }}
+    </span>
+</div>
+}

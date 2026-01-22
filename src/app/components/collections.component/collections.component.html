@@ -1,0 +1,46 @@
+<div class="p-6 h-full flex flex-col gap-6 bg-(--postonsteroids-bg-primary)">
+    <div class="flex items-center justify-between">
+        <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">Collections</h2>
+    </div>
+
+    <div class="flex gap-2">
+        <input type="text" [(ngModel)]="newCollectionName" placeholder="New collection name..."
+            class="flex-1 px-4 py-2 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)">
+        <button (click)="createCollection()"
+            class="px-4 py-2 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white font-bold rounded-lg transition-all cursor-pointer">
+            Create
+        </button>
+    </div>
+
+    <div class="flex-1 overflow-auto space-y-2">
+        @for (item of sortedCollections(); track item.id) {
+        <div
+            class="flex items-center justify-between p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/50 transition-all">
+            @if (editingId() === item.id) {
+            <div class="flex-1 flex gap-2">
+                <input type="text" [(ngModel)]="editNameValue"
+                    class="flex-1 px-3 py-1 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-accent) text-(--postonsteroids-text-primary) outline-none">
+                <button (click)="saveEdit()" class="text-green-500 hover:text-green-400 cursor-pointer">
+                    <mat-icon>check</mat-icon>
+                </button>
+                <button (click)="cancelEdit()" class="text-red-500 hover:text-red-400 cursor-pointer">
+                    <mat-icon>close</mat-icon>
+                </button>
+            </div>
+            } @else {
+            <span class="text-[14px] font-medium text-(--postonsteroids-text-primary)">{{ item.name }}</span>
+            <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button (click)="startEdit(item)"
+                    class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
+                    <mat-icon class="text-[18px]! size-[18px]!">edit</mat-icon>
+                </button>
+                <button (click)="deleteCollection(item.id)"
+                    class="p-1.5 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-500 transition-all cursor-pointer">
+                    <mat-icon class="text-[18px]! size-[18px]!">delete</mat-icon>
+                </button>
+            </div>
+            }
+        </div>
+        }
+    </div>
+</div>
