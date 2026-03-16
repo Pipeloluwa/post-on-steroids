@@ -4,6 +4,8 @@
     <app-navbar-component [title]="title()" [isLoggedIn]="authService.isLoggedIn()"
         [userEmail]="authService.userEmail()" (onToggleAuth)="toggleAuthModal()" />
 
+
+    <!-- Body -->
     <div class="h-full flex overflow-hidden">
         <app-menu-component />
 

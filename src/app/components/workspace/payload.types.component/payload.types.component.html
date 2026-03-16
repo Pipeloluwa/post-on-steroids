@@ -1,9 +1,324 @@
-<ul class="h-[30px] flex items-center justify-start gap-x-6">
+<!-- Tab Buttons -->
+<ul class="h-[30px] flex items-center justify-start gap-x-6 border-b border-(--postonsteroids-border)/50">
     @for (type of payloadTypes; track type) {
     <li>
-        <input type="button" [id]="type" [value]="type" class="cursor-pointer capitalize"
-        [style.borderBottom]="payloadType() === type ? '2px solid var(--postonsteroids-accent)' : '2px solid transparent'"
-        (click)="payloadType.set(type)" />
+        <input type="button" [id]="type" [value]="type"
+            class="cursor-pointer capitalize text-[13px] text-(--postonsteroids-text-secondary) pb-[2px] outline-none"
+            [style.borderBottom]="payloadType() === type ? '2px solid var(--postonsteroids-accent)' : '2px solid transparent'"
+            [style.color]="payloadType() === type ? 'var(--postonsteroids-text-primary)' : ''"
+            (click)="setPayloadType(type)" />
     </li>
     }
 </ul>
+
+<!-- Content Panel -->
+<div class="flex flex-col flex-1 min-h-0 h-full">
+
+    <!-- ─── PARAMS ─── -->
+    @if (payloadType() === 'params') {
+    <div class="flex flex-col">
+        <div class="flex items-center justify-between px-2 py-1 border-b border-(--postonsteroids-border)/20">
+            <span class="text-[11px] text-(--postonsteroids-text-muted) uppercase font-semibold">Query Parameters</span>
+            <button (click)="toggleRawParams()"
+                class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                {{ isRawParams() ? 'Key-Value Edit' : 'Bulk Edit' }}
+            </button>
+        </div>
+
+        @if (!isRawParams()) {
+        <table class="w-full text-[12px] border-collapse">
+            <thead>
+                <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/40">
+                    <th class="w-6 py-1.5 font-medium text-center"></th>
+                    <th class="py-1.5 px-2 font-medium text-left">Key</th>
+                    <th class="py-1.5 px-2 font-medium text-left">Value</th>
+                    <th class="w-8"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (row of params(); track $index) {
+                <tr class="group border-b border-(--postonsteroids-border)/20 hover:bg-(--postonsteroids-bg-hover)/30">
+                    <td class="py-1 text-center">
+                        <input type="checkbox" [checked]="row.enabled"
+                            (change)="updateParam($index, 'enabled', $any($event.target).checked)"
+                            class="accent-(--postonsteroids-accent) cursor-pointer" />
+                    </td>
+                    <td class="py-1 px-2">
+                        <input type="text" [value]="row.key"
+                            (input)="updateParam($index, 'key', $any($event.target).value)" placeholder="Key"
+                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                    </td>
+                    <td class="py-1 px-2">
+                        <input type="text" [value]="row.value"
+                            (input)="updateParam($index, 'value', $any($event.target).value)" placeholder="Value"
+                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                    </td>
+                    <td class="py-1 text-center">
+                        <button (click)="deleteParam($index)"
+                            class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-(--postonsteroids-text-muted) hover:text-red-400">
+                            <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
+                        </button>
+                    </td>
+                </tr>
+                }
+            </tbody>
+        </table>
+        <button (click)="addParam()"
+            class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors">
+            <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Parameter
+        </button>
+        } @else {
+        <textarea [ngModel]="rawParamsText()" (ngModelChange)="rawParamsText.set($event)"
+            placeholder="key: value&#10;key2: value2"
+            class="w-full h-[120px] bg-transparent outline-none p-2 text-[12px] font-mono text-(--postonsteroids-text-primary) resize-none placeholder:text-(--postonsteroids-text-muted) transition-all"></textarea>
+        }
+    </div>
+    }
+
+    <!-- ─── AUTH ─── -->
+    @if (payloadType() === 'auth') {
+    <div class="p-2 flex flex-col gap-y-3">
+        <div class="flex items-center gap-x-3">
+            <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[80px]">Auth Type</span>
+            <div class="flex items-center gap-x-2">
+                @for (type of authTypes; track type) {
+                <label class="flex items-center gap-x-1.5 cursor-pointer">
+                    <input type="radio" [value]="type" [checked]="auth().type === type"
+                        (change)="setAuthType($any(type))" class="accent-(--postonsteroids-accent) cursor-pointer" />
+                    <span class="text-[12px] capitalize text-(--postonsteroids-text-primary)">{{ type }}</span>
+                </label>
+                }
+            </div>
+        </div>
+
+        @if (auth().type === 'bearer') {
+        <div class="flex flex-col gap-y-1 relative">
+            <div class="flex items-center gap-x-3">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[80px]">Token</span>
+                <div
+                    class="flex-1 flex items-center relative bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
+                    <input #tokenInput [type]="isTokenVisible() ? 'text' : 'password'" [value]="auth().token"
+                        (input)="updateAuth('token', $any($event.target).value)"
+                        (click)="handleTokenChange($any($event.target).value)"
+                        (keyup)="handleTokenChange($any($event.target).value)" placeholder="Bearer token or var_name"
+                        class="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono" />
+
+                    <button (click)="toggleTokenVisibility()"
+                        class="ml-2 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer focus:outline-none">
+                        <mat-icon class="text-[16px]! size-[16px]!">{{ isTokenVisible() ? 'visibility_off' :
+                            'visibility' }}</mat-icon>
+                    </button>
+
+                    <!-- Variable Suggestions -->
+                    <app-scrollable-select-component [manualState]="tokenSuggestions().length > 0"
+                        [optionValues]="tokenSuggestions()" [verticalPosition]="32" [modalWidth]="200"
+                        (outputSelectedValue)="setTokenSuggestion($event)">
+                    </app-scrollable-select-component>
+                </div>
+            </div>
+        </div>
+        }
+
+        @if (auth().type === 'none') {
+        <p class="text-[12px] text-(--postonsteroids-text-muted) italic">No authorization configured for this request.
+        </p>
+        }
+    </div>
+    }
+
+    <!-- ─── HEADERS ─── -->
+    @if (payloadType() === 'headers') {
+    <div class="flex flex-col">
+        <div class="flex items-center justify-between px-2 py-1 border-b border-(--postonsteroids-border)/20">
+            <span class="text-[11px] text-(--postonsteroids-text-muted) uppercase font-semibold">Request Headers</span>
+            <button (click)="toggleRawHeaders()"
+                class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                {{ isRawHeaders() ? 'Key-Value Edit' : 'Bulk Edit' }}
+            </button>
+        </div>
+
+        @if (!isRawHeaders()) {
+        <table class="w-full text-[12px] border-collapse">
+            <thead>
+                <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/40">
+                    <th class="w-6 py-1.5 font-medium text-center"></th>
+                    <th class="py-1.5 px-2 font-medium text-left">Header Name</th>
+                    <th class="py-1.5 px-2 font-medium text-left">Value</th>
+                    <th class="w-8"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (row of headers(); track $index) {
+                <tr class="group border-b border-(--postonsteroids-border)/20 hover:bg-(--postonsteroids-bg-hover)/30">
+                    <td class="py-1 text-center">
+                        <input type="checkbox" [checked]="row.enabled"
+                            (change)="updateHeader($index, 'enabled', $any($event.target).checked)"
+                            class="accent-(--postonsteroids-accent) cursor-pointer" />
+                    </td>
+                    <td class="py-1 px-2">
+                        <input type="text" [value]="row.key"
+                            (input)="updateHeader($index, 'key', $any($event.target).value)" placeholder="Header name"
+                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                    </td>
+                    <td class="py-1 px-2">
+                        <input type="text" [value]="row.value"
+                            (input)="updateHeader($index, 'value', $any($event.target).value)" placeholder="Value"
+                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                    </td>
+                    <td class="py-1 text-center">
+                        <button (click)="deleteHeader($index)"
+                            class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-(--postonsteroids-text-muted) hover:text-red-400">
+                            <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
+                        </button>
+                    </td>
+                </tr>
+                }
+            </tbody>
+        </table>
+        <button (click)="addHeader()"
+            class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors">
+            <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Header
+        </button>
+        } @else {
+        <textarea [ngModel]="rawHeadersText()" (ngModelChange)="rawHeadersText.set($event)"
+            placeholder="Header-Name: value&#10;Authorization: Bearer var_name"
+            class="w-full h-[120px] bg-transparent outline-none p-2 text-[12px] font-mono text-(--postonsteroids-text-primary) resize-none placeholder:text-(--postonsteroids-text-muted) transition-all"></textarea>
+        }
+    </div>
+    }
+
+    <!-- ─── BODY ─── -->
+    @if (payloadType() === 'body') {
+    <app-body-types-component></app-body-types-component>
+    }
+
+    <!-- ─── SCRIPTS ─── -->
+    @if (payloadType() === 'scripts') {
+    <div class="p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-x-2">
+                <app-scrollable-select-component [activeValue]="displayScriptTab()" [optionValues]="scriptOptions"
+                    [verticalPosition]="28" [modalWidth]="150" (outputSelectedValue)="setScriptTab($event)">
+                    <div
+                        class="flex items-center justify-between bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-3 py-1 cursor-pointer hover:border-(--postonsteroids-accent)/50">
+                        <span class="text-[12px] font-semibold text-(--postonsteroids-text-primary)">
+                            {{ displayScriptTab() }}
+                        </span>
+                        <mat-icon
+                            class="text-[14px] w-[14px] h-[14px] leading-[14px] ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                    </div>
+                </app-scrollable-select-component>
+            </div>
+
+            <button (click)="runScript(activeScriptTab())"
+                class="flex items-center gap-x-1.5 text-[11px] font-semibold text-(--postonsteroids-bg-primary) bg-(--postonsteroids-accent) px-3 py-1.5 rounded cursor-pointer hover:bg-(--postonsteroids-accent-hover) transition-colors">
+                <mat-icon class="text-[14px]! size-[14px]!">play_arrow</mat-icon>
+                Run
+            </button>
+        </div>
+
+        <div class="w-full h-full flex border border-(--postonsteroids-border) rounded overflow-hidden">
+            <app-monaco-editor [ngModel]="scripts()[activeScriptTab()]"
+                (ngModelChange)="updateScript(activeScriptTab(), $event)" class="flex w-full h-full">
+            </app-monaco-editor>
+        </div>
+    </div>
+    }
+
+
+    <!-- ─── ENCRYPTION CHANNEL ─── -->
+    @if (payloadType() === 'encryption-channel') {
+    <div class="p-2 flex flex-col gap-y-3">
+        <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-x-2">
+                <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-accent)">lock</mat-icon>
+                <span class="text-[13px] font-semibold text-(--postonsteroids-text-primary)">Encryption Channel</span>
+            </div>
+            <div class="flex items-center gap-x-2">
+                <span class="text-[11px] " [class.opacity-40]="!encryption().channelName">Auto-encrypt</span>
+                <div (click)="encryption().channelName && setEncryptionField('autoEncrypt', !encryption().autoEncrypt)"
+                    class="relative w-8 h-4 rounded-full transition-colors duration-200 focus:outline-none shrink-0"
+                    [class.bg-(--postonsteroids-accent)]="encryption().autoEncrypt"
+                    [class.bg-(--postonsteroids-bg-tertiary)]="!encryption().autoEncrypt"
+                    [class.opacity-50]="!encryption().channelName"
+                    [class.cursor-not-allowed]="!encryption().channelName"
+                    [class.cursor-pointer]="encryption().channelName">
+
+                    <div class="absolute top-[2px] left-[2px] w-3 h-3 bg-white rounded-full transition-transform duration-200"
+                        [class.translate-x-4]="encryption().autoEncrypt">
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+
+        <div class="flex items-center gap-x-3">
+            <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[100px]">Channel Name</span>
+            <div class="w-[10%]">
+                <app-scrollable-select-component [activeValue]="encryption().channelName || 'Select Channel'"
+                    [optionValues]="channelNames" [verticalPosition]="32" [modalHeight]="300" [searchable]="true"
+                    (outputSelectedValue)="setEncryptionField('channelName', $event)">
+                    <div
+                        class="flex items-center justify-between bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-3 py-1.5 cursor-pointer hover:border-(--postonsteroids-accent)/30">
+                        <span class="text-[12px] text-(--postonsteroids-text-primary)">{{ encryption().channelName ||
+                            'Select Channel...' }}</span>
+                        <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted)">search</mat-icon>
+                    </div>
+                </app-scrollable-select-component>
+            </div>
+        </div>
+
+
+    </div>
+    }
+
+    <!-- ─── SETTINGS ─── -->
+    @if (payloadType() === 'settings') {
+    <div class="p-2 flex flex-col gap-y-1">
+        <div class="flex items-center justify-between py-2 border-b border-(--postonsteroids-border)/30">
+            <div class="flex flex-col">
+                <span class="text-[12px] font-medium text-(--postonsteroids-text-primary)">Follow Redirects</span>
+                <span class="text-[11px] text-(--postonsteroids-text-muted)">Automatically follow HTTP 3xx redirect
+                    responses</span>
+            </div>
+            <button (click)="toggleSetting('followRedirects', !settings().followRedirects)"
+                class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
+                [class.bg-(--postonsteroids-accent)]="settings().followRedirects"
+                [class.bg-(--postonsteroids-bg-tertiary)]="!settings().followRedirects">
+                <div class="absolute top-[3px] left-[3px] w-[14px] h-[14px] bg-white rounded-full transition-transform duration-200"
+                    [class.translate-x-4]="settings().followRedirects"></div>
+            </button>
+        </div>
+        <div class="flex items-center justify-between py-2 border-b border-(--postonsteroids-border)/30">
+            <div class="flex flex-col">
+                <span class="text-[12px] font-medium text-(--postonsteroids-text-primary)">Verify SSL Certificate</span>
+                <span class="text-[11px] text-(--postonsteroids-text-muted)">Validate the server's SSL/TLS
+                    certificate</span>
+            </div>
+            <button (click)="toggleSetting('verifySsl', !settings().verifySsl)"
+                class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
+                [class.bg-(--postonsteroids-accent)]="settings().verifySsl"
+                [class.bg-(--postonsteroids-bg-tertiary)]="!settings().verifySsl">
+                <div class="absolute top-[3px] left-[3px] w-[14px] h-[14px] bg-white rounded-full transition-transform duration-200"
+                    [class.translate-x-4]="settings().verifySsl"></div>
+            </button>
+        </div>
+        <div class="flex items-center justify-between py-2">
+            <div class="flex flex-col">
+                <span class="text-[12px] font-medium text-(--postonsteroids-text-primary)">Enable Cookies</span>
+                <span class="text-[11px] text-(--postonsteroids-text-muted)">Send and receive cookies
+                    automatically</span>
+            </div>
+            <button (click)="toggleSetting('enableCookies', !settings().enableCookies)"
+                class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
+                [class.bg-(--postonsteroids-accent)]="settings().enableCookies"
+                [class.bg-(--postonsteroids-bg-tertiary)]="!settings().enableCookies">
+                <div class="absolute top-[3px] left-[3px] w-[14px] h-[14px] bg-white rounded-full transition-transform duration-200"
+                    [class.translate-x-4]="settings().enableCookies"></div>
+            </button>
+        </div>
+    </div>
+    }
+
+</div>

@@ -1,9 +1,12 @@
-import { Component, effect, input, output, signal } from '@angular/core';
+import { Component, effect, input, output, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ScrollableSelectComponent } from '../../../shared/scrollable.select.component/scrollable.select.component';
+import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { MatIcon } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
-import { ShareModalComponent } from '../../../shared/share.modal.component/share.modal.component';
+import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
+import { TabStateService } from '../../../shared/services/tab.state.service';
+import { NotificationService } from '../../../shared/services/notification.service';
+import { inject } from '@angular/core';
 
 @Component({
     selector: 'app-request-details-component',
@@ -17,6 +20,10 @@ export class RequestDetailsComponent {
     onNotify = output<string>();
 
     waitingForAuth = signal<boolean>(false);
+    tabStateService = inject(TabStateService);
+    notificationService = inject(NotificationService);
+
+    isSaving = computed(() => this.tabStateService.isSaving());
 
     constructor() {
         effect(() => {
@@ -26,9 +33,23 @@ export class RequestDetailsComponent {
                 setTimeout(() => this.shareCollection(), 500);
             }
         });
+
+        effect(() => {
+            const state = this.tabStateService.activeTabState();
+            if (state) {
+                this.requestName.set(state.name);
+            }
+        });
     }
 
-    requestName = signal<string>('http://acegeld.runasp.net/api/v1/super-admin/users/create-admin');
+    requestName = signal<string>('');
+
+    onNameChange(newName: string) {
+        const id = this.tabStateService.activeTabId();
+        if (id) {
+            this.tabStateService.updateState(id, { name: newName });
+        }
+    }
     collections = signal<string[]>(['My Collection', 'API Project A', 'Personal Sandbox', 'Team Workspace']);
     selectedCollection = signal<string>('My Collection');
     saveOptions = ['Save As...'];
@@ -38,6 +59,7 @@ export class RequestDetailsComponent {
 
     setCollection(collection: string) {
         this.selectedCollection.set(collection);
+        this.tabStateService.fetchCollectionData(collection);
     }
 
     shareCollection() {
@@ -63,5 +85,12 @@ export class RequestDetailsComponent {
         if (option === 'Save As...') {
             alert('Save As clicked!');
         }
+    }
+
+    async saveRequest() {
+        const id = this.tabStateService.activeTabId();
+        if (!id) return;
+        await this.tabStateService.saveToCollection(id);
+        this.onNotify.emit('Request saved successfully!');
     }
 }

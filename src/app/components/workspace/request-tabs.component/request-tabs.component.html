@@ -16,10 +16,10 @@
         </button>
     </div>
 
-    <div (click)="scrollLeft()"
-        class="h-full flex items-center px-1 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)">
+    <button (click)="scrollLeft()" [disabled]="!canScrollLeft()"
+        class="h-full flex items-center px-1 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
         <mat-icon class="text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">chevron_left</mat-icon>
-    </div>
+    </button>
 
     <!-- Tabs Container -->
     <div #scrollContainer
@@ -58,10 +58,10 @@
     </div>
 
     <!-- Scroll Right Arrow -->
-    <div (click)="scrollRight()"
-        class="h-full flex items-center px-1 border-l border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)">
+    <button (click)="scrollRight()" [disabled]="!canScrollRight()"
+        class="h-full flex items-center px-1 border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
         <mat-icon class="text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">chevron_right</mat-icon>
-    </div>
+    </button>
 
 
     <!-- Add Tab Button -->
@@ -80,24 +80,36 @@
         </app-scrollable-select-component>
     </div>
 
-    <!-- Right Section: Auto Auth Toggle -->
-    <div (click)="toggleAutoAuth()"
-        class="flex items-center h-full px-3 border-l border-(--postonsteroids-border) gap-x-2 cursor-pointer"
-        [title]="'We will inteligently read your auth endpoint response and automatically add it as header to every of your request'">
+    <!-- Right Section: Auto Auth & Variables -->
+    <div class="flex items-center h-full border-l border-(--postonsteroids-border)">
 
-        <span class="text-[11px] text-(--postonsteroids-text-secondary) whitespace-nowrap">
-            Auto Auth
-        </span>
+        <!-- Global Variables Button -->
+        <button (click)="openVariableModal()"
+            class="h-full px-3 flex items-center gap-x-2 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors group"
+            title="Manage Global Variables">
+            <mat-icon
+                class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-accent)">variables</mat-icon>
+            <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium">Variables</span>
+        </button>
 
-        <div class="relative w-8 h-4 rounded-full transition-colors duration-200 focus:outline-none cursor-pointer"
-            [class.bg-(--postonsteroids-accent)]="autoAuthEnabled()"
-            [class.bg-(--postonsteroids-bg-tertiary)]="!autoAuthEnabled()">
-            <div class="absolute top-[2px] left-[2px] w-3 h-3 bg-white rounded-full transition-transform duration-200"
-                [class.translate-x-4]="autoAuthEnabled()"></div>
+        <!-- Auto Auth Toggle -->
+        <div (click)="toggleAutoAuth()"
+            class="flex items-center h-full px-3 gap-x-2 cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors"
+            [title]="'We will inteligently read your auth endpoint response and automatically add it as header to every of your request'">
+
+            <span class="text-[11px] text-(--postonsteroids-text-secondary) whitespace-nowrap">
+                Auto Auth
+            </span>
+
+            <div class="relative w-8 h-4 rounded-full transition-colors duration-200 focus:outline-none cursor-pointer"
+                [class.bg-(--postonsteroids-accent)]="autoAuthEnabled()"
+                [class.bg-(--postonsteroids-bg-tertiary)]="!autoAuthEnabled()">
+                <div class="absolute top-[2px] left-[2px] w-3 h-3 bg-white rounded-full transition-transform duration-200"
+                    [class.translate-x-4]="autoAuthEnabled()"></div>
+            </div>
         </div>
-
     </div>
 
-
-
 </div>
+
+<app-variable-modal #variableModal />

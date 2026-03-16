@@ -9,7 +9,7 @@
         </div>
 
         <!-- Request Name Input (styled like the text in image) -->
-        <input type="text" [(ngModel)]="requestName"
+        <input type="text" [(ngModel)]="requestName" (ngModelChange)="onNameChange($event)"
             class="bg-transparent border-none outline-none font-bold text-[13px] text-(--postonsteroids-text-primary) min-w-[200px] flex-1 truncate"
             placeholder="Request Name" />
 
@@ -45,10 +45,14 @@
     <div class="flex items-center gap-x-2">
         <div
             class="flex h-[30px] rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)">
-            <button
-                class="px-3 flex items-center gap-x-2 text-[12px] font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer">
+            <button (click)="saveRequest()" [disabled]="isSaving()"
+                class="px-3 flex items-center gap-x-2 text-[12px] font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                @if (isSaving()) {
+                <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px] animate-spin">sync</mat-icon>
+                } @else {
                 <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px]">save</mat-icon>
-                Save
+                }
+                {{ isSaving() ? 'Saving...' : 'Save' }}
             </button>
 
             <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="120"

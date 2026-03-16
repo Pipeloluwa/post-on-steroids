@@ -64,7 +64,7 @@ body {
 }
 
 /* Ensure buttons and inputs use the standard font, but not the code editor */
-button, input, select, textarea, span, div:not(.ace_editor):not(.ace_editor *) {
+button, input, select, textarea, span, div:not(.ace_editor):not(.ace_editor *):not(.monaco-editor):not(.monaco-editor *) {
     font-family: inherit;
 }
 

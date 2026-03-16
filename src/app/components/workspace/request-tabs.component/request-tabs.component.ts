@@ -1,7 +1,11 @@
-import { Component, signal, computed, inject, ViewChild, ElementRef } from '@angular/core';
+import { Component, signal, computed, inject, ViewChild, ElementRef, afterNextRender } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
-import { ScrollableSelectComponent } from '../../../shared/scrollable.select.component/scrollable.select.component';
+import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
+import { VariableModalComponent } from '../../../shared/components/variable.modal.component/variable.modal.component';
+import { VariableService } from '../../../shared/services/variable.service';
+import { TabStateService } from '../../../shared/services/tab.state.service';
+import { effect } from '@angular/core';
 
 interface RequestTab {
     id: string;
@@ -11,13 +15,44 @@ interface RequestTab {
 }
 
 @Component({
-    standalone: true,
     selector: 'app-request-tabs-component',
-    imports: [CommonModule, MatIcon, ScrollableSelectComponent],
+    imports: [CommonModule, MatIcon, ScrollableSelectComponent, VariableModalComponent],
     templateUrl: './request-tabs.component.html',
     styleUrl: './request-tabs.component.css',
 })
 export class RequestTabsComponent {
+    variableService = inject(VariableService);
+    tabStateService = inject(TabStateService);
+    @ViewChild('variableModal') variableModal!: VariableModalComponent;
+
+    constructor() {
+        const initialTabs = this.tabs();
+        if (initialTabs.length > 0) {
+            initialTabs.forEach(t => {
+                this.tabStateService.updateState(t.id, {
+                    method: t.method,
+                    name: t.name,
+                    isDirty: t.isDirty
+                });
+            });
+            this.tabStateService.setActiveTab(this.activeTabId());
+        }
+
+        effect(() => {
+            const activeId = this.tabStateService.activeTabId();
+            if (activeId && activeId !== this.activeTabId()) {
+                this.activeTabId.set(activeId);
+            }
+        });
+
+        afterNextRender(() => {
+            this.updateScrollState();
+            this.scrollContainer.nativeElement.addEventListener('scroll', () => {
+                this.updateScrollState();
+            });
+        });
+    }
+
     tabs = signal<RequestTab[]>([
         { id: '1', method: 'POST', name: 'http://acegeld.runasp.net/login', isDirty: true },
         { id: '2', method: 'POST', name: 'http://acegeld.runasp.net/registration', isDirty: false },
@@ -47,9 +82,19 @@ export class RequestTabsComponent {
     historyStack = signal<string[]>(['4']);
     historyIndex = signal<number>(0);
 
+    canScrollLeft = signal<boolean>(false);
+    canScrollRight = signal<boolean>(true);
+
     endpoints = computed(() => this.tabs().map(t => t.name));
 
     @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
+
+    updateScrollState() {
+        if (!this.scrollContainer) return;
+        const el = this.scrollContainer.nativeElement;
+        this.canScrollLeft.set(el.scrollLeft > 0);
+        this.canScrollRight.set(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+    }
 
     getMethodColor(method: string): string {
         switch (method.toUpperCase()) {
@@ -66,9 +111,9 @@ export class RequestTabsComponent {
         if (this.activeTabId() === id) return;
 
         this.activeTabId.set(id);
+        this.tabStateService.setActiveTab(id);
 
         if (!isHistoryNav) {
-            // New navigation, clear forward history
             const currentStack = this.historyStack().slice(0, this.historyIndex() + 1);
             this.historyStack.set([...currentStack, id]);
             this.historyIndex.set(this.historyStack().length - 1);
@@ -105,19 +150,20 @@ export class RequestTabsComponent {
     closeTab(id: string, event: Event) {
         event.stopPropagation();
         const currentTabs = this.tabs();
-        if (currentTabs.length === 1) return; // Keep at least one tab
+        if (currentTabs.length === 1) return;
 
         const tabIndex = currentTabs.findIndex(t => t.id === id);
         const filteredTabs = currentTabs.filter(t => t.id !== id);
         this.tabs.set(filteredTabs);
 
         if (this.activeTabId() === id) {
-            // Focus previous or next tab
             const newActiveTab = filteredTabs[tabIndex] || filteredTabs[tabIndex - 1];
             if (newActiveTab) {
                 this.activeTabId.set(newActiveTab.id);
             }
         }
+
+        setTimeout(() => this.updateScrollState(), 50);
     }
 
     toggleAutoAuth() {
@@ -127,12 +173,14 @@ export class RequestTabsComponent {
     scrollLeft() {
         if (this.scrollContainer) {
             this.scrollContainer.nativeElement.scrollBy({ left: -200, behavior: 'smooth' });
+            setTimeout(() => this.updateScrollState(), 300);
         }
     }
 
     scrollRight() {
         if (this.scrollContainer) {
             this.scrollContainer.nativeElement.scrollBy({ left: 200, behavior: 'smooth' });
+            setTimeout(() => this.updateScrollState(), 300);
         }
     }
 
@@ -144,32 +192,30 @@ export class RequestTabsComponent {
             if (activeEl) {
                 activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
             }
-
-            // Wait for DOM update then scroll to active tab
-            // setTimeout(() => {
-            //     const activeEl = this.scrollContainer.nativeElement.querySelector(`#tab${tab.id}`);
-            //     if (activeEl) {
-            //         activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-            //     }
-            // }, 0);
         }
     }
 
     addTab() {
         const newId = (this.tabs().length + 1).toString();
-        this.tabs.update(t => [...t, {
+        const newTab = {
             id: newId,
             method: 'GET',
             name: 'New Request',
             isDirty: false
-        }]);
+        };
+        this.tabs.update(t => [...t, newTab]);
         this.activeTabId.set(newId);
+        this.tabStateService.setActiveTab(newId);
 
-        // Scroll to the end
         setTimeout(() => {
             if (this.scrollContainer) {
                 this.scrollContainer.nativeElement.scrollTo({ left: this.scrollContainer.nativeElement.scrollWidth, behavior: 'smooth' });
+                setTimeout(() => this.updateScrollState(), 300);
             }
         }, 0);
+    }
+
+    openVariableModal() {
+        this.variableModal.isOpen.set(true);
     }
 }
