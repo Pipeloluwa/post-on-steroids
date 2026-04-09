@@ -115,9 +115,8 @@ export class RequestUrlComponent {
         let firstUrlSegment = affectedSegment.substring(0, affectedSegment.lastIndexOf('{') + 1);
         firstUrlSegment += `${suggestion}${firstCloseBracketAlreadyExist ? '}' : this.url()[cursor + 2] !== undefined ? "" : '}}'}`;
 
-        let firstCloseBracketIndex= remainingSegment.indexOf('}');
-        if (this.url()[cursor + 2] !== undefined ) 
-            {remainingSegment= remainingSegment.substring(firstCloseBracketIndex > -1 ? firstCloseBracketIndex : 0);}
+        let firstCloseBracketIndex = remainingSegment.indexOf('}');
+        if (this.url()[cursor + 2] !== undefined) { remainingSegment = remainingSegment.substring(firstCloseBracketIndex > -1 ? firstCloseBracketIndex : 0); }
 
         const newUrl = `${firstUrlSegment}${remainingSegment}`;
         this.url.set(newUrl);

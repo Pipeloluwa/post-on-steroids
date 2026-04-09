@@ -8,7 +8,7 @@ import { ChangeDetectionStrategy } from '@angular/core';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { BodyTypesComponent } from "../body.types.component/body.types.component";
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
-import { SandboxExecutionService, SandboxResult } from '../../../shared/services/sandbox.execution.service';
+
 
 @Component({
   selector: 'app-payload-types-component',
@@ -52,7 +52,7 @@ export class PayloadTypesComponent {
   params = computed(() => this.tabStateService.activeTabState()?.params ?? []);
   headers = computed(() => this.tabStateService.activeTabState()?.headers ?? []);
   auth = computed(() => this.tabStateService.activeTabState()?.auth ?? { type: 'none' as const, token: '' });
-  scripts = computed(() => this.tabStateService.activeTabState()?.scripts ?? { preRequest: '', postResponse: '' });
+  scripts = computed(() => this.tabStateService.activeTabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '' });
   encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncrypt: false, channelName: '' });
   settings = computed(() => this.tabStateService.activeTabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true });
 
@@ -216,8 +216,6 @@ export class PayloadTypesComponent {
     }
   }
 
-  sandboxService = inject(SandboxExecutionService);
-
   // ── Scripts ──────────────────────────────────────────────────────────
   updateScript(phase: 'preRequest' | 'postResponse', code: string) {
     const id = this.tabStateService.activeTabId();
@@ -225,32 +223,13 @@ export class PayloadTypesComponent {
     this.tabStateService.updateState(id, { scripts: { ...this.scripts(), [phase]: code } });
   }
 
-  async runScript(phase: 'preRequest' | 'postResponse') {
-    const code = this.scripts()[phase];
-    if (!code.trim()) return;
-
-    // Create a mock context representing 'pm'
-    const context = {
-      variables: {
-        get: (key: string) => this.variableService.variables().find(v => v.key === key)?.value,
-        set: (key: string, value: string) => {
-          // This will be mutated in the sandbox and returned
-          console.log(`Setting variable ${key} to ${value}`);
-        }
-      },
-      response: { code: 200, json: () => ({ success: true }) },
-      request: { url: this.tabStateService.activeTabState()?.url }
-    };
-
-    const result = await this.sandboxService.executeScript(code, context);
-
-    if (result.success) {
-      console.log('Script ran successfully', result.context);
-      alert(`${phase} executed successfully! Check console for context output.`);
-    } else {
-      console.error('Script Error', result.error);
-      alert(`Error running ${phase}:\n${result.error}`);
-    }
+  resetScript() {
+    const id = this.tabStateService.activeTabId();
+    if (!id) return;
+    const defaultState = this.tabStateService.getDefaultState(id);
+    const phase = this.activeScriptTab();
+    const defaultScript = defaultState.scripts[phase];
+    this.updateScript(phase, defaultScript);
   }
 
   // ── Encryption ───────────────────────────────────────────────────────

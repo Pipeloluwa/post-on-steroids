@@ -1,5 +1,6 @@
 @if (isBrowser) {
 <ngx-monaco-editor class="w-full h-full monaco-wrapper-custom" [options]="monacoOptions()"
-    [class.opacity-50]="disabled()" [ngModel]="value()" (ngModelChange)="onValueChange($event)">
+    [class.opacity-50]="disabled()" [ngModel]="value()" (ngModelChange)="onValueChange($event)"
+    (onInit)="onEditorInit($event)">
 </ngx-monaco-editor>
 }

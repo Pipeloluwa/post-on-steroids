@@ -30,7 +30,8 @@
             </app-scrollable-select-component>
 
             @if (url().includes('{{')) {
-            <input type="text" [value]="resolvedUrl()" readonly class="px-3 text-[10px] text-(--postonsteroids-accent) opacity-70 truncate max-w-full">
+            <input type="text" [value]="resolvedUrl()" readonly
+                class="px-3 text-[10px] text-(--postonsteroids-accent) opacity-70 truncate max-w-full">
             }
         </div>
     </div>

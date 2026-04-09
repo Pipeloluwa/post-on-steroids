@@ -21,6 +21,8 @@ export interface AuthState {
 export interface ScriptsState {
     preRequest: string;
     postResponse: string;
+    preRequestConsole: string;
+    postResponseConsole: string;
 }
 
 export interface CookieRow {
@@ -164,7 +166,7 @@ export class TabStateService {
         });
     }
 
-    private getDefaultState(id: string): RequestState {
+    getDefaultState(id: string): RequestState {
         return {
             id,
             url: '',
@@ -178,8 +180,13 @@ export class TabStateService {
                 { enabled: true, key: 'Accept', value: 'application/json' },
                 { enabled: true, key: '', value: '' }
             ],
-            auth: { type: 'none', token: ''},
-            scripts: { preRequest: '', postResponse: '' },
+            auth: { type: 'none', token: '' },
+            scripts: {
+                preRequest: 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
+                postResponse: 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}',
+                preRequestConsole: '',
+                postResponseConsole: ''
+            },
             encryption: { algorithm: 'none', key: '', autoEncrypt: false, channelName: '' },
             settings: { followRedirects: true, verifySsl: true, enableCookies: true },
             bodyType: 'none',
@@ -351,8 +358,10 @@ export class TabStateService {
             bodyType: method === 'POST' || method === 'PUT' ? 'raw' : 'none',
             rawType: 'JSON',
             scripts: {
-                preRequest: method === 'POST' ? `// Pre-request script\nconst timestamp = Date.now();\npm.variables.set("timestamp", timestamp);` : '',
-                postResponse: `// Post-response script\npm.test("Status is OK", () => {\n    pm.expect(pm.response.code).to.be.oneOf([200, 201]);\n});`,
+                preRequest: method === 'POST' ? `function preScript(headers, body, params){\n    const timestamp = Date.now();\n    headers.push({ enabled: true, key: 'X-Timestamp', value: String(timestamp) });\n}` : 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
+                postResponse: `function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}`,
+                preRequestConsole: method === 'POST' ? 'Setting variable timestamp to 1710587421932\nScript evaluated successfully.' : '',
+                postResponseConsole: 'Executing test: Status is OK\nResult: PASS'
             },
             encryption: { algorithm: 'none', key: '', autoEncrypt: false, channelName: '' },
             settings: { followRedirects: true, verifySsl: true, enableCookies: true },

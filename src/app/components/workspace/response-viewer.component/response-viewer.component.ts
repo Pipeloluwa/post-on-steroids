@@ -1,5 +1,6 @@
 import { Component, signal, computed, inject, Type, afterNextRender } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
@@ -8,7 +9,7 @@ import { ChangeDetectionStrategy } from '@angular/core';
 @Component({
     selector: 'app-response-viewer-component',
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [CommonModule, MatIcon, ScrollableSelectComponent],
+    imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent],
     templateUrl: './response-viewer.component.html',
     styleUrl: './response-viewer.component.css'
 })
@@ -51,7 +52,23 @@ export class ResponseViewerComponent {
         { name: 'Cookies', count: this.responseCookies().length || null },
         { name: 'Headers', count: this.responseHeaders().filter(h => h.enabled).length || null },
         { name: 'Test Results', count: this.testResults().length || null },
+        { name: 'Script Console', count: null },
     ]);
+
+    // Script Console tab state
+    activeScriptConsoleTab = signal<'preRequest' | 'postResponse'>('postResponse');
+    scriptConsoleOptions = ['Pre-request Script', 'Post-response Script'];
+    displayScriptConsoleTab = computed(() => this.activeScriptConsoleTab() === 'preRequest' ? 'Pre-request Script' : 'Post-response Script');
+    activeScriptConsoleOutput = computed(() => {
+        const scripts = this.tabStateService.activeTabState()?.scripts;
+        if (!scripts) return '';
+        return this.activeScriptConsoleTab() === 'preRequest' ? scripts.preRequestConsole : scripts.postResponseConsole;
+    });
+
+    setScriptConsoleTab(option: string) {
+        if (option === 'Pre-request Script') this.activeScriptConsoleTab.set('preRequest');
+        else if (option === 'Post-response Script') this.activeScriptConsoleTab.set('postResponse');
+    }
 
     statusColor = computed(() => {
         const s = this.responseStatus();

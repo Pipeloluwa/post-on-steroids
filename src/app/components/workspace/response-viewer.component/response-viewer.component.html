@@ -212,5 +212,39 @@
         </div>
         }
 
+        <!-- ─── SCRIPT CONSOLE ─── -->
+        @if (activeTab() === 'Script Console') {
+        <div class="w-full h-full overflow-hidden flex flex-col p-2 gap-y-2">
+            <div class="flex items-center">
+                <app-scrollable-select-component [activeValue]="displayScriptConsoleTab()"
+                    [optionValues]="scriptConsoleOptions" [verticalPosition]="28" [modalWidth]="150"
+                    (outputSelectedValue)="setScriptConsoleTab($event)">
+                    <div
+                        class="flex items-center justify-between bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-3 py-1 cursor-pointer hover:border-(--postonsteroids-accent)/50">
+                        <span class="text-[12px] font-semibold text-(--postonsteroids-text-primary)">
+                            {{ displayScriptConsoleTab() }}
+                        </span>
+                        <mat-icon
+                            class="text-[14px] w-[14px] h-[14px] leading-[14px] ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                    </div>
+                </app-scrollable-select-component>
+            </div>
+
+            <div
+                class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-tertiary)/30 relative">
+                @if (activeScriptConsoleOutput()) {
+                <pre
+                    class="w-full h-full p-3 font-mono text-[12px] text-(--postonsteroids-text-secondary) whitespace-pre-wrap overflow-auto">{{ activeScriptConsoleOutput() }}</pre>
+                } @else {
+                <div
+                    class="absolute inset-0 flex flex-col items-center justify-center gap-y-2 text-(--postonsteroids-text-muted)">
+                    <mat-icon class="text-[36px]! size-[36px]! opacity-30">terminal</mat-icon>
+                    <span class="text-[12px]">No console output</span>
+                </div>
+                }
+            </div>
+        </div>
+        }
+
     </div>
 </div>
