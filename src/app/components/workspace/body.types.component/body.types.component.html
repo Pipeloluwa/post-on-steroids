@@ -23,7 +23,7 @@
 </ul>
 
 <!-- Body Content Panel -->
-<div [class.mt-1]="bodyType() !== 'raw'">
+<div class="flex-1 flex flex-col min-h-0" [class.mt-1]="bodyType() !== 'raw'">
 
     <!-- ─── NONE ─── -->
     @if (bodyType() === 'none') {
@@ -71,7 +71,7 @@
                             }
                             <input type="file" #fileInput class="hidden" (change)="onFileSelected($index, $event)" />
                             <button (click)="fileInput.click()"
-                                class="px-2 py-0.5 text-[10px] bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) rounded border border-(--postonsteroids-border)/50 w-[150px] transition-colors cursor-pointer whitespace-nowrap">
+                                class="px-2 py-0.5 text-[10px] bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) rounded border border-(--postonsteroids-border) transition-colors cursor-pointer whitespace-nowrap">
                                 Select File
                             </button>
                         </div>
@@ -110,6 +110,26 @@
     </div>
     }
 
-
+    <!-- ─── RAW ─── -->
+    @if (bodyType() === 'raw') {
+    <div
+        class="w-full flex-1 flex flex-col min-h-0 border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-secondary)">
+        @if (rawType() === 'JSON') {
+            @if (jsonComponentModule(); as component) {
+            <ng-container *ngComponentOutlet="component; 
+                        inputs: { data: tabStateService.activeTabState()?.rawBodyJson || '{}' };
+                        outputs: { dataChange: onJsonDataChange.bind(this) }">
+            </ng-container>
+            } @else {
+            <div class="p-4 text-xs text-(--postonsteroids-text-muted)">Initializing JSON Editor...</div>
+            }
+        } @else {
+        <app-monaco-editor [ngModel]="tabStateService.activeTabState()?.rawBodyXml || ''"
+            (ngModelChange)="tabStateService.updateState(tabStateService.activeTabId()!, { rawBodyXml: $event, rawBody: $event })"
+                [language]="rawType().toLowerCase()" class="flex-1 w-full h-full">
+            </app-monaco-editor>
+        }
+    </div>
+    }
 
 </div>

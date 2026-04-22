@@ -28,3 +28,15 @@ div::-webkit-scrollbar-thumb {
 div::-webkit-scrollbar-thumb:hover {
     background: var(--postonsteroids-text-muted);
 }
+
+@keyframes shimmer {
+    0% { background-position: -468px 0 }
+    100% { background-position: 468px 0 }
+}
+
+.animate-shimmer {
+    background: linear-gradient(to right, var(--postonsteroids-bg-tertiary) 8%, var(--postonsteroids-bg-hover) 18%, var(--postonsteroids-bg-tertiary) 33%);
+    background-size: 800px 104px;
+    animation: shimmer 1.5s linear infinite;
+    border-radius: 4px;
+}

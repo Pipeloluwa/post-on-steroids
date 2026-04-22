@@ -1,6 +1,7 @@
-import { Component, input, output, computed } from '@angular/core';
+import { Component, input, output, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
+import { SidebarService } from '../../services/sidebar.service';
 
 @Component({
     selector: 'app-navbar-component',
@@ -14,6 +15,11 @@ export class NavbarComponent {
     userEmail = input.required<string>();
 
     onToggleAuth = output<void>();
+    sidebarService = inject(SidebarService);
+
+    toggleSidebar() {
+        this.sidebarService.toggle();
+    }
 
     userInitials = computed(() => {
         const email = this.userEmail();

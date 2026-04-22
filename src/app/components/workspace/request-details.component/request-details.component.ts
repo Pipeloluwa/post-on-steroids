@@ -52,7 +52,7 @@ export class RequestDetailsComponent {
     }
     collections = signal<string[]>(['My Collection', 'API Project A', 'Personal Sandbox', 'Team Workspace']);
     selectedCollection = signal<string>('My Collection');
-    saveOptions = ['Save As...'];
+    saveOptions = ['Export Endpoint', 'Export Collection'];
 
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
@@ -82,9 +82,30 @@ export class RequestDetailsComponent {
     }
 
     onSaveOptionSelected(option: string) {
-        if (option === 'Save As...') {
-            alert('Save As clicked!');
+        if (option === 'Export Endpoint') {
+            const state = this.tabStateService.activeTabState();
+            if (!state) return;
+            this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
+        } else if (option === 'Export Collection') {
+            const collectionName = this.selectedCollection();
+            const collectionRequests = this.tabStateService.savedCollection().filter(r => r.name === collectionName);
+            const exportData = {
+                collection: collectionName,
+                exportedAt: new Date().toISOString(),
+                requests: collectionRequests
+            };
+            this.downloadJson(exportData, `collection_${collectionName}.json`);
         }
+    }
+
+    private downloadJson(data: any, filename: string) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
     }
 
     async saveRequest() {

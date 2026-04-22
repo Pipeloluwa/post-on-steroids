@@ -3,6 +3,9 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
 
+import { TabStateService } from '../../shared/services/tab.state.service';
+import { inject } from '@angular/core';
+
 interface Collection {
     id: string;
     name: string;
@@ -16,6 +19,7 @@ interface Collection {
     styleUrl: './collections.component.css'
 })
 export class CollectionsComponent {
+    tabStateService = inject(TabStateService);
     collections = signal<Collection[]>([
         { id: '1', name: 'My Collection', createdAt: Date.now() - 10000 },
         { id: '2', name: 'API Project A', createdAt: Date.now() - 5000 },

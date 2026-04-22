@@ -1,24 +1,44 @@
-<nav class="w-20 h-full flex flex-col transition-colors duration-300"
+<nav [class.w-16]="sidebarService.isCollapsed()" [class.w-52]="!sidebarService.isCollapsed()"
+    class="h-full flex flex-col transition-all duration-300 overflow-hidden"
     style="background-color: var(--postonsteroids-bg-secondary); border-right: 1px solid var(--postonsteroids-border);">
-    <ul class="flex flex-col gap-y-2 p-1">
+    
+    <ul class="flex flex-col gap-y-2 p-2 mt-4">
         @for (item of menu(); track item.name) {
         <li [routerLink]="item.path"
             routerLinkActive="bg-(--postonsteroids-accent) text-white shadow-lg shadow-(--postonsteroids-accent)/30"
-            class="h-[55px] py-1 capitalize flex flex-col justify-center items-center gap-1 rounded-[10px] cursor-pointer transition-all duration-300 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">
-            <mat-icon class="text-[18px]! size-[18px]!">{{ item.icon }}</mat-icon>
-            <span class="text-[10px] font-black tracking-tight">{{ item.name }}</span>
+            class="h-[45px] py-2 px-3 capitalize flex items-center gap-3 rounded-xl cursor-pointer transition-all duration-300 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">
+            <mat-icon class="text-[20px]! size-[20px]! shrink-0">{{ item.icon }}</mat-icon>
+            @if (!sidebarService.isCollapsed()) {
+            <span class="text-[13px] font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ item.name }}</span>
+            }
         </li>
         }
     </ul>
 
-    <!-- Theme Toggle Button -->
-    <div class="mt-auto p-4 flex justify-center">
-        <button
-            class="theme-toggle-hover w-12 h-12 rounded-full border-0 flex items-center justify-center cursor-pointer transition-all duration-200 shadow-md active:scale-95"
-            (click)="toggleTheme()"
-            [attr.aria-label]="themeService.isDarkMode() ? 'Switch to light mode' : 'Switch to dark mode'">
-            <mat-icon class="text-[20px]! size-[20px]!">{{ themeService.isDarkMode() ? 'light_mode' : 'dark_mode'
-                }}</mat-icon>
-        </button>
+    <div class="mt-auto p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between p-1 bg-(--postonsteroids-bg-tertiary) rounded-xl border border-(--postonsteroids-border)/50 transition-all duration-300 gap-1 gap-y-4"
+            [class.flex-col]="sidebarService.isCollapsed()">
+            <button (click)="themeService.setTheme('light')" 
+                class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"
+                [class.bg-(--postonsteroids-bg-primary)]="themeService.theme() === 'light'"
+                [class.text-(--postonsteroids-accent)]="themeService.theme() === 'light'"
+                [class.shadow-sm]="themeService.theme() === 'light'">
+                <mat-icon class="text-[18px]! size-[18px]!">light_mode</mat-icon>
+            </button>
+            <button (click)="themeService.setTheme('dark')" 
+                class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"
+                [class.bg-(--postonsteroids-bg-primary)]="themeService.theme() === 'dark'"
+                [class.text-(--postonsteroids-accent)]="themeService.theme() === 'dark'"
+                [class.shadow-sm]="themeService.theme() === 'dark'">
+                <mat-icon class="text-[18px]! size-[18px]!">dark_mode</mat-icon>
+            </button>
+            <button (click)="themeService.setTheme('system')" 
+                class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"
+                [class.bg-(--postonsteroids-bg-primary)]="themeService.theme() === 'system'"
+                [class.text-(--postonsteroids-accent)]="themeService.theme() === 'system'"
+                [class.shadow-sm]="themeService.theme() === 'system'">
+                <mat-icon class="text-[18px]! size-[18px]!">settings_brightness</mat-icon>
+            </button>
+        </div>
     </div>
 </nav>

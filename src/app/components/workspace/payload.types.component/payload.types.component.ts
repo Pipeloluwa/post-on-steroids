@@ -16,6 +16,9 @@ import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.
   imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent, BodyTypesComponent, MonacoEditorComponent],
   templateUrl: './payload.types.component.html',
   styleUrl: './payload.types.component.css',
+  host: {
+    class: 'flex-1 flex flex-col min-h-0'
+  }
 })
 export class PayloadTypesComponent {
   tabStateService = inject(TabStateService);

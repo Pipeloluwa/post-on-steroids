@@ -1,20 +1,56 @@
-import { Component, signal, inject, computed } from '@angular/core';
+import { Component, signal, inject, computed, PLATFORM_ID, Type } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService, FormDataRow } from '../../../shared/services/tab.state.service';
 import { ChangeDetectionStrategy } from '@angular/core';
+import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
 @Component({
   selector: 'app-body-types-component',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule],
+  imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, MonacoEditorComponent],
   templateUrl: './body.types.component.html',
   styleUrl: './body.types.component.css',
+  host: {
+    class: 'flex-1 flex flex-col min-h-0'
+  }
 })
 export class BodyTypesComponent {
+  private platformId = inject(PLATFORM_ID);
+  isBrowser = isPlatformBrowser(this.platformId);
   tabStateService = inject(TabStateService);
+  
+  // Dynamically loaded JSON component
+  jsonComponentModule = signal<Type<any> | null>(null);
+
+  constructor() {
+    if (this.isBrowser) {
+      this.loadJsonComponent();
+    }
+  }
+
+  async loadJsonComponent() {
+    try {
+      const { JsonComponent } = await import('../../../shared/components/json.component/json.component');
+      this.jsonComponentModule.set(JsonComponent);
+    } catch (e) {
+      console.error('Failed to load JSON component:', e);
+    }
+  }
+
+  onJsonDataChange(data: any) {
+    const id = this.tabStateService.activeTabId();
+    if (id) {
+      const stringified = JSON.stringify(data, null, 2);
+      this.tabStateService.updateState(id, { 
+        rawBodyJson: stringified,
+        rawBody: stringified
+      });
+    }
+  }
 
   bodyTypes = ['none', 'form-data', 'raw'];
   rawTypes = ['JSON', 'XML'];
@@ -31,7 +67,14 @@ export class BodyTypesComponent {
 
   selectRawType(type: string) {
     const id = this.tabStateService.activeTabId();
-    if (id) this.tabStateService.updateState(id, { rawType: type });
+    if (id) {
+      const state = this.tabStateService.activeTabState();
+      const newRawBody = type === 'JSON' ? state?.rawBodyJson : state?.rawBodyXml;
+      this.tabStateService.updateState(id, { 
+        rawType: type,
+        rawBody: newRawBody
+      });
+    }
   }
 
   // Form-data CRUD

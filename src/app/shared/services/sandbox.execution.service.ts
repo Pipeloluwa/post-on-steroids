@@ -4,6 +4,7 @@ import { isPlatformBrowser } from '@angular/common';
 export interface SandboxResult {
     success: boolean;
     error?: string;
+    logs?: string;
     context: any; // Mutated variables or other state returned from the sandbox
 }
 
@@ -38,6 +39,13 @@ export class SandboxExecutionService {
             const { id, code, context } = event.data;
             if (!id) return;
 
+            let logs = [];
+            const originalConsoleLog = console.log;
+            console.log = (...args) => {
+              logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
+              originalConsoleLog(...args);
+            };
+
             let pm = { ...context }; // Mocked pm object
             
             try {
@@ -50,10 +58,12 @@ export class SandboxExecutionService {
 
               await executeInSandbox(pm);
 
-              // Send back mutated context
-               event.source.postMessage({ id, success: true, context: pm }, event.origin);
+              // Send back mutated context and logs
+              event.source.postMessage({ id, success: true, context: pm, logs: logs.join('\\n') }, event.origin);
             } catch (err) {
-               event.source.postMessage({ id, success: false, error: err.toString() }, event.origin);
+              event.source.postMessage({ id, success: false, error: err.toString(), logs: logs.join('\\n') }, event.origin);
+            } finally {
+              console.log = originalConsoleLog;
             }
           });
         </script>
@@ -82,6 +92,7 @@ export class SandboxExecutionService {
                     resolve({
                         success: event.data.success,
                         error: event.data.error,
+                        logs: event.data.logs,
                         context: event.data.context
                     });
                 }

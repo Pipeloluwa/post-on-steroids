@@ -16,31 +16,32 @@
         @for (item of sortedCollections(); track item.id) {
         <div
             class="flex items-center justify-between p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/50 transition-all">
+            
             @if (editingId() === item.id) {
-            <div class="flex-1 flex gap-2">
-                <input type="text" [(ngModel)]="editNameValue"
-                    class="flex-1 px-3 py-1 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-accent) text-(--postonsteroids-text-primary) outline-none">
-                <button (click)="saveEdit()" class="text-green-500 hover:text-green-400 cursor-pointer">
-                    <mat-icon>check</mat-icon>
-                </button>
-                <button (click)="cancelEdit()" class="text-red-500 hover:text-red-400 cursor-pointer">
-                    <mat-icon>close</mat-icon>
-                </button>
+                <div class="flex-1 flex gap-2">
+                    <input type="text" [(ngModel)]="editNameValue"
+                        class="flex-1 px-3 py-1 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-accent) text-(--postonsteroids-text-primary) outline-none">
+                    <button (click)="saveEdit()" class="text-green-500 hover:text-green-400 cursor-pointer">
+                        <mat-icon>check</mat-icon>
+                    </button>
+                    <button (click)="cancelEdit()" class="text-red-500 hover:text-red-400 cursor-pointer">
+                        <mat-icon>close</mat-icon>
+                    </button>
+                </div>
+                } @else {
+                <span class="text-[14px] font-medium text-(--postonsteroids-text-primary)">{{ item.name }}</span>
+                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button (click)="startEdit(item)"
+                        class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
+                        <mat-icon class="text-[18px]! size-[18px]!">edit</mat-icon>
+                    </button>
+                    <button (click)="deleteCollection(item.id)"
+                        class="p-1.5 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-500 transition-all cursor-pointer">
+                        <mat-icon class="text-[18px]! size-[18px]!">delete</mat-icon>
+                    </button>
+                </div>
+                }
             </div>
-            } @else {
-            <span class="text-[14px] font-medium text-(--postonsteroids-text-primary)">{{ item.name }}</span>
-            <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button (click)="startEdit(item)"
-                    class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
-                    <mat-icon class="text-[18px]! size-[18px]!">edit</mat-icon>
-                </button>
-                <button (click)="deleteCollection(item.id)"
-                    class="p-1.5 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-500 transition-all cursor-pointer">
-                    <mat-icon class="text-[18px]! size-[18px]!">delete</mat-icon>
-                </button>
-            </div>
-            }
-        </div>
         }
     </div>
 </div>

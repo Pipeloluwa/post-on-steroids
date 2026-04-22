@@ -7,6 +7,7 @@ import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
+import { SidebarService } from '../../shared/services/sidebar.service';
 
 @Component({
   selector: 'app-main-layout',
@@ -23,6 +24,7 @@ import { NotificationService } from '../../shared/services/notification.service'
 export class MainLayout {
   authService = inject(AuthService);
   notificationService = inject(NotificationService);
+  sidebarService = inject(SidebarService);
 
   protected readonly title = signal('PostOnSteroids');
 

@@ -1,4 +1,5 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, effect, inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 
 export interface KeyValue {
     enabled: boolean;
@@ -69,7 +70,9 @@ export interface RequestState {
     // Body
     bodyType: string;
     rawType: string;
-    rawBody: string;
+    rawBody: string; // Keep for compatibility or current selection
+    rawBodyJson: string;
+    rawBodyXml: string;
     formData: FormDataRow[];
     requestBody: unknown;
     // Response
@@ -86,6 +89,8 @@ export interface RequestState {
     providedIn: 'root',
 })
 export class TabStateService {
+    private platformId = inject(PLATFORM_ID);
+    private isBrowser = isPlatformBrowser(this.platformId);
     private states = signal<Map<string, RequestState>>(new Map());
     activeTabId = signal<string | null>(null);
     isCollectionLoading = signal<boolean>(false);
@@ -98,6 +103,40 @@ export class TabStateService {
         const id = this.activeTabId();
         return id ? this.states().get(id) || this.getDefaultState(id) : null;
     });
+
+    constructor() {
+        if (this.isBrowser) {
+            this.loadFromStorage();
+        }
+        
+        // Persist to storage whenever states change
+        effect(() => {
+            if (this.isBrowser) {
+                const currentStates = Array.from(this.states().entries());
+                localStorage.setItem('postonsteroids_states', JSON.stringify(currentStates));
+                localStorage.setItem('postonsteroids_active_tab', this.activeTabId() || '');
+            }
+        });
+    }
+
+    private loadFromStorage() {
+        if (!this.isBrowser) return;
+        const savedStates = localStorage.getItem('postonsteroids_states');
+        const activeTabId = localStorage.getItem('postonsteroids_active_tab');
+        
+        if (savedStates) {
+            try {
+                const parsed = JSON.parse(savedStates);
+                this.states.set(new Map(parsed));
+            } catch (e) {
+                console.error('Failed to load states from storage', e);
+            }
+        }
+        
+        if (activeTabId) {
+            this.activeTabId.set(activeTabId);
+        }
+    }
 
     setActiveTab(id: string) {
         if (!this.states().has(id)) {
@@ -192,6 +231,8 @@ export class TabStateService {
             bodyType: 'none',
             rawType: 'JSON',
             rawBody: '{}',
+            rawBodyJson: '{}',
+            rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>',
             formData: [{ enabled: true, key: '', value: '', type: 'text' }],
             requestBody: {},
             responseBody: null,
@@ -331,6 +372,7 @@ export class TabStateService {
 
         const entry = entries[parseInt(id, 10) % entries.length];
 
+        const rawBody = entry.rawBody || '{}';
         return {
             url: entry.url,
             method,
@@ -344,8 +386,10 @@ export class TabStateService {
             ],
             auth: entry.auth,
             formData: entry.formData ?? [{ enabled: true, key: '', value: '', type: 'text' }],
-            rawBody: entry.rawBody,
-            requestBody: method === 'POST' || method === 'PUT' ? JSON.parse(entry.rawBody || '{}') : {},
+            rawBody: rawBody,
+            rawBodyJson: rawBody,
+            rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>',
+            requestBody: method === 'POST' || method === 'PUT' ? JSON.parse(rawBody || '{}') : {},
             responseBody: entry.responseBody,
             responseStatus: entry.responseStatus,
             responseTime: entry.responseTime,

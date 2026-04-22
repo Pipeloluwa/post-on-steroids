@@ -1,4 +1,4 @@
-import { Component, input, forwardRef, inject, PLATFORM_ID, signal, effect } from '@angular/core';
+import { Component, input, forwardRef, inject, PLATFORM_ID, signal, effect, computed } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/forms';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
@@ -8,6 +8,9 @@ import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
   imports: [CommonModule, MonacoEditorModule, FormsModule],
   templateUrl: './monaco-editor.component.html',
   styleUrl: './monaco-editor.component.css',
+  host: {
+    class: 'w-full h-full block'
+  },
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -27,29 +30,49 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   value = signal<string>('');
   disabled = signal<boolean>(false);
 
-  monacoOptions = signal<Record<string, unknown>>({
+  monacoOptions = computed(() => ({
     theme: 'vs-dark',
     language: this.language(),
-    readOnly: this.readOnly(),
+    readOnly: this.disabled() || this.readOnly(),
     automaticLayout: true,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     fontSize: 13,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-  });
+  }));
 
-  private editorInstance: unknown = null;
+  private editorInstance: any = null;
   private isReverting = false;
   private lastValidContent = '';
+  private resizeObserver: ResizeObserver | null = null;
 
   onChange: (val: string) => void = () => { };
   onTouch: () => void = () => { };
 
-  onEditorInit(editor: unknown) {
+  onEditorInit(editor: any) {
     this.editorInstance = editor;
 
     if (this.restrictToFunctionBody()) {
       this.setupFunctionBodyRestriction(editor as MonacoEditor);
+    }
+
+    // Setup ResizeObserver to fix cursor offset issues
+    if (this.isBrowser && editor.layout) {
+      this.resizeObserver = new ResizeObserver(() => {
+        editor.layout();
+      });
+      
+      // Get the editor container element
+      const container = (editor as any).getDomNode()?.parentElement;
+      if (container) {
+        this.resizeObserver.observe(container);
+      }
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
     }
   }
 
@@ -101,7 +124,6 @@ export class MonacoEditorComponent implements ControlValueAccessor {
 
   setDisabledState(isDisabled: boolean): void {
     this.disabled.set(isDisabled);
-    this.monacoOptions.update(opts => ({ ...opts, readOnly: isDisabled || this.readOnly() }));
   }
 
   onValueChange(newVal: string) {

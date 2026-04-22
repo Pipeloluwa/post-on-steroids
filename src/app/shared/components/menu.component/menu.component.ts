@@ -2,6 +2,7 @@ import { Component, signal, inject } from '@angular/core';
 import { MatIcon } from '@angular/material/icon';
 import { RouterModule } from '@angular/router';
 import { ThemeService } from '../../services/theme.service';
+import { SidebarService } from '../../services/sidebar.service';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -11,6 +12,7 @@ import { CommonModule } from '@angular/common';
 })
 export class MenuComponent {
   protected themeService = inject(ThemeService);
+  protected sidebarService = inject(SidebarService);
 
   menu = signal<{ name: string; icon: string; path: string }[]>([
     { name: 'WorkSpace', icon: 'dashboard', path: '/workspace' },

@@ -22,9 +22,7 @@ import { computed } from '@angular/core';
         RequestDetailsComponent,
         RequestUrlComponent,
         PayloadTypesComponent,
-
         ResponseViewerComponent,
-        NgComponentOutlet,
         MatIcon
     ],
     templateUrl: './workspace.component.html',
@@ -43,14 +41,9 @@ export class WorkspaceComponent {
     notificationService = inject(NotificationService);
     tabStateService = inject(TabStateService);
 
-    protected jsonComponent = signal<Type<any> | null>(null);
     requestHeight = signal<number>(450); // Pixel height
     isResizing = signal<boolean>(false);
 
-    requestJsonData = computed(() => {
-        const state = this.tabStateService.activeTabState();
-        return state?.requestBody || {};
-    });
 
     constructor() {
         const savedHeight = this.localStorageService.getItem(LocalStorageService.JSON_RESIZE_HEIGHT);
@@ -60,14 +53,6 @@ export class WorkspaceComponent {
                 this.requestHeight.set(this.clampHeight(height));
             }
         }
-
-        afterNextRender(async () => {
-            try {
-                const { JsonComponent } = await import('../../shared/components/json.component/json.component');
-                this.jsonComponent.set(JsonComponent);
-            } catch (error) {
-            }
-        });
     }
 
     private clampHeight(height: number): number {

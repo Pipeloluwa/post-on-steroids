@@ -1,7 +1,12 @@
 <nav
     class="w-full h-[48px] shrink-0 flex items-center justify-between px-4 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/80 backdrop-blur-md z-40 relative">
-    <!-- Left Section: Spacer -->
-    <div class="flex items-center z-10 w-[40px]"></div>
+    <!-- Left Section: Sidebar Toggle -->
+    <div class="flex items-center z-10">
+        <button (click)="toggleSidebar()" 
+            class="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
+            <mat-icon>{{ sidebarService.isCollapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left' }}</mat-icon>
+        </button>
+    </div>
 
     <!-- Center Section: Logo & Title -->
     <div class="absolute inset-0 flex items-center justify-center pointer-events-none gap-x-3">
