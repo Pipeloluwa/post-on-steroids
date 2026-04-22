@@ -23,6 +23,8 @@ export class ScrollableSelectComponent {
   absoluteStartLeft = input<boolean | number>(true);
   searchable = input<boolean>(false);
   itemColor = input<(item: string) => string>(() => 'inherit');
+  activeItemColor = input<(item: string) => string>(() => 'var(--postonsteroids-accent)');
+  uppercase = input<boolean>(false);
   manualState = input<boolean | undefined>(undefined);
   scrollableSelectState = signal<boolean>(false);
   searchQuery = signal<string>('');

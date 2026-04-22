@@ -8,6 +8,7 @@ import { CommonModule } from '@angular/common';
 import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { SidebarService } from '../../shared/services/sidebar.service';
+import { MatIcon } from '@angular/material/icon';
 
 @Component({
   selector: 'app-main-layout',
@@ -17,7 +18,8 @@ import { SidebarService } from '../../shared/services/sidebar.service';
     CommonModule,
     NavbarComponent,
     AuthModalComponent,
-    NotificationComponent
+    NotificationComponent,
+    MatIcon
   ],
   templateUrl: './main.layout.html'
 })

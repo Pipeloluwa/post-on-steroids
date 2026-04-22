@@ -23,10 +23,10 @@
 
     <ul class="overflow-auto space-y-1" [style.max-height.px]="modalHeight()">
       @for (item of filteredOptions(); track $index) {
-      <li (click)="setActiveValue(item)" class="scrollable-select-item cursor-pointer px-2 py-[6px] rounded-[5px]"
-        [style.backgroundColor]="activeValue() === item ? 'var(--postonsteroids-accent)' : 'var(--postonsteroids-bg-tertiary)'"
-        [style.color]="itemColor()(item)">
-        <span class="text-[12px] truncate block">{{item}}</span>
+      <li (click)="setActiveValue(item)" class="scrollable-select-item cursor-pointer px-2 py-[6px] rounded-[5px] transition-colors duration-200"
+        [style.backgroundColor]="activeValue() === item ? activeItemColor()(item) : 'var(--postonsteroids-bg-tertiary)'"
+        [style.color]="activeValue() === item ? '#fff' : itemColor()(item)">
+        <span class="text-[12px] font-bold truncate block" [class.uppercase]="uppercase()">{{item}}</span>
       </li>
       } @empty {
       <li class="px-2 py-[6px] text-[12px] text-(--postonsteroids-text-muted)">

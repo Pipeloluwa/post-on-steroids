@@ -5,6 +5,7 @@ import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { VariableService } from '../../../shared/services/variable.service';
 import { TabStateService } from '../../../shared/services/tab.state.service';
+import { RequestExecutionService } from '../../../shared/services/request.execution.service';
 import { effect } from '@angular/core';
 
 @Component({
@@ -18,9 +19,11 @@ export class RequestUrlComponent {
 
     variableService = inject(VariableService);
     tabStateService = inject(TabStateService);
+    executionService = inject(RequestExecutionService);
     methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
     selectedMethod = computed(() => this.tabStateService.activeTabState()?.method || 'GET');
+    isLoading = computed(() => this.tabStateService.activeTabState()?.isLoading || false);
 
     @ViewChild('urlInput') urlInput!: ElementRef<HTMLInputElement>;
     url = signal<string>('');
@@ -147,6 +150,13 @@ export class RequestUrlComponent {
             case 'HEAD': return '#00BF8E';
             case 'OPTIONS': return '#FF60AD';
             default: return 'var(--postonsteroids-text-primary)';
+        }
+    }
+
+    onSend() {
+        const id = this.tabStateService.activeTabId();
+        if (id) {
+            this.executionService.executeRequest(id);
         }
     }
 }

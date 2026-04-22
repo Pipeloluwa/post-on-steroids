@@ -150,8 +150,6 @@ export class TabStateService {
 
     async fetchCollectionData(collectionName: string) {
         this.isCollectionLoading.set(true);
-        const delay = Math.floor(Math.random() * 1000) + 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
 
         this.states.update(map => {
             const newMap = new Map(map);
@@ -167,16 +165,12 @@ export class TabStateService {
 
     async fetchTabData(id: string) {
         this.updateState(id, { isLoading: true });
-        const delay = Math.floor(Math.random() * 1500) + 500;
-        await new Promise(resolve => setTimeout(resolve, delay));
         const dummyData = this.generateDummyData(id);
         this.updateState(id, { ...dummyData, isLoading: false });
     }
 
     async saveToCollection(id: string): Promise<void> {
         this.isSaving.set(true);
-        const delay = Math.floor(Math.random() * 1000) + 500;
-        await new Promise(resolve => setTimeout(resolve, delay));
 
         const currentState = this.states().get(id);
         if (currentState) {

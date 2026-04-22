@@ -18,22 +18,16 @@ export class AuthService {
     sendOtp() {
         if (!this.userEmail()) return;
         this.isAuthenticating.set(true);
-        // Mock API call
-        setTimeout(() => {
-            this.isOtpSent.set(true);
-            this.isAuthenticating.set(false);
-        }, 1500);
+        this.isOtpSent.set(true);
+        this.isAuthenticating.set(false);
     }
 
     authenticate() {
         if (!this.otp()) return;
         this.isAuthenticating.set(true);
-        // Mock API call
-        setTimeout(() => {
-            this.isLoggedIn.set(true);
-            this.showAuthModal.set(false);
-            this.isAuthenticating.set(false);
-        }, 1500);
+        this.isLoggedIn.set(true);
+        this.showAuthModal.set(false);
+        this.isAuthenticating.set(false);
     }
 
     logout() {

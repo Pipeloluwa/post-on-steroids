@@ -1,5 +1,30 @@
 <div
-    class="w-full h-full flex flex-col overflow-hidden bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) transition-colors duration-300">
+    class="w-full h-full flex flex-col overflow-hidden bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) transition-colors duration-300 relative">
+
+    <!-- Suspense Loader Overlay -->
+    @if (!sidebarService.isHydrated()) {
+    <div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-(--postonsteroids-bg-primary)">
+        <div class="relative w-24 h-24 flex items-center justify-center">
+            <!-- Animated rings -->
+            <div
+                class="absolute inset-0 border-4 border-(--postonsteroids-accent)/20 rounded-full animate-[spin_3s_linear_infinite]">
+            </div>
+            <div
+                class="absolute inset-0 border-4 border-transparent border-t-(--postonsteroids-accent) rounded-full animate-spin">
+            </div>
+            <!-- Logo/Icon placeholder -->
+            <mat-icon class="text-(--postonsteroids-accent) text-[40px]! size-[40px]!">rocket_launch</mat-icon>
+        </div>
+        <div class="mt-8 flex flex-col items-center gap-2">
+            <h1 class="text-2xl font-black tracking-tighter text-(--postonsteroids-text-primary)">
+                PostOnSteroids<span class="text-(--postonsteroids-accent)">.</span>
+            </h1>
+            <p class="text-xs font-medium text-(--postonsteroids-text-muted) tracking-widest uppercase animate-pulse">
+                Initializing Workspace
+            </p>
+        </div>
+    </div>
+    }
 
     <app-navbar-component [title]="title()" [isLoggedIn]="authService.isLoggedIn()"
         [userEmail]="authService.userEmail()" (onToggleAuth)="toggleAuthModal()" />
