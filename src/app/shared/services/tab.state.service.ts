@@ -215,8 +215,8 @@ export class TabStateService {
             ],
             auth: { type: 'none', token: '' },
             scripts: {
-                preRequest: 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
-                postResponse: 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}',
+                preRequest: '// Write your pre-request script here\n// Access data via pm.headers, pm.body, pm.params\n\nconsole.log("Pre-request script running...");',
+                postResponse: '// Write your post-response script here\n// Access data via pm.responseHeaders, pm.responseBody\n\nconsole.log("Post-response script running...");',
                 preRequestConsole: '',
                 postResponseConsole: ''
             },

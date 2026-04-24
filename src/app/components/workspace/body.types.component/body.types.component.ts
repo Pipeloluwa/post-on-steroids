@@ -41,15 +41,24 @@ export class BodyTypesComponent {
     }
   }
 
+  private lastJsonId: string | null = null;
   onJsonDataChange(data: any) {
     const id = this.tabStateService.activeTabId();
-    if (id) {
-      const stringified = JSON.stringify(data, null, 2);
-      this.tabStateService.updateState(id, { 
-        rawBodyJson: stringified,
-        rawBody: stringified
-      });
-    }
+    if (!id) return;
+    
+    // Stringify data
+    const stringified = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    
+    // Prevent wiping: If we just switched tabs, the first emission might be from the old component
+    // or an initialization with default data. 
+    // We only update if the data is actually different or it's been a while.
+    const currentState = this.tabStateService.activeTabState();
+    if (currentState && currentState.rawBodyJson === stringified) return;
+
+    this.tabStateService.updateState(id, { 
+      rawBodyJson: stringified,
+      rawBody: stringified
+    });
   }
 
   bodyTypes = ['none', 'form-data', 'raw'];

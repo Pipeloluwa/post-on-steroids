@@ -63,7 +63,16 @@ export class JsonComponent implements OnInit {
     
     // Listen for changes
     this.formInput.get('dataInput')?.valueChanges.subscribe(val => {
-      this.dataChange.emit(val);
+      // Deep check to avoid unnecessary emissions or wipes
+      const currentInput = this.data();
+      let parsedInput = currentInput;
+      if (typeof currentInput === 'string') {
+        try { parsedInput = JSON.parse(currentInput); } catch (e) {}
+      }
+      
+      if (JSON.stringify(val) !== JSON.stringify(parsedInput)) {
+        this.dataChange.emit(val);
+      }
     });
   }
 

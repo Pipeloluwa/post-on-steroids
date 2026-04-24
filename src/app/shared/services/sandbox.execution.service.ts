@@ -59,9 +59,9 @@ export class SandboxExecutionService {
               await executeInSandbox(pm);
 
               // Send back mutated context and logs
-              event.source.postMessage({ id, success: true, context: pm, logs: logs.join('\\n') }, event.origin);
+              parent.postMessage({ id, success: true, context: pm, logs: logs.join('\n') }, '*');
             } catch (err) {
-              event.source.postMessage({ id, success: false, error: err.toString(), logs: logs.join('\\n') }, event.origin);
+              parent.postMessage({ id, success: false, error: err.toString(), logs: logs.join('\n') }, '*');
             } finally {
               console.log = originalConsoleLog;
             }

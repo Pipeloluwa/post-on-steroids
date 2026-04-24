@@ -69,14 +69,18 @@ export class RequestExecutionService {
             const preScriptCode = state.scripts?.preRequest;
             let preRequestLogs = '';
             if (preScriptCode && preScriptCode.trim()) {
-                const context = { args: [headers, body, params] };
+                const context = { 
+                    headers, 
+                    body, 
+                    params 
+                };
                 const result = await this.sandboxService.executeScript(preScriptCode, context);
                 preRequestLogs = result.logs || '';
                 
-                if (result.success && result.context?.args) {
-                     headers = result.context.args[0] || headers;
-                     body = result.context.args[1] !== undefined ? result.context.args[1] : body;
-                     params = result.context.args[2] || params;
+                if (result.success && result.context) {
+                     headers = result.context.headers || headers;
+                     body = result.context.body !== undefined ? result.context.body : body;
+                     params = result.context.params || params;
                 } else if (result.error) {
                     preRequestLogs += `\nError: ${result.error}`;
                 }
@@ -165,12 +169,15 @@ export class RequestExecutionService {
             const postScriptCode = state.scripts?.postResponse;
             let postResponseLogs = '';
             if (postScriptCode && postScriptCode.trim()) {
-                const context = { args: [responseHeaders, responseBodyParsed] };
+                const context = { 
+                    responseHeaders, 
+                    responseBody: responseBodyParsed 
+                };
                 const result = await this.sandboxService.executeScript(postScriptCode, context);
                 postResponseLogs = result.logs || '';
                 
-                if (result.success && result.context?.args) {
-                     // MUTATION: Allow scripts to set variables or perform checks
+                if (result.success && result.context) {
+                     // Allow scripts to read results
                 } else if (result.error) {
                     postResponseLogs += `\nError: ${result.error}`;
                 }
