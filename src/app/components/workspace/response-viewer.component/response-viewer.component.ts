@@ -1,32 +1,21 @@
-import { Component, signal, computed, inject, Type, afterNextRender } from '@angular/core';
+import { Component, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { ChangeDetectionStrategy } from '@angular/core';
+import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
 @Component({
     selector: 'app-response-viewer-component',
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent],
+    imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent, MonacoEditorComponent],
     templateUrl: './response-viewer.component.html',
     styleUrl: './response-viewer.component.css'
 })
 export class ResponseViewerComponent {
-    protected jsonComponent = signal<Type<unknown> | null>(null);
     tabStateService = inject(TabStateService);
-
-    constructor() {
-        afterNextRender(async () => {
-            try {
-                const { JsonComponent } = await import('../../../shared/components/json.component/json.component');
-                this.jsonComponent.set(JsonComponent);
-            } catch {
-                // lazy load failure – silent
-            }
-        });
-    }
 
     activeTab = signal('Body');
     activeMode = signal('Pretty');
@@ -35,6 +24,13 @@ export class ResponseViewerComponent {
 
     // ── Derived from active tab state ──────────────────────────────────────
     responseBody = computed(() => this.tabStateService.activeTabState()?.responseBody ?? null);
+    
+    formattedResponseBody = computed(() => {
+        const body = this.responseBody();
+        if (body === null) return '';
+        if (typeof body === 'string') return body;
+        return JSON.stringify(body, null, 2);
+    });
     responseStatus = computed(() => this.tabStateService.activeTabState()?.responseStatus ?? null);
     responseTime = computed(() => this.tabStateService.activeTabState()?.responseTime ?? null);
     responseSize = computed(() => this.tabStateService.activeTabState()?.responseSize ?? null);

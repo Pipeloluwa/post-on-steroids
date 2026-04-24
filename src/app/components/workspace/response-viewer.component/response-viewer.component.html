@@ -115,9 +115,11 @@
             </div>
             } @else if (activeMode() === 'Pretty') {
             <div class="w-full h-full">
-                <ng-container
-                    *ngComponentOutlet="jsonComponent(); inputs: { data: responseBody(), readOnly: true }"></ng-container>
+                <app-monaco-editor [ngModel]="formattedResponseBody()" 
+                    [language]="responseType().toLowerCase()" [readOnly]="true" class="flex-1 w-full h-full block">
+                </app-monaco-editor>
             </div>
+
             } @else {
             <pre
                 class="p-4 font-mono text-[12px] text-(--postonsteroids-text-secondary) whitespace-pre-wrap break-all cursor-text overflow-auto">{{ responseBody() | json }}</pre>

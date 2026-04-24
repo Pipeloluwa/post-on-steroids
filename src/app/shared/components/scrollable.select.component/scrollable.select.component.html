@@ -6,7 +6,7 @@
 
   @if (this.manualState() ?? scrollableSelectState()) {
   <div (click)="eventHelpers.preventPropagation($event)" [style.top.px]="verticalPosition()"
-    class="p-2 absolute space-y-1 rounded-[5px] z-20 overflow-hidden flex flex-col" style="background-color: var(--postonsteroids-bg-secondary); 
+    class="p-2 absolute space-y-1 rounded-[5px] z-50 overflow-hidden flex flex-col" style="background-color: var(--postonsteroids-bg-secondary); 
         color: var(--postonsteroids-text-primary);
         border: 1px solid var(--postonsteroids-border);" [style.width.px]="modalWidth() ?? '100%'"
     [style.left]="leftPosition()" [style.right]="rightPosition()">

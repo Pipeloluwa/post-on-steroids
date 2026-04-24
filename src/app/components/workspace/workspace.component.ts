@@ -56,7 +56,7 @@ export class WorkspaceComponent {
     }
 
     private clampHeight(height: number): number {
-        const minHeight = 200;
+        const minHeight = 100; // Decreased to allow pulling the divider further up
         const screenHeight = this.isBrowser ? window.innerHeight : 1000;
         const maxHeight = Math.max(minHeight, screenHeight - 130);
         return Math.max(minHeight, Math.min(height, maxHeight));

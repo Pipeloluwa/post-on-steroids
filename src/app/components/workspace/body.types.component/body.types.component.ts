@@ -1,4 +1,4 @@
-import { Component, signal, inject, computed, PLATFORM_ID, Type } from '@angular/core';
+import { Component, signal, inject, computed, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -23,42 +23,20 @@ export class BodyTypesComponent {
   isBrowser = isPlatformBrowser(this.platformId);
   tabStateService = inject(TabStateService);
   
-  // Dynamically loaded JSON component
-  jsonComponentModule = signal<Type<any> | null>(null);
+  rawBodyContent = computed(() => {
+    const state = this.tabStateService.activeTabState();
+    return this.rawType() === 'JSON' ? (state?.rawBodyJson || '{}') : (state?.rawBodyXml || '');
+  });
 
-  constructor() {
-    if (this.isBrowser) {
-      this.loadJsonComponent();
-    }
-  }
-
-  async loadJsonComponent() {
-    try {
-      const { JsonComponent } = await import('../../../shared/components/json.component/json.component');
-      this.jsonComponentModule.set(JsonComponent);
-    } catch (e) {
-      console.error('Failed to load JSON component:', e);
-    }
-  }
-
-  private lastJsonId: string | null = null;
-  onJsonDataChange(data: any) {
+  onRawBodyChange(content: string) {
     const id = this.tabStateService.activeTabId();
     if (!id) return;
     
-    // Stringify data
-    const stringified = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-    
-    // Prevent wiping: If we just switched tabs, the first emission might be from the old component
-    // or an initialization with default data. 
-    // We only update if the data is actually different or it's been a while.
-    const currentState = this.tabStateService.activeTabState();
-    if (currentState && currentState.rawBodyJson === stringified) return;
-
-    this.tabStateService.updateState(id, { 
-      rawBodyJson: stringified,
-      rawBody: stringified
-    });
+    if (this.rawType() === 'JSON') {
+       this.tabStateService.updateState(id, { rawBodyJson: content, rawBody: content });
+    } else {
+       this.tabStateService.updateState(id, { rawBodyXml: content, rawBody: content });
+    }
   }
 
   bodyTypes = ['none', 'form-data', 'raw'];
