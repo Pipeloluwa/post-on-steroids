@@ -1,7 +1,8 @@
-import { Component, input, forwardRef, inject, PLATFORM_ID, signal, effect, computed } from '@angular/core';
+import { Component, input, forwardRef, inject, PLATFORM_ID, signal, effect, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/forms';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
+import { ThemeService } from '../../services/theme.service';
 
 @Component({
   selector: 'app-monaco-editor',
@@ -21,6 +22,7 @@ import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 })
 export class MonacoEditorComponent implements ControlValueAccessor {
   private platformId = inject(PLATFORM_ID);
+  private themeService = inject(ThemeService);
   isBrowser = isPlatformBrowser(this.platformId);
 
   language = input<string>('javascript');
@@ -31,7 +33,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   disabled = signal<boolean>(false);
 
   monacoOptions = computed(() => ({
-    theme: 'vs-dark',
+    theme: this.themeService.isDarkMode() ? 'vs-dark' : 'vs',
     language: this.language(),
     readOnly: this.disabled() || this.readOnly(),
     automaticLayout: true,
@@ -46,6 +48,17 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
 
+  constructor() {
+    // Dynamically update editor options when theme changes without recreating the editor
+    effect(() => {
+      const theme = this.themeService.isDarkMode() ? 'vs-dark' : 'vs';
+      const readOnly = this.disabled() || this.readOnly();
+      if (this.editorInstance) {
+        this.editorInstance.updateOptions({ theme, readOnly });
+      }
+    });
+  }
+
   onChange: (val: string) => void = () => { };
   onTouch: () => void = () => { };
 
@@ -56,13 +69,34 @@ export class MonacoEditorComponent implements ControlValueAccessor {
       this.setupFunctionBodyRestriction(editor as MonacoEditor);
     }
 
-    // Setup ResizeObserver to fix cursor offset issues
+    // Fix cursor offset: Monaco caches font character width measurements.
+    // When the editor initializes in a container that hasn't fully rendered,
+    // these measurements are wrong. We must:
+    // 1. Call layout() to recalculate container dimensions
+    // 2. Call monaco.editor.remeasureFonts() to recalculate character widths
     if (this.isBrowser && editor.layout) {
+      const fixLayout = () => {
+        editor.layout();
+        // Access the global monaco API to force font re-measurement
+        const monacoGlobal = (window as any).monaco;
+        if (monacoGlobal?.editor?.remeasureFonts) {
+          monacoGlobal.editor.remeasureFonts();
+        }
+      };
+
+      // Use requestAnimationFrame to ensure DOM is painted before measuring
+      requestAnimationFrame(() => {
+        fixLayout();
+        // Additional delayed fix for containers that settle after animation
+        setTimeout(() => fixLayout(), 100);
+        setTimeout(() => fixLayout(), 300);
+      });
+
+      // Setup ResizeObserver for ongoing layout fixes (e.g. panel resize)
       this.resizeObserver = new ResizeObserver(() => {
         editor.layout();
       });
-      
-      // Get the editor container element
+
       const container = (editor as any).getDomNode()?.parentElement;
       if (container) {
         this.resizeObserver.observe(container);
@@ -108,7 +142,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   }
 
   writeValue(val: string): void {
-    if (val !== undefined) {
+    if (val !== undefined && val !== this.value()) {
       this.value.set(val);
       this.lastValidContent = val;
     }
@@ -127,9 +161,11 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   }
 
   onValueChange(newVal: string) {
-    this.value.set(newVal);
-    this.onChange(newVal);
-    this.onTouch();
+    if (newVal !== this.value()) {
+      this.value.set(newVal);
+      this.onChange(newVal);
+      this.onTouch();
+    }
   }
 }
 

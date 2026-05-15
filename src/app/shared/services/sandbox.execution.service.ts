@@ -2,119 +2,135 @@ import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
 export interface SandboxResult {
-    success: boolean;
-    error?: string;
-    logs?: string;
-    context: any; // Mutated variables or other state returned from the sandbox
+  success: boolean;
+  error?: string;
+  logs?: string;
+  context: any; // Mutated variables or other state returned from the sandbox
 }
 
 @Injectable({
-    providedIn: 'root'
+  providedIn: 'root'
 })
 export class SandboxExecutionService {
-    private platformId = inject(PLATFORM_ID);
-    private iframe: HTMLIFrameElement | null = null;
-    private messageListener: ((evt: MessageEvent) => void) | null = null;
+  private platformId = inject(PLATFORM_ID);
+  private iframe: HTMLIFrameElement | null = null;
+  private messageListener: ((evt: MessageEvent) => void) | null = null;
 
-    constructor() {
-        if (isPlatformBrowser(this.platformId)) {
-            this.initializeSandbox();
-        }
+  constructor() {
+    if (isPlatformBrowser(this.platformId)) {
+      this.initializeSandbox();
     }
+  }
 
-    private initializeSandbox() {
-        this.iframe = document.createElement('iframe');
-        // Using allow-scripts but NOT allow-same-origin ensures the iframe runs in an opaque origin context
-        this.iframe.setAttribute('sandbox', 'allow-scripts');
-        this.iframe.style.display = 'none';
-        document.body.appendChild(this.iframe);
+  private readyPromise!: Promise<void>;
 
-        // sandbox environment script
-        const sandboxHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <script>
-          window.addEventListener('message', async (event) => {
-            const { id, code, context } = event.data;
-            if (!id) return;
+  private initializeSandbox() {
+    this.readyPromise = new Promise((resolve) => {
+      this.iframe = document.createElement('iframe');
+      this.iframe.setAttribute('sandbox', 'allow-scripts');
+      this.iframe.style.display = 'none';
 
-            let logs = [];
-            const originalConsoleLog = console.log;
-            console.log = (...args) => {
-              logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
-              originalConsoleLog(...args);
-            };
+      this.iframe.onload = () => resolve();
 
-            let pm = { ...context }; // Mocked pm object
-            
-            try {
-              // Wrap execution in an async IIFE to support await
-              const executeInSandbox = new Function('pm', \`
-                return (async () => {
-                  \${code}
-                })();
-              \`);
+      document.body.appendChild(this.iframe);
 
-              await executeInSandbox(pm);
+      const sandboxScript = `
+window.addEventListener("message", async (event) => {
+  const { id, code, context } = event.data;
+  if (!id) return;
 
-              // Send back mutated context and logs
-              parent.postMessage({ id, success: true, context: pm, logs: logs.join('\n') }, '*');
-            } catch (err) {
-              parent.postMessage({ id, success: false, error: err.toString(), logs: logs.join('\n') }, '*');
-            } finally {
-              console.log = originalConsoleLog;
-            }
+  let logs = [];
+  const originalConsoleLog = console.log;
+  console.log = (...args) => {
+    logs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
+    originalConsoleLog(...args);
+  };
+
+  let pm = { ...context };
+
+  try {
+    const contextKeys = Object.keys(context);
+    
+    // Declare all context keys as local variables
+    const paramDeclarations = contextKeys.map(k => 
+      "let " + k + " = context['" + k + "'];"
+    ).join("\\n");
+
+    // Write back any mutations to pm
+    const paramWriteBack = contextKeys.map(k => 
+      "pm['" + k + "'] = " + k + ";"
+    ).join("\\n");
+
+    const fnBody = "return (async () => {\\n"
+      + paramDeclarations + "\\n"
+      + code + "\\n"
+      + "if (typeof preScript === 'function') { await preScript(headers, body, params); }\\n"
+      + "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params); }\\n"
+      + paramWriteBack + "\\n"
+      + "})();";
+      
+    const executeInSandbox = new Function("pm", "context", fnBody);
+    await executeInSandbox(pm, context);
+
+    parent.postMessage({ id, success: true, context: pm, logs: logs.join("\\n") }, "*");
+  } catch (err) {
+    parent.postMessage({ id, success: false, error: err.toString(), logs: logs.join("\\n") }, "*");
+  } finally {
+    console.log = originalConsoleLog;
+  }
+});`;
+
+      const sandboxHtml = '<!DOCTYPE html><html><head><script>' + sandboxScript + '<\/script></head><body></body></html>';
+
+      const blob = new Blob([sandboxHtml], { type: 'text/html' });
+      this.iframe.src = URL.createObjectURL(blob);
+    });
+  }
+
+  async executeScript(code: string, context: any): Promise<SandboxResult> {
+    if (!isPlatformBrowser(this.platformId)) {
+      return { success: false, error: 'Sandbox not available', context };
+    }
+    await this.readyPromise;
+
+    return new Promise((resolve) => {
+      if (!this.iframe?.contentWindow) {
+        resolve({ success: false, error: 'Sandbox not available', context });
+        return;
+      }
+
+      const executionId = crypto.randomUUID();
+
+      // Setup one-time listener
+      const listener = (event: MessageEvent) => {
+        if (event.data?.id === executionId) {
+          window.removeEventListener('message', listener);
+          resolve({
+            success: event.data.success,
+            error: event.data.error,
+            logs: event.data.logs,
+            context: event.data.context
           });
-        </script>
-      </head>
-      <body></body>
-      </html>
-    `;
-
-        const blob = new Blob([sandboxHtml], { type: 'text/html' });
-        this.iframe.src = URL.createObjectURL(blob);
-    }
-
-    executeScript(code: string, context: any): Promise<SandboxResult> {
-        return new Promise((resolve) => {
-            if (!isPlatformBrowser(this.platformId) || !this.iframe?.contentWindow) {
-                resolve({ success: false, error: 'Sandbox not available', context });
-                return;
-            }
-
-            const executionId = crypto.randomUUID();
-
-            // Setup one-time listener
-            const listener = (event: MessageEvent) => {
-                if (event.data?.id === executionId) {
-                    window.removeEventListener('message', listener);
-                    resolve({
-                        success: event.data.success,
-                        error: event.data.error,
-                        logs: event.data.logs,
-                        context: event.data.context
-                    });
-                }
-            };
-
-            window.addEventListener('message', listener);
-
-            // Send code to the sandbox
-            // The origin is '*' because a sandboxed iframe without allow-same-origin has an opaque origin
-            this.iframe.contentWindow.postMessage({ id: executionId, code, context }, '*');
-
-            // Add a timeout to prevent hanging
-            setTimeout(() => {
-                window.removeEventListener('message', listener);
-                resolve({ success: false, error: 'Execution timeout (5000ms)', context });
-            }, 5000);
-        });
-    }
-
-    ngOnDestroy() {
-        if (this.iframe && this.iframe.parentNode) {
-            this.iframe.parentNode.removeChild(this.iframe);
         }
+      };
+
+      window.addEventListener('message', listener);
+
+      // Send code to the sandbox
+      // The origin is '*' because a sandboxed iframe without allow-same-origin has an opaque origin
+      this.iframe.contentWindow.postMessage({ id: executionId, code, context }, '*');
+
+      // Add a timeout to prevent hanging
+      setTimeout(() => {
+        window.removeEventListener('message', listener);
+        resolve({ success: false, error: 'Execution timeout (5000ms)', context });
+      }, 5000);
+    });
+  }
+
+  ngOnDestroy() {
+    if (this.iframe && this.iframe.parentNode) {
+      this.iframe.parentNode.removeChild(this.iframe);
     }
+  }
 }

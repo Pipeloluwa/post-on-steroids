@@ -20,33 +20,33 @@ interface Collection {
 })
 export class CollectionsComponent {
     tabStateService = inject(TabStateService);
-    collections = signal<Collection[]>([
-        { id: '1', name: 'My Collection', createdAt: Date.now() - 10000 },
+    capsules = signal<Collection[]>([
+        { id: '1', name: 'My Capsule', createdAt: Date.now() - 10000 },
         { id: '2', name: 'API Project A', createdAt: Date.now() - 5000 },
         { id: '3', name: 'Personal Sandbox', createdAt: Date.now() }
     ]);
 
-    sortedCollections = computed(() => {
-        return [...this.collections()].sort((a, b) => b.createdAt - a.createdAt);
+    sortedCapsules = computed(() => {
+        return [...this.capsules()].sort((a, b) => b.createdAt - a.createdAt);
     });
 
-    newCollectionName = signal<string>('');
+    newCapsuleName = signal<string>('');
     editingId = signal<string | null>(null);
     editNameValue = signal<string>('');
 
-    createCollection() {
-        if (!this.newCollectionName().trim()) return;
+    createCapsule() {
+        if (!this.newCapsuleName().trim()) return;
         const newId = Math.random().toString(36).substring(7);
-        this.collections.update(c => [...c, {
+        this.capsules.update(c => [...c, {
             id: newId,
-            name: this.newCollectionName(),
+            name: this.newCapsuleName(),
             createdAt: Date.now()
         }]);
-        this.newCollectionName.set('');
+        this.newCapsuleName.set('');
     }
 
-    deleteCollection(id: string) {
-        this.collections.update(c => c.filter(item => item.id !== id));
+    deleteCapsule(id: string) {
+        this.capsules.update(c => c.filter(item => item.id !== id));
     }
 
     startEdit(item: Collection) {
@@ -56,7 +56,7 @@ export class CollectionsComponent {
 
     saveEdit() {
         if (!this.editingId()) return;
-        this.collections.update(c => c.map(item =>
+        this.capsules.update(c => c.map(item =>
             item.id === this.editingId() ? { ...item, name: this.editNameValue() } : item
         ));
         this.editingId.set(null);

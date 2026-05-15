@@ -3,6 +3,7 @@ import { MainLayout } from './layouts/main.layout/main.layout';
 import { WorkspaceComponent } from './components/workspace/workspace.component';
 import { CollectionsComponent } from './components/collections.component/collections.component';
 import { ExportComponent } from './components/export.component/export.component';
+import { ImportComponent } from './components/import.component/import.component';
 import { HistoryComponent } from './components/history.component/history.component';
 
 export const routes: Routes = [
@@ -12,20 +13,24 @@ export const routes: Routes = [
         children: [
             {
                 path: '',
-                redirectTo: 'workspace',
+                redirectTo: 'steroid',
                 pathMatch: 'full'
             },
             {
-                path: 'workspace',
+                path: 'steroid',
                 component: WorkspaceComponent
             },
             {
-                path: 'collections',
+                path: 'capsules',
                 component: CollectionsComponent
             },
             {
                 path: 'export',
                 component: ExportComponent
+            },
+            {
+                path: 'import',
+                component: ImportComponent
             },
             {
                 path: 'history',

@@ -15,9 +15,10 @@ export class MenuComponent {
   protected sidebarService = inject(SidebarService);
 
   menu = signal<{ name: string; icon: string; path: string }[]>([
-    { name: 'WorkSpace', icon: 'dashboard', path: '/workspace' },
-    { name: 'collections', icon: 'collections', path: '/collections' },
+    { name: 'Steroid', icon: 'dashboard', path: '/steroid' },
+    { name: 'Capsules', icon: 'collections', path: '/capsules' },
     { name: 'export', icon: 'file_download', path: '/export' },
+    { name: 'import', icon: 'file_upload', path: '/import' },
     { name: 'history', icon: 'history', path: '/history' }
   ]);
 

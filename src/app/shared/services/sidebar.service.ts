@@ -9,7 +9,7 @@ export class SidebarService {
   private isBrowser = isPlatformBrowser(this.platformId);
   
   isCollapsed = signal<boolean>(
-    typeof window !== 'undefined' && window.localStorage?.getItem('postonsteroids_sidebar_collapsed') === 'true'
+    typeof window !== 'undefined' && window.localStorage?.getItem('onsteroids_sidebar_collapsed') === 'true'
   );
 
   isHydrated = signal<boolean>(false);
@@ -22,7 +22,7 @@ export class SidebarService {
 
     effect(() => {
       if (this.isBrowser) {
-        localStorage.setItem('postonsteroids_sidebar_collapsed', String(this.isCollapsed()));
+        localStorage.setItem('onsteroids_sidebar_collapsed', String(this.isCollapsed()));
       }
     });
   }

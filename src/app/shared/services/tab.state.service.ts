@@ -50,6 +50,7 @@ export interface SettingsState {
     followRedirects: boolean;
     verifySsl: boolean;
     enableCookies: boolean;
+    bypassCors: boolean;
 }
 
 export interface RequestState {
@@ -92,12 +93,16 @@ export class TabStateService {
     private platformId = inject(PLATFORM_ID);
     private isBrowser = isPlatformBrowser(this.platformId);
     private states = signal<Map<string, RequestState>>(new Map());
+
+    getState(id: string): RequestState | undefined {
+        return this.states().get(id);
+    }
     activeTabId = signal<string | null>(null);
-    isCollectionLoading = signal<boolean>(false);
+    isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
 
     // In-memory "database" of saved requests
-    savedCollection = signal<RequestState[]>([]);
+    savedCapsules = signal<RequestState[]>([]);
 
     activeTabState = computed(() => {
         const id = this.activeTabId();
@@ -113,16 +118,16 @@ export class TabStateService {
         effect(() => {
             if (this.isBrowser) {
                 const currentStates = Array.from(this.states().entries());
-                localStorage.setItem('postonsteroids_states', JSON.stringify(currentStates));
-                localStorage.setItem('postonsteroids_active_tab', this.activeTabId() || '');
+                localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
+                localStorage.setItem('onsteroids_active_tab', this.activeTabId() || '');
             }
         });
     }
 
     private loadFromStorage() {
         if (!this.isBrowser) return;
-        const savedStates = localStorage.getItem('postonsteroids_states');
-        const activeTabId = localStorage.getItem('postonsteroids_active_tab');
+        const savedStates = localStorage.getItem('onsteroids_states');
+        const activeTabId = localStorage.getItem('onsteroids_active_tab');
         
         if (savedStates) {
             try {
@@ -148,8 +153,8 @@ export class TabStateService {
         this.activeTabId.set(id);
     }
 
-    async fetchCollectionData(collectionName: string) {
-        this.isCollectionLoading.set(true);
+    async fetchCapsuleData(collectionName: string) {
+        this.isCapsuleLoading.set(true);
 
         this.states.update(map => {
             const newMap = new Map(map);
@@ -160,7 +165,7 @@ export class TabStateService {
             return newMap;
         });
 
-        this.isCollectionLoading.set(false);
+        this.isCapsuleLoading.set(false);
     }
 
     async fetchTabData(id: string) {
@@ -169,12 +174,12 @@ export class TabStateService {
         this.updateState(id, { ...dummyData, isLoading: false });
     }
 
-    async saveToCollection(id: string): Promise<void> {
+    async saveToCapsule(id: string): Promise<void> {
         this.isSaving.set(true);
 
         const currentState = this.states().get(id);
         if (currentState) {
-            this.savedCollection.update(col => {
+            this.savedCapsules.update(col => {
                 const idx = col.findIndex(r => r.id === id);
                 if (idx >= 0) {
                     const updated = [...col];
@@ -215,13 +220,13 @@ export class TabStateService {
             ],
             auth: { type: 'none', token: '' },
             scripts: {
-                preRequest: '// Write your pre-request script here\n// Access data via pm.headers, pm.body, pm.params\n\nconsole.log("Pre-request script running...");',
-                postResponse: '// Write your post-response script here\n// Access data via pm.responseHeaders, pm.responseBody\n\nconsole.log("Post-response script running...");',
+                preRequest: 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
+                postResponse: 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}',
                 preRequestConsole: '',
                 postResponseConsole: ''
             },
             encryption: { algorithm: 'none', key: '', autoEncrypt: false, channelName: '' },
-            settings: { followRedirects: true, verifySsl: true, enableCookies: true },
+            settings: { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true },
             bodyType: 'none',
             rawType: 'JSON',
             rawBody: '{}',
@@ -402,7 +407,7 @@ export class TabStateService {
                 postResponseConsole: 'Executing test: Status is OK\nResult: PASS'
             },
             encryption: { algorithm: 'none', key: '', autoEncrypt: false, channelName: '' },
-            settings: { followRedirects: true, verifySsl: true, enableCookies: true },
+            settings: { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true },
         };
     }
 }

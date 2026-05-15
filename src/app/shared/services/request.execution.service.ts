@@ -110,27 +110,36 @@ export class RequestExecutionService {
             };
 
             // 7. Make the Call
-            // ... (keep current call logic) ...
+            let finalUrl = resolvedUrl;
+            
+            // Bypass CORS if enabled and not calling a local network address
+            if (state.settings?.bypassCors) {
+                const isLocalhost = finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1');
+                if (!isLocalhost) {
+                    finalUrl = `https://corsproxy.io/?${encodeURIComponent(finalUrl)}`;
+                }
+            }
+
             const startTime = performance.now();
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
             
             try {
                 if (state.method === 'GET') {
-                    httpResponse = await firstValueFrom(this.http.get(resolvedUrl, reqOptions));
+                    httpResponse = await firstValueFrom(this.http.get(finalUrl, reqOptions));
                 } else if (state.method === 'POST') {
-                    httpResponse = await firstValueFrom(this.http.post(resolvedUrl, body, reqOptions));
+                    httpResponse = await firstValueFrom(this.http.post(finalUrl, body, reqOptions));
                 } else if (state.method === 'PUT') {
-                    httpResponse = await firstValueFrom(this.http.put(resolvedUrl, body, reqOptions));
+                    httpResponse = await firstValueFrom(this.http.put(finalUrl, body, reqOptions));
                 } else if (state.method === 'DELETE') {
-                    httpResponse = await firstValueFrom(this.http.delete(resolvedUrl, reqOptions));
+                    httpResponse = await firstValueFrom(this.http.delete(finalUrl, reqOptions));
                 } else if (state.method === 'PATCH') {
-                    httpResponse = await firstValueFrom(this.http.patch(resolvedUrl, body, reqOptions));
+                    httpResponse = await firstValueFrom(this.http.patch(finalUrl, body, reqOptions));
                 } else if (state.method === 'HEAD') {
-                    httpResponse = await firstValueFrom(this.http.head(resolvedUrl, reqOptions)) as any;
+                    httpResponse = await firstValueFrom(this.http.head(finalUrl, reqOptions)) as any;
                 } else if (state.method === 'OPTIONS') {
-                    httpResponse = await firstValueFrom(this.http.options(resolvedUrl, reqOptions));
+                    httpResponse = await firstValueFrom(this.http.options(finalUrl, reqOptions));
                 } else {
-                    httpResponse = await firstValueFrom(this.http.request(state.method, resolvedUrl, { ...reqOptions, body }));
+                    httpResponse = await firstValueFrom(this.http.request(state.method, finalUrl, { ...reqOptions, body }));
                 }
             } catch (err: any) {
                 httpResponse = err as HttpErrorResponse;
@@ -171,7 +180,11 @@ export class RequestExecutionService {
             if (postScriptCode && postScriptCode.trim()) {
                 const context = { 
                     responseHeaders, 
-                    responseBody: responseBodyParsed 
+                    responseHeader: responseHeaders, // alias for backwards compatibility with default script
+                    responseBody: responseBodyParsed,
+                    headers, // provide request headers to post-script
+                    body, // provide request body to post-script
+                    params // provide request params to post-script
                 };
                 const result = await this.sandboxService.executeScript(postScriptCode, context);
                 postResponseLogs = result.logs || '';

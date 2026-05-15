@@ -1,0 +1,33 @@
+<div class="p-6 h-full bg-(--postonsteroids-bg-primary)">
+    <h2 class="text-xl font-bold text-(--postonsteroids-text-primary) mb-8">Import Data</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div (click)="fileInput.click()"
+            class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative">
+            
+            <input type="file" #fileInput class="hidden" accept=".json" (change)="onFileSelected($event)" />
+            
+            <div class="flex items-center gap-x-4">
+                <div
+                    class="size-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all">
+                    <mat-icon class="text-[24px]">file_upload</mat-icon>
+                </div>
+                <div>
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Import JSON Data</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Upload a JSON file containing exported OnSteroids capsules.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (importStatus()) {
+    <div class="mt-8 p-4 rounded-xl border" 
+         [class.bg-green-500/10]="!importError()" [class.border-green-500/30]="!importError()" [class.text-green-500]="!importError()"
+         [class.bg-red-500/10]="importError()" [class.border-red-500/30]="importError()" [class.text-red-500]="importError()">
+        <div class="flex items-center gap-2">
+            <mat-icon>{{ importError() ? 'error' : 'check_circle' }}</mat-icon>
+            <span class="font-medium">{{ importStatus() }}</span>
+        </div>
+    </div>
+    }
+</div>

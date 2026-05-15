@@ -30,7 +30,7 @@ export class RequestDetailsComponent {
             if (this.isLoggedIn() && this.waitingForAuth()) {
                 this.waitingForAuth.set(false);
                 // Small delay to ensure modal is closed and UI is ready
-                setTimeout(() => this.shareCollection(), 500);
+                setTimeout(() => this.shareCapsule(), 500);
             }
         });
 
@@ -50,26 +50,26 @@ export class RequestDetailsComponent {
             this.tabStateService.updateState(id, { name: newName });
         }
     }
-    collections = signal<string[]>(['My Collection', 'API Project A', 'Personal Sandbox', 'Team Workspace']);
-    selectedCollection = signal<string>('My Collection');
-    saveOptions = ['Export Endpoint', 'Export Collection'];
+    capsules = signal<string[]>(['My Capsule', 'API Project A', 'Personal Sandbox', 'Team Workspace']);
+    selectedCapsule = signal<string>('My Capsule');
+    saveOptions = ['Export Endpoint', 'Export Capsule'];
 
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
 
-    setCollection(collection: string) {
-        this.selectedCollection.set(collection);
-        this.tabStateService.fetchCollectionData(collection);
+    setCapsule(collection: string) {
+        this.selectedCapsule.set(collection);
+        this.tabStateService.fetchCapsuleData(collection);
     }
 
-    shareCollection() {
+    shareCapsule() {
         if (!this.isLoggedIn()) {
             this.waitingForAuth.set(true);
             this.onAuthRequired.emit();
             return;
         }
 
-        const shareLink = `https://postonsteroids.app/share/${Math.random().toString(36).substring(7)}`;
+        const shareLink = `https://onsteroids.app/share/${Math.random().toString(36).substring(7)}`;
         this.generatedLink.set(shareLink);
         this.showShareModal.set(true);
     }
@@ -77,7 +77,7 @@ export class RequestDetailsComponent {
     copyLink() {
         navigator.clipboard.writeText(this.generatedLink()).then(() => {
             this.showShareModal.set(false);
-            this.onNotify.emit('Collection link copied to clipboard!');
+            this.onNotify.emit('Capsule link copied to clipboard!');
         });
     }
 
@@ -86,15 +86,15 @@ export class RequestDetailsComponent {
             const state = this.tabStateService.activeTabState();
             if (!state) return;
             this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
-        } else if (option === 'Export Collection') {
-            const collectionName = this.selectedCollection();
-            const collectionRequests = this.tabStateService.savedCollection().filter(r => r.name === collectionName);
+        } else if (option === 'Export Capsule') {
+            const collectionName = this.selectedCapsule();
+            const collectionRequests = this.tabStateService.savedCapsules().filter(r => r.name === collectionName);
             const exportData = {
                 collection: collectionName,
                 exportedAt: new Date().toISOString(),
                 requests: collectionRequests
             };
-            this.downloadJson(exportData, `collection_${collectionName}.json`);
+            this.downloadJson(exportData, `capsule_${collectionName}.json`);
         }
     }
 
@@ -111,7 +111,7 @@ export class RequestDetailsComponent {
     async saveRequest() {
         const id = this.tabStateService.activeTabId();
         if (!id) return;
-        await this.tabStateService.saveToCollection(id);
+        await this.tabStateService.saveToCapsule(id);
         this.onNotify.emit('Request saved successfully!');
     }
 }

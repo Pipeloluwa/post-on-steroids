@@ -1,18 +1,18 @@
 <div class="w-full h-full flex flex-col overflow-hidden workspace-container relative">
-    @if (tabStateService.isCollectionLoading()) {
+    @if (tabStateService.isCapsuleLoading()) {
     <div
         class="absolute inset-0 z-100 flex items-center justify-center bg-(--postonsteroids-bg-primary)/40 backdrop-blur-[1px]">
         <div class="flex flex-col items-center gap-y-3">
             <mat-icon class="animate-spin text-(--postonsteroids-accent) w-8! h-8! text-[32px]!">sync</mat-icon>
             <span
                 class="text-[12px] font-medium text-(--postonsteroids-text-secondary) animate-pulse uppercase tracking-widest">Fetching
-                Collection...</span>
+                Capsule...</span>
         </div>
     </div>
     }
     <app-request-tabs-component />
 
-    <div class="w-full h-full p-2 flex flex-col">
+    <div class="w-full flex-1 min-h-0 p-2 flex flex-col">
         <!-- Request Section -->
         <div [style.height.px]="requestHeight()" class="flex flex-col gap-y-2 shrink-0"
             [class.transition-[height]]="!isResizing()">
@@ -35,7 +35,7 @@
         </div>
 
         <!-- Response Section -->
-        <div class="h-full min-h-0 flex border-t border-(--postonsteroids-accent)/40 relative z-30 bg-(--postonsteroids-bg-primary)">
+        <div class="flex-1 min-h-0 flex border-t border-(--postonsteroids-accent)/40 relative z-30 bg-(--postonsteroids-bg-primary)">
             <app-response-viewer-component class="w-full h-full block" />
         </div>
 

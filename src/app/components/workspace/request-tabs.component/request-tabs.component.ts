@@ -26,14 +26,18 @@ export class RequestTabsComponent {
     @ViewChild('variableModal') variableModal!: VariableModalComponent;
 
     constructor() {
+        // Only initialize state for tabs that don't already have persisted state
         const initialTabs = this.tabs();
         if (initialTabs.length > 0) {
             initialTabs.forEach(t => {
-                this.tabStateService.updateState(t.id, {
-                    method: t.method,
-                    name: t.name,
-                    isDirty: t.isDirty
-                });
+                const existingState = this.tabStateService.getState(t.id);
+                if (!existingState) {
+                    this.tabStateService.updateState(t.id, {
+                        method: t.method,
+                        name: t.name,
+                        isDirty: t.isDirty
+                    });
+                }
             });
             this.tabStateService.setActiveTab(this.activeTabId());
         }
@@ -86,6 +90,11 @@ export class RequestTabsComponent {
     canScrollRight = signal<boolean>(true);
 
     endpoints = computed(() => this.tabs().map(t => t.name));
+
+    /** Get the current method for a tab from the persisted service state */
+    getTabMethod(tabId: string): string {
+        return this.tabStateService.getState(tabId)?.method ?? 'GET';
+    }
 
     @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
 

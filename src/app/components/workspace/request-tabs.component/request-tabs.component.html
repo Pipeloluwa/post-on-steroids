@@ -30,8 +30,8 @@
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
 
             <!-- Method -->
-            <span class="text-[9px] font-bold uppercase" [style.color]="getMethodColor(tab.method)">
-                {{ tab.method }}
+            <span class="text-[9px] font-bold uppercase" [style.color]="getMethodColor(getTabMethod(tab.id))">
+                {{ getTabMethod(tab.id) }}
             </span>
 
             <!-- Name/URL -->
@@ -74,7 +74,7 @@
     <div
         class="h-full flex items-center px-1 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)">
         <app-scrollable-select-component [optionValues]="endpoints()" [searchable]="true" [verticalPosition]="32"
-            [modalWidth]="300" [modalHeight]="600" [absoluteStartLeft]="false"
+            [modalWidth]="300" [modalHeight]="300" [absoluteStartLeft]="false"
             (outputSelectedValue)="selectEndpoint($event)">
             <mat-icon class="pt-[3px] text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">search</mat-icon>
         </app-scrollable-select-component>

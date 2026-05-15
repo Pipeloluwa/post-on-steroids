@@ -1,19 +1,19 @@
 <div class="p-6 h-full flex flex-col gap-6 bg-(--postonsteroids-bg-primary)">
     <div class="flex items-center justify-between">
-        <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">Collections</h2>
+        <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">Capsules</h2>
     </div>
 
     <div class="flex gap-2">
-        <input type="text" [(ngModel)]="newCollectionName" placeholder="New collection name..."
+        <input type="text" [(ngModel)]="newCapsuleName" placeholder="New capsule name..."
             class="flex-1 px-4 py-2 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)">
-        <button (click)="createCollection()"
+        <button (click)="createCapsule()"
             class="px-4 py-2 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white font-bold rounded-lg transition-all cursor-pointer">
             Create
         </button>
     </div>
 
     <div class="flex-1 overflow-auto space-y-2">
-        @for (item of sortedCollections(); track item.id) {
+        @for (item of sortedCapsules(); track item.id) {
         <div
             class="flex items-center justify-between p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/50 transition-all">
             
@@ -35,7 +35,7 @@
                         class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
                         <mat-icon class="text-[18px]! size-[18px]!">edit</mat-icon>
                     </button>
-                    <button (click)="deleteCollection(item.id)"
+                    <button (click)="deleteCapsule(item.id)"
                         class="p-1.5 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-500 transition-all cursor-pointer">
                         <mat-icon class="text-[18px]! size-[18px]!">delete</mat-icon>
                     </button>

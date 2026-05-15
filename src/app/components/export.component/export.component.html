@@ -11,7 +11,7 @@
                 </div>
                 <div>
                     <h3 class="font-bold text-(--postonsteroids-text-primary)">Export All as JSON</h3>
-                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Download all your collections
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Download all your capsules
                         in a single JSON file.</p>
                 </div>
             </div>
@@ -20,19 +20,19 @@
 
     <div class="mt-8 flex flex-col gap-4">
         <div class="flex items-center justify-between">
-            <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Select Collections to Export</h3>
-            <button (click)="exportSelected()" [disabled]="selectedCollections().size === 0"
+            <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Select Capsules to Export</h3>
+            <button (click)="exportSelected()" [disabled]="selectedCapsules().size === 0"
                 class="px-4 py-2 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white font-bold rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                 <mat-icon>file_download</mat-icon>
-                Export Selected ({{ selectedCollections().size }})
+                Export Selected ({{ selectedCapsules().size }})
             </button>
         </div>
 
         <div class="space-y-2">
-            @for (item of collections(); track item.id) {
+            @for (item of capsules(); track item.id) {
             <div class="flex items-center gap-4 p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 transition-all">
                 <input type="checkbox" 
-                    [checked]="selectedCollections().has(item.id)"
+                    [checked]="selectedCapsules().has(item.id)"
                     (change)="toggleSelection(item.id)"
                     class="accent-(--postonsteroids-accent) cursor-pointer w-5 h-5" />
                 <div class="flex-1">

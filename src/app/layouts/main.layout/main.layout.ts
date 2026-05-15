@@ -28,7 +28,7 @@ export class MainLayout {
   notificationService = inject(NotificationService);
   sidebarService = inject(SidebarService);
 
-  protected readonly title = signal('PostOnSteroids');
+  protected readonly title = signal('OnSteroids');
 
   toggleAuthModal() {
     this.authService.toggleAuthModal();

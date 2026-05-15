@@ -57,7 +57,7 @@ export class PayloadTypesComponent {
   auth = computed(() => this.tabStateService.activeTabState()?.auth ?? { type: 'none' as const, token: '' });
   scripts = computed(() => this.tabStateService.activeTabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '' });
   encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncrypt: false, channelName: '' });
-  settings = computed(() => this.tabStateService.activeTabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true });
+  settings = computed(() => this.tabStateService.activeTabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true });
 
   setPayloadType(type: string) {
     const id = this.tabStateService.activeTabId();

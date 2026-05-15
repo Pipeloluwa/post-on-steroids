@@ -222,7 +222,7 @@
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
             <app-monaco-editor [ngModel]="scripts()[activeScriptTab()]"
                 (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="true"
-                class="flex w-full h-full">
+                class="block w-full h-full">
             </app-monaco-editor>
         </div>
     </div>
@@ -319,6 +319,19 @@
                 [class.bg-(--postonsteroids-bg-tertiary)]="!settings().enableCookies">
                 <div class="absolute top-[3px] left-[3px] w-[14px] h-[14px] bg-white rounded-full transition-transform duration-200"
                     [class.translate-x-4]="settings().enableCookies"></div>
+            </button>
+        </div>
+        <div class="flex items-center justify-between py-2">
+            <div class="flex flex-col">
+                <span class="text-[12px] font-medium text-(--postonsteroids-text-primary)">Bypass CORS</span>
+                <span class="text-[11px] text-(--postonsteroids-text-muted)">Use an open proxy to bypass browser CORS restrictions (like Postman)</span>
+            </div>
+            <button (click)="toggleSetting('bypassCors', !settings().bypassCors)"
+                class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
+                [class.bg-(--postonsteroids-accent)]="settings().bypassCors"
+                [class.bg-(--postonsteroids-bg-tertiary)]="!settings().bypassCors">
+                <div class="absolute top-[3px] left-[3px] w-[14px] h-[14px] bg-white rounded-full transition-transform duration-200"
+                    [class.translate-x-4]="settings().bypassCors"></div>
             </button>
         </div>
     </div>
