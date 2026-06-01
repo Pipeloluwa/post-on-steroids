@@ -65,9 +65,36 @@ export class RequestExecutionService {
                 }
             }
 
-            // 5. Pre-Request Script Execution
-            const preScriptCode = state.scripts?.preRequest;
+            // 5. Script Execution (Encryption -> Pre-Request)
             let preRequestLogs = '';
+
+            // 5a. Encryption Script
+            const encryptionScriptCode = state.encryption?.script;
+            if (encryptionScriptCode && encryptionScriptCode.trim()) {
+                const encContext = { 
+                    headers, 
+                    body, 
+                    params,
+                    encryptedHeaders: state.encryption?.encryptedHeaders || [],
+                    encryptedBodyPaths: state.encryption?.encryptedBodyPaths || [],
+                    autoEncryptBody: state.encryption?.autoEncryptBody || false,
+                    autoEncryptHeaders: state.encryption?.autoEncryptHeaders || false,
+                    channelName: state.encryption?.channelName || ''
+                };
+                const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
+                if (encResult.logs) preRequestLogs += 'Encryption Logs:\n' + encResult.logs + '\n\n';
+                
+                if (encResult.success && encResult.context) {
+                     headers = encResult.context.headers || headers;
+                     body = encResult.context.body !== undefined ? encResult.context.body : body;
+                     params = encResult.context.params || params;
+                } else if (encResult.error) {
+                    preRequestLogs += `\nEncryption Error: ${encResult.error}\n\n`;
+                }
+            }
+
+            // 5b. Pre-Request Script
+            const preScriptCode = state.scripts?.preRequest;
             if (preScriptCode && preScriptCode.trim()) {
                 const context = { 
                     headers, 
@@ -75,7 +102,7 @@ export class RequestExecutionService {
                     params 
                 };
                 const result = await this.sandboxService.executeScript(preScriptCode, context);
-                preRequestLogs = result.logs || '';
+                preRequestLogs += result.logs || '';
                 
                 if (result.success && result.context) {
                      headers = result.context.headers || headers;

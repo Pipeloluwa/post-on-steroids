@@ -66,6 +66,7 @@ window.addEventListener("message", async (event) => {
       + code + "\\n"
       + "if (typeof preScript === 'function') { await preScript(headers, body, params); }\\n"
       + "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params); }\\n"
+      + "if (typeof encryptScript === 'function') { await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); }\\n"
       + paramWriteBack + "\\n"
       + "})();";
       

@@ -24,7 +24,7 @@ export class PayloadTypesComponent {
   tabStateService = inject(TabStateService);
   variableService = inject(VariableService);
 
-  payloadTypes = ['params', 'auth', 'headers', 'body', 'scripts', 'encryption-channel', 'settings'];
+  payloadTypes = ['params', 'auth', 'headers', 'body', 'scripts', 'encryption', 'settings'];
   authTypes: AuthState['type'][] = ['none', 'bearer'];
   channelNames = ['Default Channel', 'Secure Channel 1', 'Payment Gateway', 'Internal Legacy', 'Production Node', 'Staging Link', 'Encrypted Proxy', 'VPN Tunnel'];
 
@@ -56,7 +56,7 @@ export class PayloadTypesComponent {
   headers = computed(() => this.tabStateService.activeTabState()?.headers ?? []);
   auth = computed(() => this.tabStateService.activeTabState()?.auth ?? { type: 'none' as const, token: '' });
   scripts = computed(() => this.tabStateService.activeTabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '' });
-  encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncrypt: false, channelName: '' });
+  encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
   settings = computed(() => this.tabStateService.activeTabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true });
 
   setPayloadType(type: string) {
@@ -236,12 +236,24 @@ export class PayloadTypesComponent {
   }
 
   // ── Encryption ───────────────────────────────────────────────────────
-  setEncryptionField(field: keyof EncryptionState, val: string | boolean) {
+  setEncryptionField(field: keyof EncryptionState, val: any) {
     const id = this.tabStateService.activeTabId();
     if (!id) return;
     const current = this.encryption();
-    const updated: EncryptionState = { ...current, [field]: val };
+    const updated: EncryptionState = { ...current, [field]: val } as any;
     this.tabStateService.updateState(id, { encryption: updated });
+  }
+
+  toggleHeaderEncryption(key: string) {
+    if (!key) return;
+    const current = this.encryption();
+    const headers = new Set(current.encryptedHeaders || []);
+    if (headers.has(key)) {
+      headers.delete(key);
+    } else {
+      headers.add(key);
+    }
+    this.setEncryptionField('encryptedHeaders', Array.from(headers));
   }
 
   // ── Settings ─────────────────────────────────────────────────────────

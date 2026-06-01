@@ -1,4 +1,4 @@
-import { Component, input, forwardRef, inject, PLATFORM_ID, signal, effect, computed, ChangeDetectionStrategy } from '@angular/core';
+import { Component, input, output, forwardRef, inject, PLATFORM_ID, signal, effect, computed, ChangeDetectionStrategy, OnDestroy } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/forms';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
@@ -28,6 +28,10 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   language = input<string>('javascript');
   readOnly = input<boolean>(false);
   restrictToFunctionBody = input<boolean>(false);
+  enableEncryptionToggles = input<boolean>(false);
+  encryptedPaths = input<string[]>([]);
+  autoEncrypt = input<boolean>(false);
+  toggleEncryption = output<string>();
 
   value = signal<string>('');
   disabled = signal<boolean>(false);
@@ -38,7 +42,10 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     readOnly: this.disabled() || this.readOnly(),
     automaticLayout: true,
     minimap: { enabled: false },
+    scrollbar: { useShadows: false },
+    stickyScroll: { enabled: false },
     scrollBeyondLastLine: false,
+    glyphMargin: this.enableEncryptionToggles(),
     fontSize: 13,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
   }));
@@ -53,8 +60,17 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     effect(() => {
       const theme = this.themeService.isDarkMode() ? 'vs-dark' : 'vs';
       const readOnly = this.disabled() || this.readOnly();
+      const glyphMargin = this.enableEncryptionToggles();
       if (this.editorInstance) {
-        this.editorInstance.updateOptions({ theme, readOnly });
+        this.editorInstance.updateOptions({ theme, readOnly, glyphMargin });
+      }
+    });
+
+    effect(() => {
+      const paths = this.encryptedPaths();
+      const autoEnc = this.autoEncrypt();
+      if (this.editorInstance && this.enableEncryptionToggles()) {
+        this.updateDecorations();
       }
     });
   }
@@ -102,6 +118,90 @@ export class MonacoEditorComponent implements ControlValueAccessor {
         this.resizeObserver.observe(container);
       }
     }
+
+    if (this.enableEncryptionToggles()) {
+      editor.onMouseDown((e: any) => {
+        const monacoGlobal = (window as any).monaco;
+        if (e.target.type === monacoGlobal.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+          const lineNumber = e.target.position.lineNumber;
+          const model = editor.getModel();
+          if (model) {
+            const lines = model.getValue().split('\n');
+            const path = this.getJsonPathAtLine(lines, lineNumber - 1);
+            if (path) {
+              this.toggleEncryption.emit(path);
+            }
+          }
+        }
+      });
+
+      editor.onDidChangeModelContent(() => {
+        this.updateDecorations();
+      });
+    }
+  }
+
+  private decorationsCollection: any;
+
+  private updateDecorations() {
+    if (!this.editorInstance) return;
+    const monacoGlobal = (window as any).monaco;
+    if (!monacoGlobal) return;
+
+    const model = this.editorInstance.getModel();
+    if (!model) return;
+
+    const lines = model.getValue().split('\n');
+    const decorations: any[] = [];
+    const paths = this.encryptedPaths() || [];
+    const autoEnc = this.autoEncrypt();
+
+    for (let i = 0; i < lines.length; i++) {
+      const path = this.getJsonPathAtLine(lines, i);
+      if (path) {
+        const isEncrypted = autoEnc || paths.includes(path);
+        decorations.push({
+          range: new monacoGlobal.Range(i + 1, 1, i + 1, 1),
+          options: {
+            isWholeLine: false,
+            glyphMarginClassName: isEncrypted ? 'monaco-lock-icon active' : 'monaco-lock-icon inactive',
+            glyphMarginHoverMessage: { value: isEncrypted ? 'Click to disable encryption' : 'Click to enable encryption' }
+          }
+        });
+      }
+    }
+
+    if (this.decorationsCollection) {
+      this.decorationsCollection.set(decorations);
+    } else {
+      this.decorationsCollection = this.editorInstance.createDecorationsCollection(decorations);
+    }
+  }
+
+  private getJsonPathAtLine(lines: string[], targetLineIndex: number): string | null {
+    const targetLine = lines[targetLineIndex];
+    if (!targetLine) return null;
+    const keyMatch = targetLine.match(/^\s*"([^"]+)"\s*:/);
+    if (!keyMatch) return null;
+    
+    const targetKey = keyMatch[1];
+    const targetIndent = targetLine.search(/\S/);
+
+    const path: string[] = [targetKey];
+    let currentIndent = targetIndent;
+
+    for (let i = targetLineIndex - 1; i >= 0; i--) {
+      const line = lines[i];
+      const indent = line.search(/\S/);
+      if (indent !== -1 && indent < currentIndent) {
+        const parentMatch = line.match(/^\s*"([^"]+)"\s*:\s*\{/);
+        if (parentMatch) {
+          path.unshift(parentMatch[1]);
+          currentIndent = indent;
+        }
+      }
+    }
+    return path.join('.');
   }
 
   ngOnDestroy() {

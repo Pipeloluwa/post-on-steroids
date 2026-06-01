@@ -15,3 +15,33 @@
     height: 100% !important;
     min-height: 0 !important;
 }
+/* Remove the dark bevel/shadow line that appears at the top when the editor is scrolled */
+::ng-deep .monaco-editor .scroll-decoration {
+    display: none !important;
+    box-shadow: none !important;
+}
+
+::ng-deep .monaco-lock-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+::ng-deep .monaco-lock-icon::before {
+    content: "🔒";
+    font-size: 10px;
+}
+
+::ng-deep .monaco-lock-icon.active::before {
+    opacity: 1;
+}
+
+::ng-deep .monaco-lock-icon.inactive::before {
+    opacity: 0.3;
+    filter: grayscale(100%);
+}
+
+::ng-deep .monaco-lock-icon.inactive:hover::before {
+    opacity: 0.8;
+}

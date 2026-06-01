@@ -46,6 +46,27 @@ export class BodyTypesComponent {
   bodyType = computed(() => this.tabStateService.activeTabState()?.bodyType ?? 'none');
   rawType = computed(() => this.tabStateService.activeTabState()?.rawType ?? 'JSON');
   formData = computed(() => this.tabStateService.activeTabState()?.formData ?? []);
+  encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
+
+  setEncryptionField(field: keyof import('../../../shared/services/tab.state.service').EncryptionState, val: any) {
+    const id = this.tabStateService.activeTabId();
+    if (!id) return;
+    const current = this.encryption();
+    const updated = { ...current, [field]: val } as any;
+    this.tabStateService.updateState(id, { encryption: updated });
+  }
+
+  toggleBodyEncryption(path: string) {
+    if (!path) return;
+    const current = this.encryption();
+    const paths = new Set(current.encryptedBodyPaths || []);
+    if (paths.has(path)) {
+      paths.delete(path);
+    } else {
+      paths.add(path);
+    }
+    this.setEncryptionField('encryptedBodyPaths', Array.from(paths));
+  }
 
   setBodyType(type: string) {
     const id = this.tabStateService.activeTabId();
