@@ -71,9 +71,9 @@ export class RequestExecutionService {
             // 5a. Encryption Script
             const encryptionScriptCode = state.encryption?.script;
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
-                const encContext = { 
-                    headers, 
-                    body, 
+                const encContext = {
+                    headers,
+                    body,
                     params,
                     encryptedHeaders: state.encryption?.encryptedHeaders || [],
                     encryptedBodyPaths: state.encryption?.encryptedBodyPaths || [],
@@ -83,7 +83,7 @@ export class RequestExecutionService {
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
                 if (encResult.logs) preRequestLogs += 'Encryption Logs:\n' + encResult.logs + '\n\n';
-                
+
                 if (encResult.success && encResult.context) {
                      headers = encResult.context.headers || headers;
                      body = encResult.context.body !== undefined ? encResult.context.body : body;
@@ -96,14 +96,14 @@ export class RequestExecutionService {
             // 5b. Pre-Request Script
             const preScriptCode = state.scripts?.preRequest;
             if (preScriptCode && preScriptCode.trim()) {
-                const context = { 
-                    headers, 
-                    body, 
-                    params 
+                const context = {
+                    headers,
+                    body,
+                    params
                 };
                 const result = await this.sandboxService.executeScript(preScriptCode, context);
                 preRequestLogs += result.logs || '';
-                
+
                 if (result.success && result.context) {
                      headers = result.context.headers || headers;
                      body = result.context.body !== undefined ? result.context.body : body;
@@ -133,12 +133,12 @@ export class RequestExecutionService {
                 headers: httpHeaders,
                 params: httpParams,
                 observe: 'response' as const,
-                responseType: 'text' as const 
+                responseType: 'text' as const
             };
 
             // 7. Make the Call
             let finalUrl = resolvedUrl;
-            
+
             // Bypass CORS if enabled and not calling a local network address
             if (state.settings?.bypassCors) {
                 const isLocalhost = finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1');
@@ -149,25 +149,35 @@ export class RequestExecutionService {
 
             const startTime = performance.now();
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
-            
+
             try {
-                if (state.method === 'GET') {
+              switch (state.method){
+                case 'GET':
                     httpResponse = await firstValueFrom(this.http.get(finalUrl, reqOptions));
-                } else if (state.method === 'POST') {
+                    break;
+                case 'POST':
                     httpResponse = await firstValueFrom(this.http.post(finalUrl, body, reqOptions));
-                } else if (state.method === 'PUT') {
+                    break;
+                case 'PUT':
                     httpResponse = await firstValueFrom(this.http.put(finalUrl, body, reqOptions));
-                } else if (state.method === 'DELETE') {
+                    break;
+                case 'DELETE':
                     httpResponse = await firstValueFrom(this.http.delete(finalUrl, reqOptions));
-                } else if (state.method === 'PATCH') {
+                    break;
+                case 'PATCH':
                     httpResponse = await firstValueFrom(this.http.patch(finalUrl, body, reqOptions));
-                } else if (state.method === 'HEAD') {
+                    break;
+                case 'HEAD':
                     httpResponse = await firstValueFrom(this.http.head(finalUrl, reqOptions)) as any;
-                } else if (state.method === 'OPTIONS') {
+                    break;
+                case 'OPTIONS':
                     httpResponse = await firstValueFrom(this.http.options(finalUrl, reqOptions));
-                } else {
+                    break;
+                default:
                     httpResponse = await firstValueFrom(this.http.request(state.method, finalUrl, { ...reqOptions, body }));
-                }
+                    break;
+
+              }
             } catch (err: any) {
                 httpResponse = err as HttpErrorResponse;
             }
@@ -205,8 +215,8 @@ export class RequestExecutionService {
             const postScriptCode = state.scripts?.postResponse;
             let postResponseLogs = '';
             if (postScriptCode && postScriptCode.trim()) {
-                const context = { 
-                    responseHeaders, 
+                const context = {
+                    responseHeaders,
                     responseHeader: responseHeaders, // alias for backwards compatibility with default script
                     responseBody: responseBodyParsed,
                     headers, // provide request headers to post-script
@@ -215,7 +225,7 @@ export class RequestExecutionService {
                 };
                 const result = await this.sandboxService.executeScript(postScriptCode, context);
                 postResponseLogs = result.logs || '';
-                
+
                 if (result.success && result.context) {
                      // Allow scripts to read results
                 } else if (result.error) {
