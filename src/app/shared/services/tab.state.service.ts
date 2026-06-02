@@ -97,6 +97,7 @@ export class TabStateService {
     private platformId = inject(PLATFORM_ID);
     private isBrowser = isPlatformBrowser(this.platformId);
     private states = signal<Map<string, RequestState>>(new Map());
+    private openTabIds = signal<string[]>([]);
 
     getState(id: string): RequestState | undefined {
         return this.states().get(id);
@@ -124,14 +125,20 @@ export class TabStateService {
                 const currentStates = Array.from(this.states().entries());
                 localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
                 localStorage.setItem('onsteroids_active_tab', this.activeTabId() || '');
+                localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
             }
         });
+
+        if (this.states().size === 0) {
+            this.setActiveTab('1');
+        }
     }
 
     private loadFromStorage() {
         if (!this.isBrowser) return;
         const savedStates = localStorage.getItem('onsteroids_states');
         const activeTabId = localStorage.getItem('onsteroids_active_tab');
+        const savedOpenTabIds = localStorage.getItem('onsteroids_open_tab_ids');
         
         if (savedStates) {
             try {
@@ -141,7 +148,22 @@ export class TabStateService {
                 console.error('Failed to load states from storage', e);
             }
         }
+
+        if (savedOpenTabIds) {
+            try {
+                const parsed = JSON.parse(savedOpenTabIds);
+                if (Array.isArray(parsed)) {
+                    this.openTabIds.set(parsed.filter(item => typeof item === 'string'));
+                }
+            } catch (e) {
+                console.error('Failed to load open tabs from storage', e);
+            }
+        }
         
+        if (this.openTabIds().length === 0 && this.states().size > 0) {
+            this.openTabIds.set(Array.from(this.states().keys()));
+        }
+
         if (activeTabId) {
             this.activeTabId.set(activeTabId);
         }
@@ -154,7 +176,38 @@ export class TabStateService {
                 return new Map(map);
             });
         }
+
+        if (!this.openTabIds().includes(id)) {
+            this.openTabIds.update(ids => [...ids, id]);
+        }
+
         this.activeTabId.set(id);
+    }
+
+    getAllOpenTabs(): RequestState[] {
+        return this.openTabIds()
+            .map(id => this.states().get(id))
+            .filter((state): state is RequestState => Boolean(state));
+    }
+
+    addOpenTab(state: RequestState) {
+        this.states.update(map => {
+            const next = new Map(map);
+            next.set(state.id, state);
+            return next;
+        });
+
+        if (!this.openTabIds().includes(state.id)) {
+            this.openTabIds.update(ids => [...ids, state.id]);
+        }
+    }
+
+    closeTab(id: string) {
+        this.openTabIds.update(ids => ids.filter(item => item !== id));
+        if (this.activeTabId() === id) {
+            const remaining = this.openTabIds();
+            this.activeTabId.set(remaining[0] || null);
+        }
     }
 
     async fetchCapsuleData(collectionName: string) {

@@ -64,9 +64,17 @@
     </button>
 
 
+    <!-- Import From Swagger Button -->
+    <div (click)="swaggerModal.open()"
+        class="h-full flex items-center px-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)"
+        title="Import from Swagger">
+        <mat-icon class="flex text-[18px]! size-[18px]! text-(--postonsteroids-text-secondary)">cloud_download</mat-icon>
+    </div>
+
     <!-- Add Tab Button -->
     <div (click)="addTab()"
-        class="h-full flex items-center px-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)">
+        class="h-full flex items-center px-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)"
+        title="Create new request">
         <mat-icon class="flex text-[18px]! size-[18px]! text-(--postonsteroids-text-secondary)">add</mat-icon>
     </div>
 
@@ -113,3 +121,4 @@
 </div>
 
 <app-variable-modal #variableModal />
+<app-swagger-import-modal #swaggerModal />

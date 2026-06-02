@@ -18,7 +18,24 @@
                 </div>
             </div>
         </div>
+
+        <div (click)="swaggerModal.open()"
+            class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative"
+            title="Import from Swagger">
+            <div class="flex items-center gap-x-4">
+                <div
+                    class="size-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                    <mat-icon class="text-[24px]">cloud_download</mat-icon>
+                </div>
+                <div>
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Import from Swagger</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a Swagger URL that ends with /swagger/index.html to import API endpoints.</p>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <app-swagger-import-modal #swaggerModal />
 
     @if (importStatus()) {
     <div class="mt-8 p-4 rounded-xl border" 

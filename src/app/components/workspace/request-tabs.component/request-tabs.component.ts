@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { VariableModalComponent } from '../../../shared/components/variable.modal.component/variable.modal.component';
+import { SwaggerImportModalComponent } from '../../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
 import { VariableService } from '../../../shared/services/variable.service';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { effect } from '@angular/core';
@@ -16,7 +17,7 @@ interface RequestTab {
 
 @Component({
     selector: 'app-request-tabs-component',
-    imports: [CommonModule, MatIcon, ScrollableSelectComponent, VariableModalComponent],
+    imports: [CommonModule, MatIcon, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent],
     templateUrl: './request-tabs.component.html',
     styleUrl: './request-tabs.component.css',
 })
@@ -24,67 +25,22 @@ export class RequestTabsComponent {
     variableService = inject(VariableService);
     tabStateService = inject(TabStateService);
     @ViewChild('variableModal') variableModal!: VariableModalComponent;
+    @ViewChild('swaggerModal') swaggerModal!: SwaggerImportModalComponent;
 
-    constructor() {
-        // Only initialize state for tabs that don't already have persisted state
-        const initialTabs = this.tabs();
-        if (initialTabs.length > 0) {
-            initialTabs.forEach(t => {
-                const existingState = this.tabStateService.getState(t.id);
-                if (!existingState) {
-                    this.tabStateService.updateState(t.id, {
-                        method: t.method,
-                        name: t.name,
-                        isDirty: t.isDirty
-                    });
-                }
-            });
-            this.tabStateService.setActiveTab(this.activeTabId());
-        }
+    tabs = computed<RequestTab[]>(() => {
+        return this.tabStateService.getAllOpenTabs().map(state => ({
+            id: state.id,
+            method: state.method,
+            name: state.name,
+            isDirty: state.isDirty,
+        }));
+    });
 
-        effect(() => {
-            const activeId = this.tabStateService.activeTabId();
-            if (activeId && activeId !== this.activeTabId()) {
-                this.activeTabId.set(activeId);
-            }
-        });
-
-        afterNextRender(() => {
-            this.updateScrollState();
-            this.scrollContainer.nativeElement.addEventListener('scroll', () => {
-                this.updateScrollState();
-            });
-        });
-    }
-
-    tabs = signal<RequestTab[]>([
-        { id: '1', method: 'POST', name: 'http://acegeld.runasp.net/login', isDirty: true },
-        { id: '2', method: 'POST', name: 'http://acegeld.runasp.net/registration', isDirty: false },
-        { id: '3', method: 'GET', name: 'https://api.example.com/...', isDirty: true },
-        { id: '4', method: 'POST', name: 'http://local.dev/...', isDirty: false },
-        { id: '5', method: 'POST', name: 'http://server.com/...', isDirty: false },
-        { id: '6', method: 'POST', name: 'http://api.v2/...', isDirty: false },
-        { id: '7', method: 'GET', name: 'https://prod.env/...', isDirty: false },
-        { id: '8', method: 'POST', name: 'http://test.api/...', isDirty: false },
-        { id: '9', method: 'PUT', name: 'https://update.me/...', isDirty: false },
-        { id: '10', method: 'DEL', name: 'https://delete.it/...', isDirty: false },
-        { id: '11', method: 'POST', name: 'http://acegeld.runasp.net/login', isDirty: true },
-        { id: '12', method: 'POST', name: 'http://acegeld.runasp.net/registration', isDirty: false },
-        { id: '13', method: 'GET', name: 'https://api.example.com/...', isDirty: true },
-        { id: '14', method: 'POST', name: 'http://local.dev/...', isDirty: false },
-        { id: '15', method: 'POST', name: 'http://server.com/...', isDirty: false },
-        { id: '16', method: 'POST', name: 'http://api.v2/...', isDirty: false },
-        { id: '17', method: 'GET', name: 'https://prod.env/...', isDirty: false },
-        { id: '18', method: 'POST', name: 'http://test.api/...', isDirty: false },
-        { id: '19', method: 'PUT', name: 'https://update.me/...', isDirty: false },
-        { id: '20', method: 'DEL', name: 'https://delete.it/...', isDirty: false },
-    ]);
-
-    activeTabId = signal<string>('4');
+    activeTabId = this.tabStateService.activeTabId;
     autoAuthEnabled = signal<boolean>(true);
 
-    historyStack = signal<string[]>(['4']);
-    historyIndex = signal<number>(0);
+    historyStack = signal<string[]>([]);
+    historyIndex = signal<number>(-1);
 
     canScrollLeft = signal<boolean>(false);
     canScrollRight = signal<boolean>(true);
@@ -97,6 +53,24 @@ export class RequestTabsComponent {
     }
 
     @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
+
+    constructor() {
+        effect(() => {
+            const activeId = this.tabStateService.activeTabId();
+            if (activeId && !this.historyStack().includes(activeId)) {
+                const currentStack = this.historyStack().slice(0, this.historyIndex() + 1);
+                this.historyStack.set([...currentStack, activeId]);
+                this.historyIndex.set(this.historyStack().length - 1);
+            }
+        });
+
+        afterNextRender(() => {
+            this.updateScrollState();
+            this.scrollContainer.nativeElement.addEventListener('scroll', () => {
+                this.updateScrollState();
+            });
+        });
+    }
 
     updateScrollState() {
         if (!this.scrollContainer) return;
@@ -119,7 +93,6 @@ export class RequestTabsComponent {
     setActiveTab(id: string, isHistoryNav: boolean = false) {
         if (this.activeTabId() === id) return;
 
-        this.activeTabId.set(id);
         this.tabStateService.setActiveTab(id);
 
         if (!isHistoryNav) {
@@ -162,13 +135,12 @@ export class RequestTabsComponent {
         if (currentTabs.length === 1) return;
 
         const tabIndex = currentTabs.findIndex(t => t.id === id);
-        const filteredTabs = currentTabs.filter(t => t.id !== id);
-        this.tabs.set(filteredTabs);
+        this.tabStateService.closeTab(id);
 
         if (this.activeTabId() === id) {
-            const newActiveTab = filteredTabs[tabIndex] || filteredTabs[tabIndex - 1];
-            if (newActiveTab) {
-                this.activeTabId.set(newActiveTab.id);
+            const newTab = this.tabs()[tabIndex] || this.tabs()[tabIndex - 1];
+            if (newTab) {
+                this.tabStateService.setActiveTab(newTab.id);
             }
         }
 
@@ -196,7 +168,7 @@ export class RequestTabsComponent {
     selectEndpoint(endpoint: string) {
         const tab = this.tabs().find(t => t.name === endpoint);
         if (tab) {
-            this.activeTabId.set(tab.id);
+            this.tabStateService.setActiveTab(tab.id);
             const activeEl = this.scrollContainer.nativeElement.querySelector(`#tab${tab.id}`);
             if (activeEl) {
                 activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -205,15 +177,7 @@ export class RequestTabsComponent {
     }
 
     addTab() {
-        const newId = (this.tabs().length + 1).toString();
-        const newTab = {
-            id: newId,
-            method: 'GET',
-            name: 'New Request',
-            isDirty: false
-        };
-        this.tabs.update(t => [...t, newTab]);
-        this.activeTabId.set(newId);
+        const newId = Date.now().toString();
         this.tabStateService.setActiveTab(newId);
 
         setTimeout(() => {

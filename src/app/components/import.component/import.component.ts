@@ -2,10 +2,11 @@ import { Component, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
+import { SwaggerImportModalComponent } from '../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
 
 @Component({
     selector: 'app-import-component',
-    imports: [CommonModule, MatIcon],
+    imports: [CommonModule, MatIcon, SwaggerImportModalComponent],
     templateUrl: './import.component.html',
     styleUrl: './import.component.css'
 })
