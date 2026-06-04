@@ -1,11 +1,12 @@
 import { Component, input, output, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { SidebarService } from '../../services/sidebar.service';
 
 @Component({
     selector: 'app-navbar-component',
-    imports: [CommonModule, MatIcon],
+    imports: [CommonModule, RouterModule, MatIcon],
     templateUrl: './navbar.component.html',
     styleUrl: './navbar.component.css'
 })

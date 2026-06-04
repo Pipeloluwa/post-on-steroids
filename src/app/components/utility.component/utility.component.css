@@ -1,0 +1,14 @@
+:host {
+    display: block;
+    min-height: 100%;
+}
+
+input[type="text"],
+input[type="date"],
+input[type="datetime-local"] {
+    width: 100%;
+}
+
+button {
+    font-family: inherit;
+}

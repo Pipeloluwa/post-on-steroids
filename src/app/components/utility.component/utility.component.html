@@ -1,0 +1,130 @@
+<div class="p-6 h-full overflow-auto space-y-6">
+    <div class="flex flex-col gap-y-2">
+        <h1 class="text-xl font-bold text-(--postonsteroids-text-primary)">Utilities</h1>
+        <p class="text-sm text-(--postonsteroids-text-secondary)">Generate IDs, timestamps, and time conversions quickly.</p>
+    </div>
+
+    <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+        <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
+            <div>
+                <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">UUID / GUID Generator</h2>
+                <p class="text-sm text-(--postonsteroids-text-secondary)">Quickly create a new UUID and copy it for use in requests, headers, or test data.</p>
+            </div>
+            <button (click)="generateUuid()"
+                class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
+                <mat-icon class="text-[18px]! size-[18px]!">share</mat-icon>
+                Generate UUID
+            </button>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+            <input readonly type="text" [value]="uuidValue()"
+                class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none" />
+            <button (click)="copyText(uuidValue())"
+                class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-3 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">
+                Copy
+            </button>
+        </div>
+
+        @if (copyStatus()) {
+        <p class="mt-3 text-sm text-(--postonsteroids-text-secondary)">{{ copyStatus() }}</p>
+        }
+    </section>
+
+    <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+        <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
+            <div>
+                <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Current Timestamp</h2>
+                <p class="text-sm text-(--postonsteroids-text-secondary)">View the current date and time in different formats.</p>
+            </div>
+            <button (click)="refreshNow()"
+                class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-[13px] font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">
+                <mat-icon class="text-[18px]! size-[18px]!">refresh</mat-icon>
+                Refresh
+            </button>
+        </div>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Local</span>
+                <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentLocal() }}</p>
+            </div>
+            <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">UTC ISO</span>
+                <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentIso() }}</p>
+            </div>
+            <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Epoch (ms)</span>
+                <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentEpochMs() }}</p>
+            </div>
+            <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Epoch (sec)</span>
+                <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentEpochSec() }}</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+        <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
+            <div>
+                <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Date / Timestamp Converters</h2>
+                <p class="text-sm text-(--postonsteroids-text-secondary)">Convert between human readable dates and integer epoch values.</p>
+            </div>
+        </div>
+
+        <div class="mt-6 grid gap-4 lg:grid-cols-2">
+            <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-(--postonsteroids-text-muted)">Date to Epoch</h3>
+                <div class="mt-3 space-y-3">
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <label class="text-[12px] font-medium text-(--postonsteroids-text-secondary)">Date</label>
+                        <input type="date" [value]="dateValue()" (input)="dateValue.set($any($event.target).value)"
+                            class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    </div>
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <label class="text-[12px] font-medium text-(--postonsteroids-text-secondary)">DateTime</label>
+                        <input type="datetime-local" [value]="datetimeValue()" (input)="datetimeValue.set($any($event.target).value)"
+                            class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Epoch ms</span>
+                        <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{ dateEpochMs() }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Epoch sec</span>
+                        <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{ dateEpochSec() }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">DateTime ms</span>
+                        <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{ datetimeEpochMs() }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">DateTime sec</span>
+                        <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{ datetimeEpochSec() }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-(--postonsteroids-text-muted)">Epoch to Date</h3>
+                <div class="mt-3 space-y-3">
+                    <label class="block text-[12px] font-medium text-(--postonsteroids-text-secondary)">Epoch value</label>
+                    <input type="text" [value]="epochValue()" (input)="updateEpochValue($any($event.target).value)"
+                        placeholder="e.g. 1680000000000 or 1680000000"
+                        class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 text-sm text-(--postonsteroids-text-primary) outline-none" />
+                </div>
+
+                <div class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                    <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Converted</span>
+                    <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{ epochToDate() }}</p>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

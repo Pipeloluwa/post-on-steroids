@@ -17,12 +17,10 @@ export class MenuComponent {
   menu = signal<{ name: string; icon: string; path: string }[]>([
     { name: 'Steroid', icon: 'dashboard', path: '/steroid' },
     { name: 'Capsules', icon: 'collections', path: '/capsules' },
-    { name: 'export', icon: 'file_download', path: '/export' },
-    { name: 'import', icon: 'file_upload', path: '/import' },
-    { name: 'history', icon: 'history', path: '/history' }
-  ]);
-
-  toggleTheme(): void {
+    { name: 'Export', icon: 'file_download', path: '/export' },
+    { name: 'Import', icon: 'file_upload', path: '/import' },
+    { name: 'Utilities', icon: 'bolt', path: '/utilities' },
+    { name: 'History', icon: 'history', path: '/history' }
     this.themeService.toggleTheme();
   }
 }

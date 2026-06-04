@@ -2,9 +2,8 @@ import { Component, signal, inject, ChangeDetectionStrategy, output } from '@ang
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
 import { TabStateService, RequestState } from '../../services/tab.state.service';
+import { SwaggerExtractionService } from '../../services/swagger-extraction.service';
 
 @Component({
     selector: 'app-swagger-import-modal',
@@ -14,7 +13,7 @@ import { TabStateService, RequestState } from '../../services/tab.state.service'
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SwaggerImportModalComponent {
-    private http = inject(HttpClient);
+    private swaggerExtraction = inject(SwaggerExtractionService);
     private tabStateService = inject(TabStateService);
 
     onImportStatus = output<{ message: string; isError: boolean }>();
@@ -49,13 +48,11 @@ export class SwaggerImportModalComponent {
         }
 
         this.isImporting.set(true);
-        this.setStatus('Fetching Swagger index page...', false);
+        this.setStatus('Extracting OpenAPI specification...', false);
 
         try {
-            const html = await firstValueFrom(this.http.get(url, { responseType: 'text' as const }));
-            const jsonUrl = this.resolveSwaggerJsonUrl(html, url);
-            const openApi = await firstValueFrom(this.http.get<Record<string, unknown>>(jsonUrl));
-            const result = this.buildRequestStates(openApi, url, jsonUrl);
+            const openApi = await this.swaggerExtraction.extractSwaggerSpec(url);
+            const result = this.buildRequestStates(openApi, url);
 
             if (result.requests.length === 0) {
                 this.setStatus('No operations found inside the Swagger document.', true);
@@ -87,36 +84,7 @@ export class SwaggerImportModalComponent {
         this.hasError.set(isError);
     }
 
-    private resolveSwaggerJsonUrl(html: string, indexUrl: string): string {
-        const parseMatch = html.match(/JSON\.parse\(\s*'([\s\S]*?)'\s*\)/);
-        if (!parseMatch || !parseMatch[1]) {
-            throw new Error('Swagger configuration object not found in index.html.');
-        }
-
-        let configObject;
-        try {
-            configObject = JSON.parse(parseMatch[1]);
-        } catch (err) {
-            throw new Error('Could not parse Swagger configuration JSON.');
-        }
-
-        let jsonHref: string | undefined;
-        if (Array.isArray(configObject.urls)) {
-            jsonHref = configObject.urls.find((entry: any) => typeof entry?.url === 'string' && entry.url.trim().toLowerCase().endsWith('.json'))?.url;
-        }
-
-        if (!jsonHref && typeof configObject.url === 'string' && configObject.url.trim().toLowerCase().endsWith('.json')) {
-            jsonHref = configObject.url;
-        }
-
-        if (!jsonHref) {
-            throw new Error('No JSON swagger URL found in the Swagger configuration object.');
-        }
-
-        return new URL(jsonHref, indexUrl).toString();
-    }
-
-    private buildRequestStates(openApi: Record<string, any>, indexUrl: string, openApiUrl: string): { collectionName: string; requests: RequestState[] } {
+    private buildRequestStates(openApi: Record<string, any>, indexUrl: string): { collectionName: string; requests: RequestState[] } {
         const collectionName = typeof openApi['info']?.title === 'string' && openApi['info'].title.trim()
             ? openApi['info'].title.trim()
             : 'Swagger Import';

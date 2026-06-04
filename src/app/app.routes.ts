@@ -5,6 +5,7 @@ import { CollectionsComponent } from './components/collections.component/collect
 import { ExportComponent } from './components/export.component/export.component';
 import { ImportComponent } from './components/import.component/import.component';
 import { HistoryComponent } from './components/history.component/history.component';
+import { UtilityComponent } from './components/utility.component/utility.component';
 
 export const routes: Routes = [
     {
@@ -31,6 +32,10 @@ export const routes: Routes = [
             {
                 path: 'import',
                 component: ImportComponent
+            },
+            {
+                path: 'utilities',
+                component: UtilityComponent
             },
             {
                 path: 'history',

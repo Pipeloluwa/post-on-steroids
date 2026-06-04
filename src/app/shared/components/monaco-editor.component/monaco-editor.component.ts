@@ -27,6 +27,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
 
   language = input<string>('javascript');
   readOnly = input<boolean>(false);
+  wordWrap = input<boolean>(false);
   restrictToFunctionBody = input<boolean>(false);
   enableEncryptionToggles = input<boolean>(false);
   encryptedPaths = input<string[]>([]);
@@ -46,6 +47,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     stickyScroll: { enabled: false },
     scrollBeyondLastLine: false,
     glyphMargin: this.enableEncryptionToggles(),
+    wordWrap: this.wordWrap() ? 'on' : 'off',
     fontSize: 13,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
   }));
@@ -183,7 +185,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     if (!targetLine) return null;
     const keyMatch = targetLine.match(/^\s*"([^"]+)"\s*:/);
     if (!keyMatch) return null;
-    
+
     const targetKey = keyMatch[1];
     const targetIndent = targetLine.search(/\S/);
 

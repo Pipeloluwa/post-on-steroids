@@ -2,7 +2,7 @@
     class="w-full h-[48px] shrink-0 flex items-center justify-between px-4 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/80 backdrop-blur-md z-40 relative">
     <!-- Left Section: Sidebar Toggle -->
     <div class="flex items-center z-10">
-        <button (click)="toggleSidebar()" 
+        <button (click)="toggleSidebar()"
             class="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
             <mat-icon>{{ sidebarService.isCollapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left' }}</mat-icon>
         </button>
@@ -20,8 +20,14 @@
         </span>
     </div>
 
-    <!-- Right Section: Auth -->
-    <div class="flex items-center gap-x-4 z-10">
+    <!-- Right Section: Auth + Utilities -->
+    <div class="flex items-center gap-x-3 z-10">
+        <a routerLink="/utilities" title="Utilities"
+            class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-3 py-1.5 text-[12px] font-semibold text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-300">
+            <mat-icon class="text-[18px]! size-[18px]!">bolt</mat-icon>
+            <span>Utilities</span>
+            <span class="rounded-full bg-(--postonsteroids-accent) px-2 py-px text-[10px] font-bold text-white">NEW</span>
+        </a>
         <button (click)="onToggleAuth.emit()"
             class="flex items-center gap-x-2 px-2 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-300 cursor-pointer group">
             @if (isLoggedIn()) {

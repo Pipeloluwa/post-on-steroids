@@ -21,10 +21,11 @@ export class ResponseViewerComponent {
     activeMode = signal('Pretty');
     responseType = signal('JSON');
     responseTypes = signal(['JSON', 'XML']);
+    wrapResponse = signal(true);
 
     // ── Derived from active tab state ──────────────────────────────────────
     responseBody = computed(() => this.tabStateService.activeTabState()?.responseBody ?? null);
-    
+
     formattedResponseBody = computed(() => {
         const body = this.responseBody();
         if (body === null) return '';
@@ -102,5 +103,9 @@ export class ResponseViewerComponent {
     copyResponse() {
         const data = JSON.stringify(this.responseBody(), null, 2);
         navigator.clipboard.writeText(data);
+    }
+
+    toggleWrap() {
+        this.wrapResponse.update(value => !value);
     }
 }
