@@ -26,6 +26,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    z-index: 10 !important;
 }
 
 ::ng-deep .monaco-lock-icon::before {
@@ -34,6 +35,8 @@
     color: var(--postonsteroids-text-secondary) !important;
     transition: color 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
     mix-blend-mode: normal;
+    position: relative;
+    z-index: 11 !important;
 }
 
 ::ng-deep .monaco-lock-icon.active::before {

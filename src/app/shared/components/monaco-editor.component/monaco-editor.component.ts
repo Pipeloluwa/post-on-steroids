@@ -56,6 +56,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   private isReverting = false;
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
+  private themeUpdateId = 0;
 
   constructor() {
     // Dynamically update editor options when theme changes without recreating the editor
@@ -64,16 +65,17 @@ export class MonacoEditorComponent implements ControlValueAccessor {
       const readOnly = this.disabled() || this.readOnly();
       const glyphMargin = this.enableEncryptionToggles();
       if (this.editorInstance) {
-        this.editorInstance.updateOptions({ theme, readOnly, glyphMargin });
-        // Toggle glyphMargin off and on to force Monaco to re-render the glyph margin with new CSS
+        const monacoGlobal = (window as any).monaco;
+        if (monacoGlobal && monacoGlobal.editor) {
+           monacoGlobal.editor.setTheme(theme);
+        }
+        this.editorInstance.updateOptions({ readOnly, glyphMargin });
+
         if (this.enableEncryptionToggles()) {
-          requestAnimationFrame(() => {
-            this.editorInstance?.updateOptions({ glyphMargin: false });
-            requestAnimationFrame(() => {
-              this.editorInstance?.updateOptions({ glyphMargin: true });
-              this.updateDecorations();
-            });
-          });
+           this.themeUpdateId++; // Increment so class name changes
+           // Re-apply decorations after a single short tick to allow the editor 
+           // options (like theme) to sync up with Monaco's internal DOM structure.
+           setTimeout(() => this.updateDecorations(), 50);
         }
       }
     });
@@ -157,6 +159,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   }
 
   private decorationsCollection: any;
+  private oldDecorations: string[] = [];
 
   private updateDecorations() {
     if (!this.editorInstance) return;
@@ -179,14 +182,16 @@ export class MonacoEditorComponent implements ControlValueAccessor {
           range: new monacoGlobal.Range(i + 1, 1, i + 1, 1),
           options: {
             isWholeLine: false,
-            glyphMarginClassName: isEncrypted ? 'monaco-lock-icon active' : 'monaco-lock-icon inactive',
+            glyphMarginClassName: (isEncrypted ? 'monaco-lock-icon active ' : 'monaco-lock-icon inactive ') + `theme-sync-${this.themeUpdateId}`,
             glyphMarginHoverMessage: { value: isEncrypted ? 'Click to disable encryption' : 'Click to enable encryption' }
           }
         });
       }
     }
 
-    if (this.decorationsCollection) {
+    if (this.editorInstance.deltaDecorations) {
+      this.oldDecorations = this.editorInstance.deltaDecorations(this.oldDecorations, decorations);
+    } else if (this.decorationsCollection) {
       this.decorationsCollection.set(decorations);
     } else {
       this.decorationsCollection = this.editorInstance.createDecorationsCollection(decorations);
