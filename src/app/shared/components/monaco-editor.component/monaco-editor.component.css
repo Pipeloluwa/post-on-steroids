@@ -31,17 +31,23 @@
 ::ng-deep .monaco-lock-icon::before {
     content: "🔒";
     font-size: 10px;
+    color: var(--postonsteroids-text-secondary) !important;
+    transition: color 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+    mix-blend-mode: normal;
 }
 
 ::ng-deep .monaco-lock-icon.active::before {
-    opacity: 1;
+    color: var(--postonsteroids-accent) !important;
+    opacity: 1 !important;
 }
 
 ::ng-deep .monaco-lock-icon.inactive::before {
-    opacity: 0.3;
-    filter: grayscale(100%);
+    color: var(--postonsteroids-text-muted) !important;
+    opacity: 0.55 !important;
+    filter: grayscale(100%) !important;
 }
 
 ::ng-deep .monaco-lock-icon.inactive:hover::before {
-    opacity: 0.8;
+    opacity: 0.85;
+    filter: grayscale(0%);
 }

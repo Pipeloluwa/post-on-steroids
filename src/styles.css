@@ -28,9 +28,9 @@
   --postonsteroids-bg-hover: #F8F8F8;
   --postonsteroids-accent: #FF6C37;
   --postonsteroids-accent-hover: #E85A28;
-  --postonsteroids-text-primary: #212121;
-  --postonsteroids-text-secondary: #6B6B6B;
-  --postonsteroids-text-muted: #999999;
+  --postonsteroids-text-primary: #000000;
+  --postonsteroids-text-secondary: #333333;
+  --postonsteroids-text-muted: #666666;
   --postonsteroids-border: #DDDDDD;
   --postonsteroids-shadow: rgba(0, 0, 0, 0.1);
 }
@@ -61,6 +61,21 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="dark"] input[type="date"],
+:root[data-theme="dark"] input[type="datetime-local"] {
+  color: var(--postonsteroids-text-primary);
+}
+
+:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+:root[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(100%) contrast(150%) brightness(120%);
+}
+
+:root[data-theme="dark"] input[type="date"]::-webkit-datetime-edit,
+:root[data-theme="dark"] input[type="datetime-local"]::-webkit-datetime-edit {
+  color: var(--postonsteroids-text-primary);
 }
 
 /* Ensure buttons and inputs use the standard font, but not the code editor */

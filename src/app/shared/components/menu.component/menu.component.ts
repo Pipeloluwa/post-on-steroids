@@ -21,6 +21,10 @@ export class MenuComponent {
     { name: 'Import', icon: 'file_upload', path: '/import' },
     { name: 'Utilities', icon: 'bolt', path: '/utilities' },
     { name: 'History', icon: 'history', path: '/history' }
+  ]);
+
+  toggleTheme(): void {
     this.themeService.toggleTheme();
   }
 }
+

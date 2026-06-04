@@ -65,6 +65,16 @@ export class MonacoEditorComponent implements ControlValueAccessor {
       const glyphMargin = this.enableEncryptionToggles();
       if (this.editorInstance) {
         this.editorInstance.updateOptions({ theme, readOnly, glyphMargin });
+        // Toggle glyphMargin off and on to force Monaco to re-render the glyph margin with new CSS
+        if (this.enableEncryptionToggles()) {
+          requestAnimationFrame(() => {
+            this.editorInstance?.updateOptions({ glyphMargin: false });
+            requestAnimationFrame(() => {
+              this.editorInstance?.updateOptions({ glyphMargin: true });
+              this.updateDecorations();
+            });
+          });
+        }
       }
     });
 
@@ -140,6 +150,9 @@ export class MonacoEditorComponent implements ControlValueAccessor {
       editor.onDidChangeModelContent(() => {
         this.updateDecorations();
       });
+
+      // Ensure decorations exist immediately after the editor mounts.
+      requestAnimationFrame(() => this.updateDecorations());
     }
   }
 
@@ -247,6 +260,9 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     if (val !== undefined && val !== this.value()) {
       this.value.set(val);
       this.lastValidContent = val;
+      if (this.editorInstance && this.enableEncryptionToggles()) {
+        this.updateDecorations();
+      }
     }
   }
 

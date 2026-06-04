@@ -1,5 +1,5 @@
 <nav
-    class="w-full h-[48px] shrink-0 flex items-center justify-between px-4 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/80 backdrop-blur-md z-40 relative">
+    class="w-full h-12 shrink-0 flex items-center justify-between px-4 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/80 backdrop-blur-md z-40 relative">
     <!-- Left Section: Sidebar Toggle -->
     <div class="flex items-center z-10">
         <button (click)="toggleSidebar()"
@@ -12,7 +12,7 @@
     <div class="absolute inset-0 flex items-center justify-center pointer-events-none gap-x-3">
         <div
             class="flex items-center gap-x-1.5 px-2 py-1 rounded-lg bg-(--postonsteroids-accent) shadow-lg shadow-(--postonsteroids-accent)/30 select-none pointer-events-auto">
-            <mat-icon class="text-white text-[18px] w-[18px] h-[18px] leading-[18px]">bolt</mat-icon>
+            <mat-icon class="text-white text-[18px] w-4.5 h-4.5 leading-4.5">bolt</mat-icon>
         </div>
         <span
             class="text-[16px] font-black tracking-widest bg-linear-to-r from-(--postonsteroids-text-primary) via-(--postonsteroids-text-primary) to-(--postonsteroids-text-muted) bg-clip-text text-transparent select-none">
@@ -24,9 +24,8 @@
     <div class="flex items-center gap-x-3 z-10">
         <a routerLink="/utilities" title="Utilities"
             class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-3 py-1.5 text-[12px] font-semibold text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-300">
-            <mat-icon class="text-[18px]! size-[18px]!">bolt</mat-icon>
+            <mat-icon class="text-[18px]! size-4.5!">bolt</mat-icon>
             <span>Utilities</span>
-            <span class="rounded-full bg-(--postonsteroids-accent) px-2 py-px text-[10px] font-bold text-white">NEW</span>
         </a>
         <button (click)="onToggleAuth.emit()"
             class="flex items-center gap-x-2 px-2 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-300 cursor-pointer group">
@@ -38,7 +37,7 @@
                 </div>
                 <div class="flex items-center gap-x-1">
                     <span
-                        class="text-xs font-bold text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary) transition-colors max-w-[120px] truncate">
+                        class="text-xs font-bold text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary) transition-colors max-w-30 truncate">
                         {{ userEmail().split('@')[0] }}
                     </span>
                     <div
@@ -51,7 +50,7 @@
             } @else {
             <div class="flex items-center gap-x-2 px-2 py-0.5">
                 <mat-icon
-                    class="text-[20px] w-[20px] h-[20px] leading-[20px] text-(--postonsteroids-text-secondary)">account_circle</mat-icon>
+                    class="text-[20px] w-5 h-5 leading-5 text-(--postonsteroids-text-secondary)">account_circle</mat-icon>
                 <span
                     class="text-[12px] font-bold text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary)">Login</span>
             </div>
