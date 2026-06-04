@@ -90,6 +90,12 @@ export interface RequestState {
     testResults: TestResult[];
 }
 
+export interface Capsule {
+    id: string;
+    name: string;
+    createdAt: number;
+}
+
 @Injectable({
     providedIn: 'root',
 })
@@ -104,11 +110,26 @@ export class TabStateService {
     }
     activeTabId = signal<string | null>(null);
     activeCapsuleName = signal<string>('My Capsule');
+    activeCapsuleId = signal<string>('1');
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
 
+    // Shared capsule list (drives both workspace sidebar and Capsules page)
+    capsules = signal<Capsule[]>([
+        { id: '1', name: 'My Capsule', createdAt: Date.now() - 10000 },
+        { id: '2', name: 'API Project A', createdAt: Date.now() - 5000 },
+        { id: '3', name: 'Personal Sandbox', createdAt: Date.now() }
+    ]);
+
     // In-memory "database" of saved requests
     savedCapsules = signal<RequestState[]>([]);
+
+    // Reactive list of open tabs (mirrors the horizontal tab strip)
+    openTabs = computed<RequestState[]>(() => {
+        const ids = this.openTabIds();
+        const stateMap = this.states();
+        return ids.map(id => stateMap.get(id)).filter((s): s is RequestState => Boolean(s));
+    });
 
     activeTabState = computed(() => {
         const id = this.activeTabId();
@@ -198,6 +219,11 @@ export class TabStateService {
 
     setActiveCapsuleName(name: string) {
         this.activeCapsuleName.set(name);
+    }
+
+    switchCapsule(capsule: { id: string; name: string }) {
+        this.activeCapsuleId.set(capsule.id);
+        this.activeCapsuleName.set(capsule.name);
     }
 
     addOpenTab(state: RequestState) {

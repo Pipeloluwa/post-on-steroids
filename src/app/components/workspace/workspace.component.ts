@@ -1,5 +1,6 @@
-import { Component, signal, afterNextRender, Type, inject, PLATFORM_ID } from '@angular/core';
+import { Component, signal, afterNextRender, inject, PLATFORM_ID } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
 import { RequestDetailsComponent } from './request-details.component/request-details.component';
 import { RequestUrlComponent } from './request-url.component/request-url.component';
@@ -18,6 +19,7 @@ import { computed } from '@angular/core';
     selector: 'app-workspace',
     imports: [
         CommonModule,
+        FormsModule,
         RequestTabsComponent,
         RequestDetailsComponent,
         RequestUrlComponent,
@@ -44,6 +46,8 @@ export class WorkspaceComponent {
     requestHeight = signal<number>(450); // Pixel height
     isResizing = signal<boolean>(false);
 
+
+    isSidebarOpen = signal<boolean>(true);
 
     constructor() {
         const savedHeight = this.localStorageService.getItem(LocalStorageService.JSON_RESIZE_HEIGHT);
@@ -92,5 +96,52 @@ export class WorkspaceComponent {
 
     toggleAuthModal() {
         this.authService.toggleAuthModal();
+    }
+
+    toggleSidebar() {
+        this.isSidebarOpen.update(v => !v);
+    }
+
+    onCapsuleChange(capsuleId: string) {
+        const capsule = this.tabStateService.capsules().find(c => c.id === capsuleId);
+        if (capsule) {
+            this.tabStateService.switchCapsule(capsule);
+        }
+    }
+
+    getMethodColor(method: string): string {
+        switch (method.toUpperCase()) {
+            case 'GET': return '#00BF8E';
+            case 'POST': return '#FFB400';
+            case 'PUT': return '#097BED';
+            case 'DEL':
+            case 'DELETE': return '#FF5233';
+            default: return 'var(--postonsteroids-text-primary)';
+        }
+    }
+
+    openRequest(request: any) {
+        this.tabStateService.addOpenTab(request);
+        this.tabStateService.setActiveTab(request.id);
+    }
+
+    closeTabFromSidebar(id: string, event: Event) {
+        event.stopPropagation();
+        const tabs = this.tabStateService.openTabs();
+        if (tabs.length === 1) return; // never close the last tab
+        this.tabStateService.closeTab(id);
+        if (this.tabStateService.activeTabId() === id) {
+            const remaining = this.tabStateService.openTabs();
+            if (remaining.length > 0) {
+                this.tabStateService.setActiveTab(remaining[0].id);
+            }
+        }
+    }
+
+    formatRequestName(name: string): string {
+        if (name.includes(' — ')) {
+            return name.split(' — ')[1];
+        }
+        return name;
     }
 }

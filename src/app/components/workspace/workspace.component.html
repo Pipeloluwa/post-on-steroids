@@ -1,43 +1,126 @@
-<div class="w-full h-full flex flex-col overflow-hidden workspace-container relative">
-    @if (tabStateService.isCapsuleLoading()) {
-    <div
-        class="absolute inset-0 z-100 flex items-center justify-center bg-(--postonsteroids-bg-primary)/40 backdrop-blur-[1px]">
-        <div class="flex flex-col items-center gap-y-3">
-            <mat-icon class="animate-spin text-(--postonsteroids-accent) w-8! h-8! text-[32px]!">sync</mat-icon>
-            <span
-                class="text-[12px] font-medium text-(--postonsteroids-text-secondary) animate-pulse uppercase tracking-widest">Fetching
-                Capsule...</span>
+<div class="w-full h-full flex overflow-hidden workspace-container relative">
+    
+    <!-- Secondary Sidebar (Capsule Tree) -->
+    <div class="h-full border-r border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) flex flex-col transition-all duration-300"
+         [class.w-[250px]]="isSidebarOpen()" [class.w-[40px]]="!isSidebarOpen()">
+
+        <!-- Header row — capsule selector (when open) + toggle button on the right -->
+        <div class="border-b border-(--postonsteroids-border) flex items-center h-[38px] shrink-0 px-1 gap-x-1"
+             [class.justify-between]="isSidebarOpen()" [class.justify-center]="!isSidebarOpen()">
+            @if (isSidebarOpen()) {
+                <!-- Capsule switcher dropdown -->
+                <select class="flex-1 min-w-0 text-[11px] font-semibold bg-transparent text-(--postonsteroids-text-primary) outline-none cursor-pointer truncate border border-(--postonsteroids-border) rounded px-1 py-0.5 hover:border-(--postonsteroids-accent) transition-colors"
+                        [ngModel]="tabStateService.activeCapsuleId()"
+                        (ngModelChange)="onCapsuleChange($event)">
+                    @for (c of tabStateService.capsules(); track c.id) {
+                        <option [value]="c.id" class="bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-primary)">
+                            {{ c.name }}
+                        </option>
+                    }
+                </select>
+            }
+            <button (click)="toggleSidebar()" title="Toggle Sidebar"
+                    class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors flex items-center justify-center cursor-pointer shrink-0">
+                <mat-icon class="text-[18px]! size-[18px]! transition-transform duration-300"
+                          [class.rotate-180]="!isSidebarOpen()">
+                    keyboard_arrow_left
+                </mat-icon>
+            </button>
+        </div>
+
+        <!-- Collapsed state: label at the top, reads top-to-bottom -->
+        @if (!isSidebarOpen()) {
+            <div class="flex-1 flex justify-center items-start pt-2 cursor-pointer hover:bg-(--postonsteroids-bg-hover)" (click)="toggleSidebar()">
+                <span class="text-[11px] text-(--postonsteroids-text-primary) select-none opacity-90"
+                      style="writing-mode: vertical-lr;">
+                    Expand capsule
+                </span>
+            </div>
+        }
+
+        <!-- Open tabs list (visible when expanded) -->
+        <div class="flex-1 overflow-y-auto overflow-x-hidden py-1" [class.hidden]="!isSidebarOpen()">
+            <div class="flex items-center gap-x-1.5 px-3 py-1">
+                <mat-icon class="text-(--postonsteroids-text-muted) text-[14px]! size-[14px]!">layers</mat-icon>
+                <span class="text-[10px] text-(--postonsteroids-text-muted) tracking-widest uppercase">Open tabs</span>
+            </div>
+
+            <div class="flex flex-col">
+                @for (tab of tabStateService.openTabs(); track tab.id) {
+                    <div class="flex items-center gap-x-2 pl-4 pr-2 py-1.5 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
+                         [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === tab.id"
+                         [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === tab.id"
+                         [class.border-transparent]="tabStateService.activeTabId() !== tab.id"
+                         [title]="tab.name"
+                         (click)="openRequest(tab)">
+                        <span class="text-[9px] font-bold w-[30px] shrink-0" [style.color]="getMethodColor(tab.method)">
+                            {{ tab.method }}
+                        </span>
+                        <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 min-w-0">
+                            {{ formatRequestName(tab.name) }}
+                        </span>
+                        @if (tab.isDirty) {
+                            <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"></div>
+                        }
+                        <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-(--postonsteroids-text-primary) text-(--postonsteroids-text-muted)"
+                                (click)="closeTabFromSidebar(tab.id, $event)">
+                            <mat-icon class="text-[14px]! size-[14px]!">close</mat-icon>
+                        </button>
+                    </div>
+                }
+
+                @if (tabStateService.openTabs().length === 0) {
+                    <div class="pl-4 pr-3 py-1 text-[11px] text-(--postonsteroids-text-muted) italic">
+                        No open tabs.
+                    </div>
+                }
+            </div>
         </div>
     </div>
-    }
-    <app-request-tabs-component />
 
-    <div class="w-full flex-1 min-h-0 p-2 flex flex-col">
-        <!-- Request Section -->
-        <div [style.height.px]="requestHeight()" class="flex flex-col gap-y-2 shrink-0"
-            [class.transition-[height]]="!isResizing()">
-            <div>
-                <app-request-details-component [isLoggedIn]="authService.isLoggedIn()"
-                    (onAuthRequired)="toggleAuthModal()" (onNotify)="triggerNotification($event)" />
-                <app-request-url-component />
+    <!-- Main Workspace Area -->
+    <div class="flex-1 h-full flex flex-col min-w-0 relative">
+        @if (tabStateService.isCapsuleLoading()) {
+        <div
+            class="absolute inset-0 z-100 flex items-center justify-center bg-(--postonsteroids-bg-primary)/40 backdrop-blur-[1px]">
+            <div class="flex flex-col items-center gap-y-3">
+                <mat-icon class="animate-spin text-(--postonsteroids-accent) w-8! h-8! text-[32px]!">sync</mat-icon>
+                <span
+                    class="text-[12px] font-medium text-(--postonsteroids-text-secondary) animate-pulse uppercase tracking-widest">Fetching
+                    Capsule...</span>
+            </div>
+        </div>
+        }
+        
+        <app-request-tabs-component />
+
+        <div class="w-full flex-1 min-h-0 p-2 flex flex-col">
+            <!-- Request Section -->
+            <div [style.height.px]="requestHeight()" class="flex flex-col gap-y-2 shrink-0"
+                [class.transition-[height]]="!isResizing()">
+                <div>
+                    <app-request-details-component [isLoggedIn]="authService.isLoggedIn()"
+                        (onAuthRequired)="toggleAuthModal()" (onNotify)="triggerNotification($event)" />
+                    <app-request-url-component />
+                </div>
+
+                <div class="flex flex-col min-h-0 flex-1">
+                    <app-payload-types-component class="flex-1 flex flex-col min-h-0 w-full"></app-payload-types-component>
+                </div>
+
             </div>
 
-            <div class="flex flex-col min-h-0 flex-1">
-                <app-payload-types-component class="flex-1 flex flex-col min-h-0 w-full"></app-payload-types-component>
+            <!-- Resize Handle -->
+            <div (mousedown)="startResizing($event)"
+                class="h-[6px] w-full shrink-0 cursor-ns-resize hover:bg-(--postonsteroids-accent)/30 transition-colors duration-200 rounded-full z-10"
+                [class]="{ 'bg-(--postonsteroids-accent)/50': isResizing() }">
+            </div>
+
+            <!-- Response Section -->
+            <div class="flex-1 min-h-0 flex border-t border-(--postonsteroids-accent)/40 relative z-30 bg-(--postonsteroids-bg-primary)">
+                <app-response-viewer-component class="w-full h-full block" />
             </div>
 
         </div>
-
-        <!-- Resize Handle -->
-        <div (mousedown)="startResizing($event)"
-            class="h-[6px] w-full shrink-0 cursor-ns-resize hover:bg-(--postonsteroids-accent)/30 transition-colors duration-200 rounded-full z-10"
-            [class]="{ 'bg-(--postonsteroids-accent)/50': isResizing() }">
-        </div>
-
-        <!-- Response Section -->
-        <div class="flex-1 min-h-0 flex border-t border-(--postonsteroids-accent)/40 relative z-30 bg-(--postonsteroids-bg-primary)">
-            <app-response-viewer-component class="w-full h-full block" />
-        </div>
-
     </div>
 </div>

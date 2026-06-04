@@ -28,12 +28,18 @@ export class RequestTabsComponent {
     @ViewChild('swaggerModal') swaggerModal!: SwaggerImportModalComponent;
 
     tabs = computed<RequestTab[]>(() => {
-        return this.tabStateService.getAllOpenTabs().map(state => ({
-            id: state.id,
-            method: state.method,
-            name: state.name,
-            isDirty: state.isDirty,
-        }));
+        return this.tabStateService.getAllOpenTabs().map(state => {
+            let name = state.name;
+            if (name.includes(' — ')) {
+                name = name.split(' — ')[1];
+            }
+            return {
+                id: state.id,
+                method: state.method,
+                name: name,
+                isDirty: state.isDirty,
+            };
+        });
     });
 
     activeTabId = this.tabStateService.activeTabId;
