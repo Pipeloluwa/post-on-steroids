@@ -103,6 +103,7 @@ export class TabStateService {
         return this.states().get(id);
     }
     activeTabId = signal<string | null>(null);
+    activeCapsuleName = signal<string>('My Capsule');
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
 
@@ -188,6 +189,15 @@ export class TabStateService {
         return this.openTabIds()
             .map(id => this.states().get(id))
             .filter((state): state is RequestState => Boolean(state));
+    }
+
+    closeAllTabs() {
+        this.openTabIds.set([]);
+        this.activeTabId.set(null);
+    }
+
+    setActiveCapsuleName(name: string) {
+        this.activeCapsuleName.set(name);
     }
 
     addOpenTab(state: RequestState) {

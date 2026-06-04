@@ -15,6 +15,7 @@ export class ImportComponent {
     
     importStatus = signal<string>('');
     importError = signal<boolean>(false);
+    private importStatusTimeout: number | null = null;
 
     onFileSelected(event: Event) {
         const input = event.target as HTMLInputElement;
@@ -30,12 +31,10 @@ export class ImportComponent {
                 
                 this.processImportData(data);
                 
-                this.importStatus.set('Import successful! Your capsules and requests have been loaded.');
-                this.importError.set(false);
+                this.showStatus('Import successful! Your capsules and requests have been loaded.', false);
             } catch (err) {
                 console.error('Import failed:', err);
-                this.importStatus.set('Invalid file format. Please upload a valid OnSteroids JSON export file.');
-                this.importError.set(true);
+                this.showStatus('Invalid file format. Please upload a valid OnSteroids JSON export file.', true);
             }
             
             // Reset input so the same file can be selected again if needed
@@ -43,11 +42,27 @@ export class ImportComponent {
         };
 
         reader.onerror = () => {
-            this.importStatus.set('Failed to read the file.');
-            this.importError.set(true);
+            this.showStatus('Failed to read the file.', true);
         };
 
         reader.readAsText(file);
+    }
+
+    onSwaggerImportStatus(event: { message: string; isError: boolean }) {
+        this.showStatus(event.message, event.isError);
+    }
+
+    private showStatus(message: string, isError: boolean) {
+        if (this.importStatusTimeout) {
+            window.clearTimeout(this.importStatusTimeout);
+        }
+        this.importStatus.set(message);
+        this.importError.set(isError);
+        this.importStatusTimeout = window.setTimeout(() => {
+            this.importStatus.set('');
+            this.importError.set(false);
+            this.importStatusTimeout = null;
+        }, 10000);
     }
 
     private processImportData(data: any) {

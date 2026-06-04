@@ -19,7 +19,7 @@
             </div>
         </div>
 
-        <div (click)="swaggerModal.open()"
+        <div (click)="swaggerModal.open()" (mouseenter)="swaggerModal.open()" tabindex="0"
             class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative"
             title="Import from Swagger">
             <div class="flex items-center gap-x-4">
@@ -35,7 +35,7 @@
         </div>
     </div>
 
-    <app-swagger-import-modal #swaggerModal />
+    <app-swagger-import-modal #swaggerModal (onImportStatus)="onSwaggerImportStatus($event)" />
 
     @if (importStatus()) {
     <div class="mt-8 p-4 rounded-xl border" 

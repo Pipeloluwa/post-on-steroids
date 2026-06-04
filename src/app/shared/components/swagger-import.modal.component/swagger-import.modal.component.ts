@@ -1,4 +1,4 @@
-import { Component, signal, inject, ChangeDetectionStrategy } from '@angular/core';
+import { Component, signal, inject, ChangeDetectionStrategy, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
@@ -16,6 +16,8 @@ import { TabStateService, RequestState } from '../../services/tab.state.service'
 export class SwaggerImportModalComponent {
     private http = inject(HttpClient);
     private tabStateService = inject(TabStateService);
+
+    onImportStatus = output<{ message: string; isError: boolean }>();
 
     isOpen = signal(false);
     swaggerUrl = signal('');
@@ -60,14 +62,21 @@ export class SwaggerImportModalComponent {
                 return;
             }
 
+            this.tabStateService.closeAllTabs();
+            this.tabStateService.setActiveCapsuleName(result.collectionName);
+            this.tabStateService.savedCapsules.set(result.requests);
             result.requests.forEach(request => this.tabStateService.addOpenTab(request));
             this.tabStateService.setActiveTab(result.requests[0].id);
 
-            this.setStatus(`Imported ${result.requests.length} requests from ${result.collectionName}.`, false);
+            const successMessage = `Imported ${result.requests.length} requests from ${result.collectionName}.`;
+            this.onImportStatus.emit({ message: successMessage, isError: false });
+            this.setStatus(successMessage, false);
             setTimeout(() => this.close(), 800);
         } catch (error: any) {
             console.error('Swagger import failed', error);
-            this.setStatus(`Failed to import Swagger: ${error?.message || error}`, true);
+            const message = `Failed to import Swagger: ${error?.message || error}`;
+            this.onImportStatus.emit({ message, isError: true });
+            this.setStatus(message, true);
         } finally {
             this.isImporting.set(false);
         }
@@ -131,16 +140,18 @@ export class SwaggerImportModalComponent {
                 const requestId = this.createId();
                 const url = new URL(pathKey, baseServiceUrl).toString();
 
-                const allParams = this.extractParameters(operation.parameters);
-                const params = allParams.queryParams;
+                const allParams = this.extractParameters(this.mergeParameters(pathObject.parameters, operation.parameters), openApi);
+                const params = [...allParams.queryParams, { enabled: true, key: '', value: '' }];
                 const headers = allParams.headerParams;
-                const body = this.extractRequestBody(operation.requestBody);
+                const pathParams = allParams.pathParams;
+                const body = this.extractRequestBody(operation.requestBody, openApi);
+                const resolvedUrl = this.applyPathParameters(url, pathParams);
 
                 const requestState: RequestState = {
                     ...this.tabStateService.getDefaultState(requestId),
                     id: requestId,
                     name: displayName,
-                    url,
+                    url: resolvedUrl,
                     method,
                     isDirty: true,
                     params,
@@ -174,43 +185,157 @@ export class SwaggerImportModalComponent {
         return indexUrl.replace(/\/swagger\/index\.html$/i, '/') || indexUrl;
     }
 
-    private extractParameters(parameters: any): { queryParams: { enabled: boolean; key: string; value: string }[]; headerParams: { enabled: boolean; key: string; value: string }[] } {
+    private extractParameters(parameters: any, openApi: Record<string, any>): { queryParams: { enabled: boolean; key: string; value: string }[]; headerParams: { enabled: boolean; key: string; value: string }[]; pathParams: { enabled: boolean; key: string; value: string }[] } {
         const queryParams: { enabled: boolean; key: string; value: string }[] = [];
         const headerParams: { enabled: boolean; key: string; value: string }[] = [];
+        const pathParams: { enabled: boolean; key: string; value: string }[] = [];
 
-        if (!Array.isArray(parameters)) return { queryParams, headerParams };
+        if (!Array.isArray(parameters)) return { queryParams, headerParams, pathParams };
 
         for (const param of parameters) {
             if (!param || typeof param !== 'object' || !param.name) continue;
-            const value = param.example ?? param.default ?? '';
-            const entry = { enabled: true, key: String(param.name), value: String(value) };
+            const exampleValue = this.resolveExampleValue(param, openApi) ?? '';
+            const entryValue = typeof exampleValue === 'object' ? JSON.stringify(exampleValue, null, 2) : String(exampleValue);
+            const entry = { enabled: true, key: String(param.name), value: entryValue };
 
             if (param.in === 'query') {
                 queryParams.push(entry);
             } else if (param.in === 'header') {
                 headerParams.push(entry);
+            } else if (param.in === 'path') {
+                pathParams.push(entry);
             }
         }
 
-        return { queryParams, headerParams };
+        return { queryParams, headerParams, pathParams };
     }
 
-    private extractRequestBody(requestBody: any): { rawBody: string; rawBodyJson: string; rawBodyXml: string; exampleBody: unknown } {
+    private mergeParameters(pathParameters: any, operationParameters: any): any[] {
+        const merged: any[] = [];
+        const canonical = new Map<string, any>();
+
+        for (const param of Array.isArray(pathParameters) ? pathParameters : []) {
+            if (param && typeof param === 'object' && param.name && param.in) {
+                canonical.set(`${param.in}:${param.name}`, param);
+            }
+        }
+
+        for (const param of Array.isArray(operationParameters) ? operationParameters : []) {
+            if (param && typeof param === 'object' && param.name && param.in) {
+                canonical.set(`${param.in}:${param.name}`, param);
+            }
+        }
+
+        for (const value of canonical.values()) {
+            merged.push(value);
+        }
+
+        return merged;
+    }
+
+    private extractRequestBody(requestBody: any, openApi: Record<string, any>): { rawBody: string; rawBodyJson: string; rawBodyXml: string; exampleBody: unknown } {
         if (!requestBody || typeof requestBody !== 'object') {
             return { rawBody: '', rawBodyJson: '{}', rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>', exampleBody: {} };
         }
 
-        const jsonContent = requestBody.content?.['application/json'] || requestBody.content?.['application/*+json'] || requestBody.content?.['text/json'];
-        const schema = jsonContent?.schema;
-        const exampleBody = schema ? this.generateExampleFromSchema(schema) : {};
-        const rawBody = JSON.stringify(exampleBody, null, 2);
+        const content = this.findRequestBodyContent(requestBody);
+        if (!content) {
+            return { rawBody: '', rawBodyJson: '{}', rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>', exampleBody: {} };
+        }
+
+        const exampleFromContent = this.resolveExampleValue(content, openApi);
+        const schema = content.schema;
+        const exampleBody = exampleFromContent !== undefined && exampleFromContent !== null
+            ? exampleFromContent
+            : schema ? this.generateExampleFromSchema(schema, openApi) : {};
+
+        const rawBody = typeof exampleBody === 'string'
+            ? exampleBody
+            : JSON.stringify(exampleBody, null, 2);
 
         return { rawBody, rawBodyJson: rawBody, rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>', exampleBody };
     }
 
-    private generateExampleFromSchema(schema: any): any {
+    private findRequestBodyContent(requestBody: any): any {
+        if (!requestBody || typeof requestBody !== 'object' || !requestBody.content || typeof requestBody.content !== 'object') {
+            return undefined;
+        }
+
+        const jsonContent = requestBody.content['application/json'] || requestBody.content['application/*+json'] || requestBody.content['text/json'];
+        if (jsonContent) return jsonContent;
+
+        const firstContentType = Object.keys(requestBody.content).find(key => typeof key === 'string');
+        return firstContentType ? requestBody.content[firstContentType] : undefined;
+    }
+
+    private resolveExampleValue(source: any, openApi: Record<string, any>): unknown {
+        if (!source || typeof source !== 'object') {
+            return undefined;
+        }
+
+        if (source.$ref && typeof source.$ref === 'string') {
+            const resolved = this.resolveRef(source.$ref, openApi);
+            return this.resolveExampleValue(resolved, openApi);
+        }
+
+        if (source.example !== undefined) {
+            return source.example;
+        }
+
+        if (source.default !== undefined) {
+            return source.default;
+        }
+
+        if (source.examples && typeof source.examples === 'object') {
+            const firstExample = Object.values(source.examples).find(example => example && typeof example === 'object' && 'value' in example);
+            if (firstExample && typeof firstExample === 'object') {
+                return (firstExample as any).value;
+            }
+        }
+
+        if (source.schema && typeof source.schema === 'object') {
+            return this.generateExampleFromSchema(source.schema, openApi);
+        }
+
+        if (source.type === 'object' || source.properties) {
+            return this.generateExampleFromSchema(source, openApi);
+        }
+
+        return undefined;
+    }
+
+    private applyPathParameters(url: string, pathParams: { enabled: boolean; key: string; value: string }[]): string {
+        return pathParams.reduce((currentUrl, param) => {
+            if (!param.key) return currentUrl;
+            const placeholder = `{${param.key}}`;
+            return currentUrl.replaceAll(placeholder, param.value || placeholder);
+        }, url);
+    }
+
+    private resolveRef(ref: string, openApi: Record<string, any>): any {
+        if (!ref.startsWith('#/')) {
+            return undefined;
+        }
+
+        const parts = ref.slice(2).split('/').map(part => decodeURIComponent(part));
+        let target: any = openApi;
+        for (const part of parts) {
+            if (!target || typeof target !== 'object' || !(part in target)) {
+                return undefined;
+            }
+            target = target[part];
+        }
+        return target;
+    }
+
+    private generateExampleFromSchema(schema: any, openApi: Record<string, any>): any {
         if (!schema || typeof schema !== 'object') {
             return null;
+        }
+
+        if (schema.$ref && typeof schema.$ref === 'string') {
+            const resolved = this.resolveRef(schema.$ref, openApi);
+            return this.generateExampleFromSchema(resolved, openApi);
         }
 
         if (schema.example !== undefined) {
@@ -225,13 +350,13 @@ export class SwaggerImportModalComponent {
             const example: Record<string, unknown> = {};
             const properties = schema.properties || {};
             for (const key of Object.keys(properties)) {
-                example[key] = this.generateExampleFromSchema(properties[key]);
+                example[key] = this.generateExampleFromSchema(properties[key], openApi);
             }
             return example;
         }
 
         if (schema.type === 'array') {
-            return [this.generateExampleFromSchema(schema.items || {})];
+            return [this.generateExampleFromSchema(schema.items || {}, openApi)];
         }
 
         if (schema.type === 'boolean') {
@@ -240,6 +365,10 @@ export class SwaggerImportModalComponent {
 
         if (schema.type === 'integer' || schema.type === 'number') {
             return 0;
+        }
+
+        if (schema.type === 'string') {
+            return schema.format === 'date-time' ? new Date().toISOString() : '';
         }
 
         return '';

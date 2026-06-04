@@ -6,7 +6,7 @@
                 <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Import from Swagger</h3>
                 <p class="text-[12px] text-(--postonsteroids-text-secondary) mt-1">Enter a Swagger URL that ends with <span class="font-semibold">/swagger/index.html</span>.</p>
             </div>
-            <button (click)="close()" class="text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) rounded-full p-2">
+            <button (click)="close()" class="text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) rounded-full p-2 cursor-pointer">
                 <mat-icon class="text-[20px]! size-[20px]!">close</mat-icon>
             </button>
         </div>
@@ -26,9 +26,9 @@
 
         <div class="mt-6 flex items-center justify-end gap-x-3">
             <button (click)="close()" type="button"
-                class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-2 text-sm text-(--postonsteroids-text-secondary) hover:bg-(--postonsteroids-bg-hover)">Cancel</button>
+                class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-2 text-sm text-(--postonsteroids-text-secondary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Cancel</button>
             <button (click)="importFromSwagger()" type="button"
-                class="inline-flex items-center gap-x-2 rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">
+                class="inline-flex items-center gap-x-2 rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover) cursor-pointer">
                 <mat-icon class="text-[18px]! size-[18px]!">cloud_download</mat-icon>
                 @if (isImporting()) {
                 Importing...

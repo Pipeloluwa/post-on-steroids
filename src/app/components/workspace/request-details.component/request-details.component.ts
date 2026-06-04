@@ -22,8 +22,20 @@ export class RequestDetailsComponent {
     waitingForAuth = signal<boolean>(false);
     tabStateService = inject(TabStateService);
     notificationService = inject(NotificationService);
-
     isSaving = computed(() => this.tabStateService.isSaving());
+
+    requestName = signal<string>('');
+    activeCapsuleName = this.tabStateService.activeCapsuleName;
+    capsules = computed(() => {
+        const defaultCapsules = ['My Capsule', 'API Project A', 'Personal Sandbox', 'Team Workspace'];
+        const active = this.activeCapsuleName();
+        const collectionSet = new Set(defaultCapsules);
+        if (active) {
+            collectionSet.add(active);
+        }
+        return Array.from(collectionSet);
+    });
+    selectedCapsule = signal<string>(this.activeCapsuleName() || 'My Capsule');
 
     constructor() {
         effect(() => {
@@ -40,9 +52,14 @@ export class RequestDetailsComponent {
                 this.requestName.set(state.name);
             }
         });
-    }
 
-    requestName = signal<string>('');
+        effect(() => {
+            const capsule = this.activeCapsuleName();
+            if (capsule && capsule !== this.selectedCapsule()) {
+                this.selectedCapsule.set(capsule);
+            }
+        });
+    }
 
     onNameChange(newName: string) {
         const id = this.tabStateService.activeTabId();
@@ -50,14 +67,13 @@ export class RequestDetailsComponent {
             this.tabStateService.updateState(id, { name: newName });
         }
     }
-    capsules = signal<string[]>(['My Capsule', 'API Project A', 'Personal Sandbox', 'Team Workspace']);
-    selectedCapsule = signal<string>('My Capsule');
     saveOptions = ['Export Endpoint', 'Export Capsule'];
 
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
 
     setCapsule(collection: string) {
+        this.tabStateService.setActiveCapsuleName(collection);
         this.selectedCapsule.set(collection);
         this.tabStateService.fetchCapsuleData(collection);
     }

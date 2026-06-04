@@ -64,6 +64,13 @@ export class RequestTabsComponent {
             }
         });
 
+        effect(() => {
+            const activeId = this.tabStateService.activeTabId();
+            if (activeId && this.scrollContainer) {
+                this.scrollToTab(activeId);
+            }
+        });
+
         afterNextRender(() => {
             this.updateScrollState();
             this.scrollContainer.nativeElement.addEventListener('scroll', () => {
