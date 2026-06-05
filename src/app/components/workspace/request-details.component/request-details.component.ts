@@ -25,17 +25,15 @@ export class RequestDetailsComponent {
     isSaving = computed(() => this.tabStateService.isSaving());
 
     requestName = signal<string>('');
-    activeCapsuleName = this.tabStateService.activeCapsuleName;
     capsules = computed(() => {
-        const defaultCapsules = ['My Capsule', 'API Project A', 'Personal Sandbox', 'Team Workspace'];
-        const active = this.activeCapsuleName();
-        const collectionSet = new Set(defaultCapsules);
-        if (active) {
-            collectionSet.add(active);
-        }
-        return Array.from(collectionSet);
+        return this.tabStateService.capsules().map(c => c.name);
     });
-    selectedCapsule = signal<string>(this.activeCapsuleName() || 'My Capsule');
+    
+    selectedCapsule = computed(() => {
+        const id = this.tabStateService.activeCapsuleId();
+        const capsule = this.tabStateService.capsules().find(c => c.id === id);
+        return capsule ? capsule.name : 'My Capsule';
+    });
 
     constructor() {
         effect(() => {
@@ -52,13 +50,6 @@ export class RequestDetailsComponent {
                 this.requestName.set(state.name);
             }
         });
-
-        effect(() => {
-            const capsule = this.activeCapsuleName();
-            if (capsule && capsule !== this.selectedCapsule()) {
-                this.selectedCapsule.set(capsule);
-            }
-        });
     }
 
     onNameChange(newName: string) {
@@ -72,10 +63,12 @@ export class RequestDetailsComponent {
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
 
-    setCapsule(collection: string) {
-        this.tabStateService.setActiveCapsuleName(collection);
-        this.selectedCapsule.set(collection);
-        this.tabStateService.fetchCapsuleData(collection);
+    setCapsule(collectionName: string) {
+        const capsule = this.tabStateService.capsules().find(c => c.name === collectionName);
+        if (capsule) {
+            this.tabStateService.switchCapsule(capsule);
+            this.tabStateService.fetchCapsuleData(collectionName);
+        }
     }
 
     shareCapsule() {

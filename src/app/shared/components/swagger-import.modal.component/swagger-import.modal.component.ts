@@ -60,7 +60,15 @@ export class SwaggerImportModalComponent {
             }
 
             this.tabStateService.closeAllTabs();
-            this.tabStateService.setActiveCapsuleName(result.collectionName);
+            
+            const newCapsule = {
+                id: this.createId(),
+                name: result.collectionName,
+                createdAt: Date.now()
+            };
+            this.tabStateService.capsules.update(c => [...c, newCapsule]);
+            this.tabStateService.switchCapsule(newCapsule);
+            
             this.tabStateService.savedCapsules.set(result.requests);
             result.requests.forEach(request => this.tabStateService.addOpenTab(request));
             this.tabStateService.setActiveTab(result.requests[0].id);
@@ -108,11 +116,17 @@ export class SwaggerImportModalComponent {
                 const requestId = this.createId();
                 const url = new URL(pathKey, baseServiceUrl).toString();
 
-                const allParams = this.extractParameters(this.mergeParameters(pathObject.parameters, operation.parameters), openApi);
+                const mergedParams = this.mergeParameters(pathObject.parameters, operation.parameters, openApi);
+                let bodySource = operation.requestBody;
+                if (!bodySource && Array.isArray(mergedParams)) {
+                    bodySource = mergedParams.find(p => p && typeof p === 'object' && p.in === 'body');
+                }
+
+                const allParams = this.extractParameters(mergedParams, openApi);
                 const params = [...allParams.queryParams, { enabled: true, key: '', value: '' }];
                 const headers = allParams.headerParams;
                 const pathParams = allParams.pathParams;
-                const body = this.extractRequestBody(operation.requestBody, openApi);
+                const body = this.extractRequestBody(bodySource, openApi);
                 const resolvedUrl = this.applyPathParameters(url, pathParams);
 
                 const requestState: RequestState = {
@@ -178,19 +192,34 @@ export class SwaggerImportModalComponent {
         return { queryParams, headerParams, pathParams };
     }
 
-    private mergeParameters(pathParameters: any, operationParameters: any): any[] {
+    private mergeParameters(pathParameters: any, operationParameters: any, openApi: Record<string, any>): any[] {
         const merged: any[] = [];
         const canonical = new Map<string, any>();
 
-        for (const param of Array.isArray(pathParameters) ? pathParameters : []) {
-            if (param && typeof param === 'object' && param.name && param.in) {
-                canonical.set(`${param.in}:${param.name}`, param);
+        const resolveIfRef = (p: any): any => {
+            if (p && typeof p === 'object' && p.$ref && typeof p.$ref === 'string') {
+                return this.resolveRef(p.$ref, openApi) || p;
+            }
+            return p;
+        };
+
+        for (let param of Array.isArray(pathParameters) ? pathParameters : []) {
+            param = resolveIfRef(param);
+            if (param && typeof param === 'object' && param.in) {
+                const name = param.name || (param.in === 'body' ? 'body' : '');
+                if (name) {
+                    canonical.set(`${param.in}:${name}`, param);
+                }
             }
         }
 
-        for (const param of Array.isArray(operationParameters) ? operationParameters : []) {
-            if (param && typeof param === 'object' && param.name && param.in) {
-                canonical.set(`${param.in}:${param.name}`, param);
+        for (let param of Array.isArray(operationParameters) ? operationParameters : []) {
+            param = resolveIfRef(param);
+            if (param && typeof param === 'object' && param.in) {
+                const name = param.name || (param.in === 'body' ? 'body' : '');
+                if (name) {
+                    canonical.set(`${param.in}:${name}`, param);
+                }
             }
         }
 
@@ -206,16 +235,79 @@ export class SwaggerImportModalComponent {
             return { rawBody: '', rawBodyJson: '{}', rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>', exampleBody: {} };
         }
 
-        const content = this.findRequestBodyContent(requestBody);
-        if (!content) {
-            return { rawBody: '', rawBodyJson: '{}', rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>', exampleBody: {} };
+        // Resolve top-level requestBody reference if it exists
+        let resolvedRequestBody = requestBody;
+        if (requestBody.$ref && typeof requestBody.$ref === 'string') {
+            resolvedRequestBody = this.resolveRef(requestBody.$ref, openApi) || requestBody;
         }
 
-        const exampleFromContent = this.resolveExampleValue(content, openApi);
-        const schema = content.schema;
-        const exampleBody = exampleFromContent !== undefined && exampleFromContent !== null
-            ? exampleFromContent
-            : schema ? this.generateExampleFromSchema(schema, openApi) : {};
+        let exampleBody: unknown = undefined;
+        let foundDirect = false;
+
+        // 1. Check if a request body under each URL content exists with schema examples directly populated without $ref, or without the value being referenced starting with #/
+        if (resolvedRequestBody.content && typeof resolvedRequestBody.content === 'object') {
+            const keys = Object.keys(resolvedRequestBody.content);
+            const preferredOrder = ['application/json', 'application/*+json', 'text/json'];
+            const sortedKeys = [...keys].sort((a, b) => {
+                const aIdx = preferredOrder.indexOf(a);
+                const bIdx = preferredOrder.indexOf(b);
+                if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+                if (aIdx !== -1) return -1;
+                if (bIdx !== -1) return 1;
+                return 0;
+            });
+
+            for (const contentType of sortedKeys) {
+                const content = resolvedRequestBody.content[contentType];
+                if (!content || typeof content !== 'object') continue;
+
+                if (content.example !== undefined) {
+                    exampleBody = content.example;
+                    foundDirect = true;
+                    break;
+                } else if (content.examples && typeof content.examples === 'object') {
+                    const firstExample = Object.values(content.examples).find(example => example && typeof example === 'object' && 'value' in example);
+                    if (firstExample && typeof firstExample === 'object') {
+                        exampleBody = (firstExample as any).value;
+                        foundDirect = true;
+                        break;
+                    }
+                }
+
+                const schema = content.schema;
+                if (schema && typeof schema === 'object') {
+                    const hasRef = schema.$ref && typeof schema.$ref === 'string';
+                    const isInternalRef = hasRef && schema.$ref.startsWith('#/');
+                    if (!hasRef || !isInternalRef) {
+                        exampleBody = this.generateExampleFromSchema(schema, openApi);
+                        foundDirect = true;
+                        break;
+                    }
+                }
+            }
+        } else if (resolvedRequestBody.schema && typeof resolvedRequestBody.schema === 'object') {
+            const schema = resolvedRequestBody.schema;
+            const hasRef = schema.$ref && typeof schema.$ref === 'string';
+            const isInternalRef = hasRef && schema.$ref.startsWith('#/');
+            if (!hasRef || !isInternalRef) {
+                exampleBody = this.generateExampleFromSchema(schema, openApi);
+                foundDirect = true;
+            }
+        }
+
+        // 2. Fallback to extracting from the component of the json (where $ref starting with #/ is resolved)
+        if (!foundDirect) {
+            const content = this.findRequestBodyContent(resolvedRequestBody);
+            if (content) {
+                const exampleFromContent = this.resolveExampleValue(content, openApi);
+                const schema = content.schema;
+                exampleBody = exampleFromContent !== undefined && exampleFromContent !== null
+                    ? exampleFromContent
+                    : schema ? this.generateExampleFromSchema(schema, openApi) : {};
+            } else {
+                exampleBody = {};
+            }
+        }
 
         const rawBody = typeof exampleBody === 'string'
             ? exampleBody
@@ -225,15 +317,30 @@ export class SwaggerImportModalComponent {
     }
 
     private findRequestBodyContent(requestBody: any): any {
-        if (!requestBody || typeof requestBody !== 'object' || !requestBody.content || typeof requestBody.content !== 'object') {
+        if (!requestBody || typeof requestBody !== 'object') {
             return undefined;
         }
 
-        const jsonContent = requestBody.content['application/json'] || requestBody.content['application/*+json'] || requestBody.content['text/json'];
-        if (jsonContent) return jsonContent;
+        // OpenAPI 3.0 content object structure
+        if (requestBody.content && typeof requestBody.content === 'object') {
+            const jsonContent = requestBody.content['application/json'] || requestBody.content['application/*+json'] || requestBody.content['text/json'];
+            if (jsonContent) return jsonContent;
 
-        const firstContentType = Object.keys(requestBody.content).find(key => typeof key === 'string');
-        return firstContentType ? requestBody.content[firstContentType] : undefined;
+            const firstContentType = Object.keys(requestBody.content).find(key => typeof key === 'string');
+            return firstContentType ? requestBody.content[firstContentType] : undefined;
+        }
+
+        // Swagger 2.0 schema directly in the parameter
+        if (requestBody.schema && typeof requestBody.schema === 'object') {
+            return requestBody;
+        }
+
+        // Direct schema structure
+        if (requestBody.type || requestBody.properties || requestBody.additionalProperties || requestBody.$ref || requestBody.allOf || requestBody.anyOf || requestBody.oneOf) {
+            return { schema: requestBody };
+        }
+
+        return undefined;
     }
 
     private resolveExampleValue(source: any, openApi: Record<string, any>): unknown {
@@ -301,6 +408,27 @@ export class SwaggerImportModalComponent {
             return null;
         }
 
+        if (schema.allOf && Array.isArray(schema.allOf)) {
+            let merged: any = {};
+            for (const sub of schema.allOf) {
+                const subExample = this.generateExampleFromSchema(sub, openApi);
+                if (subExample && typeof subExample === 'object' && !Array.isArray(subExample)) {
+                    merged = { ...merged, ...subExample };
+                } else if (subExample !== undefined && subExample !== null) {
+                    merged = subExample;
+                }
+            }
+            return merged;
+        }
+
+        if (schema.anyOf && Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
+            return this.generateExampleFromSchema(schema.anyOf[0], openApi);
+        }
+
+        if (schema.oneOf && Array.isArray(schema.oneOf) && schema.oneOf.length > 0) {
+            return this.generateExampleFromSchema(schema.oneOf[0], openApi);
+        }
+
         if (schema.$ref && typeof schema.$ref === 'string') {
             const resolved = this.resolveRef(schema.$ref, openApi);
             return this.generateExampleFromSchema(resolved, openApi);
@@ -314,11 +442,14 @@ export class SwaggerImportModalComponent {
             return schema.enum[0];
         }
 
-        if (schema.type === 'object' || schema.properties) {
+        if (schema.type === 'object' || schema.properties || schema.additionalProperties) {
             const example: Record<string, unknown> = {};
             const properties = schema.properties || {};
             for (const key of Object.keys(properties)) {
                 example[key] = this.generateExampleFromSchema(properties[key], openApi);
+            }
+            if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
+                example['additionalProp1'] = this.generateExampleFromSchema(schema.additionalProperties, openApi);
             }
             return example;
         }

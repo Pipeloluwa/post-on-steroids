@@ -14,7 +14,8 @@
                 </div>
                 <div>
                     <h3 class="font-bold text-(--postonsteroids-text-primary)">Import JSON Data</h3>
-                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Upload a JSON file containing exported OnSteroids capsules.</p>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Upload a JSON file containing exported
+                        OnSteroids capsules.</p>
                 </div>
             </div>
         </div>
@@ -29,7 +30,8 @@
                 </div>
                 <div class="flex flex-col gap-y-1">
                     <h3 class="font-bold text-(--postonsteroids-text-primary)">Import from Swagger</h3>
-                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a Swagger URL that ends with /swagger/index.html to import API endpoints and payloads.</p>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a Swagger URL that ends with
+                        /swagger/index.html to import API endpoints and payloads.</p>
                 </div>
             </div>
         </div>
@@ -38,9 +40,10 @@
     <app-swagger-import-modal #swaggerModal (onImportStatus)="onSwaggerImportStatus($event)" />
 
     @if (importStatus()) {
-    <div class="mt-8 p-4 rounded-xl border"
-         [class.bg-green-500/10]="!importError()" [class.border-green-500/30]="!importError()" [class.text-green-500]="!importError()"
-         [class.bg-red-500/10]="importError()" [class.border-red-500/30]="importError()" [class.text-red-500]="importError()">
+    <div class="mt-8 p-4 rounded-xl border" [class.bg-green-500/10]="!importError()"
+        [class.border-green-500/30]="!importError()" [class.text-green-500]="!importError()"
+        [class.bg-red-500/10]="importError()" [class.border-red-500/30]="importError()"
+        [class.text-red-500]="importError()">
         <div class="flex items-center gap-2">
             <mat-icon>{{ importError() ? 'error' : 'check_circle' }}</mat-icon>
             <span class="font-medium">{{ importStatus() }}</span>
