@@ -22,6 +22,7 @@ export class BodyTypesComponent {
   private platformId = inject(PLATFORM_ID);
   isBrowser = isPlatformBrowser(this.platformId);
   tabStateService = inject(TabStateService);
+  wrapResponse = signal(true);
   
   rawBodyContent = computed(() => {
     const state = this.tabStateService.activeTabState();
@@ -120,4 +121,9 @@ export class BodyTypesComponent {
       this.updateFormDataRow(i, 'value', input.files[0].name);
     }
   }
+
+  toggleWrap() {
+        this.wrapResponse.update(value => !value);
+    }
+
 }
