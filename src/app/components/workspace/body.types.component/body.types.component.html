@@ -23,7 +23,7 @@
         }
     </div>
 
-    @if (bodyType() !== 'none') {
+    @if (bodyType() === 'raw') {
     <div class="flex items-center gap-x-2 mr-2">
         <div class="flex items-center mt-1">
             <button (click)="toggleWrap()" title="{{ wrapResponse() ? 'Disable wrapping' : 'Enable wrapping' }}"
