@@ -64,9 +64,9 @@ window.addEventListener("message", async (event) => {
     const fnBody = "return (async () => {\\n"
       + paramDeclarations + "\\n"
       + code + "\\n"
-      + "if (typeof preScript === 'function') { await preScript(headers, body, params); }\\n"
+      + "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params); if (_preReturn !== undefined) { body = _preReturn; } }\\n"
       + "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params); }\\n"
-      + "if (typeof encryptScript === 'function') { await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); }\\n"
+      + "if (typeof encryptScript === 'function') { const _encReturn = await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); if (_encReturn !== undefined) { body = _encReturn; } }\\n"
       + paramWriteBack + "\\n"
       + "})();";
       
