@@ -44,11 +44,14 @@ export class ResponseViewerComponent {
     passedTests = computed(() => this.testResults().filter(t => t.passed).length);
     failedTests = computed(() => this.testResults().filter(t => !t.passed).length);
 
+    encryptionConsole = computed(() => this.tabStateService.activeTabState()?.scripts?.encryptionConsole ?? '');
+
     tabs = computed(() => [
         { name: 'Body', count: null },
         { name: 'Cookies', count: this.responseCookies().length || null },
         { name: 'Headers', count: this.responseHeaders().filter(h => h.enabled).length || null },
         { name: 'Test Results', count: this.testResults().length || null },
+        { name: 'Encryption Console', count: null },
         { name: 'Script Console', count: null },
     ]);
 

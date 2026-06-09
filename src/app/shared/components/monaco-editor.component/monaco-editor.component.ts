@@ -73,7 +73,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
 
         if (this.enableEncryptionToggles()) {
            this.themeUpdateId++; // Increment so class name changes
-           // Re-apply decorations after a single short tick to allow the editor 
+           // Re-apply decorations after a single short tick to allow the editor
            // options (like theme) to sync up with Monaco's internal DOM structure.
            setTimeout(() => this.updateDecorations(), 50);
         }
@@ -92,6 +92,17 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   onChange: (val: string) => void = () => { };
   onTouch: () => void = () => { };
 
+  private async waitForFontsToLoad(): Promise<void> {
+    if (!this.isBrowser || !(document as any).fonts) return;
+
+    try {
+      // Wait for JetBrains Mono and fallback fonts to load
+      await (document as any).fonts.ready;
+    } catch (err) {
+      // Fonts API might not be available in some browsers, continue anyway
+    }
+  }
+
   onEditorInit(editor: any) {
     this.editorInstance = editor;
 
@@ -102,8 +113,9 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     // Fix cursor offset: Monaco caches font character width measurements.
     // When the editor initializes in a container that hasn't fully rendered,
     // these measurements are wrong. We must:
-    // 1. Call layout() to recalculate container dimensions
-    // 2. Call monaco.editor.remeasureFonts() to recalculate character widths
+    // 1. Wait for fonts to load completely
+    // 2. Call layout() to recalculate container dimensions
+    // 3. Call monaco.editor.remeasureFonts() to recalculate character widths
     if (this.isBrowser && editor.layout) {
       const fixLayout = () => {
         editor.layout();
@@ -114,12 +126,15 @@ export class MonacoEditorComponent implements ControlValueAccessor {
         }
       };
 
-      // Use requestAnimationFrame to ensure DOM is painted before measuring
-      requestAnimationFrame(() => {
-        fixLayout();
-        // Additional delayed fix for containers that settle after animation
-        setTimeout(() => fixLayout(), 100);
-        setTimeout(() => fixLayout(), 300);
+      // Wait for fonts to load, then fix the layout
+      this.waitForFontsToLoad().then(() => {
+        // Use requestAnimationFrame to ensure DOM is painted before measuring
+        requestAnimationFrame(() => {
+          fixLayout();
+          // Additional delayed fix for containers that settle after animation
+          setTimeout(() => fixLayout(), 100);
+          setTimeout(() => fixLayout(), 300);
+        });
       });
 
       // Setup ResizeObserver for ongoing layout fixes (e.g. panel resize)
@@ -246,7 +261,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
       const firstLine = lines[0];
       const lastLine = lines[lines.length - 1];
 
-      const isFirstLineValid = /^function\s+\w+\s*\(.*\)\s*\{/.test(firstLine);
+      const isFirstLineValid = /^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(firstLine);
       const isLastLineValid = lastLine.trim() === '}';
 
       if (!isFirstLineValid || !isLastLineValid) {

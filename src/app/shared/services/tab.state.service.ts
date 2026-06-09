@@ -24,6 +24,9 @@ export interface ScriptsState {
     postResponse: string;
     preRequestConsole: string;
     postResponseConsole: string;
+    encryptionConsole: string;
+    testScript: string;
+    testScriptEnabled: boolean;
 }
 
 export interface CookieRow {
@@ -316,7 +319,10 @@ export class TabStateService {
                 preRequest: 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
                 postResponse: 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}',
                 preRequestConsole: '',
-                postResponseConsole: ''
+                postResponseConsole: '',
+                encryptionConsole: '',
+                testScript: 'function testScript(responseStatus, responseTime, responseBody){\n    let passed = true;\n    //Add test assertions here\n    return passed;\n}',
+                testScriptEnabled: false
             },
             encryption: {
                 algorithm: 'none',
@@ -506,7 +512,10 @@ export class TabStateService {
                 preRequest: method === 'POST' ? `function preScript(headers, body, params){\n    const timestamp = Date.now();\n    headers.push({ enabled: true, key: 'X-Timestamp', value: String(timestamp) });\n}` : 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
                 postResponse: `function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}`,
                 preRequestConsole: method === 'POST' ? 'Setting variable timestamp to 1710587421932\nScript evaluated successfully.' : '',
-                postResponseConsole: 'Executing test: Status is OK\nResult: PASS'
+                postResponseConsole: 'Executing test: Status is OK\nResult: PASS',
+                encryptionConsole: '',
+                testScript: 'function testScript(responseStatus, responseTime, responseBody){\n    let passed = true;\n    //Add test assertions here\n    return passed;\n}',
+                testScriptEnabled: false
             },
             encryption: {
                 algorithm: 'none',

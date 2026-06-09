@@ -219,7 +219,7 @@
     <div class="p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-x-2">
-                <app-scrollable-select-component [activeValue]="displayScriptTab()" [optionValues]="scriptOptions"
+                     <app-scrollable-select-component [activeValue]="displayScriptTab()" [optionValues]="scriptOptions()"
                     [verticalPosition]="28" [modalWidth]="150" (outputSelectedValue)="setScriptTab($event)">
                     <div
                         class="flex items-center justify-between bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-3 py-1 cursor-pointer hover:border-(--postonsteroids-accent)/50">
@@ -242,10 +242,29 @@
         </div>
 
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
-            <app-monaco-editor [ngModel]="scripts()[activeScriptTab()]"
-                (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="true"
-                class="block w-full h-full">
-            </app-monaco-editor>
+            @if (activeScriptTab() === 'test') {
+                <div class="w-full h-full flex flex-col">
+                    <div class="flex items-center justify-between px-3 py-2 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)">
+                        <span class="text-[11px] text-(--postonsteroids-text-muted) font-semibold">Enable Test Execution</span>
+                        <button type="button" (click)="toggleTestScript()"
+                            class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
+                            [class.bg-(--postonsteroids-accent)]="scripts().testScriptEnabled"
+                            [class.bg-(--postonsteroids-bg-tertiary)]="!scripts().testScriptEnabled">
+                            <div class="absolute top-0.75 left-0.75 w-3.5 h-3.5 bg-white rounded-full transition-transform duration-200"
+                                [class.translate-x-4]="scripts().testScriptEnabled"></div>
+                        </button>
+                    </div>
+                    <app-monaco-editor [ngModel]="scripts().testScript"
+                        (ngModelChange)="updateScript('test', $event)" [restrictToFunctionBody]="true"
+                        class="flex-1 min-h-0 block w-full">
+                    </app-monaco-editor>
+                </div>
+            } @else {
+                <app-monaco-editor [ngModel]="getScriptContent()"
+                    (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="true"
+                    class="block w-full h-full">
+                </app-monaco-editor>
+            }
         </div>
     </div>
     }
@@ -270,7 +289,14 @@
             </div>
         </div>
 
-        <div class="text-[12px] text-(--postonsteroids-text-primary) font-semibold mt-1">Encryption Script</div>
+        <div class="flex items-center justify-between gap-2">
+            <div class="text-[12px] text-(--postonsteroids-text-primary) font-semibold">Encryption Script</div>
+            <button type="button" (click)="resetEncryptionScript()"
+                class="text-[11px] font-semibold text-(--postonsteroids-accent) hover:text-(--postonsteroids-accent)/80 transition"
+                aria-label="Reset encryption script to default">
+                Reset
+            </button>
+        </div>
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
             <app-monaco-editor [ngModel]="encryption().script"
                 (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="true"

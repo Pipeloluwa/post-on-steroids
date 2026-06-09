@@ -35,14 +35,23 @@ export class PayloadTypesComponent {
   rawHeadersText = signal('');
 
   // State for Scripts
-  activeScriptTab = signal<'preRequest' | 'postResponse'>('preRequest');
-  scriptOptions = ['Pre-request Script', 'Post-response Script'];
+  activeScriptTab = signal<'preRequest' | 'postResponse' | 'test'>('preRequest');
+  scriptOptions = signal(['Pre-request Script', 'Post-response Script', 'Test Script']);
 
-  displayScriptTab = computed(() => this.activeScriptTab() === 'preRequest' ? 'Pre-request Script' : 'Post-response Script');
+  displayScriptTab = computed(() => {
+    const tab = this.activeScriptTab();
+    switch(tab) {
+      case 'preRequest': return 'Pre-request Script';
+      case 'postResponse': return 'Post-response Script';
+      case 'test': return 'Test Script';
+      default: return 'Pre-request Script';
+    }
+  });
 
   setScriptTab(option: string) {
     if (option === 'Pre-request Script') this.activeScriptTab.set('preRequest');
     else if (option === 'Post-response Script') this.activeScriptTab.set('postResponse');
+    else if (option === 'Test Script') this.activeScriptTab.set('test');
   }
 
   // State for Auth
@@ -55,7 +64,7 @@ export class PayloadTypesComponent {
   params = computed(() => this.tabStateService.activeTabState()?.params ?? []);
   headers = computed(() => this.tabStateService.activeTabState()?.headers ?? []);
   auth = computed(() => this.tabStateService.activeTabState()?.auth ?? { type: 'none' as const, token: '' });
-  scripts = computed(() => this.tabStateService.activeTabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '' });
+  scripts = computed(() => this.tabStateService.activeTabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '', encryptionConsole: '', testScript: '', testScriptEnabled: false });
   encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
   settings = computed(() => this.tabStateService.activeTabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true });
 
@@ -220,19 +229,48 @@ export class PayloadTypesComponent {
   }
 
   // ── Scripts ──────────────────────────────────────────────────────────
-  updateScript(phase: 'preRequest' | 'postResponse', code: string) {
+  updateScript(phase: 'preRequest' | 'postResponse' | 'test', code: string) {
     const id = this.tabStateService.activeTabId();
     if (!id) return;
-    this.tabStateService.updateState(id, { scripts: { ...this.scripts(), [phase]: code } });
+    const current = this.scripts();
+    if (phase === 'test') {
+      this.tabStateService.updateState(id, { scripts: { ...current, testScript: code } });
+    } else {
+      this.tabStateService.updateState(id, { scripts: { ...current, [phase]: code } });
+    }
   }
 
   resetScript() {
     const id = this.tabStateService.activeTabId();
     if (!id) return;
+    const current = this.scripts();
+    if (this.activeScriptTab() === 'test') {
+      this.tabStateService.updateState(id, { scripts: { ...current, testScript: '' } });
+    } else {
+      this.tabStateService.updateState(id, { scripts: { ...current, [this.activeScriptTab()]: '' } });
+    }
+  }
+
+  toggleTestScript() {
+    const id = this.tabStateService.activeTabId();
+    if (!id) return;
+    const current = this.scripts();
+    this.tabStateService.updateState(id, { scripts: { ...current, testScriptEnabled: !current.testScriptEnabled } });
+  }
+
+  getScriptContent(): string {
+    const tab = this.activeScriptTab();
+    if (tab === 'preRequest') return this.scripts().preRequest;
+    if (tab === 'postResponse') return this.scripts().postResponse;
+    return '';
+  }
+
+  resetEncryptionScript() {
+    const id = this.tabStateService.activeTabId();
+    if (!id) return;
     const defaultState = this.tabStateService.getDefaultState(id);
-    const phase = this.activeScriptTab();
-    const defaultScript = defaultState.scripts[phase];
-    this.updateScript(phase, defaultScript);
+    const defaultScript = defaultState.encryption?.script ?? '';
+    this.setEncryptionField('script', defaultScript);
   }
 
   // ── Encryption ───────────────────────────────────────────────────────

@@ -70,10 +70,16 @@ export class RequestExecutionService {
 
             // 5a. Encryption Script
             const encryptionScriptCode = state.encryption?.script;
+            let encryptionLogs = '';
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
+                // Serialize body to JSON string for encryption script
+                const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
+                console.log('🔐 [Encryption] Initial body:', body);
+                console.log('🔐 [Encryption] Serialized bodyStr:', bodyStr);
+
                 const encContext = {
                     headers,
-                    body,
+                    body: bodyStr,
                     params,
                     encryptedHeaders: state.encryption?.encryptedHeaders || [],
                     encryptedBodyPaths: state.encryption?.encryptedBodyPaths || [],
@@ -82,14 +88,32 @@ export class RequestExecutionService {
                     channelName: state.encryption?.channelName || ''
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
+                encryptionLogs = encResult.logs || '';
                 if (encResult.logs) preRequestLogs += 'Encryption Logs:\n' + encResult.logs + '\n\n';
+
+                console.log('🔐 [Encryption] Script result:', encResult);
+                console.log('🔐 [Encryption] Result context.body:', encResult.context?.body);
 
                 if (encResult.success && encResult.context) {
                      headers = encResult.context.headers || headers;
-                     body = encResult.context.body !== undefined ? encResult.context.body : body;
+                     // Parse body back to object if it was originally an object
+                     const encryptedBodyStr = encResult.context.body != null ? encResult.context.body : bodyStr;
+                     console.log('🔐 [Encryption] encryptedBodyStr to parse:', encryptedBodyStr);
+
+                     try {
+                         body = JSON.parse(encryptedBodyStr);
+                         console.log('🔐 [Encryption] Parsed body to object:', body);
+                     } catch (parseErr) {
+                         body = encryptedBodyStr;
+                         console.log('🔐 [Encryption] Using encryptedBodyStr as-is (not valid JSON):', body);
+                     }
                      params = encResult.context.params || params;
+                     console.log('🔐 [Encryption] Final body after encryption:', body);
                 } else if (encResult.error) {
+                    encryptionLogs = `Encryption Error: ${encResult.error}`;
                     preRequestLogs += `\nEncryption Error: ${encResult.error}\n\n`;
+                    console.error('🔐 [Encryption] ERROR - Encryption script failed:', encResult.error);
+                    console.warn('🔐 [Encryption] Using original body due to encryption error');
                 }
             }
 
@@ -124,6 +148,13 @@ export class RequestExecutionService {
                 httpHeaders = httpHeaders.set('Content-Type', 'application/xml');
             }
 
+            // Ensure Content-Type is application/json if body is an object or JSON string and not already set
+            if (body && !httpHeaders.has('Content-Type')) {
+                if (typeof body === 'object' || (typeof body === 'string' && body.trim().startsWith('{'))) {
+                    httpHeaders = httpHeaders.set('Content-Type', 'application/json');
+                }
+            }
+
             let httpParams = new HttpParams();
             params.forEach(p => {
                 httpParams = httpParams.append(p.key, p.value);
@@ -150,15 +181,22 @@ export class RequestExecutionService {
             const startTime = performance.now();
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
 
+            console.log('📤 [HTTP Request] Method:', state.method);
+            console.log('📤 [HTTP Request] URL:', finalUrl);
+            console.log('📤 [HTTP Request] Body:', body);
+            console.log('📤 [HTTP Request] Headers:', httpHeaders.keys().map(k => `${k}: ${httpHeaders.get(k)}`));
+
             try {
               switch (state.method){
                 case 'GET':
                     httpResponse = await firstValueFrom(this.http.get(finalUrl, reqOptions));
                     break;
                 case 'POST':
+                    console.log('📤 [HTTP] Sending POST with body:', body);
                     httpResponse = await firstValueFrom(this.http.post(finalUrl, body, reqOptions));
                     break;
                 case 'PUT':
+                    console.log('📤 [HTTP] Sending PUT with body:', body);
                     httpResponse = await firstValueFrom(this.http.put(finalUrl, body, reqOptions));
                     break;
                 case 'DELETE':
@@ -244,7 +282,8 @@ export class RequestExecutionService {
                 scripts: {
                     ...state.scripts,
                     preRequestConsole: preRequestLogs,
-                    postResponseConsole: postResponseLogs
+                    postResponseConsole: postResponseLogs,
+                    encryptionConsole: encryptionLogs
                 }
             });
 

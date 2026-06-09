@@ -241,6 +241,25 @@
         </div>
         }
 
+        <!-- ─── ENCRYPTION CONSOLE ─── -->
+        @if (activeTab() === 'Encryption Console') {
+        <div class="w-full h-full overflow-hidden flex flex-col p-2 gap-y-2">
+            <div
+                class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-tertiary)/30 relative">
+                @if (encryptionConsole()) {
+                <pre
+                    class="w-full h-full p-3 font-mono text-[12px] text-(--postonsteroids-text-secondary) whitespace-pre-wrap overflow-auto">{{ encryptionConsole() }}</pre>
+                } @else {
+                <div
+                    class="absolute inset-0 flex flex-col items-center justify-center gap-y-2 text-(--postonsteroids-text-muted)">
+                    <mat-icon class="text-[36px]! size-[36px]! opacity-30">lock</mat-icon>
+                    <span class="text-[12px]">No encryption logs yet</span>
+                </div>
+                }
+            </div>
+        </div>
+        }
+
         <!-- ─── SCRIPT CONSOLE ─── -->
         @if (activeTab() === 'Script Console') {
         <div class="w-full h-full overflow-hidden flex flex-col p-2 gap-y-2">
