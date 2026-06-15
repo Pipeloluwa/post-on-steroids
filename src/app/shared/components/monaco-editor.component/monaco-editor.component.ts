@@ -57,6 +57,9 @@ export class MonacoEditorComponent implements ControlValueAccessor {
 
   private editorInstance = signal<any>(null);
   private isReverting = false;
+  // Prevents writeValue from calling model.setValue() during a model-restore operation
+  // which would destroy Monaco's undo/redo history
+  private isRestoringModel = false;
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
   private themeUpdateId = 0;
@@ -109,19 +112,24 @@ export class MonacoEditorComponent implements ControlValueAccessor {
 
           if (cachedModel) {
             if (editor.getModel() !== cachedModel) {
+              // Restore the cached model — this preserves undo/redo history
+              // Set the flag so that writeValue (called by Angular form binding after
+              // onChange below) does NOT call model.setValue(), which would destroy history
+              this.isRestoringModel = true;
               editor.setModel(cachedModel);
               if (this.enableEncryptionToggles()) {
                 this.updateDecorations();
               }
-            }
-            // Sync value
-            const cachedValue = cachedModel.getValue();
-            if (this.value() !== cachedValue) {
+              // Sync the Angular value signal with the restored model's content
+              const cachedValue = cachedModel.getValue();
               this.value.set(cachedValue);
+              // Notify Angular form of the restored value (triggers writeValue,
+              // which will see isRestoringModel=true and skip setValue)
               this.onChange(cachedValue);
+              this.isRestoringModel = false;
             }
           } else {
-            // Create a new model for this cache key
+            // No cached model yet — create one with the current value
             const newModel = monacoGlobal.editor.createModel(this.value(), language);
             MonacoEditorComponent.modelCache.set(cacheKey, newModel);
             editor.setModel(newModel);
@@ -354,26 +362,31 @@ export class MonacoEditorComponent implements ControlValueAccessor {
 
   writeValue(val: string): void {
     const safeVal = val || '';
-    if (safeVal !== this.value()) {
-      this.value.set(safeVal);
-      this.lastValidContent = safeVal;
-      
-      const editor = this.editorInstance();
-      if (editor) {
-        const monacoGlobal = (window as any).monaco;
-        if (monacoGlobal && monacoGlobal.editor) {
-          const activeTabId = this.tabStateService.activeTabId() || 'default';
-          const cacheKey = `${activeTabId}-${this.editorId()}-${this.language()}`;
-          const cachedModel = MonacoEditorComponent.modelCache.get(cacheKey);
-          const currentModel = editor.getModel();
-          
-          if (currentModel && currentModel === cachedModel && currentModel.getValue() !== safeVal) {
-            currentModel.setValue(safeVal);
-          }
-        }
-      }
 
-      if (editor && this.enableEncryptionToggles()) {
+    // During a model-restore operation (tab navigation), skip calling model.setValue().
+    // editor.setModel(cachedModel) already restored the correct content AND undo history.
+    // Calling setValue here would destroy that history.
+    if (this.isRestoringModel) {
+      if (safeVal !== this.value()) {
+        this.value.set(safeVal);
+        this.lastValidContent = safeVal;
+      }
+      return;
+    }
+
+    if (safeVal === this.value()) return;
+
+    this.value.set(safeVal);
+    this.lastValidContent = safeVal;
+
+    const editor = this.editorInstance();
+    if (editor) {
+      const currentModel = editor.getModel();
+      // Only call setValue if model content genuinely differs — setValue resets undo history!
+      if (currentModel && currentModel.getValue() !== safeVal) {
+        currentModel.setValue(safeVal);
+      }
+      if (this.enableEncryptionToggles()) {
         this.updateDecorations();
       }
     }

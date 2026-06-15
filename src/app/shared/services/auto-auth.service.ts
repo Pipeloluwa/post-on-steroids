@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { TabStateService, RequestState } from './tab.state.service';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -9,6 +9,9 @@ import { firstValueFrom } from 'rxjs';
 export class AutoAuthService {
     private tabStateService = inject(TabStateService);
     private http = inject(HttpClient);
+
+    // Globally cached token, shared across all tabs for global auth scope
+    private cachedAccessToken = signal<string | null>(null);
 
     isAutoAuthEnabled(tabId?: string): boolean {
         const scope = this.tabStateService.autoAuthEnabled();
@@ -21,6 +24,18 @@ export class AutoAuthService {
             return !!state?.autoAuthEnabled;
         }
         return false;
+    }
+
+    getCachedToken(): string | null {
+        return this.cachedAccessToken();
+    }
+
+    setCachedToken(token: string) {
+        this.cachedAccessToken.set(token);
+    }
+
+    clearCachedToken() {
+        this.cachedAccessToken.set(null);
     }
 
     getAutoAuthEndpointId() {

@@ -54,6 +54,18 @@ export class RequestExecutionService {
                 headers.push({ key: 'Authorization', value: `Basic ${this.variableService.resolve(state.auth.token)}` });
             }
 
+            // Inject globally cached Auto-Auth token if no tab-level auth is configured
+            const autoAuthEnabled = this.autoAuthService.isAutoAuthEnabled(tabId);
+            if (autoAuthEnabled && !state.auth.token) {
+                const cachedToken = this.autoAuthService.getCachedToken();
+                if (cachedToken) {
+                    const alreadyHasAuth = headers.some(h => h.key.toLowerCase() === 'authorization');
+                    if (!alreadyHasAuth) {
+                        headers.push({ key: 'Authorization', value: `Bearer ${cachedToken}` });
+                    }
+                }
+            }
+
             // 3. Prepare Params
             let params = state.params
                 .filter(p => p.enabled && p.key)
@@ -288,28 +300,38 @@ export class RequestExecutionService {
                 }
             }
 
-            // 10. Auto Auth Check
+            // 10. Auto Auth Check — only triggered on 401, never on initial request
             if (status === 401 && !isAutoAuthRetry && this.autoAuthService.isAutoAuthEnabled(tabId)) {
                 const endpointId = this.autoAuthService.getAutoAuthEndpointId();
                 if (endpointId) {
                     console.log('🔄 [Auto Auth] 401 Detected. Attempting auto authentication...');
-                    
+
+                    // If a cached token existed but got 401, it has expired — clear it
+                    if (this.autoAuthService.getCachedToken()) {
+                        console.log('🔄 [Auto Auth] Cached token expired. Clearing and re-authenticating.');
+                        this.autoAuthService.clearCachedToken();
+                    }
+
                     // Remember original active tab
                     const originalTabId = this.tabStateService.activeTabId();
-                    
+
                     // Switch to auth tab and execute
                     this.tabStateService.setActiveTab(endpointId);
                     await this.executeRequest(endpointId, true); // true to prevent infinite loops
-                    
+
                     // Get token from auth response
                     const authState = this.tabStateService.getState(endpointId);
                     if (authState && authState.responseStatus === 200) {
                         const token = this.autoAuthService.extractAccessToken(authState.responseBody);
                         if (token) {
-                            console.log('🔄 [Auto Auth] Token extracted successfully. Retrying original request...');
-                            // Update original tab with new token
+                            console.log('🔄 [Auto Auth] Token extracted & cached globally. Retrying original request...');
+
+                            // Cache the token globally so all other tabs can reuse it
+                            this.autoAuthService.setCachedToken(token);
+
+                            // Also update this tab's auth state for explicit auth type tabs
                             const originalState = this.tabStateService.getState(tabId);
-                            if (originalState) {
+                            if (originalState && (originalState.auth.type === 'bearer' || originalState.auth.type === 'none')) {
                                 this.tabStateService.updateState(tabId, {
                                     auth: {
                                         ...originalState.auth,
@@ -318,7 +340,7 @@ export class RequestExecutionService {
                                     }
                                 });
                             }
-                            
+
                             // Switch back and retry
                             this.tabStateService.setActiveTab(tabId);
                             await this.executeRequest(tabId, true);
@@ -329,7 +351,7 @@ export class RequestExecutionService {
                     } else {
                         console.warn('🔄 [Auto Auth] Auth request failed with status:', authState?.responseStatus);
                     }
-                    
+
                     // Restore original tab if auth failed
                     if (originalTabId) {
                         this.tabStateService.setActiveTab(originalTabId);
