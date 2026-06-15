@@ -17,6 +17,16 @@ export class RequestExecutionService {
     // Use injector for AutoAuthService to avoid circular dependency if needed, but here it might be fine.
     private autoAuthService = inject(AutoAuthService);
 
+    private pendingRequests = new Map<string, () => void>();
+
+    cancelRequest(tabId: string) {
+        const cancelFn = this.pendingRequests.get(tabId);
+        if (cancelFn) {
+            cancelFn();
+            this.pendingRequests.delete(tabId);
+        }
+    }
+
     async executeRequest(tabId: string, isAutoAuthRetry: boolean = false): Promise<void> {
         const state = this.tabStateService.activeTabState();
         if (!state || state.id !== tabId) return;
@@ -190,37 +200,41 @@ export class RequestExecutionService {
             console.log('📤 [HTTP Request] Headers:', httpHeaders.keys().map(k => `${k}: ${httpHeaders.get(k)}`));
 
             try {
+              let reqObservable: any;
               switch (state.method){
-                case 'GET':
-                    httpResponse = await firstValueFrom(this.http.get(finalUrl, reqOptions));
-                    break;
-                case 'POST':
+                case 'GET': reqObservable = this.http.get(finalUrl, reqOptions); break;
+                case 'POST': 
                     console.log('📤 [HTTP] Sending POST with body:', body);
-                    httpResponse = await firstValueFrom(this.http.post(finalUrl, body, reqOptions));
-                    break;
+                    reqObservable = this.http.post(finalUrl, body, reqOptions); break;
                 case 'PUT':
                     console.log('📤 [HTTP] Sending PUT with body:', body);
-                    httpResponse = await firstValueFrom(this.http.put(finalUrl, body, reqOptions));
-                    break;
-                case 'DELETE':
-                    httpResponse = await firstValueFrom(this.http.delete(finalUrl, reqOptions));
-                    break;
-                case 'PATCH':
-                    httpResponse = await firstValueFrom(this.http.patch(finalUrl, body, reqOptions));
-                    break;
-                case 'HEAD':
-                    httpResponse = await firstValueFrom(this.http.head(finalUrl, reqOptions)) as any;
-                    break;
-                case 'OPTIONS':
-                    httpResponse = await firstValueFrom(this.http.options(finalUrl, reqOptions));
-                    break;
-                default:
-                    httpResponse = await firstValueFrom(this.http.request(state.method, finalUrl, { ...reqOptions, body }));
-                    break;
-
+                    reqObservable = this.http.put(finalUrl, body, reqOptions); break;
+                case 'DELETE': reqObservable = this.http.delete(finalUrl, reqOptions); break;
+                case 'PATCH': reqObservable = this.http.patch(finalUrl, body, reqOptions); break;
+                case 'HEAD': reqObservable = this.http.head(finalUrl, reqOptions); break;
+                case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
+                default: reqObservable = this.http.request(state.method, finalUrl, { ...reqOptions, body }); break;
               }
+
+              httpResponse = await new Promise((resolve, reject) => {
+                  const sub = reqObservable.subscribe({
+                      next: (res: any) => resolve(res),
+                      error: (err: any) => resolve(err)
+                  });
+                  this.pendingRequests.set(tabId, () => {
+                      sub.unsubscribe();
+                      reject(new Error('Request cancelled'));
+                  });
+              });
             } catch (err: any) {
+                if (err.message === 'Request cancelled') {
+                    console.log('🚫 [HTTP] Request cancelled by user');
+                    this.tabStateService.updateState(tabId, { isLoading: false });
+                    return; // Stop processing
+                }
                 httpResponse = err as HttpErrorResponse;
+            } finally {
+                this.pendingRequests.delete(tabId);
             }
 
             const endTime = performance.now();
@@ -275,7 +289,7 @@ export class RequestExecutionService {
             }
 
             // 10. Auto Auth Check
-            if (status === 401 && !isAutoAuthRetry && this.autoAuthService.isAutoAuthEnabled()) {
+            if (status === 401 && !isAutoAuthRetry && this.autoAuthService.isAutoAuthEnabled(tabId)) {
                 const endpointId = this.autoAuthService.getAutoAuthEndpointId();
                 if (endpointId) {
                     console.log('🔄 [Auto Auth] 401 Detected. Attempting auto authentication...');

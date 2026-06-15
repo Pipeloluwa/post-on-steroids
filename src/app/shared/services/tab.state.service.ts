@@ -67,6 +67,7 @@ export interface RequestState {
     name: string;
     isDirty: boolean;
     isLoading: boolean;
+    autoAuthEnabled?: boolean;
     // Payload type tabs
     payloadType: string;
     params: KeyValue[];
@@ -115,7 +116,7 @@ export class TabStateService {
     activeTabId = signal<string | null>(null);
     activeCapsuleName = signal<string>('My Capsule');
     activeCapsuleId = signal<string>('1');
-    autoAuthEnabled = signal<boolean>(false);
+    autoAuthEnabled = signal<'off' | 'individual' | 'global'>('off');
     autoAuthEndpointId = signal<string | null>(null);
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
@@ -196,6 +197,21 @@ export class TabStateService {
 
         if (activeTabId) {
             this.activeTabId.set(activeTabId);
+        }
+
+        const savedAutoAuth = localStorage.getItem('autoAuthEnabled');
+        const savedAutoAuthId = localStorage.getItem('autoAuthEndpointId');
+        if (savedAutoAuth) {
+            if (savedAutoAuth === 'true') {
+                this.autoAuthEnabled.set('individual');
+            } else if (savedAutoAuth === 'false') {
+                this.autoAuthEnabled.set('off');
+            } else {
+                this.autoAuthEnabled.set(savedAutoAuth as any);
+            }
+        }
+        if (savedAutoAuthId) {
+            this.autoAuthEndpointId.set(savedAutoAuthId);
         }
     }
 
@@ -313,6 +329,7 @@ export class TabStateService {
             name: 'New Request',
             isDirty: false,
             isLoading: false,
+            autoAuthEnabled: false,
             payloadType: 'params',
             params: [{ enabled: true, key: '', value: '' }],
             headers: [
@@ -337,7 +354,7 @@ export class TabStateService {
                 channelName: '',
                 encryptedHeaders: [],
                 encryptedBodyPaths: [],
-                script: 'async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {\n    function getNestedValue(obj, path) {\n        return path.split(\'.\').reduce((acc, part) => acc && acc[part], obj);\n    }\n    function setNestedValue(obj, path, value) {\n        const parts = path.split(\'.\');\n        const last = parts.pop();\n        const target = parts.reduce((acc, part) => {\n            if (!acc[part]) acc[part] = {};\n            return acc[part];\n        }, obj);\n        if (target) target[last] = value;\n    }\n    function getPrimitivePaths(obj, currentPath = \'\') {\n        let paths = [];\n        for (let key in obj) {\n            if (obj.hasOwnProperty(key)) {\n                const path = currentPath ? `${currentPath}.${key}` : key;\n                if (obj[key] !== null && typeof obj[key] === \'object\') {\n                    paths = paths.concat(getPrimitivePaths(obj[key], path));\n                } else {\n                    paths.push(path);\n                }\n            }\n        }\n        return paths;\n    }\n    const parameters = {};\n    const shouldEncryptAllHeaders = typeof autoEncryptHeaders !== \'undefined\' ? autoEncryptHeaders : false;\n    const encHeadersList = encryptedHeaders || [];\n    for (let h of headers) {\n        if (h.enabled && h.key) {\n            if (shouldEncryptAllHeaders || encHeadersList.includes(h.key)) {\n                parameters[h.key] = h.value;\n            }\n        }\n    }\n    let bodyObj = null;\n    if (body) {\n        try {\n            bodyObj = JSON.parse(body);\n        } catch (e) {}\n    }\n    if (bodyObj) {\n        const shouldEncryptAllBody = typeof autoEncryptBody !== \'undefined\' ? autoEncryptBody : false;\n        const encBodyPathsList = encryptedBodyPaths || [];\n        if (shouldEncryptAllBody) {\n            const allPaths = getPrimitivePaths(bodyObj);\n            for (let path of allPaths) {\n                const val = getNestedValue(bodyObj, path);\n                if (val !== undefined && val !== null) {\n                    parameters[path] = val;\n                }\n            }\n        } else {\n            for (let path of encBodyPathsList) {\n                const val = getNestedValue(bodyObj, path);\n                if (val !== undefined && val !== null) {\n                    parameters[path] = val;\n                }\n            }\n        }\n    }\n    if (Object.keys(parameters).length > 0) {\n        try {\n            const chName = typeof channelName !== \'undefined\' ? channelName : \'Default Channel\';\n            const response = await fetch(\'https://localhost:7131/api/v1/auth/encrypt\', {\n                method: \'POST\',\n                headers: {\n                    \'Content-Type\': \'application/json\'\n                },\n                body: JSON.stringify({\n                    channelName: chName,\n                    parameters: parameters\n                })\n            });\n            if (response.ok) {\n                const result = await response.json();\n                const encryptedParams = result.parameters || result;\n                for (let h of headers) {\n                    if (h.key && encryptedParams[h.key] !== undefined) {\n                        h.value = String(encryptedParams[h.key]);\n                    }\n                }\n                if (bodyObj) {\n                    for (let key in encryptedParams) {\n                        if (encryptedParams.hasOwnProperty(key)) {\n                            if (key.includes(\'.\') || getNestedValue(bodyObj, key) !== undefined) {\n                                setNestedValue(bodyObj, key, encryptedParams[key]);\n                            }\n                        }\n                    }\n                    body = JSON.stringify(bodyObj, null, 2);\n                }\n            }\n        } catch (error) {\n            console.error(\'Error during payload encryption:\', error);\n        }\n    }\n    return body;\n}'
+                script: 'async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {\n    function getNestedValue(obj, path) {\n        return path.split(".").reduce((acc, part) => acc && acc[part], obj);\n    }\n    function setNestedValue(obj, path, value) {\n        const parts = path.split(".");\n        const last = parts.pop();\n        const target = parts.reduce((acc, part) => {\n            if (!acc[part]) acc[part] = {};\n            return acc[part];\n        }, obj);\n        if (target) target[last] = value;\n    }\n    function getPrimitivePaths(obj, currentPath = "") {\n        let paths = [];\n        for (let key in obj) {\n            if (obj.hasOwnProperty(key)) {\n                const path = currentPath ? `${currentPath}.${key}` : key;\n                if (obj[key] !== null && typeof obj[key] === "object") {\n                    paths = paths.concat(getPrimitivePaths(obj[key], path));\n                } else {\n                    paths.push(path);\n                }\n            }\n        }\n        return paths;\n    }\n    const parameters = {};\n    const shouldEncryptAllHeaders = typeof autoEncryptHeaders !== "undefined" ? autoEncryptHeaders : false;\n    const encHeadersList = encryptedHeaders || [];\n    for (let h of headers) {\n        if (h.enabled && h.key) {\n            if (shouldEncryptAllHeaders || encHeadersList.includes(h.key)) {\n                parameters[h.key] = h.value;\n            }\n        }\n    }\n    let bodyObj = null;\n    if (body) {\n        try {\n            bodyObj = JSON.parse(body);\n        } catch (e) {}\n    }\n    if (bodyObj) {\n        const shouldEncryptAllBody = typeof autoEncryptBody !== "undefined" ? autoEncryptBody : false;\n        const encBodyPathsList = encryptedBodyPaths || [];\n        if (shouldEncryptAllBody) {\n            const allPaths = getPrimitivePaths(bodyObj);\n            for (let path of allPaths) {\n                const val = getNestedValue(bodyObj, path);\n                if (val !== undefined && val !== null) {\n                    parameters[path] = val;\n                }\n            }\n        } else {\n            for (let path of encBodyPathsList) {\n                const val = getNestedValue(bodyObj, path);\n                if (val !== undefined && val !== null) {\n                    parameters[path] = val;\n                }\n            }\n        }\n    }\n    if (Object.keys(parameters).length > 0) {\n        console.log("Sending the following parameters for encryption:", JSON.stringify(parameters, null, 2));\n        try {\n            const chName = typeof channelName !== "undefined" ? channelName : "Default Channel";\n            const response = await fetch("https://localhost:7131/api/v1/auth/encrypt", {\n                method: "POST",\n                headers: {\n                    "Content-Type": "application/json"\n                },\n                body: JSON.stringify({\n                    channelName: chName,\n                    parameters: parameters\n                })\n            });\n            if (response.ok) {\n                const result = await response.json();\n                console.log("Encryption successful. Encrypted values received:", JSON.stringify(result, null, 2));\n                const encryptedParams = result.parameters || result;\n                for (let h of headers) {\n                    if (h.key && encryptedParams[h.key] !== undefined) {\n                        h.value = String(encryptedParams[h.key]);\n                    }\n                }\n                if (bodyObj) {\n                    for (let key in encryptedParams) {\n                        if (encryptedParams.hasOwnProperty(key)) {\n                            if (key.includes(".") || getNestedValue(bodyObj, key) !== undefined) {\n                                setNestedValue(bodyObj, key, encryptedParams[key]);\n                            }\n                        }\n                    }\n                    body = JSON.stringify(bodyObj, null, 2);\n                }\n            } else {\n                console.log("Encryption failed. Status:", response.status);\n            }\n        } catch (error) {\n            console.error("Error during payload encryption:", error);\n        }\n    } else {\n        console.log("No parameters were selected for encryption.");\n    }\n    return body;\n}'
             },
             settings: { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true },
             bodyType: 'none',

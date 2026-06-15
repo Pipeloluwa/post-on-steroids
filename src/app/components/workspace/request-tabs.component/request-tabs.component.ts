@@ -43,7 +43,6 @@ export class RequestTabsComponent {
     });
 
     activeTabId = this.tabStateService.activeTabId;
-    autoAuthEnabled = signal<boolean>(true);
 
     historyStack = signal<string[]>([]);
     historyIndex = signal<number>(-1);
@@ -158,10 +157,6 @@ export class RequestTabsComponent {
         }
 
         setTimeout(() => this.updateScrollState(), 50);
-    }
-
-    toggleAutoAuth() {
-        this.autoAuthEnabled.update(v => !v);
     }
 
     scrollLeft() {

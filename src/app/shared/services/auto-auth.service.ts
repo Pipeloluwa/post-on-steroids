@@ -10,15 +10,24 @@ export class AutoAuthService {
     private tabStateService = inject(TabStateService);
     private http = inject(HttpClient);
 
-    isAutoAuthEnabled() {
-        return this.tabStateService.autoAuthEnabled();
+    isAutoAuthEnabled(tabId?: string): boolean {
+        const scope = this.tabStateService.autoAuthEnabled();
+        if (scope === 'off') return false;
+        if (scope === 'global') return true;
+
+        const id = tabId || this.tabStateService.activeTabId();
+        if (scope === 'individual' && id) {
+            const state = this.tabStateService.getState(id);
+            return !!state?.autoAuthEnabled;
+        }
+        return false;
     }
 
     getAutoAuthEndpointId() {
         return this.tabStateService.autoAuthEndpointId();
     }
 
-    setAutoAuthEnabled(enabled: boolean) {
+    setAutoAuthEnabled(enabled: 'off' | 'individual' | 'global') {
         this.tabStateService.autoAuthEnabled.set(enabled);
     }
 

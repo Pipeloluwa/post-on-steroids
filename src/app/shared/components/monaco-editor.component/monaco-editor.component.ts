@@ -55,11 +55,13 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
   }));
 
-  private editorInstance: any = null;
+  private editorInstance = signal<any>(null);
   private isReverting = false;
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
   private themeUpdateId = 0;
+
+  private static modelCache = new Map<string, any>();
 
   constructor() {
     // Dynamically update editor options when theme changes without recreating the editor
@@ -67,12 +69,13 @@ export class MonacoEditorComponent implements ControlValueAccessor {
       const theme = this.themeService.isDarkMode() ? 'vs-dark' : 'vs';
       const readOnly = this.disabled() || this.readOnly();
       const glyphMargin = this.enableEncryptionToggles();
-      if (this.editorInstance) {
+      const editor = this.editorInstance();
+      if (editor) {
         const monacoGlobal = (window as any).monaco;
         if (monacoGlobal && monacoGlobal.editor) {
            monacoGlobal.editor.setTheme(theme);
         }
-        this.editorInstance.updateOptions({ readOnly, glyphMargin });
+        editor.updateOptions({ readOnly, glyphMargin });
 
         if (this.enableEncryptionToggles()) {
            this.themeUpdateId++; // Increment so class name changes
@@ -86,8 +89,47 @@ export class MonacoEditorComponent implements ControlValueAccessor {
     effect(() => {
       const paths = this.encryptedPaths();
       const autoEnc = this.autoEncrypt();
-      if (this.editorInstance && this.enableEncryptionToggles()) {
+      if (this.editorInstance() && this.enableEncryptionToggles()) {
         this.updateDecorations();
+      }
+    });
+
+    // Reactive effect for cache key creation & model-swapping using activeTabId
+    effect(() => {
+      const editorId = this.editorId();
+      const language = this.language();
+      const activeTabId = this.tabStateService.activeTabId() || 'default';
+      const editor = this.editorInstance();
+
+      if (editor && editorId && this.isBrowser) {
+        const monacoGlobal = (window as any).monaco;
+        if (monacoGlobal && monacoGlobal.editor) {
+          const cacheKey = `${activeTabId}-${editorId}-${language}`;
+          let cachedModel = MonacoEditorComponent.modelCache.get(cacheKey);
+
+          if (cachedModel) {
+            if (editor.getModel() !== cachedModel) {
+              editor.setModel(cachedModel);
+              if (this.enableEncryptionToggles()) {
+                this.updateDecorations();
+              }
+            }
+            // Sync value
+            const cachedValue = cachedModel.getValue();
+            if (this.value() !== cachedValue) {
+              this.value.set(cachedValue);
+              this.onChange(cachedValue);
+            }
+          } else {
+            // Create a new model for this cache key
+            const newModel = monacoGlobal.editor.createModel(this.value(), language);
+            MonacoEditorComponent.modelCache.set(cacheKey, newModel);
+            editor.setModel(newModel);
+            if (this.enableEncryptionToggles()) {
+              this.updateDecorations();
+            }
+          }
+        }
       }
     });
   }
@@ -107,7 +149,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   }
 
   onEditorInit(editor: any) {
-    this.editorInstance = editor;
+    this.editorInstance.set(editor);
 
     if (this.restrictToFunctionBody()) {
       this.setupFunctionBodyRestriction(editor as MonacoEditor);
@@ -210,11 +252,12 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   private oldDecorations: string[] = [];
 
   private updateDecorations() {
-    if (!this.editorInstance) return;
+    const editor = this.editorInstance();
+    if (!editor) return;
     const monacoGlobal = (window as any).monaco;
     if (!monacoGlobal) return;
 
-    const model = this.editorInstance.getModel();
+    const model = editor.getModel();
     if (!model) return;
 
     const lines = model.getValue().split('\n');
@@ -237,12 +280,12 @@ export class MonacoEditorComponent implements ControlValueAccessor {
       }
     }
 
-    if (this.editorInstance.deltaDecorations) {
-      this.oldDecorations = this.editorInstance.deltaDecorations(this.oldDecorations, decorations);
+    if (editor.deltaDecorations) {
+      this.oldDecorations = editor.deltaDecorations(this.oldDecorations, decorations);
     } else if (this.decorationsCollection) {
       this.decorationsCollection.set(decorations);
     } else {
-      this.decorationsCollection = this.editorInstance.createDecorationsCollection(decorations);
+      this.decorationsCollection = editor.createDecorationsCollection(decorations);
     }
   }
 
@@ -310,10 +353,27 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   }
 
   writeValue(val: string): void {
-    if (val !== undefined && val !== this.value()) {
-      this.value.set(val);
-      this.lastValidContent = val;
-      if (this.editorInstance && this.enableEncryptionToggles()) {
+    const safeVal = val || '';
+    if (safeVal !== this.value()) {
+      this.value.set(safeVal);
+      this.lastValidContent = safeVal;
+      
+      const editor = this.editorInstance();
+      if (editor) {
+        const monacoGlobal = (window as any).monaco;
+        if (monacoGlobal && monacoGlobal.editor) {
+          const activeTabId = this.tabStateService.activeTabId() || 'default';
+          const cacheKey = `${activeTabId}-${this.editorId()}-${this.language()}`;
+          const cachedModel = MonacoEditorComponent.modelCache.get(cacheKey);
+          const currentModel = editor.getModel();
+          
+          if (currentModel && currentModel === cachedModel && currentModel.getValue() !== safeVal) {
+            currentModel.setValue(safeVal);
+          }
+        }
+      }
+
+      if (editor && this.enableEncryptionToggles()) {
         this.updateDecorations();
       }
     }
