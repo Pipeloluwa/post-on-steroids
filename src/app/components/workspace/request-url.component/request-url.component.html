@@ -39,6 +39,20 @@
 
     <!-- Send Button Group -->
     <div class="flex h-full rounded-[4px] overflow-hidden">
+        <!-- Auto Auth Toggle Button -->
+        <button (click)="toggleAutoAuth()" title="Auto Auth on 401"
+            class="px-3 h-full border-r border-white/20 transition-colors duration-200 cursor-pointer flex items-center justify-center shrink-0"
+            [class.bg-(--postonsteroids-bg-secondary)]="!isAutoAuthEnabled()"
+            [class.bg-(--postonsteroids-bg-hover)]="!isAutoAuthEnabled()"
+            [class.hover:bg-(--postonsteroids-bg-tertiary)]="!isAutoAuthEnabled()"
+            [class.text-(--postonsteroids-text-muted)]="!isAutoAuthEnabled()"
+            [class.bg-(--postonsteroids-accent)]="isAutoAuthEnabled()"
+            [class.hover:bg-(--postonsteroids-accent)/90]="isAutoAuthEnabled()"
+            [class.text-white]="isAutoAuthEnabled()">
+            <mat-icon class="text-[18px]! size-[18px]!">bolt</mat-icon>
+        </button>
+
+        <!-- Send Button -->
         <button (click)="onSend()" [disabled]="isLoading()"
             class="bg-[#097BED] hover:bg-[#0766C6] disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 font-bold text-[13px] flex items-center h-full transition-colors duration-200 cursor-pointer min-w-[120px] justify-center">
             @if (isLoading()) {
@@ -52,3 +66,7 @@
         </button>
     </div>
 </div>
+
+<app-auto-auth-modal [show]="showAutoAuthModal()" [detectedEndpoint]="detectedEndpoint()" 
+    (onCancel)="onCancelAutoAuth()" (onConfirm)="onConfirmAutoAuth($event)">
+</app-auto-auth-modal>

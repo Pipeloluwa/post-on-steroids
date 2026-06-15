@@ -122,7 +122,7 @@
             } @else if (activeMode() === 'Pretty') {
             <div class="w-full h-full">
                 <app-monaco-editor [ngModel]="formattedResponseBody()"
-                    [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="wrapResponse()" class="flex-1 w-full h-full block">
+                    [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="wrapResponse()" [editorId]="'response-body'" class="flex-1 w-full h-full block">
                 </app-monaco-editor>
             </div>
 
@@ -138,7 +138,17 @@
 
         <!-- ─── COOKIES ─── -->
         @if (activeTab() === 'Cookies') {
-        <div class="w-full h-full overflow-auto">
+        <div class="w-full h-full flex flex-col relative overflow-hidden">
+            @if (responseCookies().length > 0) {
+            <!-- Actions Bar -->
+            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+                <button (click)="copyCookies()" title="Copy Cookies"
+                    class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                    <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                </button>
+            </div>
+            }
+            <div class="flex-1 overflow-auto">
             @if (responseCookies().length === 0) {
             <div class="flex flex-col items-center justify-center h-full gap-y-2 text-(--postonsteroids-text-muted)">
                 <mat-icon class="text-[36px]! size-[36px]! opacity-30">cookie</mat-icon>
@@ -169,12 +179,23 @@
                 </tbody>
             </table>
             }
+            </div>
         </div>
         }
 
         <!-- ─── HEADERS ─── -->
         @if (activeTab() === 'Headers') {
-        <div class="w-full h-full overflow-auto">
+        <div class="w-full h-full flex flex-col relative overflow-hidden">
+            @if (responseHeaders().length > 0) {
+            <!-- Actions Bar -->
+            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+                <button (click)="copyHeaders()" title="Copy Headers"
+                    class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                    <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                </button>
+            </div>
+            }
+            <div class="flex-1 overflow-auto">
             @if (responseHeaders().length === 0) {
             <div class="flex flex-col items-center justify-center h-full gap-y-2 text-(--postonsteroids-text-muted)">
                 <mat-icon class="text-[36px]! size-[36px]! opacity-30">http</mat-icon>
@@ -202,12 +223,23 @@
                 </tbody>
             </table>
             }
+            </div>
         </div>
         }
 
         <!-- ─── TEST RESULTS ─── -->
         @if (activeTab() === 'Test Results') {
-        <div class="w-full h-full overflow-auto p-3 flex flex-col gap-y-2">
+        <div class="w-full h-full flex flex-col relative overflow-hidden">
+            @if (testResults().length > 0) {
+            <!-- Actions Bar -->
+            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+                <button (click)="copyTestResults()" title="Copy Test Results"
+                    class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                    <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                </button>
+            </div>
+            }
+            <div class="flex-1 overflow-auto p-3 flex flex-col gap-y-2">
             @if (testResults().length === 0) {
             <div class="flex flex-col items-center justify-center h-full gap-y-2 text-(--postonsteroids-text-muted)">
                 <mat-icon class="text-[36px]! size-[36px]! opacity-30">science</mat-icon>
@@ -238,18 +270,36 @@
             </div>
             }
             }
+            </div>
         </div>
         }
 
         <!-- ─── ENCRYPTION CONSOLE ─── -->
         @if (activeTab() === 'Encryption Console') {
-        <div class="w-full h-full overflow-hidden flex flex-col p-2 gap-y-2">
-            <div
-                class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-tertiary)/30 relative">
-                @if (encryptionConsole()) {
-                <pre
-                    class="w-full h-full p-3 font-mono text-[12px] text-(--postonsteroids-text-secondary) whitespace-pre-wrap overflow-auto">{{ encryptionConsole() }}</pre>
-                } @else {
+        <div class="w-full h-full flex flex-col relative overflow-hidden">
+            @if (encryptionConsole()) {
+            <!-- Actions Bar -->
+            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+                <div class="flex items-center gap-x-1">
+                    <button (click)="toggleConsoleWrap()" title="{{ wrapConsole() ? 'Disable wrapping' : 'Enable wrapping' }}"
+                        class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                        <mat-icon class="text-[18px]! size-[18px]!">{{ wrapConsole() ? 'wrap_text' : 'text_fields' }}</mat-icon>
+                    </button>
+                    <button (click)="copyEncryptionConsole()" title="Copy Console"
+                        class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                        <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                    </button>
+                </div>
+            </div>
+            }
+            <div class="w-full h-full overflow-hidden flex flex-col p-2 gap-y-2">
+                <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-tertiary)/30 relative">
+                    @if (encryptionConsole()) {
+                    <pre
+                        class="w-full h-full p-3 font-mono text-[12px] text-(--postonsteroids-text-secondary) overflow-auto"
+                        [class.whitespace-pre-wrap]="wrapConsole()" [class.break-all]="wrapConsole()"
+                        [class.whitespace-pre]="!wrapConsole()">{{ encryptionConsole() }}</pre>
+                    } @else {
                 <div
                     class="absolute inset-0 flex flex-col items-center justify-center gap-y-2 text-(--postonsteroids-text-muted)">
                     <mat-icon class="text-[36px]! size-[36px]! opacity-30">lock</mat-icon>
@@ -257,33 +307,51 @@
                 </div>
                 }
             </div>
+            </div>
         </div>
         }
 
         <!-- ─── SCRIPT CONSOLE ─── -->
         @if (activeTab() === 'Script Console') {
-        <div class="w-full h-full overflow-hidden flex flex-col p-2 gap-y-2">
-            <div class="flex items-center">
-                <app-scrollable-select-component [activeValue]="displayScriptConsoleTab()"
-                    [optionValues]="scriptConsoleOptions" [verticalPosition]="28" [modalWidth]="150"
-                    (outputSelectedValue)="setScriptConsoleTab($event)">
-                    <div
-                        class="flex items-center justify-between bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-3 py-1 cursor-pointer hover:border-(--postonsteroids-accent)/50">
-                        <span class="text-[12px] font-semibold text-(--postonsteroids-text-primary)">
-                            {{ displayScriptConsoleTab() }}
-                        </span>
-                        <mat-icon
-                            class="text-[14px] w-[14px] h-[14px] leading-[14px] ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
-                    </div>
-                </app-scrollable-select-component>
+        <div class="w-full h-full flex flex-col relative overflow-hidden">
+            <div class="flex items-center justify-between px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+                <div class="flex items-center">
+                    <app-scrollable-select-component [activeValue]="displayScriptConsoleTab()"
+                        [optionValues]="scriptConsoleOptions" [verticalPosition]="28" [modalWidth]="150"
+                        (outputSelectedValue)="setScriptConsoleTab($event)">
+                        <div
+                            class="flex items-center justify-between bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-3 py-1 cursor-pointer hover:border-(--postonsteroids-accent)/50">
+                            <span class="text-[12px] font-semibold text-(--postonsteroids-text-primary)">
+                                {{ displayScriptConsoleTab() }}
+                            </span>
+                            <mat-icon
+                                class="text-[14px] w-[14px] h-[14px] leading-[14px] ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                        </div>
+                    </app-scrollable-select-component>
+                </div>
+                @if (activeScriptConsoleOutput()) {
+                <div class="flex items-center gap-x-1">
+                    <button (click)="toggleConsoleWrap()" title="{{ wrapConsole() ? 'Disable wrapping' : 'Enable wrapping' }}"
+                        class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                        <mat-icon class="text-[18px]! size-[18px]!">{{ wrapConsole() ? 'wrap_text' : 'text_fields' }}</mat-icon>
+                    </button>
+                    <button (click)="copyScriptConsole()" title="Copy Console"
+                        class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                        <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                    </button>
+                </div>
+                }
             </div>
 
-            <div
-                class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-tertiary)/30 relative">
-                @if (activeScriptConsoleOutput()) {
-                <pre
-                    class="w-full h-full p-3 font-mono text-[12px] text-(--postonsteroids-text-secondary) whitespace-pre-wrap overflow-auto">{{ activeScriptConsoleOutput() }}</pre>
-                } @else {
+            <div class="w-full h-full overflow-hidden flex flex-col p-2 gap-y-2">
+                <div
+                    class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-tertiary)/30 relative">
+                    @if (activeScriptConsoleOutput()) {
+                    <pre
+                        class="w-full h-full p-3 font-mono text-[12px] text-(--postonsteroids-text-secondary) overflow-auto"
+                        [class.whitespace-pre-wrap]="wrapConsole()" [class.break-all]="wrapConsole()"
+                        [class.whitespace-pre]="!wrapConsole()">{{ activeScriptConsoleOutput() }}</pre>
+                    } @else {
                 <div
                     class="absolute inset-0 flex flex-col items-center justify-center gap-y-2 text-(--postonsteroids-text-muted)">
                     <mat-icon class="text-[36px]! size-[36px]! opacity-30">terminal</mat-icon>
@@ -291,8 +359,10 @@
                 </div>
                 }
             </div>
+            </div>
         </div>
         }
+        
 
     </div>
 </div>

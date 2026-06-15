@@ -22,6 +22,7 @@ export class ResponseViewerComponent {
     responseType = signal('JSON');
     responseTypes = signal(['JSON', 'XML']);
     wrapResponse = signal(true);
+    wrapConsole = signal(false);
 
     // ── Derived from active tab state ──────────────────────────────────────
     responseBody = computed(() => this.tabStateService.activeTabState()?.responseBody ?? null);
@@ -105,10 +106,43 @@ export class ResponseViewerComponent {
 
     copyResponse() {
         const data = JSON.stringify(this.responseBody(), null, 2);
-        navigator.clipboard.writeText(data);
+        this.copyToClipboard(data);
+    }
+
+    copyEncryptionConsole() {
+        this.copyToClipboard(this.encryptionConsole());
+    }
+
+    copyScriptConsole() {
+        this.copyToClipboard(this.activeScriptConsoleOutput());
+    }
+
+    copyTestResults() {
+        const results = this.testResults().map(t => `${t.passed ? '✓' : '✗'} ${t.name}`).join('\n');
+        this.copyToClipboard(results);
+    }
+
+    copyHeaders() {
+        const hdrs = this.responseHeaders().filter(h => h.enabled).map(h => `${h.key}: ${h.value}`).join('\n');
+        this.copyToClipboard(hdrs);
+    }
+
+    copyCookies() {
+        const cks = this.responseCookies().map(c => `${c.name}=${c.value}; Domain=${c.domain}; Path=${c.path}; Expires=${c.expires}`).join('\n');
+        this.copyToClipboard(cks);
+    }
+
+    private copyToClipboard(text: string) {
+        if (!text) return;
+        navigator.clipboard.writeText(text);
+        // Could also trigger a notification here if we had NotificationService injected
     }
 
     toggleWrap() {
         this.wrapResponse.update(value => !value);
+    }
+
+    toggleConsoleWrap() {
+        this.wrapConsole.update(value => !value);
     }
 }

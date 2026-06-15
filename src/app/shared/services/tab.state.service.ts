@@ -91,6 +91,7 @@ export interface RequestState {
     responseCookies: CookieRow[];
     responseHeaders: KeyValue[];
     testResults: TestResult[];
+    editorScrollPositions: Record<string, { scrollTop: number; scrollLeft: number }>;
 }
 
 export interface Capsule {
@@ -114,6 +115,8 @@ export class TabStateService {
     activeTabId = signal<string | null>(null);
     activeCapsuleName = signal<string>('My Capsule');
     activeCapsuleId = signal<string>('1');
+    autoAuthEnabled = signal<boolean>(false);
+    autoAuthEndpointId = signal<string | null>(null);
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
 
@@ -151,6 +154,8 @@ export class TabStateService {
                 localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
                 localStorage.setItem('onsteroids_active_tab', this.activeTabId() || '');
                 localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
+                localStorage.setItem('autoAuthEnabled', String(this.autoAuthEnabled()));
+                localStorage.setItem('autoAuthEndpointId', this.autoAuthEndpointId() || '');
             }
         });
 
@@ -349,6 +354,7 @@ export class TabStateService {
             responseCookies: [],
             responseHeaders: [],
             testResults: [],
+            editorScrollPositions: {},
         };
     }
 
@@ -504,6 +510,7 @@ export class TabStateService {
             responseCookies: entry.responseCookies,
             responseHeaders: entry.responseHeaders,
             testResults: entry.testResults,
+            editorScrollPositions: {},
             isDirty: Math.random() > 0.5,
             payloadType: 'params',
             bodyType: method === 'POST' || method === 'PUT' ? 'raw' : 'none',

@@ -6,11 +6,13 @@ import { ScrollableSelectComponent } from '../../../shared/components/scrollable
 import { VariableService } from '../../../shared/services/variable.service';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { RequestExecutionService } from '../../../shared/services/request.execution.service';
+import { AutoAuthService } from '../../../shared/services/auto-auth.service';
+import { AutoAuthModalComponent } from '../../../shared/components/auto-auth.modal.component';
 import { effect } from '@angular/core';
 
 @Component({
     selector: 'app-request-url-component',
-    imports: [CommonModule, FormsModule, ScrollableSelectComponent, MatIcon],
+    imports: [CommonModule, FormsModule, ScrollableSelectComponent, MatIcon, AutoAuthModalComponent],
     templateUrl: './request-url.component.html',
     styleUrl: './request-url.component.css',
 })
@@ -20,10 +22,16 @@ export class RequestUrlComponent {
     variableService = inject(VariableService);
     tabStateService = inject(TabStateService);
     executionService = inject(RequestExecutionService);
+    autoAuthService = inject(AutoAuthService);
     methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
     selectedMethod = computed(() => this.tabStateService.activeTabState()?.method || 'GET');
     isLoading = computed(() => this.tabStateService.activeTabState()?.isLoading || false);
+    isAutoAuthEnabled = computed(() => this.autoAuthService.isAutoAuthEnabled());
+
+    // Auto Auth Modal State
+    showAutoAuthModal = signal(false);
+    detectedEndpoint = signal<any>(null);
 
     @ViewChild('urlInput') urlInput!: ElementRef<HTMLInputElement>;
     url = signal<string>('');
@@ -158,5 +166,26 @@ export class RequestUrlComponent {
         if (id) {
             this.executionService.executeRequest(id);
         }
+    }
+
+    toggleAutoAuth() {
+        if (this.isAutoAuthEnabled()) {
+            this.autoAuthService.setAutoAuthEnabled(false);
+            this.autoAuthService.setAutoAuthEndpointId(null);
+        } else {
+            const detected = this.autoAuthService.detectLoginEndpoint();
+            this.detectedEndpoint.set(detected);
+            this.showAutoAuthModal.set(true);
+        }
+    }
+
+    onCancelAutoAuth() {
+        this.showAutoAuthModal.set(false);
+    }
+
+    onConfirmAutoAuth(endpointId: string) {
+        this.autoAuthService.setAutoAuthEndpointId(endpointId);
+        this.autoAuthService.setAutoAuthEnabled(true);
+        this.showAutoAuthModal.set(false);
     }
 }

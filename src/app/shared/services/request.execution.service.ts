@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } 
 import { TabStateService, RequestState } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
+import { AutoAuthService } from './auto-auth.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
@@ -13,8 +14,10 @@ export class RequestExecutionService {
     private tabStateService = inject(TabStateService);
     private variableService = inject(VariableService);
     private sandboxService = inject(SandboxExecutionService);
+    // Use injector for AutoAuthService to avoid circular dependency if needed, but here it might be fine.
+    private autoAuthService = inject(AutoAuthService);
 
-    async executeRequest(tabId: string): Promise<void> {
+    async executeRequest(tabId: string, isAutoAuthRetry: boolean = false): Promise<void> {
         const state = this.tabStateService.activeTabState();
         if (!state || state.id !== tabId) return;
 
@@ -271,7 +274,56 @@ export class RequestExecutionService {
                 }
             }
 
-            // 10. Update Tab State
+            // 10. Auto Auth Check
+            if (status === 401 && !isAutoAuthRetry && this.autoAuthService.isAutoAuthEnabled()) {
+                const endpointId = this.autoAuthService.getAutoAuthEndpointId();
+                if (endpointId) {
+                    console.log('🔄 [Auto Auth] 401 Detected. Attempting auto authentication...');
+                    
+                    // Remember original active tab
+                    const originalTabId = this.tabStateService.activeTabId();
+                    
+                    // Switch to auth tab and execute
+                    this.tabStateService.setActiveTab(endpointId);
+                    await this.executeRequest(endpointId, true); // true to prevent infinite loops
+                    
+                    // Get token from auth response
+                    const authState = this.tabStateService.getState(endpointId);
+                    if (authState && authState.responseStatus === 200) {
+                        const token = this.autoAuthService.extractAccessToken(authState.responseBody);
+                        if (token) {
+                            console.log('🔄 [Auto Auth] Token extracted successfully. Retrying original request...');
+                            // Update original tab with new token
+                            const originalState = this.tabStateService.getState(tabId);
+                            if (originalState) {
+                                this.tabStateService.updateState(tabId, {
+                                    auth: {
+                                        ...originalState.auth,
+                                        type: 'bearer',
+                                        token: token
+                                    }
+                                });
+                            }
+                            
+                            // Switch back and retry
+                            this.tabStateService.setActiveTab(tabId);
+                            await this.executeRequest(tabId, true);
+                            return; // Exit here as retry will handle state update
+                        } else {
+                            console.warn('🔄 [Auto Auth] Could not extract token from auth response.');
+                        }
+                    } else {
+                        console.warn('🔄 [Auto Auth] Auth request failed with status:', authState?.responseStatus);
+                    }
+                    
+                    // Restore original tab if auth failed
+                    if (originalTabId) {
+                        this.tabStateService.setActiveTab(originalTabId);
+                    }
+                }
+            }
+
+            // 11. Update Tab State
             this.tabStateService.updateState(tabId, {
                 isLoading: false,
                 responseBody: responseBodyParsed,

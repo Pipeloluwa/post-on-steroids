@@ -141,7 +141,7 @@
         <app-monaco-editor [ngModel]="rawBodyContent()" (ngModelChange)="onRawBodyChange($event)"
             [language]="rawType().toLowerCase()" class="block w-full h-full" [enableEncryptionToggles]="true"
             [encryptedPaths]="encryption().encryptedBodyPaths" [autoEncrypt]="encryption().autoEncryptBody"
-            (toggleEncryption)="toggleBodyEncryption($event)" [wordWrap]="wrapResponse()">
+            (toggleEncryption)="toggleBodyEncryption($event)" [wordWrap]="wrapResponse()" [editorId]="'body-' + rawType().toLowerCase()">
         </app-monaco-editor>
     </div>
     }

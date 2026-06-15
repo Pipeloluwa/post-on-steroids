@@ -3,6 +3,7 @@ import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/forms';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 import { ThemeService } from '../../services/theme.service';
+import { TabStateService } from '../../services/tab.state.service';
 
 @Component({
   selector: 'app-monaco-editor',
@@ -23,8 +24,10 @@ import { ThemeService } from '../../services/theme.service';
 export class MonacoEditorComponent implements ControlValueAccessor {
   private platformId = inject(PLATFORM_ID);
   private themeService = inject(ThemeService);
+  private tabStateService = inject(TabStateService);
   isBrowser = isPlatformBrowser(this.platformId);
 
+  editorId = input<string>('');
   language = input<string>('javascript');
   readOnly = input<boolean>(false);
   wordWrap = input<boolean>(false);
@@ -170,6 +173,36 @@ export class MonacoEditorComponent implements ControlValueAccessor {
 
       // Ensure decorations exist immediately after the editor mounts.
       requestAnimationFrame(() => this.updateDecorations());
+    }
+
+    // Scroll persistence
+    if (this.editorId()) {
+      const activeState = this.tabStateService.activeTabState();
+      if (activeState && activeState.editorScrollPositions) {
+        const savedScroll = activeState.editorScrollPositions[this.editorId()];
+        if (savedScroll) {
+          // Restore position
+          requestAnimationFrame(() => {
+            editor.setScrollTop(savedScroll.scrollTop);
+            editor.setScrollLeft(savedScroll.scrollLeft);
+          });
+        }
+      }
+
+      editor.onDidScrollChange((e: any) => {
+        const id = this.tabStateService.activeTabId();
+        if (id && this.editorId()) {
+          const state = this.tabStateService.activeTabState();
+          if (state) {
+            const currentScrollPositions = state.editorScrollPositions || {};
+            const updatedScrollPositions = {
+              ...currentScrollPositions,
+              [this.editorId()]: { scrollTop: e.scrollTop, scrollLeft: e.scrollLeft }
+            };
+            this.tabStateService.updateState(id, { editorScrollPositions: updatedScrollPositions });
+          }
+        }
+      });
     }
   }
 
