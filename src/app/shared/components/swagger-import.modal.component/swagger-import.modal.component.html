@@ -1,6 +1,6 @@
 @if (isOpen()) {
-<div class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-    <div class="w-full max-w-lg rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-6 shadow-2xl">
+<div class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" (click)="close()">
+    <div class="w-full max-w-lg rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-6 shadow-2xl" (click)="$event.stopPropagation()">
         <div class="flex items-start justify-between gap-x-3 mb-4">
             <div>
                 <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Import from Swagger</h3>

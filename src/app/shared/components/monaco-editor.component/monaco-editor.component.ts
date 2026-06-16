@@ -21,7 +21,7 @@ import { TabStateService } from '../../services/tab.state.service';
     }
   ]
 })
-export class MonacoEditorComponent implements ControlValueAccessor {
+export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private platformId = inject(PLATFORM_ID);
   private themeService = inject(ThemeService);
   private tabStateService = inject(TabStateService);
@@ -63,6 +63,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
   private themeUpdateId = 0;
+  private activeModelCacheKey = '';
 
   private static modelCache = new Map<string, any>();
 
@@ -109,6 +110,10 @@ export class MonacoEditorComponent implements ControlValueAccessor {
         if (monacoGlobal && monacoGlobal.editor) {
           const cacheKey = `${activeTabId}-${editorId}-${language}`;
           let cachedModel = MonacoEditorComponent.modelCache.get(cacheKey);
+          if (cachedModel?.isDisposed?.()) {
+            MonacoEditorComponent.modelCache.delete(cacheKey);
+            cachedModel = null;
+          }
 
           if (cachedModel) {
             if (editor.getModel() !== cachedModel) {
@@ -137,6 +142,7 @@ export class MonacoEditorComponent implements ControlValueAccessor {
               this.updateDecorations();
             }
           }
+          this.activeModelCacheKey = cacheKey;
         }
       }
     });
@@ -326,6 +332,15 @@ export class MonacoEditorComponent implements ControlValueAccessor {
   ngOnDestroy() {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
+    }
+
+    const editor = this.editorInstance();
+    if (editor?.setModel) {
+      const model = editor.getModel?.();
+      if (model && this.activeModelCacheKey && !MonacoEditorComponent.modelCache.has(this.activeModelCacheKey)) {
+        MonacoEditorComponent.modelCache.set(this.activeModelCacheKey, model);
+      }
+      editor.setModel(null);
     }
   }
 

@@ -262,6 +262,59 @@ export class TabStateService {
         }
     }
 
+    duplicateTab(id: string): string | null {
+        const source = this.states().get(id);
+        if (!source) return null;
+
+        const newId = this.createId();
+        const duplicate: RequestState = {
+            ...structuredClone(source),
+            id: newId,
+            name: `${source.name} Copy`,
+            isDirty: true,
+            isLoading: false,
+        };
+
+        this.states.update(map => {
+            const next = new Map(map);
+            next.set(newId, duplicate);
+            return next;
+        });
+
+        this.openTabIds.update(ids => {
+            const sourceIndex = ids.indexOf(id);
+            if (sourceIndex === -1) {
+                return [...ids, newId];
+            }
+
+            const next = [...ids];
+            next.splice(sourceIndex + 1, 0, newId);
+            return next;
+        });
+
+        this.activeTabId.set(newId);
+        return newId;
+    }
+
+    reorderOpenTabs(previousIndex: number, currentIndex: number) {
+        this.openTabIds.update(ids => {
+            if (
+                previousIndex === currentIndex ||
+                previousIndex < 0 ||
+                currentIndex < 0 ||
+                previousIndex >= ids.length ||
+                currentIndex >= ids.length
+            ) {
+                return ids;
+            }
+
+            const next = [...ids];
+            const [movedId] = next.splice(previousIndex, 1);
+            next.splice(currentIndex, 0, movedId);
+            return next;
+        });
+    }
+
     closeTab(id: string) {
         this.openTabIds.update(ids => ids.filter(item => item !== id));
         if (this.activeTabId() === id) {
@@ -553,5 +606,13 @@ export class TabStateService {
             },
             settings: { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true },
         };
+    }
+
+    private createId(): string {
+        if (this.isBrowser && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+
+        return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     }
 }

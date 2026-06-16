@@ -1,6 +1,7 @@
 import { Component, signal, computed, inject, ViewChild, ElementRef, afterNextRender } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
+import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { VariableModalComponent } from '../../../shared/components/variable.modal.component/variable.modal.component';
 import { SwaggerImportModalComponent } from '../../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
@@ -17,7 +18,7 @@ interface RequestTab {
 
 @Component({
     selector: 'app-request-tabs-component',
-    imports: [CommonModule, MatIcon, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent],
+    imports: [CommonModule, MatIcon, DragDropModule, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent],
     templateUrl: './request-tabs.component.html',
     styleUrl: './request-tabs.component.css',
 })
@@ -156,6 +157,22 @@ export class RequestTabsComponent {
             }
         }
 
+        setTimeout(() => this.updateScrollState(), 50);
+    }
+
+    duplicateTab(id: string, event: Event) {
+        event.stopPropagation();
+        const duplicateId = this.tabStateService.duplicateTab(id);
+        if (duplicateId) {
+            setTimeout(() => {
+                this.scrollToTab(duplicateId);
+                this.updateScrollState();
+            }, 50);
+        }
+    }
+
+    dropTab(event: CdkDragDrop<RequestTab[]>) {
+        this.tabStateService.reorderOpenTabs(event.previousIndex, event.currentIndex);
         setTimeout(() => this.updateScrollState(), 50);
     }
 

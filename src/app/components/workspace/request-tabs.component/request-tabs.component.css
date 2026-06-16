@@ -16,3 +16,17 @@
 .flex-1 {
     position: relative;
 }
+
+.request-tab.cdk-drag-preview {
+    background: var(--postonsteroids-bg-secondary);
+    border: 1px solid var(--postonsteroids-border);
+    box-shadow: 0 10px 24px var(--postonsteroids-shadow);
+}
+
+.request-tab.cdk-drag-placeholder {
+    opacity: 0.35;
+}
+
+.cdk-drop-list-dragging .request-tab:not(.cdk-drag-placeholder) {
+    transition: transform 160ms ease;
+}

@@ -23,10 +23,13 @@
 
     <!-- Tabs Container -->
     <div #scrollContainer
+        cdkDropList
+        cdkDropListOrientation="horizontal"
+        (cdkDropListDropped)="dropTab($event)"
         class="w-full h-full flex items-center overflow-hidden overflow-x-auto no-scrollbar scroll-smooth">
         @for (tab of tabs(); track tab.id) {
-        <div (click)="setActiveTab(tab.id)" [title]="tab.name"
-            class="relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group min-w-fit"
+        <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)" [title]="tab.name"
+            class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group min-w-fit"
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
 
             <!-- Method -->
@@ -49,7 +52,12 @@
             <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-(--postonsteroids-accent)"></div>
             }
 
-            <button (click)="closeTab(tab.id, $event)" class="flex">
+            <button type="button" (click)="duplicateTab(tab.id, $event)" class="flex" title="Duplicate tab" aria-label="Duplicate tab">
+                <mat-icon
+                    class="text-[15px]! size-[15px]! ml-auto opacity-0 group-hover:opacity-100 cursor-pointer">content_copy</mat-icon>
+            </button>
+
+            <button type="button" (click)="closeTab(tab.id, $event)" class="flex" title="Close tab" aria-label="Close tab">
                 <mat-icon
                     class="text-[16px]! size-[16px]!  ml-auto opacity-0 group-hover:opacity-100 cursor-pointer">close</mat-icon>
             </button>

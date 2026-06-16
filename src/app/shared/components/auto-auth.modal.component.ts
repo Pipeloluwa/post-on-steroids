@@ -10,8 +10,8 @@ import { AutoAuthService } from '../services/auto-auth.service';
     imports: [CommonModule, MatIcon, FormsModule],
     template: `
     @if (show()) {
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-        <div class="w-[450px] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" (click)="onCancel.emit()">
+        <div class="w-[450px] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" (click)="$event.stopPropagation()">
             <!-- Header -->
             <div class="flex items-center justify-between px-5 py-4 border-b border-(--postonsteroids-border)/50 bg-(--postonsteroids-bg-tertiary)/30">
                 <div class="flex items-center gap-x-3">
@@ -23,7 +23,7 @@ import { AutoAuthService } from '../services/auto-auth.service';
                         <p class="text-[11px] text-(--postonsteroids-text-muted) mt-0.5">Automatically re-authenticate on 401 Unauthorized</p>
                     </div>
                 </div>
-                <button (click)="onCancel.emit()" class="p-1 rounded-full hover:bg-(--postonsteroids-bg-hover) transition-colors text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                <button (click)="onCancel.emit()" class="p-1 rounded-full hover:bg-(--postonsteroids-bg-hover) transition-colors text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
                     <mat-icon class="text-[20px]! size-[20px]!">close</mat-icon>
                 </button>
             </div>
@@ -52,10 +52,10 @@ import { AutoAuthService } from '../services/auto-auth.service';
 
             <!-- Footer -->
             <div class="flex items-center justify-end gap-x-3 px-5 py-4 border-t border-(--postonsteroids-border)/50 bg-(--postonsteroids-bg-tertiary)/30">
-                <button (click)="onCancel.emit()" class="px-4 py-1.5 text-[13px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) transition-colors">
+                <button (click)="onCancel.emit()" class="px-4 py-1.5 text-[13px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
                     Cancel
                 </button>
-                <button (click)="confirm()" [disabled]="!selectedEndpointId" class="px-5 py-1.5 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent)/90 text-white text-[13px] font-semibold rounded shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <button (click)="confirm()" [disabled]="!selectedEndpointId" class="px-5 py-1.5 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent)/90 text-white text-[13px] font-semibold rounded shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
                     Enable
                 </button>
             </div>

@@ -32,6 +32,73 @@
     </section>
 
     <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+        <div class="flex flex-col gap-y-2">
+            <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">JSON Tools</h2>
+            <p class="text-sm text-(--postonsteroids-text-secondary)">Format or minify request and response payloads.</p>
+        </div>
+
+        <div class="mt-4 grid gap-4 lg:grid-cols-2">
+            <textarea [value]="jsonInput()" (input)="updateJsonInput($any($event.target).value)" rows="8"
+                class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
+                aria-label="JSON input"></textarea>
+            <textarea readonly [value]="jsonOutput()" rows="8"
+                class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
+                aria-label="JSON output"></textarea>
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+            <button (click)="formatJson()"
+                class="rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">Format</button>
+            <button (click)="minifyJson()"
+                class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">Minify</button>
+            <button (click)="copyText(jsonOutput())"
+                class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">Copy Output</button>
+        </div>
+    </section>
+
+    <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+        <div class="grid gap-6 xl:grid-cols-3">
+            <div>
+                <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Base64</h2>
+                <textarea [value]="base64Input()" (input)="updateBase64Input($any($event.target).value)" rows="4"
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
+                    aria-label="Base64 input"></textarea>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button (click)="encodeBase64()" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Encode</button>
+                    <button (click)="decodeBase64()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Decode</button>
+                    <button (click)="copyText(base64Output())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                </div>
+                <p class="mt-3 min-h-10 break-words rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary)">{{ base64Output() }}</p>
+            </div>
+
+            <div>
+                <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">URL Encoding</h2>
+                <textarea [value]="urlInput()" (input)="updateUrlInput($any($event.target).value)" rows="4"
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
+                    aria-label="URL input"></textarea>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button (click)="encodeUrl()" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Encode</button>
+                    <button (click)="decodeUrl()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Decode</button>
+                    <button (click)="copyText(urlOutput())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                </div>
+                <p class="mt-3 min-h-10 break-words rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary)">{{ urlOutput() }}</p>
+            </div>
+
+            <div>
+                <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">SHA-256</h2>
+                <textarea [value]="hashInput()" (input)="updateHashInput($any($event.target).value)" rows="4"
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
+                    aria-label="SHA-256 input"></textarea>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button (click)="generateSha256()" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Hash</button>
+                    <button (click)="copyText(hashOutput())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                </div>
+                <p class="mt-3 min-h-10 break-all rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary)">{{ hashOutput() }}</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
         <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
             <div>
                 <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Current Timestamp</h2>

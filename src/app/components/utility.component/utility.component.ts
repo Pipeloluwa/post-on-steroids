@@ -16,6 +16,14 @@ export class UtilityComponent {
     dateValue = signal(this.formatDateInput(this.now()));
     datetimeValue = signal(this.formatDatetimeLocal(this.now()));
     epochValue = signal('');
+    jsonInput = signal('{\n  "hello": "world"\n}');
+    jsonOutput = signal('');
+    base64Input = signal('');
+    base64Output = signal('');
+    urlInput = signal('');
+    urlOutput = signal('');
+    hashInput = signal('');
+    hashOutput = signal('');
     copyStatus = signal('');
     private copyTimer: number | null = null;
 
@@ -59,6 +67,89 @@ export class UtilityComponent {
 
     updateEpochValue(value: string): void {
         this.epochValue.set(value.trim());
+    }
+
+    updateJsonInput(value: string): void {
+        this.jsonInput.set(value);
+    }
+
+    formatJson(): void {
+        try {
+            const parsed: unknown = JSON.parse(this.jsonInput());
+            this.jsonOutput.set(JSON.stringify(parsed, null, 2));
+            this.setCopyStatus('JSON formatted');
+        } catch {
+            this.jsonOutput.set('Invalid JSON');
+            this.setCopyStatus('JSON could not be parsed');
+        }
+    }
+
+    minifyJson(): void {
+        try {
+            const parsed: unknown = JSON.parse(this.jsonInput());
+            this.jsonOutput.set(JSON.stringify(parsed));
+            this.setCopyStatus('JSON minified');
+        } catch {
+            this.jsonOutput.set('Invalid JSON');
+            this.setCopyStatus('JSON could not be parsed');
+        }
+    }
+
+    updateBase64Input(value: string): void {
+        this.base64Input.set(value);
+    }
+
+    encodeBase64(): void {
+        try {
+            this.base64Output.set(btoa(unescape(encodeURIComponent(this.base64Input()))));
+            this.setCopyStatus('Base64 encoded');
+        } catch {
+            this.base64Output.set('Unable to encode value');
+        }
+    }
+
+    decodeBase64(): void {
+        try {
+            this.base64Output.set(decodeURIComponent(escape(atob(this.base64Input().trim()))));
+            this.setCopyStatus('Base64 decoded');
+        } catch {
+            this.base64Output.set('Invalid Base64 value');
+        }
+    }
+
+    updateUrlInput(value: string): void {
+        this.urlInput.set(value);
+    }
+
+    encodeUrl(): void {
+        this.urlOutput.set(encodeURIComponent(this.urlInput()));
+        this.setCopyStatus('URL encoded');
+    }
+
+    decodeUrl(): void {
+        try {
+            this.urlOutput.set(decodeURIComponent(this.urlInput()));
+            this.setCopyStatus('URL decoded');
+        } catch {
+            this.urlOutput.set('Invalid encoded URL value');
+        }
+    }
+
+    updateHashInput(value: string): void {
+        this.hashInput.set(value);
+    }
+
+    async generateSha256(): Promise<void> {
+        if (typeof crypto === 'undefined' || !crypto.subtle) {
+            this.hashOutput.set('SHA-256 is not available in this browser context');
+            return;
+        }
+
+        const data = new TextEncoder().encode(this.hashInput());
+        const digest = await crypto.subtle.digest('SHA-256', data);
+        const bytes = Array.from(new Uint8Array(digest));
+        this.hashOutput.set(bytes.map(byte => byte.toString(16).padStart(2, '0')).join(''));
+        this.setCopyStatus('SHA-256 generated');
     }
 
     private toEpochMs(value: string): number {
