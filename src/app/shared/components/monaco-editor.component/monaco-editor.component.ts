@@ -1,13 +1,13 @@
 import { Component, input, output, forwardRef, inject, PLATFORM_ID, signal, effect, computed, ChangeDetectionStrategy, OnDestroy } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
-import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/forms';
+import { NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 import { ThemeService } from '../../services/theme.service';
 import { TabStateService } from '../../services/tab.state.service';
 
 @Component({
   selector: 'app-monaco-editor',
-  imports: [CommonModule, MonacoEditorModule, FormsModule],
+  imports: [CommonModule, MonacoEditorModule],
   templateUrl: './monaco-editor.component.html',
   styleUrl: './monaco-editor.component.css',
   host: {
@@ -49,6 +49,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     scrollbar: { useShadows: false },
     stickyScroll: { enabled: false },
     scrollBeyondLastLine: false,
+    fixedOverflowWidgets: true,
     glyphMargin: this.enableEncryptionToggles(),
     wordWrap: this.wordWrap() ? 'on' : 'off',
     fontSize: 13,
