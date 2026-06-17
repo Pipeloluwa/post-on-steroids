@@ -1,4 +1,4 @@
-import { Component, signal, afterNextRender, inject, PLATFORM_ID } from '@angular/core';
+import { Component, signal, inject, PLATFORM_ID } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
@@ -7,13 +7,11 @@ import { RequestUrlComponent } from './request-url.component/request-url.compone
 import { PayloadTypesComponent } from './payload.types.component/payload.types.component';
 
 import { ResponseViewerComponent } from './response-viewer.component/response-viewer.component';
-import { NgComponentOutlet } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { LocalStorageService } from '../../shared/services/local.storage.service';
 import { TabStateService } from '../../shared/services/tab.state.service';
-import { computed } from '@angular/core';
 
 @Component({
     selector: 'app-workspace',
