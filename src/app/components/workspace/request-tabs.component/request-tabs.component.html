@@ -30,6 +30,7 @@
         class="w-full h-full flex items-center overflow-hidden overflow-x-auto no-scrollbar scroll-smooth">
         @for (tab of tabs(); track tab.id) {
         <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)" [title]="tab.name"
+            (cdkDragMoved)="onDragMoved($event)"
             class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group min-w-fit"
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
 

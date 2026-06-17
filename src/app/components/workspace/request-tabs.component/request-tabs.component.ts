@@ -1,7 +1,7 @@
 import { Component, signal, computed, inject, ViewChild, ElementRef, afterNextRender } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
-import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
+import { CdkDragDrop, DragDropModule, CdkDragMove } from '@angular/cdk/drag-drop';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { VariableModalComponent } from '../../../shared/components/variable.modal.component/variable.modal.component';
 import { SwaggerImportModalComponent } from '../../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
@@ -174,6 +174,24 @@ export class RequestTabsComponent {
     dropTab(event: CdkDragDrop<RequestTab[]>) {
         this.tabStateService.reorderOpenTabs(event.previousIndex, event.currentIndex);
         setTimeout(() => this.updateScrollState(), 50);
+    }
+
+    onDragMoved(event: CdkDragMove<any>) {
+        if (!this.scrollContainer) return;
+        
+        const container = this.scrollContainer.nativeElement;
+        const rect = container.getBoundingClientRect();
+        
+        // Use pointer position to determine if we're near the edge
+        const pointerX = event.pointerPosition.x;
+        const edgeThreshold = 60;
+        const scrollSpeed = 25;
+        
+        if (pointerX < rect.left + edgeThreshold) {
+            container.scrollLeft -= scrollSpeed;
+        } else if (pointerX > rect.right - edgeThreshold) {
+            container.scrollLeft += scrollSpeed;
+        }
     }
 
     scrollLeft() {

@@ -20,7 +20,7 @@
 
         <!-- URL Input & Resolved Display -->
         <div class="flex-1 flex flex-col justify-center h-full">
-            <input #urlInput type="text" [(ngModel)]="url" (ngModelChange)="onUrlChange($event)"
+            <input #urlInput type="text" [ngModel]="url()" (ngModelChange)="onUrlChange($event)"
                 placeholder="Enter request URL" (click)="updateCursorPosition($event)"
                 (keyup)="updateCursorPosition($event)" (keydown.enter)="onSend()"
                 class="w-full bg-transparent border-none font-mono outline-none px-3 text-[13px] text-(--postonsteroids-text-primary)" />

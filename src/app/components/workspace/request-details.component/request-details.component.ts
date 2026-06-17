@@ -24,7 +24,9 @@ export class RequestDetailsComponent {
     notificationService = inject(NotificationService);
     isSaving = computed(() => this.tabStateService.isSaving());
 
-    requestName = signal<string>('');
+    tabId = input.required<string>();
+    
+    requestName = computed(() => this.tabStateService.getState(this.tabId())?.name || '');
     capsules = computed(() => {
         return this.tabStateService.capsules().map(c => c.name);
     });
@@ -43,20 +45,10 @@ export class RequestDetailsComponent {
                 setTimeout(() => this.shareCapsule(), 500);
             }
         });
-
-        effect(() => {
-            const state = this.tabStateService.activeTabState();
-            if (state) {
-                this.requestName.set(state.name);
-            }
-        });
     }
 
     onNameChange(newName: string) {
-        const id = this.tabStateService.activeTabId();
-        if (id) {
-            this.tabStateService.updateState(id, { name: newName });
-        }
+        this.tabStateService.updateState(this.tabId(), { name: newName });
     }
     saveOptions = ['Export Endpoint', 'Export Capsule'];
 
@@ -92,7 +84,7 @@ export class RequestDetailsComponent {
 
     onSaveOptionSelected(option: string) {
         if (option === 'Export Endpoint') {
-            const state = this.tabStateService.activeTabState();
+            const state = this.tabStateService.getState(this.tabId());
             if (!state) return;
             this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
         } else if (option === 'Export Capsule') {
@@ -118,9 +110,7 @@ export class RequestDetailsComponent {
     }
 
     async saveRequest() {
-        const id = this.tabStateService.activeTabId();
-        if (!id) return;
-        await this.tabStateService.saveToCapsule(id);
+        await this.tabStateService.saveToCapsule(this.tabId());
         this.onNotify.emit('Request saved successfully!');
     }
 }

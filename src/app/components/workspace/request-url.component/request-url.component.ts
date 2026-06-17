@@ -8,7 +8,7 @@ import { TabStateService } from '../../../shared/services/tab.state.service';
 import { RequestExecutionService } from '../../../shared/services/request.execution.service';
 import { AutoAuthService } from '../../../shared/services/auto-auth.service';
 import { AutoAuthModalComponent } from '../../../shared/components/auto-auth.modal.component';
-import { effect } from '@angular/core';
+import { input } from '@angular/core';
 
 @Component({
     selector: 'app-request-url-component',
@@ -28,10 +28,13 @@ export class RequestUrlComponent {
     autoAuthService = inject(AutoAuthService);
     methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
-    selectedMethod = computed(() => this.tabStateService.activeTabState()?.method || 'GET');
-    isLoading = computed(() => this.tabStateService.activeTabState()?.isLoading || false);
+    tabId = input.required<string>();
+    tabState = computed(() => this.tabStateService.getState(this.tabId()));
+
+    selectedMethod = computed(() => this.tabState()?.method || 'GET');
+    isLoading = computed(() => this.tabState()?.isLoading || false);
     isAutoAuthEnabled = computed(() => this.autoAuthService.isAutoAuthEnabled());
-    autoAuthScope = computed(() => this.tabStateService.autoAuthEnabled());
+    autoAuthScope = computed(() => this.tabState()?.autoAuthEnabled ? 'individual' : (this.autoAuthService.isAutoAuthEnabled() ? 'global' : 'off'));
     isDropdownOpen = signal(false);
     pendingScope: 'off' | 'individual' | 'global' | null = null;
     lastEnabledScope: 'individual' | 'global' = 'individual';
@@ -41,15 +44,9 @@ export class RequestUrlComponent {
     detectedEndpoint = signal<any>(null);
 
     @ViewChild('urlInput') urlInput!: ElementRef<HTMLInputElement>;
-    url = signal<string>('');
+    url = computed(() => this.tabState()?.url || '');
 
     constructor() {
-        effect(() => {
-            const state = this.tabStateService.activeTabState();
-            if (state) {
-                this.url.set(state.url);
-            }
-        });
     }
 
     resolvedUrl = computed(() => this.variableService.resolve(this.url()));
@@ -115,10 +112,7 @@ export class RequestUrlComponent {
     }
 
     onUrlChange(newUrl: string) {
-        const id = this.tabStateService.activeTabId();
-        if (id) {
-            this.tabStateService.updateState(id, { url: newUrl });
-        }
+        this.tabStateService.updateState(this.tabId(), { url: newUrl });
     }
 
 
@@ -137,11 +131,7 @@ export class RequestUrlComponent {
         if (this.url()[cursor + 2] !== undefined) { remainingSegment = remainingSegment.substring(firstCloseBracketIndex > -1 ? firstCloseBracketIndex : 0); }
 
         const newUrl = `${firstUrlSegment}${remainingSegment}`;
-        this.url.set(newUrl);
-        const id = this.tabStateService.activeTabId();
-        if (id) {
-            this.tabStateService.updateState(id, { url: newUrl });
-        }
+        this.tabStateService.updateState(this.tabId(), { url: newUrl });
 
         this.currentCursorIndex.set(-1);
         this.searchVariableToken = "";
@@ -149,10 +139,7 @@ export class RequestUrlComponent {
     }
 
     setMethod(method: string) {
-        const id = this.tabStateService.activeTabId();
-        if (id) {
-            this.tabStateService.updateState(id, { method });
-        }
+        this.tabStateService.updateState(this.tabId(), { method });
     }
 
     getMethodColor = (method: string): string => {
@@ -169,17 +156,11 @@ export class RequestUrlComponent {
     }
 
     onSend() {
-        const id = this.tabStateService.activeTabId();
-        if (id) {
-            this.executionService.executeRequest(id);
-        }
+        this.executionService.executeRequest(this.tabId());
     }
 
     onCancel() {
-        const id = this.tabStateService.activeTabId();
-        if (id) {
-            this.executionService.cancelRequest(id);
-        }
+        this.executionService.cancelRequest(this.tabId());
     }
 
     toggleDropdown(event: MouseEvent) {
@@ -209,10 +190,7 @@ export class RequestUrlComponent {
         if (scope === 'off') {
             this.autoAuthService.setAutoAuthEnabled('off');
             this.autoAuthService.setAutoAuthEndpointId(null);
-            const id = this.tabStateService.activeTabId();
-            if (id) {
-                this.tabStateService.updateState(id, { autoAuthEnabled: false });
-            }
+            this.tabStateService.updateState(this.tabId(), { autoAuthEnabled: false });
         } else {
             if (!this.autoAuthService.getAutoAuthEndpointId()) {
                 this.pendingScope = scope;
@@ -222,10 +200,7 @@ export class RequestUrlComponent {
             } else {
                 this.autoAuthService.setAutoAuthEnabled(scope);
                 if (scope === 'individual') {
-                    const id = this.tabStateService.activeTabId();
-                    if (id) {
-                        this.tabStateService.updateState(id, { autoAuthEnabled: true });
-                    }
+                    this.tabStateService.updateState(this.tabId(), { autoAuthEnabled: true });
                 }
             }
         }
@@ -241,10 +216,7 @@ export class RequestUrlComponent {
         const scope = this.pendingScope || 'individual';
         this.autoAuthService.setAutoAuthEnabled(scope);
         if (scope === 'individual') {
-            const id = this.tabStateService.activeTabId();
-            if (id) {
-                this.tabStateService.updateState(id, { autoAuthEnabled: true });
-            }
+            this.tabStateService.updateState(this.tabId(), { autoAuthEnabled: true });
         }
         this.showAutoAuthModal.set(false);
         this.pendingScope = null;

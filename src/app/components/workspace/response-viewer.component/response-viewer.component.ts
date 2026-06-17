@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
-import { ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, input } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
 @Component({
@@ -24,8 +24,11 @@ export class ResponseViewerComponent {
     wrapResponse = signal(true);
     wrapConsole = signal(false);
 
+    tabId = input.required<string>();
+    tabState = computed(() => this.tabStateService.getState(this.tabId()));
+
     // ── Derived from active tab state ──────────────────────────────────────
-    responseBody = computed(() => this.tabStateService.activeTabState()?.responseBody ?? null);
+    responseBody = computed(() => this.tabState()?.responseBody ?? null);
 
     formattedResponseBody = computed(() => {
         const body = this.responseBody();
@@ -33,19 +36,19 @@ export class ResponseViewerComponent {
         if (typeof body === 'string') return body;
         return JSON.stringify(body, null, 2);
     });
-    responseStatus = computed(() => this.tabStateService.activeTabState()?.responseStatus ?? null);
-    responseTime = computed(() => this.tabStateService.activeTabState()?.responseTime ?? null);
-    responseSize = computed(() => this.tabStateService.activeTabState()?.responseSize ?? null);
-    responseCookies = computed(() => this.tabStateService.activeTabState()?.responseCookies ?? []);
-    responseHeaders = computed(() => this.tabStateService.activeTabState()?.responseHeaders ?? []);
-    testResults = computed(() => this.tabStateService.activeTabState()?.testResults ?? []);
+    responseStatus = computed(() => this.tabState()?.responseStatus ?? null);
+    responseTime = computed(() => this.tabState()?.responseTime ?? null);
+    responseSize = computed(() => this.tabState()?.responseSize ?? null);
+    responseCookies = computed(() => this.tabState()?.responseCookies ?? []);
+    responseHeaders = computed(() => this.tabState()?.responseHeaders ?? []);
+    testResults = computed(() => this.tabState()?.testResults ?? []);
 
     hasResponse = computed(() => this.responseStatus() !== null);
 
     passedTests = computed(() => this.testResults().filter(t => t.passed).length);
     failedTests = computed(() => this.testResults().filter(t => !t.passed).length);
 
-    encryptionConsole = computed(() => this.tabStateService.activeTabState()?.scripts?.encryptionConsole ?? '');
+    encryptionConsole = computed(() => this.tabState()?.scripts?.encryptionConsole ?? '');
 
     tabs = computed(() => [
         { name: 'Body', count: null },
@@ -61,7 +64,7 @@ export class ResponseViewerComponent {
     scriptConsoleOptions = ['Pre-request Script', 'Post-response Script'];
     displayScriptConsoleTab = computed(() => this.activeScriptConsoleTab() === 'preRequest' ? 'Pre-request Script' : 'Post-response Script');
     activeScriptConsoleOutput = computed(() => {
-        const scripts = this.tabStateService.activeTabState()?.scripts;
+        const scripts = this.tabState()?.scripts;
         if (!scripts) return '';
         return this.activeScriptConsoleTab() === 'preRequest' ? scripts.preRequestConsole : scripts.postResponseConsole;
     });

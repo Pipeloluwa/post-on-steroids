@@ -4,7 +4,7 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, KeyValue, AuthState, EncryptionState, SettingsState } from '../../../shared/services/tab.state.service';
 import { VariableService } from '../../../shared/services/variable.service';
-import { ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, input } from '@angular/core';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { BodyTypesComponent } from "../body.types.component/body.types.component";
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
@@ -60,43 +60,39 @@ export class PayloadTypesComponent {
 
   @ViewChild('tokenInput') tokenInput?: ElementRef<HTMLInputElement>;
 
-  payloadType = computed(() => this.tabStateService.activeTabState()?.payloadType ?? 'params');
-  params = computed(() => this.tabStateService.activeTabState()?.params ?? []);
-  headers = computed(() => this.tabStateService.activeTabState()?.headers ?? []);
-  auth = computed(() => this.tabStateService.activeTabState()?.auth ?? { type: 'none' as const, token: '' });
-  scripts = computed(() => this.tabStateService.activeTabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '', encryptionConsole: '', testScript: '', testScriptEnabled: false });
-  encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
-  settings = computed(() => this.tabStateService.activeTabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true });
+  tabId = input.required<string>();
+  tabState = computed(() => this.tabStateService.getState(this.tabId()));
+
+  payloadType = computed(() => this.tabState()?.payloadType ?? 'params');
+  params = computed(() => this.tabState()?.params ?? []);
+  headers = computed(() => this.tabState()?.headers ?? []);
+  auth = computed(() => this.tabState()?.auth ?? { type: 'none' as const, token: '' });
+  scripts = computed(() => this.tabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '', encryptionConsole: '', testScript: '', testScriptEnabled: false });
+  encryption = computed(() => this.tabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
+  settings = computed(() => this.tabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true });
 
   setPayloadType(type: string) {
-    const id = this.tabStateService.activeTabId();
-    if (id) this.tabStateService.updateState(id, { payloadType: type });
+    this.tabStateService.updateState(this.tabId(), { payloadType: type });
   }
 
   private updateKVField(field: 'params' | 'headers', index: number, key: keyof KeyValue, val: string | boolean) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
-    const rows = [...(this.tabStateService.activeTabState()?.[field] ?? [])] as KeyValue[];
+    const rows = [...(this.tabState()?.[field] ?? [])] as KeyValue[];
     if (index < 0 || index >= rows.length) return;
     const row = rows[index];
     if (key === 'enabled') rows[index] = { ...row, enabled: val as boolean };
     else if (key === 'key') rows[index] = { ...row, key: val as string };
     else if (key === 'value') rows[index] = { ...row, value: val as string };
-    this.tabStateService.updateState(id, { [field]: rows });
+    this.tabStateService.updateState(this.tabId(), { [field]: rows });
   }
 
   // ── Params ───────────────────────────────────────────────────────────
   updateParam(i: number, key: keyof KeyValue, val: string | boolean) { this.updateKVField('params', i, key, val); }
   addParam() {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
-    this.tabStateService.updateState(id, { params: [...this.params(), { enabled: true, key: '', value: '' }] });
+    this.tabStateService.updateState(this.tabId(), { params: [...this.params(), { enabled: true, key: '', value: '' }] });
   }
   deleteParam(i: number) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const rows = this.params().filter((_, idx) => idx !== i);
-    this.tabStateService.updateState(id, { params: rows.length ? rows : [{ enabled: true, key: '', value: '' }] });
+    this.tabStateService.updateState(this.tabId(), { params: rows.length ? rows : [{ enabled: true, key: '', value: '' }] });
   }
 
   toggleRawParams() {
@@ -109,24 +105,18 @@ export class PayloadTypesComponent {
   }
 
   private paramsFromRaw() {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const parsed = this.parseRawKV(this.rawParamsText());
-    this.tabStateService.updateState(id, { params: parsed });
+    this.tabStateService.updateState(this.tabId(), { params: parsed });
   }
 
   // ── Headers ──────────────────────────────────────────────────────────
   updateHeader(i: number, key: keyof KeyValue, val: string | boolean) { this.updateKVField('headers', i, key, val); }
   addHeader() {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
-    this.tabStateService.updateState(id, { headers: [...this.headers(), { enabled: true, key: '', value: '' }] });
+    this.tabStateService.updateState(this.tabId(), { headers: [...this.headers(), { enabled: true, key: '', value: '' }] });
   }
   deleteHeader(i: number) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const rows = this.headers().filter((_, idx) => idx !== i);
-    this.tabStateService.updateState(id, { headers: rows.length ? rows : [{ enabled: true, key: '', value: '' }] });
+    this.tabStateService.updateState(this.tabId(), { headers: rows.length ? rows : [{ enabled: true, key: '', value: '' }] });
   }
 
   toggleRawHeaders() {
@@ -139,10 +129,8 @@ export class PayloadTypesComponent {
   }
 
   private headersFromRaw() {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const parsed = this.parseRawKV(this.rawHeadersText());
-    this.tabStateService.updateState(id, { headers: parsed });
+    this.tabStateService.updateState(this.tabId(), { headers: parsed });
   }
 
   // ── KV Utilities ─────────────────────────────────────────────────────
@@ -169,18 +157,14 @@ export class PayloadTypesComponent {
 
   // ── Auth ─────────────────────────────────────────────────────────────
   setAuthType(type: AuthState['type']) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const current = this.auth();
     const updated: AuthState = { type, token: current.token };
-    this.tabStateService.updateState(id, { auth: updated });
+    this.tabStateService.updateState(this.tabId(), { auth: updated });
   }
   updateAuth(field: keyof Omit<AuthState, 'type'>, val: string) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const current = this.auth();
     const updated: AuthState = { ...current, [field]: val };
-    this.tabStateService.updateState(id, { auth: updated });
+    this.tabStateService.updateState(this.tabId(), { auth: updated });
 
     if (field === 'token') {
       this.handleTokenChange(val);
@@ -230,32 +214,26 @@ export class PayloadTypesComponent {
 
   // ── Scripts ──────────────────────────────────────────────────────────
   updateScript(phase: 'preRequest' | 'postResponse' | 'test', code: string) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const current = this.scripts();
     if (phase === 'test') {
-      this.tabStateService.updateState(id, { scripts: { ...current, testScript: code } });
+      this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScript: code } });
     } else {
-      this.tabStateService.updateState(id, { scripts: { ...current, [phase]: code } });
+      this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [phase]: code } });
     }
   }
 
   resetScript() {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const current = this.scripts();
     if (this.activeScriptTab() === 'test') {
-      this.tabStateService.updateState(id, { scripts: { ...current, testScript: '' } });
+      this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScript: '' } });
     } else {
-      this.tabStateService.updateState(id, { scripts: { ...current, [this.activeScriptTab()]: '' } });
+      this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [this.activeScriptTab()]: '' } });
     }
   }
 
   toggleTestScript() {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const current = this.scripts();
-    this.tabStateService.updateState(id, { scripts: { ...current, testScriptEnabled: !current.testScriptEnabled } });
+    this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScriptEnabled: !current.testScriptEnabled } });
   }
 
   getScriptContent(): string {
@@ -266,20 +244,16 @@ export class PayloadTypesComponent {
   }
 
   resetEncryptionScript() {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
-    const defaultState = this.tabStateService.getDefaultState(id);
+    const defaultState = this.tabStateService.getDefaultState(this.tabId());
     const defaultScript = defaultState.encryption?.script ?? '';
     this.setEncryptionField('script', defaultScript);
   }
 
   // ── Encryption ───────────────────────────────────────────────────────
   setEncryptionField(field: keyof EncryptionState, val: any) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const current = this.encryption();
     const updated: EncryptionState = { ...current, [field]: val } as any;
-    this.tabStateService.updateState(id, { encryption: updated });
+    this.tabStateService.updateState(this.tabId(), { encryption: updated });
   }
 
   toggleHeaderEncryption(key: string) {
@@ -296,10 +270,8 @@ export class PayloadTypesComponent {
 
   // ── Settings ─────────────────────────────────────────────────────────
   toggleSetting(field: keyof SettingsState, val: boolean) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
     const current = this.settings();
     const updated: SettingsState = { ...current, [field]: val };
-    this.tabStateService.updateState(id, { settings: updated });
+    this.tabStateService.updateState(this.tabId(), { settings: updated });
   }
 }

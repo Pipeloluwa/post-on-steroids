@@ -14,6 +14,27 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 export class UtilityComponent {
     private sanitizer = inject(DomSanitizer);
 
+    activeTool = signal<string | null>(null);
+    tools = [
+        { id: 'uuid', name: 'UUID Generator', description: 'Generate random v4 UUIDs', icon: 'fingerprint' },
+        { id: 'time', name: 'Timestamp & Epoch', description: 'Convert between epoch and readable dates', icon: 'schedule' },
+        { id: 'json', name: 'JSON Formatter', description: 'Format and minify JSON payloads', icon: 'data_object' },
+        { id: 'base64', name: 'Base64 Encoder', description: 'Encode and decode Base64 strings', icon: 'swap_horiz' },
+        { id: 'url', name: 'URL Encoder', description: 'Encode and decode URL parameters', icon: 'link' },
+        { id: 'hash', name: 'SHA-256 Hash', description: 'Generate SHA-256 hash from text', icon: 'lock' },
+        { id: 'html', name: 'HTML Entities', description: 'Encode and decode HTML entities', icon: 'code' },
+        { id: 'jwt', name: 'JWT Decoder', description: 'Decode JSON Web Tokens', icon: 'security' },
+        { id: 'lorem', name: 'Lorem Ipsum', description: 'Generate dummy text paragraphs', icon: 'text_snippet' },
+        { id: 'diff', name: 'Text Diff', description: 'Compare two text blocks line by line', icon: 'compare_arrows' },
+        { id: 'regex', name: 'Regex Tester', description: 'Test regular expressions against text', icon: 'fact_check' },
+        { id: 'color', name: 'Color Converter', description: 'Convert between HEX, RGB, and HSL', icon: 'palette' },
+        { id: 'markdown', name: 'Markdown Preview', description: 'Live preview of markdown text', icon: 'description' }
+    ];
+
+    setActiveTool(toolId: string | null) {
+        this.activeTool.set(toolId);
+    }
+
     uuidValue = signal('');
     now = signal(new Date());
     dateValue = signal(this.formatDateInput(this.now()));
