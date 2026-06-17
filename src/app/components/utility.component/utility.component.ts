@@ -2,6 +2,7 @@ import { Component, signal, computed, inject, ChangeDetectionStrategy } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 @Component({
     selector: 'app-utility-component',
@@ -11,6 +12,8 @@ import { MatIcon } from '@angular/material/icon';
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UtilityComponent {
+    private sanitizer = inject(DomSanitizer);
+
     uuidValue = signal('');
     now = signal(new Date());
     dateValue = signal(this.formatDateInput(this.now()));
@@ -26,6 +29,41 @@ export class UtilityComponent {
     hashOutput = signal('');
     copyStatus = signal('');
     private copyTimer: number | null = null;
+
+    // ── HTML Entity ──
+    htmlEntityInput = signal('');
+    htmlEntityOutput = signal('');
+
+    // ── JWT Decoder ──
+    jwtInput = signal('');
+    jwtHeader = signal('');
+    jwtPayload = signal('');
+    jwtError = signal('');
+
+    // ── Lorem Ipsum ──
+    loremParagraphs = signal(3);
+    loremOutput = signal('');
+
+    // ── Text Diff ──
+    diffTextA = signal('');
+    diffTextB = signal('');
+    diffResult = signal<{ type: 'same' | 'added' | 'removed'; text: string }[]>([]);
+
+    // ── Regex Tester ──
+    regexPattern = signal('');
+    regexFlags = signal('g');
+    regexInput = signal('');
+    regexMatches = signal<{ match: string; index: number; groups: string[] }[]>([]);
+    regexError = signal('');
+
+    // ── Color Converter ──
+    colorHex = signal('#3B82F6');
+    colorRgb = computed(() => this.hexToRgb(this.colorHex()));
+    colorHsl = computed(() => this.hexToHsl(this.colorHex()));
+
+    // ── Markdown Preview ──
+    markdownInput = signal('# Hello World\n\nThis is **bold** and *italic* text.\n\n- Item 1\n- Item 2\n- Item 3\n\n```js\nconsole.log("hello");\n```\n\n> A blockquote example\n\n[Example Link](https://example.com)');
+    markdownHtml = computed<SafeHtml>(() => this.sanitizer.bypassSecurityTrustHtml(this.renderMarkdown(this.markdownInput())));
 
     currentIso = computed(() => this.now().toISOString());
     currentLocal = computed(() => this.now().toLocaleString());
@@ -150,6 +188,312 @@ export class UtilityComponent {
         const bytes = Array.from(new Uint8Array(digest));
         this.hashOutput.set(bytes.map(byte => byte.toString(16).padStart(2, '0')).join(''));
         this.setCopyStatus('SHA-256 generated');
+    }
+
+    // ── HTML Entity Encode/Decode ──────────────────────────────────────
+    encodeHtmlEntities(): void {
+        const input = this.htmlEntityInput();
+        const encoded = input
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        this.htmlEntityOutput.set(encoded);
+        this.setCopyStatus('HTML entities encoded');
+    }
+
+    decodeHtmlEntities(): void {
+        const input = this.htmlEntityInput();
+        const decoded = input
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&#x27;/g, "'")
+            .replace(/&#(\d+);/g, (_match, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+            .replace(/&#x([0-9a-fA-F]+);/g, (_match, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+        this.htmlEntityOutput.set(decoded);
+        this.setCopyStatus('HTML entities decoded');
+    }
+
+    // ── JWT Decoder ────────────────────────────────────────────────────
+    decodeJwt(): void {
+        const token = this.jwtInput().trim();
+        this.jwtError.set('');
+        this.jwtHeader.set('');
+        this.jwtPayload.set('');
+
+        if (!token) {
+            this.jwtError.set('Please enter a JWT token');
+            return;
+        }
+
+        const parts = token.split('.');
+        if (parts.length < 2) {
+            this.jwtError.set('Invalid JWT format — expected at least 2 dot-separated parts');
+            return;
+        }
+
+        try {
+            const header = JSON.parse(atob(this.base64UrlDecode(parts[0])));
+            this.jwtHeader.set(JSON.stringify(header, null, 2));
+        } catch {
+            this.jwtError.set('Failed to decode JWT header');
+            return;
+        }
+
+        try {
+            const payload = JSON.parse(atob(this.base64UrlDecode(parts[1])));
+            this.jwtPayload.set(JSON.stringify(payload, null, 2));
+        } catch {
+            this.jwtError.set('Failed to decode JWT payload');
+            return;
+        }
+
+        this.setCopyStatus('JWT decoded');
+    }
+
+    private base64UrlDecode(str: string): string {
+        let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4) {
+            base64 += '=';
+        }
+        return base64;
+    }
+
+    // ── Lorem Ipsum Generator ──────────────────────────────────────────
+    private readonly loremSentences = [
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+        'Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+        'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.',
+        'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore.',
+        'Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit.',
+        'Nulla facilisi etiam dignissim diam quis enim lobortis scelerisque fermentum.',
+        'Viverra accumsan in nisl nisi scelerisque eu ultrices vitae auctor.',
+        'Amet volutpat consequat mauris nunc congue nisi vitae suscipit tellus.',
+        'Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.',
+        'Faucibus scelerisque eleifend donec pretium vulputate sapien nec sagittis aliquam.',
+        'Eget nulla facilisi etiam dignissim diam quis enim lobortis.',
+        'Donec ultrices tincidunt arcu non sodales neque sodales ut etiam.',
+        'Morbi tempus iaculis urna id volutpat lacus laoreet non curabitur.',
+        'Pretium quam vulputate dignissim suspendisse in est ante in nibh.',
+        'Adipiscing elit pellentesque habitant morbi tristique senectus et netus.',
+    ];
+
+    generateLorem(): void {
+        const count = Math.max(1, Math.min(10, this.loremParagraphs()));
+        const paragraphs: string[] = [];
+        for (let p = 0; p < count; p++) {
+            const sentenceCount = 3 + Math.floor(Math.random() * 4);
+            const sentences: string[] = [];
+            for (let s = 0; s < sentenceCount; s++) {
+                sentences.push(this.loremSentences[Math.floor(Math.random() * this.loremSentences.length)]);
+            }
+            paragraphs.push(sentences.join(' '));
+        }
+        this.loremOutput.set(paragraphs.join('\n\n'));
+        this.setCopyStatus('Lorem Ipsum generated');
+    }
+
+    // ── Text Diff ──────────────────────────────────────────────────────
+    computeDiff(): void {
+        const linesA = this.diffTextA().split('\n');
+        const linesB = this.diffTextB().split('\n');
+        const result: { type: 'same' | 'added' | 'removed'; text: string }[] = [];
+
+        const maxLen = Math.max(linesA.length, linesB.length);
+        // Simple line-by-line diff
+        const setB = new Set(linesB);
+        const setA = new Set(linesA);
+
+        // Use a basic LCS-style approach for small inputs
+        const lcs = this.computeLCS(linesA, linesB);
+        let ai = 0;
+        let bi = 0;
+        let li = 0;
+
+        while (ai < linesA.length || bi < linesB.length) {
+            if (li < lcs.length && ai < linesA.length && linesA[ai] === lcs[li]) {
+                if (bi < linesB.length && linesB[bi] === lcs[li]) {
+                    result.push({ type: 'same', text: lcs[li] });
+                    ai++;
+                    bi++;
+                    li++;
+                } else if (bi < linesB.length) {
+                    result.push({ type: 'added', text: linesB[bi] });
+                    bi++;
+                } else {
+                    result.push({ type: 'removed', text: linesA[ai] });
+                    ai++;
+                }
+            } else if (ai < linesA.length && (li >= lcs.length || linesA[ai] !== lcs[li])) {
+                result.push({ type: 'removed', text: linesA[ai] });
+                ai++;
+            } else if (bi < linesB.length) {
+                result.push({ type: 'added', text: linesB[bi] });
+                bi++;
+            }
+        }
+
+        this.diffResult.set(result);
+        this.setCopyStatus('Diff computed');
+    }
+
+    private computeLCS(a: string[], b: string[]): string[] {
+        const m = a.length;
+        const n = b.length;
+        // Limit LCS computation for performance on large inputs
+        if (m > 500 || n > 500) {
+            // Fallback: just return common lines in order
+            const result: string[] = [];
+            let j = 0;
+            for (let i = 0; i < m && j < n; i++) {
+                while (j < n && b[j] !== a[i]) j++;
+                if (j < n) { result.push(a[i]); j++; }
+            }
+            return result;
+        }
+
+        const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+        for (let i = 1; i <= m; i++) {
+            for (let j = 1; j <= n; j++) {
+                dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+
+        const result: string[] = [];
+        let i = m, j = n;
+        while (i > 0 && j > 0) {
+            if (a[i - 1] === b[j - 1]) {
+                result.unshift(a[i - 1]);
+                i--;
+                j--;
+            } else if (dp[i - 1][j] > dp[i][j - 1]) {
+                i--;
+            } else {
+                j--;
+            }
+        }
+        return result;
+    }
+
+    // ── Regex Tester ───────────────────────────────────────────────────
+    testRegex(): void {
+        this.regexError.set('');
+        this.regexMatches.set([]);
+        const pattern = this.regexPattern();
+        if (!pattern) {
+            this.regexError.set('Please enter a regex pattern');
+            return;
+        }
+
+        try {
+            const regex = new RegExp(pattern, this.regexFlags());
+            const input = this.regexInput();
+            const matches: { match: string; index: number; groups: string[] }[] = [];
+
+            if (this.regexFlags().includes('g')) {
+                let match: RegExpExecArray | null;
+                let safety = 0;
+                while ((match = regex.exec(input)) !== null && safety < 1000) {
+                    matches.push({
+                        match: match[0],
+                        index: match.index,
+                        groups: match.slice(1),
+                    });
+                    if (match[0].length === 0) regex.lastIndex++;
+                    safety++;
+                }
+            } else {
+                const match = regex.exec(input);
+                if (match) {
+                    matches.push({
+                        match: match[0],
+                        index: match.index,
+                        groups: match.slice(1),
+                    });
+                }
+            }
+
+            this.regexMatches.set(matches);
+            this.setCopyStatus(`${matches.length} match${matches.length !== 1 ? 'es' : ''} found`);
+        } catch (e) {
+            this.regexError.set(`Invalid regex: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    // ── Color Converter ────────────────────────────────────────────────
+    updateColorFromHex(hex: string): void {
+        if (/^#[0-9a-fA-F]{6}$/.test(hex) || /^#[0-9a-fA-F]{3}$/.test(hex)) {
+            this.colorHex.set(hex);
+        }
+    }
+
+    updateColorFromRgb(r: number, g: number, b: number): void {
+        const hex = '#' + [r, g, b].map(c => Math.max(0, Math.min(255, c)).toString(16).padStart(2, '0')).join('');
+        this.colorHex.set(hex);
+    }
+
+    private hexToRgb(hex: string): { r: number; g: number; b: number } {
+        let h = hex.replace('#', '');
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        const num = parseInt(h, 16);
+        return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    }
+
+    private hexToHsl(hex: string): { h: number; s: number; l: number } {
+        const { r, g, b } = this.hexToRgb(hex);
+        const rn = r / 255, gn = g / 255, bn = b / 255;
+        const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+        const l = (max + min) / 2;
+        if (max === min) return { h: 0, s: 0, l: Math.round(l * 100) };
+        const d = max - min;
+        const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        let h = 0;
+        if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+        else if (max === gn) h = ((bn - rn) / d + 2) / 6;
+        else h = ((rn - gn) / d + 4) / 6;
+        return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+
+    // ── Markdown Preview ───────────────────────────────────────────────
+    private renderMarkdown(md: string): string {
+        let html = md
+            // Code blocks (must be before inline code)
+            .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="md-code-block"><code>$2</code></pre>')
+            // Inline code
+            .replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>')
+            // Headers
+            .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+            // Bold and italic
+            .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            // Blockquotes
+            .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+            // Links
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+            // Unordered lists
+            .replace(/^- (.+)$/gm, '<li>$1</li>')
+            // Horizontal rule
+            .replace(/^---$/gm, '<hr>')
+            // Line breaks
+            .replace(/\n\n/g, '<br><br>')
+            .replace(/\n/g, '<br>');
+
+        // Wrap consecutive <li> elements in <ul>
+        html = html.replace(/((?:<li>.*?<\/li>(?:<br>)?)+)/g, '<ul>$1</ul>');
+        // Clean up <br> inside <ul>
+        html = html.replace(/<ul>([\s\S]*?)<\/ul>/g, (_, inner: string) =>
+            '<ul>' + inner.replace(/<br>/g, '') + '</ul>'
+        );
+
+        return html;
     }
 
     private toEpochMs(value: string): number {
