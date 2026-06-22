@@ -17,25 +17,33 @@ export class RequestExecutionService {
     // Use injector for AutoAuthService to avoid circular dependency if needed, but here it might be fine.
     private autoAuthService = inject(AutoAuthService);
 
-    private pendingRequests = new Map<string, () => void>();
+    private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
 
     cancelRequest(tabId: string) {
-        const cancelFn = this.pendingRequests.get(tabId);
-        if (cancelFn) {
-            cancelFn();
-            this.pendingRequests.delete(tabId);
+        this.tabStateService.updateState(tabId, { isLoading: false });
+        
+        const token = this.cancellationTokens.get(tabId);
+        if (token) {
+            token.cancelled = true;
+            if (token.cancelFn) token.cancelFn();
+            this.cancellationTokens.delete(tabId);
         }
     }
 
     async executeRequest(tabId: string, isAutoAuthRetry: boolean = false): Promise<void> {
-        const state = this.tabStateService.activeTabState();
+        const state = this.tabStateService.getState(tabId);
         if (!state || state.id !== tabId) return;
+
+        const cancelToken = { cancelled: false, cancelFn: undefined as (() => void) | undefined };
+        this.cancellationTokens.set(tabId, cancelToken);
 
         // Set Tab to Loading
         this.tabStateService.updateState(tabId, { isLoading: true });
         
         // Yield to the event loop to allow Angular to paint the "Cancel" button before heavy synchronous work
         await new Promise(resolve => setTimeout(resolve, 0));
+        
+        if (cancelToken.cancelled) return;
 
         try {
             // 1. Resolve URL
@@ -116,6 +124,7 @@ export class RequestExecutionService {
                     channelName: state.encryption?.channelName || ''
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
+                if (cancelToken.cancelled) return;
                 encryptionLogs = encResult.logs || '';
                 if (encResult.logs) preRequestLogs += 'Encryption Logs:\n' + encResult.logs + '\n\n';
 
@@ -154,6 +163,7 @@ export class RequestExecutionService {
                     params
                 };
                 const result = await this.sandboxService.executeScript(preScriptCode, context);
+                if (cancelToken.cancelled) return;
                 preRequestLogs += result.logs || '';
 
                 if (result.success && result.context) {
@@ -236,10 +246,10 @@ export class RequestExecutionService {
                       next: (res: any) => resolve(res),
                       error: (err: any) => resolve(err)
                   });
-                  this.pendingRequests.set(tabId, () => {
+                  cancelToken.cancelFn = () => {
                       sub.unsubscribe();
                       reject(new Error('Request cancelled'));
-                  });
+                  };
               });
             } catch (err: any) {
                 if (err.message === 'Request cancelled') {
@@ -249,7 +259,7 @@ export class RequestExecutionService {
                 }
                 httpResponse = err as HttpErrorResponse;
             } finally {
-                this.pendingRequests.delete(tabId);
+                this.cancellationTokens.delete(tabId);
             }
 
             const endTime = performance.now();
@@ -315,11 +325,7 @@ export class RequestExecutionService {
                         this.autoAuthService.clearCachedToken();
                     }
 
-                    // Remember original active tab
-                    const originalTabId = this.tabStateService.activeTabId();
-
-                    // Switch to auth tab and execute
-                    this.tabStateService.setActiveTab(endpointId);
+                    // Execute auth tab silently in background without switching UI
                     await this.executeRequest(endpointId, true); // true to prevent infinite loops
 
                     // Get token from auth response
@@ -344,8 +350,7 @@ export class RequestExecutionService {
                                 });
                             }
 
-                            // Switch back and retry
-                            this.tabStateService.setActiveTab(tabId);
+                            // Retry original request silently
                             await this.executeRequest(tabId, true);
                             return; // Exit here as retry will handle state update
                         } else {
@@ -355,10 +360,8 @@ export class RequestExecutionService {
                         console.warn('🔄 [Auto Auth] Auth request failed with status:', authState?.responseStatus);
                     }
 
-                    // Restore original tab if auth failed
-                    if (originalTabId) {
-                        this.tabStateService.setActiveTab(originalTabId);
-                    }
+                    // No need to restore original tab since we didn't switch
+                    console.log('🔄 [Auto Auth] Complete.');
                 }
             }
 
