@@ -96,6 +96,7 @@
 
         <div class="w-full flex-1 min-h-0 p-2 flex flex-col relative">
             @for (tab of tabStateService.openTabs(); track tab.id) {
+            @defer (when tabStateService.activeTabId() === tab.id) {
             <div [class]="tabStateService.activeTabId() === tab.id ? 'absolute inset-2 flex flex-col' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
                 <!-- Request Section -->
                 <div [style.height.px]="requestHeight()" class="flex flex-col gap-y-2 shrink-0"
@@ -123,6 +124,17 @@
                     <app-response-viewer-component [tabId]="tab.id" class="w-full h-full block" />
                 </div>
             </div>
+            } @placeholder {
+            <div [class]="tabStateService.activeTabId() === tab.id ? 'absolute inset-2 flex flex-col' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
+                <div class="w-full h-full flex flex-col gap-y-2 animate-pulse">
+                    <div class="h-10 bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
+                    <div class="h-[40px] bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
+                    <div class="flex-1 bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
+                    <div class="h-[6px] bg-(--postonsteroids-bg-secondary) rounded-full"></div>
+                    <div class="flex-1 bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
+                </div>
+            </div>
+            }
             }
         </div>
     </div>

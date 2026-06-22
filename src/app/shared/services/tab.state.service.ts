@@ -154,7 +154,11 @@ export class TabStateService {
         // Persist to storage whenever states change
         effect(() => {
             if (this.isBrowser) {
-                const currentStates = Array.from(this.states().entries());
+                const currentStates = Array.from(this.states().entries()).map(([id, state]) => {
+                    // Strip out heavy response data to prevent massive JSON serialization blocking the UI thread
+                    const { responseBody, responseHeaders, testResults, ...rest } = state;
+                    return [id, rest];
+                });
                 localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
                 localStorage.setItem('onsteroids_active_tab', this.activeTabId() || '');
                 localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));

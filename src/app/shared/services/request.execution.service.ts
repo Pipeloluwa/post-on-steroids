@@ -33,6 +33,9 @@ export class RequestExecutionService {
 
         // Set Tab to Loading
         this.tabStateService.updateState(tabId, { isLoading: true });
+        
+        // Yield to the event loop to allow Angular to paint the "Cancel" button before heavy synchronous work
+        await new Promise(resolve => setTimeout(resolve, 0));
 
         try {
             // 1. Resolve URL
