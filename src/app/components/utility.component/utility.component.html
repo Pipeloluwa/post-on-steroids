@@ -567,5 +567,213 @@
                 </section>
             </div>
         }
+        @if (activeTool() === 'url-parse') {
+            <!-- ─── URL Parser ─── -->
+            <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+                <div class="flex flex-col gap-y-2">
+                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">URL Parser</h2>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Break down a URL into its constituent parts.</p>
+                </div>
+
+                <div class="mt-4">
+                    <textarea [value]="urlParseInput()" (input)="urlParseInput.set($any($event.target).value)" rows="3"
+                        placeholder="https://example.com:8080/path/to/resource?query=1#hash"
+                        class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
+                        aria-label="URL Parse input"></textarea>
+                </div>
+
+                @if (urlParseResult()) {
+                <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Protocol</span>
+                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.protocol }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Host</span>
+                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.host }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Pathname</span>
+                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.pathname }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Search</span>
+                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.search || '(empty)' }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Hash</span>
+                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.hash || '(empty)' }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Origin</span>
+                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.origin }}</p>
+                    </div>
+                </div>
+                }
+            </section>
+        }
+
+        @if (activeTool() === 'case') {
+            <!-- ─── Text Case Converter ─── -->
+            <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+                <div class="flex flex-col gap-y-2">
+                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Text Case Converter</h2>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Convert text between various naming conventions.</p>
+                </div>
+
+                <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                    <textarea [value]="textCaseInput()" (input)="textCaseInput.set($any($event.target).value)" rows="5"
+                        placeholder="Type something here..."
+                        class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
+                        aria-label="Text Case input"></textarea>
+                    <textarea readonly [value]="textCaseOutput()" rows="5"
+                        class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
+                        aria-label="Text Case output"></textarea>
+                </div>
+
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <button (click)="convertTextCase('upper')" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">UPPERCASE</button>
+                    <button (click)="convertTextCase('lower')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">lowercase</button>
+                    <button (click)="convertTextCase('camel')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">camelCase</button>
+                    <button (click)="convertTextCase('snake')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">snake_case</button>
+                    <button (click)="convertTextCase('kebab')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">kebab-case</button>
+                    <button (click)="convertTextCase('pascal')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">PascalCase</button>
+                    <button (click)="copyText(textCaseOutput())" class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy Output</button>
+                </div>
+            </section>
+        }
+
+        @if (activeTool() === 'base') {
+            <!-- ─── Number Base Converter ─── -->
+            <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+                <div class="flex flex-col gap-y-2">
+                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Number Base Converter</h2>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Convert numbers between Decimal, Hexadecimal, Binary, etc.</p>
+                </div>
+
+                <div class="mt-4 flex flex-wrap gap-4 items-end">
+                    <div class="flex flex-col gap-y-1">
+                        <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Number</label>
+                        <input type="text" [value]="numberBaseInput()" (input)="numberBaseInput.set($any($event.target).value)"
+                            placeholder="123"
+                            class="w-48 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    </div>
+                    <div class="flex flex-col gap-y-1">
+                        <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">From Base</label>
+                        <input type="number" [value]="numberBaseFrom()" (input)="numberBaseFrom.set(+$any($event.target).value)"
+                            min="2" max="36"
+                            class="w-24 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    </div>
+                    <div class="flex flex-col gap-y-1">
+                        <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">To Base</label>
+                        <input type="number" [value]="numberBaseTo()" (input)="numberBaseTo.set(+$any($event.target).value)"
+                            min="2" max="36"
+                            class="w-24 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    </div>
+                    <button (click)="convertNumberBase()"
+                        class="h-[38px] rounded-xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Convert</button>
+                </div>
+
+                @if (numberBaseOutput()) {
+                <div class="mt-4">
+                    <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold mb-1 block">Result</span>
+                    <div class="flex items-center gap-x-2">
+                        <input readonly type="text" [value]="numberBaseOutput()"
+                            class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                        <button (click)="copyText(numberBaseOutput())"
+                            class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                    </div>
+                </div>
+                }
+            </section>
+        }
+        @if (activeTool() === 'random-string') {
+            <!-- ─── Random String Generator ─── -->
+            <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+                <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Random String / Password Generator</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Generate secure random strings with specific character sets.</p>
+                    </div>
+                    <button (click)="generateRandomString()"
+                        class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
+                        <mat-icon class="text-[18px]! size-[18px]!">refresh</mat-icon>
+                        Generate
+                    </button>
+                </div>
+
+                <div class="mt-6 flex flex-wrap gap-4 lg:gap-8">
+                    <div class="flex flex-col gap-y-2">
+                        <label class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted)">Length ({{ randomStringLength() }})</label>
+                        <input type="range" min="4" max="128" [value]="randomStringLength()" (input)="randomStringLength.set(+$any($event.target).value)"
+                            class="w-48 mt-2" aria-label="String length" />
+                    </div>
+                    <div class="flex flex-col gap-y-2">
+                        <label class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted)">Options</label>
+                        <div class="flex flex-wrap gap-3 mt-1">
+                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().upper" (change)="toggleRandomStringInclude('upper')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> A-Z
+                            </label>
+                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().lower" (change)="toggleRandomStringInclude('lower')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> a-z
+                            </label>
+                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().num" (change)="toggleRandomStringInclude('num')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> 0-9
+                            </label>
+                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().sym" (change)="toggleRandomStringInclude('sym')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> !@#$
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center gap-x-2">
+                    <input readonly type="text" [value]="randomStringOutput()" placeholder="Click Generate..."
+                        class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    <button (click)="copyText(randomStringOutput())"
+                        class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) px-4 py-3 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                </div>
+            </section>
+        }
+
+        @if (activeTool() === 'text-stat') {
+            <!-- ─── Text Statistics ─── -->
+            <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
+                <div class="flex flex-col gap-y-2">
+                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Text Statistics</h2>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Count words, characters, and lines.</p>
+                </div>
+
+                <div class="mt-4">
+                    <textarea [value]="textStatInput()" (input)="textStatInput.set($any($event.target).value)" rows="6"
+                        placeholder="Paste text here..."
+                        class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
+                        aria-label="Text input for statistics"></textarea>
+                </div>
+
+                <div class="mt-4 grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Words</span>
+                        <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().words }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Chars</span>
+                        <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().chars }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Chars (no space)</span>
+                        <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().charsNoSpaces }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Lines</span>
+                        <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().lines }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Bytes</span>
+                        <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().bytes }}</p>
+                    </div>
+                </div>
+            </section>
+        }
     }
 </div>

@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
-import { TabStateService, RequestState } from './tab.state.service';
+import { TabStateService, RequestState, FormDataRow } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
@@ -86,7 +86,7 @@ export class RequestExecutionService {
                     }
                 } else if (state.bodyType === 'form-data') {
                     // For Sandbox passing we can pass form-data as array
-                    body = state.formData.filter(f => f.enabled && f.key).map(f => ({ ...f }));
+                    body = state.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({ ...f }));
                 }
             }
 

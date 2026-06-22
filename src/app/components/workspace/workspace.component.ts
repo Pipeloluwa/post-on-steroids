@@ -1,4 +1,4 @@
-import { Component, signal, inject, PLATFORM_ID } from '@angular/core';
+import { Component, signal, inject, PLATFORM_ID, HostListener } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
@@ -141,5 +141,37 @@ export class WorkspaceComponent {
             return name.split(' — ')[1];
         }
         return name;
+    }
+
+    @HostListener('document:keydown', ['$event'])
+    handleKeyboardShortcuts(event: KeyboardEvent) {
+        if (!this.isBrowser) return;
+
+        const target = event.target as HTMLElement;
+        
+        if (target?.closest('.monaco-editor')) {
+            return;
+        }
+
+        if (target?.closest('.cdk-overlay-container') || target?.closest('app-utility-component') || target?.closest('app-swagger-import-modal') || target?.closest('app-variable-modal')) {
+            return;
+        }
+
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const isCtrlOrCmd = isMac ? event.metaKey : event.ctrlKey;
+
+        if (isCtrlOrCmd) {
+            if (event.key.toLowerCase() === 'z') {
+                if (event.shiftKey) {
+                    this.tabStateService.redo();
+                } else {
+                    this.tabStateService.undo();
+                }
+                event.preventDefault();
+            } else if (event.key.toLowerCase() === 'y' && !isMac) {
+                this.tabStateService.redo();
+                event.preventDefault();
+            }
+        }
     }
 }

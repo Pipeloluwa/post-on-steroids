@@ -28,7 +28,12 @@ export class UtilityComponent {
         { id: 'diff', name: 'Text Diff', description: 'Compare two text blocks line by line', icon: 'compare_arrows' },
         { id: 'regex', name: 'Regex Tester', description: 'Test regular expressions against text', icon: 'fact_check' },
         { id: 'color', name: 'Color Converter', description: 'Convert between HEX, RGB, and HSL', icon: 'palette' },
-        { id: 'markdown', name: 'Markdown Preview', description: 'Live preview of markdown text', icon: 'description' }
+        { id: 'markdown', name: 'Markdown Preview', description: 'Live preview of markdown text', icon: 'description' },
+        { id: 'url-parse', name: 'URL Parser', description: 'Parse URLs into their components', icon: 'account_tree' },
+        { id: 'case', name: 'Text Case Converter', description: 'Convert text to camel, snake, kebab, etc.', icon: 'text_format' },
+        { id: 'base', name: 'Number Base Converter', description: 'Convert numbers between bases', icon: '123' },
+        { id: 'random-string', name: 'Random String', description: 'Generate secure random strings and passwords', icon: 'password' },
+        { id: 'text-stat', name: 'Text Statistics', description: 'Count words, characters, and lines', icon: 'analytics' }
     ];
 
     setActiveTool(toolId: string | null) {
@@ -85,6 +90,107 @@ export class UtilityComponent {
     // ── Markdown Preview ──
     markdownInput = signal('# Hello World\n\nThis is **bold** and *italic* text.\n\n- Item 1\n- Item 2\n- Item 3\n\n```js\nconsole.log("hello");\n```\n\n> A blockquote example\n\n[Example Link](https://example.com)');
     markdownHtml = computed<SafeHtml>(() => this.sanitizer.bypassSecurityTrustHtml(this.renderMarkdown(this.markdownInput())));
+
+    // ── URL Parser ──
+    urlParseInput = signal('');
+    urlParseResult = computed(() => {
+        try {
+            const urlStr = this.urlParseInput().trim();
+            if (!urlStr) return null;
+            return new URL(urlStr.startsWith('http') ? urlStr : `https://${urlStr}`);
+        } catch {
+            return null;
+        }
+    });
+
+    // ── Text Case Converter ──
+    textCaseInput = signal('');
+    textCaseOutput = signal('');
+
+    convertTextCase(format: 'upper' | 'lower' | 'camel' | 'snake' | 'kebab' | 'pascal'): void {
+        const text = this.textCaseInput();
+        if (!text) return;
+        switch (format) {
+            case 'upper': this.textCaseOutput.set(text.toUpperCase()); break;
+            case 'lower': this.textCaseOutput.set(text.toLowerCase()); break;
+            case 'camel': this.textCaseOutput.set(text.toLowerCase().replace(/[^a-zA-Z0-9]+(.)/g, (_, chr) => chr.toUpperCase())); break;
+            case 'snake': this.textCaseOutput.set(text.replace(/([a-z])([A-Z])/g, '$1_$2').replace(/[^a-zA-Z0-9]+/g, '_').toLowerCase()); break;
+            case 'kebab': this.textCaseOutput.set(text.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()); break;
+            case 'pascal': this.textCaseOutput.set(text.toLowerCase().replace(/(?:^|[^a-zA-Z0-9]+)(.)/g, (_, chr) => chr.toUpperCase())); break;
+        }
+        this.setCopyStatus(`Converted to ${format} case`);
+    }
+
+    // ── Number Base Converter ──
+    numberBaseInput = signal('');
+    numberBaseFrom = signal<number>(10);
+    numberBaseTo = signal<number>(16);
+    numberBaseOutput = signal('');
+
+    convertNumberBase(): void {
+        try {
+            const input = this.numberBaseInput().trim();
+            if (!input) {
+                this.numberBaseOutput.set('');
+                return;
+            }
+            const parsed = parseInt(input, this.numberBaseFrom());
+            if (isNaN(parsed)) {
+                this.numberBaseOutput.set('Invalid number for the selected base');
+                return;
+            }
+            this.numberBaseOutput.set(parsed.toString(this.numberBaseTo()).toUpperCase());
+        } catch {
+            this.numberBaseOutput.set('Conversion error');
+        }
+    }
+
+    // ── Random String ──
+    randomStringLength = signal(16);
+    randomStringOutput = signal('');
+    randomStringIncludes = signal({ upper: true, lower: true, num: true, sym: true });
+
+    generateRandomString(): void {
+        const chars = {
+            upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+            lower: 'abcdefghijklmnopqrstuvwxyz',
+            num: '0123456789',
+            sym: '!@#$%^&*()_+-=[]{}|;:,.<>?'
+        };
+        const activeChars = Object.entries(this.randomStringIncludes())
+            .filter(([_, active]) => active)
+            .map(([key]) => chars[key as keyof typeof chars])
+            .join('');
+            
+        if (!activeChars) {
+            this.randomStringOutput.set('');
+            return;
+        }
+
+        let result = '';
+        for (let i = 0; i < this.randomStringLength(); i++) {
+            result += activeChars.charAt(Math.floor(Math.random() * activeChars.length));
+        }
+        this.randomStringOutput.set(result);
+        this.setCopyStatus('Random string generated');
+    }
+
+    toggleRandomStringInclude(type: 'upper' | 'lower' | 'num' | 'sym') {
+        this.randomStringIncludes.update(current => ({ ...current, [type]: !current[type] }));
+    }
+
+    // ── Text Statistics ──
+    textStatInput = signal('');
+    textStatResult = computed(() => {
+        const text = this.textStatInput();
+        return {
+            chars: text.length,
+            charsNoSpaces: text.replace(/\s+/g, '').length,
+            words: text.trim() ? text.trim().split(/\s+/).length : 0,
+            lines: text ? text.split(/\r\n|\r|\n/).length : 0,
+            bytes: new Blob([text]).size
+        };
+    });
 
     currentIso = computed(() => this.now().toISOString());
     currentLocal = computed(() => this.now().toLocaleString());

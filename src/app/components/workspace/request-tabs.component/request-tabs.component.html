@@ -25,7 +25,7 @@
     <div #scrollContainer
         cdkDropList
         cdkDropListOrientation="horizontal"
-        [cdkDropListAutoScrollStep]="30"
+        [cdkDropListAutoScrollStep]="150"
         (cdkDropListDropped)="dropTab($event)"
         class="w-full h-full flex items-center overflow-hidden overflow-x-auto no-scrollbar scroll-smooth">
         @for (tab of tabs(); track tab.id) {

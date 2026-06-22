@@ -96,7 +96,7 @@
 
         <div class="w-full flex-1 min-h-0 p-2 flex flex-col relative">
             @for (tab of tabStateService.openTabs(); track tab.id) {
-            <div class="absolute inset-2 flex flex-col" [class.hidden]="tabStateService.activeTabId() !== tab.id">
+            <div [class]="tabStateService.activeTabId() === tab.id ? 'absolute inset-2 flex flex-col' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
                 <!-- Request Section -->
                 <div [style.height.px]="requestHeight()" class="flex flex-col gap-y-2 shrink-0"
                     [class.transition-[height]]="!isResizing()">

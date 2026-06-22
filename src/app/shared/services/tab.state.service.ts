@@ -95,6 +95,7 @@ export interface RequestState {
     editorScrollPositions: Record<string, { scrollTop: number; scrollLeft: number }>;
 }
 
+
 export interface Capsule {
     id: string;
     name: string;
@@ -120,6 +121,8 @@ export class TabStateService {
     autoAuthEndpointId = signal<string | null>(null);
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
+
+    private historyStack = new Map<string, { past: Partial<RequestState>[], future: Partial<RequestState>[] }>();
 
     // Shared capsule list (drives both workspace sidebar and Capsules page)
     capsules = signal<Capsule[]>([
@@ -250,6 +253,71 @@ export class TabStateService {
         this.activeCapsuleName.set(capsule.name);
     }
 
+    updateState(id: string, partialState: Partial<RequestState>, recordHistory = true) {
+        this.states.update(map => {
+            const currentState = map.get(id) || this.getDefaultState(id);
+
+            const ignorableKeys = ['isLoading', 'responseBody', 'responseStatus', 'responseTime', 'responseSize', 'responseCookies', 'responseHeaders', 'testResults', 'editorScrollPositions', 'isDirty'];
+            const isSignificantChange = Object.keys(partialState).some(k => !ignorableKeys.includes(k));
+
+            if (recordHistory && isSignificantChange) {
+                const pastChange: Partial<RequestState> = {};
+                for (const key in partialState) {
+                    if (!ignorableKeys.includes(key)) {
+                        pastChange[key as keyof RequestState] = currentState[key as keyof RequestState] as any;
+                    }
+                }
+                
+                if (Object.keys(pastChange).length > 0) {
+                    const stack = this.historyStack.get(id) || { past: [], future: [] };
+                    stack.past.push(pastChange);
+                    if (stack.past.length > 50) stack.past.shift();
+                    stack.future = [];
+                    this.historyStack.set(id, stack);
+                }
+            }
+
+            map.set(id, { ...currentState, ...partialState });
+            return new Map(map);
+        });
+    }
+
+    undo() {
+        const id = this.activeTabId();
+        if (!id) return;
+        const stack = this.historyStack.get(id);
+        if (!stack || stack.past.length === 0) return;
+
+        const pastChange = stack.past.pop()!;
+        const currentState = this.states().get(id)!;
+        
+        const futureChange: Partial<RequestState> = {};
+        for (const key in pastChange) {
+            futureChange[key as keyof RequestState] = currentState[key as keyof RequestState] as any;
+        }
+        stack.future.push(futureChange);
+        
+        this.updateState(id, pastChange, false);
+    }
+
+    redo() {
+        const id = this.activeTabId();
+        if (!id) return;
+        const stack = this.historyStack.get(id);
+        if (!stack || stack.future.length === 0) return;
+
+        const futureChange = stack.future.pop()!;
+        const currentState = this.states().get(id)!;
+        
+        const pastChange: Partial<RequestState> = {};
+        for (const key in futureChange) {
+            pastChange[key as keyof RequestState] = currentState[key as keyof RequestState] as any;
+        }
+        stack.past.push(pastChange);
+        
+        this.updateState(id, futureChange, false);
+    }
+
     addOpenTab(state: RequestState) {
         this.states.update(map => {
             const next = new Map(map);
@@ -260,6 +328,58 @@ export class TabStateService {
         if (!this.openTabIds().includes(state.id)) {
             this.openTabIds.update(ids => [...ids, state.id]);
         }
+    }
+
+    closeTab(id: string) {
+        this.openTabIds.update(ids => ids.filter(tabId => tabId !== id));
+        this.states.update(map => {
+            const next = new Map(map);
+            next.delete(id);
+            return next;
+        });
+        this.historyStack.delete(id);
+    }
+
+    async fetchCapsuleData(collectionName: string) {
+        this.isCapsuleLoading.set(true);
+        this.states.update(map => {
+            const newMap = new Map(map);
+            for (let [id, state] of newMap.entries()) {
+                const dummyData = this.generateDummyData(id);
+                newMap.set(id, { ...state, ...dummyData, isLoading: false });
+            }
+            return newMap;
+        });
+
+        this.isCapsuleLoading.set(false);
+    }
+
+    async fetchTabData(id: string) {
+        this.updateState(id, { isLoading: true });
+        const dummyData = this.generateDummyData(id);
+        this.updateState(id, { ...dummyData, isLoading: false });
+    }
+
+    async saveToCapsule(id: string): Promise<void> {
+        this.isSaving.set(true);
+
+        const currentState = this.states().get(id);
+        if (currentState) {
+            this.savedCapsules.update(col => {
+                const idx = col.findIndex(r => r.id === id);
+                if (idx >= 0) {
+                    const updated = [...col];
+                    updated[idx] = { ...currentState, isDirty: false };
+                    return updated;
+                } else {
+                    return [...col, { ...currentState, isDirty: false }];
+                }
+            });
+            // Mark tab as clean after save
+            this.updateState(id, { isDirty: false });
+        }
+
+        this.isSaving.set(false);
     }
 
     duplicateTab(id: string): string | null {
@@ -312,65 +432,6 @@ export class TabStateService {
             const [movedId] = next.splice(previousIndex, 1);
             next.splice(currentIndex, 0, movedId);
             return next;
-        });
-    }
-
-    closeTab(id: string) {
-        this.openTabIds.update(ids => ids.filter(item => item !== id));
-        if (this.activeTabId() === id) {
-            const remaining = this.openTabIds();
-            this.activeTabId.set(remaining[0] || null);
-        }
-    }
-
-    async fetchCapsuleData(collectionName: string) {
-        this.isCapsuleLoading.set(true);
-
-        this.states.update(map => {
-            const newMap = new Map(map);
-            for (const [id, state] of newMap.entries()) {
-                const dummyData = this.generateDummyData(id);
-                newMap.set(id, { ...state, ...dummyData, isLoading: false });
-            }
-            return newMap;
-        });
-
-        this.isCapsuleLoading.set(false);
-    }
-
-    async fetchTabData(id: string) {
-        this.updateState(id, { isLoading: true });
-        const dummyData = this.generateDummyData(id);
-        this.updateState(id, { ...dummyData, isLoading: false });
-    }
-
-    async saveToCapsule(id: string): Promise<void> {
-        this.isSaving.set(true);
-
-        const currentState = this.states().get(id);
-        if (currentState) {
-            this.savedCapsules.update(col => {
-                const idx = col.findIndex(r => r.id === id);
-                if (idx >= 0) {
-                    const updated = [...col];
-                    updated[idx] = { ...currentState, isDirty: false };
-                    return updated;
-                } else {
-                    return [...col, { ...currentState, isDirty: false }];
-                }
-            });
-            // Mark tab as clean after save
-            this.updateState(id, { isDirty: false });
-        }
-
-        this.isSaving.set(false);
-    }
-
-    updateState(id: string, partialState: Partial<RequestState>) {
-        this.states.update(map => {
-            const currentState = map.get(id) || this.getDefaultState(id);
-            map.set(id, { ...currentState, ...partialState });
-            return new Map(map);
         });
     }
 

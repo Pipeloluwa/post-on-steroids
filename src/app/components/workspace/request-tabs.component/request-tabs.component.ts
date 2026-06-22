@@ -184,8 +184,8 @@ export class RequestTabsComponent {
         
         // Use pointer position to determine if we're near the edge
         const pointerX = event.pointerPosition.x;
-        const edgeThreshold = 60;
-        const scrollSpeed = 25;
+        const edgeThreshold = 80;
+        const scrollSpeed = 50;
         
         if (pointerX < rect.left + edgeThreshold) {
             container.scrollLeft -= scrollSpeed;

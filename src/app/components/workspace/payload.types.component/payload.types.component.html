@@ -15,7 +15,7 @@
 <div class="flex flex-col flex-1 min-h-0 h-full">
 
     <!-- ─── PARAMS ─── -->
-    <div class="flex flex-col" [class.hidden]="payloadType() !== 'params'">
+    <div [class]="payloadType() === 'params' ? 'flex flex-col' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
         <div class="flex items-center justify-between px-2 py-1 border-b border-(--postonsteroids-border)/20">
             <span class="text-[11px] text-(--postonsteroids-text-muted) uppercase font-semibold">Query Parameters</span>
             <button (click)="toggleRawParams()"
@@ -43,13 +43,13 @@
                             class="accent-(--postonsteroids-accent) cursor-pointer" />
                     </td>
                     <td class="py-1 px-2">
-                        <input type="text" [value]="row.key"
-                            (input)="updateParam($index, 'key', $any($event.target).value)" placeholder="Key"
+                        <input type="text" [ngModel]="row.key"
+                            (ngModelChange)="updateParam($index, 'key', $event)" placeholder="Key"
                             class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
                     </td>
                     <td class="py-1 px-2">
-                        <input type="text" [value]="row.value"
-                            (input)="updateParam($index, 'value', $any($event.target).value)" placeholder="Value"
+                        <input type="text" [ngModel]="row.value"
+                            (ngModelChange)="updateParam($index, 'value', $event)" placeholder="Value"
                             class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
                     </td>
                     <td class="py-1 text-center">
@@ -74,7 +74,7 @@
     </div>
 
     <!-- ─── AUTH ─── -->
-    <div class="p-2 flex flex-col gap-y-3" [class.hidden]="payloadType() !== 'auth'">
+    <div [class]="payloadType() === 'auth' ? 'p-2 flex flex-col gap-y-3' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
         <div class="flex items-center gap-x-3">
             <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[80px]">Auth Type</span>
             <div class="flex items-center gap-x-2">
@@ -94,10 +94,9 @@
                 <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[80px]">Token</span>
                 <div
                     class="flex-1 flex items-center relative bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
-                    <input #tokenInput [type]="isTokenVisible() ? 'text' : 'password'" [value]="auth().token"
-                        (input)="updateAuth('token', $any($event.target).value)"
-                        (click)="handleTokenChange($any($event.target).value)"
-                        (keyup)="handleTokenChange($any($event.target).value)" placeholder="Bearer token or var_name"
+                    <input #tokenInput [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().token"
+                        (ngModelChange)="updateAuth('token', $event); handleTokenChange($event)"
+                        placeholder="Bearer token or var_name"
                         class="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono" />
 
                     <button (click)="toggleTokenVisibility()"
@@ -123,7 +122,7 @@
     </div>
 
     <!-- ─── HEADERS ─── -->
-    <div class="flex flex-col" [class.hidden]="payloadType() !== 'headers'">
+    <div [class]="payloadType() === 'headers' ? 'flex flex-col' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
         <div class="flex items-center justify-between px-2 py-1 border-b border-(--postonsteroids-border)/20">
             <span class="text-[11px] text-(--postonsteroids-text-muted) uppercase font-semibold">Request Headers</span>
             <div class="flex items-center gap-x-4">
@@ -173,13 +172,13 @@
                             <mat-icon class="text-[14px]! size-[14px]!">lock</mat-icon>
                         </button>
                         }
-                        <input type="text" [value]="row.key"
-                            (input)="updateHeader($index, 'key', $any($event.target).value)" placeholder="Header name"
+                        <input type="text" [ngModel]="row.key"
+                            (ngModelChange)="updateHeader($index, 'key', $event)" placeholder="Header name"
                             class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
                     </td>
                     <td class="py-1 px-2">
-                        <input type="text" [value]="row.value"
-                            (input)="updateHeader($index, 'value', $any($event.target).value)" placeholder="Value"
+                        <input type="text" [ngModel]="row.value"
+                            (ngModelChange)="updateHeader($index, 'value', $event)" placeholder="Value"
                             class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
                     </td>
                     <td class="py-1 text-center">
