@@ -34,6 +34,16 @@ export class RequestExecutionService {
         const state = this.tabStateService.getState(tabId);
         if (!state || state.id !== tabId) return;
 
+        let originalTabId: string | null | undefined;
+        if (isAutoAuthRetry) {
+            originalTabId = this.tabStateService.activeTabId();
+            if (originalTabId && originalTabId !== tabId) {
+                this.tabStateService.setActiveTab(tabId);
+                // Yield so UI renders
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
         const cancelToken = { cancelled: false, cancelFn: undefined as (() => void) | undefined };
         this.cancellationTokens.set(tabId, cancelToken);
 
@@ -360,7 +370,6 @@ export class RequestExecutionService {
                         console.warn('🔄 [Auto Auth] Auth request failed with status:', authState?.responseStatus);
                     }
 
-                    // No need to restore original tab since we didn't switch
                     console.log('🔄 [Auto Auth] Complete.');
                 }
             }
@@ -388,6 +397,10 @@ export class RequestExecutionService {
                 responseStatus: 0,
                 responseBody: `Error connecting: ${globalErr.message || globalErr}`
             });
+        } finally {
+            if (isAutoAuthRetry && originalTabId && originalTabId !== tabId) {
+                this.tabStateService.setActiveTab(originalTabId);
+            }
         }
     }
 }

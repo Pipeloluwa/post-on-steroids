@@ -8,12 +8,13 @@ import { ChangeDetectionStrategy, input } from '@angular/core';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { BodyTypesComponent } from "../body.types.component/body.types.component";
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
+import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 
 
 @Component({
   selector: 'app-payload-types-component',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent, BodyTypesComponent, MonacoEditorComponent],
+  imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent, BodyTypesComponent, MonacoEditorComponent, VariableInputComponent],
   templateUrl: './payload.types.component.html',
   styleUrl: './payload.types.component.css',
   host: {
@@ -56,9 +57,6 @@ export class PayloadTypesComponent {
 
   // State for Auth
   isTokenVisible = signal(false);
-  tokenSuggestions = signal<string[]>([]);
-
-  @ViewChild('tokenInput') tokenInput?: ElementRef<HTMLInputElement>;
 
   tabId = input.required<string>();
   tabState = computed(() => this.tabStateService.getState(this.tabId()));
@@ -165,51 +163,10 @@ export class PayloadTypesComponent {
     const current = this.auth();
     const updated: AuthState = { ...current, [field]: val };
     this.tabStateService.updateState(this.tabId(), { auth: updated });
-
-    if (field === 'token') {
-      this.handleTokenChange(val);
-    }
   }
 
   toggleTokenVisibility() {
     this.isTokenVisible.update(v => !v);
-  }
-
-  handleTokenChange(val: string) {
-    const cursorPosition = this.tokenInput?.nativeElement.selectionStart || 0;
-    const textBeforeCursor = val.substring(0, cursorPosition);
-    const lastDoubleBraceIndex = textBeforeCursor.lastIndexOf('{{');
-
-    if (lastDoubleBraceIndex !== -1 && !textBeforeCursor.substring(lastDoubleBraceIndex).includes('}}')) {
-      const query = textBeforeCursor.substring(lastDoubleBraceIndex + 2).toLowerCase();
-      const filtered = this.variableService.variables()
-        .filter(v => v.key.toLowerCase().includes(query))
-        .map(v => v.key);
-      this.tokenSuggestions.set(filtered);
-    } else {
-      this.tokenSuggestions.set([]);
-    }
-  }
-
-  setTokenSuggestion(suggestion: string) {
-    const currentToken = this.auth().token;
-    const cursorPosition = this.tokenInput?.nativeElement.selectionStart || 0;
-    const textBeforeCursor = currentToken.substring(0, cursorPosition);
-    const textAfterCursor = currentToken.substring(cursorPosition);
-    const lastDoubleBraceIndex = textBeforeCursor.lastIndexOf('{{');
-
-    if (lastDoubleBraceIndex !== -1) {
-      const newToken = textBeforeCursor.substring(0, lastDoubleBraceIndex + 2) + suggestion + '}}' + textAfterCursor;
-      this.updateAuth('token', newToken);
-      this.tokenSuggestions.set([]);
-
-      // Set focus back and move cursor
-      setTimeout(() => {
-        const newPos = lastDoubleBraceIndex + 2 + suggestion.length + 2;
-        this.tokenInput?.nativeElement.setSelectionRange(newPos, newPos);
-        this.tokenInput?.nativeElement.focus();
-      });
-    }
   }
 
   // ── Scripts ──────────────────────────────────────────────────────────
@@ -259,6 +216,7 @@ export class PayloadTypesComponent {
   toggleHeaderEncryption(key: string) {
     if (!key) return;
     const current = this.encryption();
+    if (current.autoEncryptHeaders) return;
     const headers = new Set(current.encryptedHeaders || []);
     if (headers.has(key)) {
       headers.delete(key);

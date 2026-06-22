@@ -4,6 +4,7 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 import { ThemeService } from '../../services/theme.service';
 import { TabStateService } from '../../services/tab.state.service';
+import { VariableService } from '../../services/variable.service';
 
 @Component({
   selector: 'app-monaco-editor',
@@ -25,6 +26,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private platformId = inject(PLATFORM_ID);
   private themeService = inject(ThemeService);
   private tabStateService = inject(TabStateService);
+  private variableService = inject(VariableService);
   isBrowser = isPlatformBrowser(this.platformId);
 
   editorId = input<string>('');
@@ -67,6 +69,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private activeModelCacheKey = '';
 
   private static modelCache = new Map<string, any>();
+  private static completionProvidersRegistered = new Set<string>();
 
   constructor() {
     // Dynamically update editor options when theme changes without recreating the editor
@@ -169,6 +172,44 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     if (this.restrictToFunctionBody()) {
       this.setupFunctionBodyRestriction(editor as MonacoEditor);
     }
+    
+    // Register global variable auto-completion provider for this language
+    if (this.isBrowser) {
+      const monacoGlobal = (window as any).monaco;
+      if (monacoGlobal && monacoGlobal.languages) {
+        const lang = this.language();
+        if (!MonacoEditorComponent.completionProvidersRegistered.has(lang)) {
+          monacoGlobal.languages.registerCompletionItemProvider(lang, {
+            triggerCharacters: ['{'],
+            provideCompletionItems: (model: any, position: any) => {
+              const word = model.getWordUntilPosition(position);
+              const range = {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: word.startColumn,
+                endColumn: word.endColumn
+              };
+
+              const lineContent = model.getLineContent(position.lineNumber);
+              const textBeforeWord = lineContent.substring(0, word.startColumn - 1);
+              
+              if (textBeforeWord.endsWith('{{')) {
+                const variables = this.variableService.variables();
+                const suggestions = variables.map((v: any) => ({
+                  label: v.key,
+                  kind: monacoGlobal.languages.CompletionItemKind.Variable,
+                  insertText: `${v.key}}}`,
+                  range: range
+                }));
+                return { suggestions };
+              }
+              return { suggestions: [] };
+            }
+          });
+          MonacoEditorComponent.completionProvidersRegistered.add(lang);
+        }
+      }
+    }
 
     // Fix cursor offset: Monaco caches font character width measurements.
     // When the editor initializes in a container that hasn't fully rendered,
@@ -212,6 +253,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       editor.onMouseDown((e: any) => {
         const monacoGlobal = (window as any).monaco;
         if (e.target.type === monacoGlobal.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+          if (this.autoEncrypt()) return;
           const lineNumber = e.target.position.lineNumber;
           const model = editor.getModel();
           if (model) {

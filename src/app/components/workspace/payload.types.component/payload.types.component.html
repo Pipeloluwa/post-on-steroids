@@ -43,14 +43,16 @@
                             class="accent-(--postonsteroids-accent) cursor-pointer" />
                     </td>
                     <td class="py-1 px-2">
-                        <input type="text" [ngModel]="row.key"
+                        <app-variable-input [ngModel]="row.key"
                             (ngModelChange)="updateParam($index, 'key', $event)" placeholder="Key"
-                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                            customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                        </app-variable-input>
                     </td>
                     <td class="py-1 px-2">
-                        <input type="text" [ngModel]="row.value"
+                        <app-variable-input [ngModel]="row.value"
                             (ngModelChange)="updateParam($index, 'value', $event)" placeholder="Value"
-                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                            customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                        </app-variable-input>
                     </td>
                     <td class="py-1 text-center">
                         <button (click)="deleteParam($index)"
@@ -94,22 +96,17 @@
                 <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[80px]">Token</span>
                 <div
                     class="flex-1 flex items-center relative bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
-                    <input #tokenInput [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().token"
-                        (ngModelChange)="updateAuth('token', $event); handleTokenChange($event)"
+                    <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().token"
+                        (ngModelChange)="updateAuth('token', $event)"
                         placeholder="Bearer token or var_name"
-                        class="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono" />
+                        customClass="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono">
+                    </app-variable-input>
 
                     <button (click)="toggleTokenVisibility()"
                         class="ml-2 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer focus:outline-none">
                         <mat-icon class="text-[16px]! size-[16px]!">{{ isTokenVisible() ? 'visibility_off' :
                             'visibility' }}</mat-icon>
                     </button>
-
-                    <!-- Variable Suggestions -->
-                    <app-scrollable-select-component [manualState]="tokenSuggestions().length > 0"
-                        [optionValues]="tokenSuggestions()" [verticalPosition]="32" [modalWidth]="200"
-                        (outputSelectedValue)="setTokenSuggestion($event)">
-                    </app-scrollable-select-component>
                 </div>
             </div>
         </div>
@@ -172,14 +169,16 @@
                             <mat-icon class="text-[14px]! size-[14px]!">lock</mat-icon>
                         </button>
                         }
-                        <input type="text" [ngModel]="row.key"
+                        <app-variable-input [ngModel]="row.key"
                             (ngModelChange)="updateHeader($index, 'key', $event)" placeholder="Header name"
-                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                            customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                        </app-variable-input>
                     </td>
                     <td class="py-1 px-2">
-                        <input type="text" [ngModel]="row.value"
+                        <app-variable-input [ngModel]="row.value"
                             (ngModelChange)="updateHeader($index, 'value', $event)" placeholder="Value"
-                            class="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+                            customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                        </app-variable-input>
                     </td>
                     <td class="py-1 text-center">
                         <button (click)="deleteHeader($index)"

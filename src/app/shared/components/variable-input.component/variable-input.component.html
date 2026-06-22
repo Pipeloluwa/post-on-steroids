@@ -1,0 +1,19 @@
+<div class="relative w-full h-full flex items-center">
+    <input #inputField [type]="type()" [value]="value()" (input)="onInput($event)"
+        (keyup)="updateCursorPosition()" (click)="updateCursorPosition()" (keydown)="onKeyDown($event)"
+        [placeholder]="placeholder()" [class]="customClass()" />
+
+    @if(suggestions().length > 0) {
+    <div class="absolute top-full mt-1 left-0 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-md shadow-lg z-50 max-h-[250px] overflow-y-auto"
+        [style.left.px]="cursorOffset()" [style.width.px]="150">
+        <ul class="flex flex-col py-1">
+            @for(suggestion of suggestions(); track suggestion) {
+            <li (mousedown)="$event.preventDefault(); setSuggestion(suggestion)"
+                class="px-3 py-1.5 text-sm text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer font-mono truncate">
+                {{suggestion}}
+            </li>
+            }
+        </ul>
+    </div>
+    }
+</div>

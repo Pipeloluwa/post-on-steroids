@@ -60,6 +60,7 @@ export class BodyTypesComponent {
   toggleBodyEncryption(path: string) {
     if (!path) return;
     const current = this.encryption();
+    if (current.autoEncryptBody) return;
     const paths = new Set(current.encryptedBodyPaths || []);
     if (paths.has(path)) {
       paths.delete(path);
