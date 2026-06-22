@@ -125,12 +125,12 @@
             <div class="flex items-center gap-x-4">
                 <div class="flex items-center gap-x-2">
                     <span class="text-[11px] text-(--postonsteroids-text-muted)">Auto-encrypt</span>
-                    <button (click)="setEncryptionField('autoEncryptHeaders', !encryption().autoEncryptHeaders)"
+                    <button (click)="toggleAutoEncryptHeaders()"
                         class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
-                        [class.bg-(--postonsteroids-accent)]="encryption().autoEncryptHeaders"
-                        [class.bg-(--postonsteroids-bg-tertiary)]="!encryption().autoEncryptHeaders">
+                        [class.bg-(--postonsteroids-accent)]="encryption().encryptedHeaders.length > 0"
+                        [class.bg-(--postonsteroids-bg-tertiary)]="encryption().encryptedHeaders.length === 0">
                         <div class="absolute top-[3px] left-[3px] w-[14px] h-[14px] bg-white rounded-full transition-transform duration-200"
-                            [class.translate-x-4]="encryption().autoEncryptHeaders"></div>
+                            [class.translate-x-4]="encryption().encryptedHeaders.length > 0"></div>
                     </button>
                 </div>
                 <button (click)="toggleRawHeaders()"
@@ -162,10 +162,10 @@
                         @if (row.key) {
                         <button (click)="toggleHeaderEncryption(row.key)"
                             class="mr-1 hover:opacity-100 transition-opacity cursor-pointer shrink-0"
-                            [class.opacity-100]="encryption().autoEncryptHeaders || encryption().encryptedHeaders.includes(row.key)"
-                            [class.opacity-50]="!encryption().autoEncryptHeaders && !encryption().encryptedHeaders.includes(row.key)"
-                            [class.text-(--postonsteroids-accent)]="encryption().autoEncryptHeaders || encryption().encryptedHeaders.includes(row.key)"
-                            [class.text-(--postonsteroids-text-muted)]="!encryption().autoEncryptHeaders && !encryption().encryptedHeaders.includes(row.key)">
+                            [class.opacity-100]="encryption().encryptedHeaders.includes(row.key)"
+                            [class.opacity-50]="!encryption().encryptedHeaders.includes(row.key)"
+                            [class.text-(--postonsteroids-accent)]="encryption().encryptedHeaders.includes(row.key)"
+                            [class.text-(--postonsteroids-text-muted)]="!encryption().encryptedHeaders.includes(row.key)">
                             <mat-icon class="text-[14px]! size-[14px]!">lock</mat-icon>
                         </button>
                         }
@@ -203,7 +203,7 @@
 
     <!-- ─── BODY ─── -->
     @if (payloadType() === 'body') {
-    <app-body-types-component class="flex-1 flex flex-col min-h-0"></app-body-types-component>
+    <app-body-types-component [tabId]="tabId()" class="flex-1 flex flex-col min-h-0"></app-body-types-component>
     }
 
     <!-- ─── SCRIPTS ─── -->

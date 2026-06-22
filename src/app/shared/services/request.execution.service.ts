@@ -56,6 +56,7 @@ export class RequestExecutionService {
         if (cancelToken.cancelled) return;
 
         try {
+            const startTime = performance.now();
             // 1. Resolve URL
             const resolvedUrl = this.variableService.resolve(state.url);
 
@@ -71,8 +72,8 @@ export class RequestExecutionService {
             if (state.auth.type === 'bearer' && state.auth.token) {
                 headers.push({ key: 'Authorization', value: `Bearer ${this.variableService.resolve(state.auth.token)}` });
             } else if (state.auth.type === 'basic' && state.auth.token) {
-                // In Post-on-Steroids MVP, the 'token' field holds the entire base64 string or we assume it's just the token part
-                headers.push({ key: 'Authorization', value: `Basic ${this.variableService.resolve(state.auth.token)}` });
+                const tokenStr = this.variableService.resolve(state.auth.token);
+                headers.push({ key: 'Authorization', value: `Basic ${tokenStr}` });
             }
 
             // Inject globally cached Auto-Auth token if no tab-level auth is configured
@@ -88,12 +89,10 @@ export class RequestExecutionService {
             }
 
             // 3. Prepare Params
-            let params = state.params
-                .filter(p => p.enabled && p.key)
-                .map(p => ({
-                    key: this.variableService.resolve(p.key),
-                    value: this.variableService.resolve(p.value)
-                }));
+            let params = state.params.filter(p => p.enabled && p.key).map(p => ({ 
+                key: this.variableService.resolve(p.key), 
+                value: this.variableService.resolve(p.value) 
+            }));
 
             // 4. Prepare Body
             let body: any = null;
@@ -107,9 +106,15 @@ export class RequestExecutionService {
                     }
                 } else if (state.bodyType === 'form-data') {
                     // For Sandbox passing we can pass form-data as array
-                    body = state.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({ ...f }));
+                    body = state.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({ 
+                        ...f, 
+                        key: this.variableService.resolve(f.key),
+                        value: typeof f.value === 'string' ? this.variableService.resolve(f.value) : f.value
+                    }));
                 }
             }
+
+
 
             // 5. Script Execution (Encryption -> Pre-Request)
             let preRequestLogs = '';
@@ -160,7 +165,20 @@ export class RequestExecutionService {
                     encryptionLogs = `Encryption Error: ${encResult.error}`;
                     preRequestLogs += `\nEncryption Error: ${encResult.error}\n\n`;
                     console.error('🔐 [Encryption] ERROR - Encryption script failed:', encResult.error);
-                    console.warn('🔐 [Encryption] Using original body due to encryption error');
+                    
+                    const errorStr = `Encryption Script Error:\n${encResult.error}`;
+                    this.tabStateService.updateState(tabId, {
+                        isLoading: false,
+                        responseStatus: 400,
+                        responseBody: errorStr,
+                        responseHeaders: [],
+                        responseCookies: [],
+                        responseSize: new Blob([errorStr]).size,
+                        responseTime: Math.floor(performance.now() - startTime),
+                        scripts: { ...state.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
+                    });
+                    this.cancellationTokens.delete(tabId);
+                    return;
                 }
             }
 
@@ -182,6 +200,19 @@ export class RequestExecutionService {
                      params = result.context.params || params;
                 } else if (result.error) {
                     preRequestLogs += `\nError: ${result.error}`;
+                    const errorStr = `Pre-Request Script Error:\n${result.error}`;
+                    this.tabStateService.updateState(tabId, {
+                        isLoading: false,
+                        responseStatus: 400,
+                        responseBody: errorStr,
+                        responseHeaders: [],
+                        responseCookies: [],
+                        responseSize: new Blob([errorStr]).size,
+                        responseTime: Math.floor(performance.now() - startTime),
+                        scripts: { ...state.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
+                    });
+                    this.cancellationTokens.delete(tabId);
+                    return;
                 }
             }
 
@@ -226,7 +257,6 @@ export class RequestExecutionService {
                 }
             }
 
-            const startTime = performance.now();
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
 
             console.log('📤 [HTTP Request] Method:', state.method);
@@ -277,7 +307,18 @@ export class RequestExecutionService {
 
             // 8. Process Response
             const status = httpResponse?.status || 0;
-            let rawResponseBody = (httpResponse as any)?.error || (httpResponse as HttpResponse<string>)?.body || '';
+            let rawResponseBody = (httpResponse as any)?.error;
+            if (rawResponseBody === undefined || rawResponseBody === null) {
+                rawResponseBody = (httpResponse as HttpResponse<string>)?.body || (httpResponse as any)?.message || '';
+            }
+            
+            // Handle ProgressEvent (Network Errors) which stringify to {}
+            if (rawResponseBody && typeof rawResponseBody === 'object') {
+                if (rawResponseBody instanceof Event || rawResponseBody.type === 'error' || rawResponseBody.name === 'HttpErrorResponse') {
+                    rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue';
+                }
+            }
+
             let responseSize = 0;
 
             if (typeof rawResponseBody === 'string') {

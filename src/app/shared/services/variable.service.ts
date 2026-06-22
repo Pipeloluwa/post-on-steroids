@@ -61,8 +61,8 @@ export class VariableService {
         let resolvedText = text;
         this.variables().forEach(v => {
             if (v.enabled && v.key) {
-                const regex = new RegExp(`{{${v.key}}}`, 'g');
-                resolvedText = resolvedText.replace(regex, v.value);
+                const regex = new RegExp(`{{\\s*${v.key.trim()}\\s*}}`, 'g');
+                resolvedText = resolvedText.replace(regex, v.value.trim());
             }
         });
         return resolvedText;

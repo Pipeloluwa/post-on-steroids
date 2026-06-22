@@ -1,10 +1,10 @@
-import { Component, signal, inject, computed, PLATFORM_ID } from '@angular/core';
+import { Component, signal, inject, computed, PLATFORM_ID, input } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
-import { TabStateService, FormDataRow } from '../../../shared/services/tab.state.service';
+import { TabStateService, EncryptionState, FormDataRow } from '../../../shared/services/tab.state.service';
 import { ChangeDetectionStrategy } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
@@ -22,15 +22,16 @@ export class BodyTypesComponent {
   private platformId = inject(PLATFORM_ID);
   isBrowser = isPlatformBrowser(this.platformId);
   tabStateService = inject(TabStateService);
+  tabId = input.required<string>();
   wrapResponse = signal(true);
   
   rawBodyContent = computed(() => {
-    const state = this.tabStateService.activeTabState();
+    const state = this.tabStateService.getState(this.tabId());
     return this.rawType() === 'JSON' ? (state?.rawBodyJson || '{}') : (state?.rawBodyXml || '');
   });
 
   onRawBodyChange(content: string) {
-    const id = this.tabStateService.activeTabId();
+    const id = this.tabId();
     if (!id) return;
     
     if (this.rawType() === 'JSON') {
@@ -44,23 +45,65 @@ export class BodyTypesComponent {
   rawTypes = ['JSON', 'XML'];
   rowTypes = ['text', 'file'];
 
-  bodyType = computed(() => this.tabStateService.activeTabState()?.bodyType ?? 'none');
-  rawType = computed(() => this.tabStateService.activeTabState()?.rawType ?? 'JSON');
-  formData = computed(() => this.tabStateService.activeTabState()?.formData ?? []);
-  encryption = computed(() => this.tabStateService.activeTabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
+  bodyType = computed(() => this.tabStateService.getState(this.tabId())?.bodyType ?? 'none');
+  rawType = computed(() => this.tabStateService.getState(this.tabId())?.rawType ?? 'JSON');
+  formData = computed(() => this.tabStateService.getState(this.tabId())?.formData ?? []);
+  encryption = computed(() => this.tabStateService.getState(this.tabId())?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
 
-  setEncryptionField(field: keyof import('../../../shared/services/tab.state.service').EncryptionState, val: any) {
-    const id = this.tabStateService.activeTabId();
-    if (!id) return;
+  setEncryptionField(field: keyof EncryptionState, value: any) {
     const current = this.encryption();
-    const updated = { ...current, [field]: val } as any;
-    this.tabStateService.updateState(id, { encryption: updated });
+    const id = this.tabStateService.activeTabId();
+    if (id) {
+        this.tabStateService.updateState(id, {
+        encryption: { ...current, [field]: value }
+        });
+    }
+  }
+
+  toggleAutoEncryptBody() {
+      const current = this.encryption();
+      let newEncryptedBodyPaths: string[] = [];
+      
+      if (current.encryptedBodyPaths && current.encryptedBodyPaths.length > 0) {
+          newEncryptedBodyPaths = [];
+      } else {
+          try {
+              const bodyStr = this.rawBodyContent();
+              if (bodyStr) {
+                  const bodyObj = JSON.parse(bodyStr);
+                  newEncryptedBodyPaths = this.getPrimitivePaths(bodyObj);
+              }
+          } catch (e) {
+              console.warn("Could not parse body to auto-encrypt paths");
+          }
+      }
+      
+      const id = this.tabStateService.activeTabId();
+      if (id) {
+          this.tabStateService.updateState(id, {
+              encryption: { ...current, encryptedBodyPaths: newEncryptedBodyPaths }
+          });
+      }
+  }
+
+  private getPrimitivePaths(obj: any, currentPath = ''): string[] {
+      let paths: string[] = [];
+      for (let key in obj) {
+          if (obj.hasOwnProperty(key)) {
+              const path = currentPath ? `${currentPath}.${key}` : key;
+              if (obj[key] !== null && typeof obj[key] === 'object') {
+                  paths = paths.concat(this.getPrimitivePaths(obj[key], path));
+              } else {
+                  paths.push(path);
+              }
+          }
+      }
+      return paths;
   }
 
   toggleBodyEncryption(path: string) {
     if (!path) return;
     const current = this.encryption();
-    if (current.autoEncryptBody) return;
     const paths = new Set(current.encryptedBodyPaths || []);
     if (paths.has(path)) {
       paths.delete(path);

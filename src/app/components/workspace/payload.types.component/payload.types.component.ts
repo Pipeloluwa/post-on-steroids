@@ -207,16 +207,34 @@ export class PayloadTypesComponent {
   }
 
   // ── Encryption ───────────────────────────────────────────────────────
-  setEncryptionField(field: keyof EncryptionState, val: any) {
+  setEncryptionField(field: keyof EncryptionState, value: any) {
     const current = this.encryption();
-    const updated: EncryptionState = { ...current, [field]: val } as any;
-    this.tabStateService.updateState(this.tabId(), { encryption: updated });
+    this.tabStateService.updateState(this.tabId(), {
+      encryption: { ...current, [field]: value }
+    });
+  }
+
+  toggleAutoEncryptHeaders() {
+    const current = this.encryption();
+    let newEncryptedHeaders: string[] = [];
+    
+    // If any are encrypted, clear them. Otherwise, encrypt all valid headers.
+    if (current.encryptedHeaders && current.encryptedHeaders.length > 0) {
+        newEncryptedHeaders = [];
+    } else {
+        newEncryptedHeaders = this.headers()
+            .filter(h => h.key && h.key.trim() !== '')
+            .map(h => h.key);
+    }
+    
+    this.tabStateService.updateState(this.tabId(), {
+      encryption: { ...current, encryptedHeaders: newEncryptedHeaders }
+    });
   }
 
   toggleHeaderEncryption(key: string) {
     if (!key) return;
     const current = this.encryption();
-    if (current.autoEncryptHeaders) return;
     const headers = new Set(current.encryptedHeaders || []);
     if (headers.has(key)) {
       headers.delete(key);
