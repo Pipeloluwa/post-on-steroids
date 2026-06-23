@@ -102,6 +102,11 @@ export class PayloadTypesComponent {
     this.isRawParams.update(v => !v);
   }
 
+  onRawParamsChange(text: string) {
+    this.rawParamsText.set(text);
+    this.paramsFromRaw();
+  }
+
   private paramsFromRaw() {
     const parsed = this.parseRawKV(this.rawParamsText());
     this.tabStateService.updateState(this.tabId(), { params: parsed });
@@ -124,6 +129,11 @@ export class PayloadTypesComponent {
       this.headersFromRaw();
     }
     this.isRawHeaders.update(v => !v);
+  }
+
+  onRawHeadersChange(text: string) {
+    this.rawHeadersText.set(text);
+    this.headersFromRaw();
   }
 
   private headersFromRaw() {

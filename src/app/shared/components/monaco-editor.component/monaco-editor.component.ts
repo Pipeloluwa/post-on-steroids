@@ -249,6 +249,15 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       }
     }
 
+    // Unconditionally listen for content changes and notify Angular Forms
+    editor.onDidChangeModelContent(() => {
+      if (this.isReverting || this.isRestoringModel) return;
+      const model = editor.getModel();
+      if (model) {
+        this.onValueChange(model.getValue());
+      }
+    });
+
     if (this.enableEncryptionToggles()) {
       editor.onMouseDown((e: any) => {
         const monacoGlobal = (window as any).monaco;

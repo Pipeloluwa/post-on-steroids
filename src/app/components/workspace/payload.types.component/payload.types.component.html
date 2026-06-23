@@ -69,7 +69,7 @@
             <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Parameter
         </button>
         } @else {
-        <textarea [ngModel]="rawParamsText()" (ngModelChange)="rawParamsText.set($event)"
+        <textarea [ngModel]="rawParamsText()" (ngModelChange)="onRawParamsChange($event)"
             placeholder="key: value&#10;key2: value2"
             class="w-full h-[120px] bg-transparent outline-none p-2 text-[12px] font-mono text-(--postonsteroids-text-primary) resize-none placeholder:text-(--postonsteroids-text-muted) transition-all"></textarea>
         }
@@ -195,7 +195,7 @@
             <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Header
         </button>
         } @else {
-        <textarea [ngModel]="rawHeadersText()" (ngModelChange)="rawHeadersText.set($event)"
+        <textarea [ngModel]="rawHeadersText()" (ngModelChange)="onRawHeadersChange($event)"
             placeholder="Header-Name: value&#10;Authorization: Bearer var_name"
             class="w-full h-[120px] bg-transparent outline-none p-2 text-[12px] font-mono text-(--postonsteroids-text-primary) resize-none placeholder:text-(--postonsteroids-text-muted) transition-all"></textarea>
         }
