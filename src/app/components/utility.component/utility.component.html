@@ -308,22 +308,63 @@
         }
 
         @if (activeTool() === 'regex') {
-            <!-- ─── Regex Tester ─── -->
+            <!-- ─── Regex Builder & Tester ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Regex Tester</h2>
-                        <p class="text-sm text-(--postonsteroids-text-secondary)">Test regex patterns against input text and view
-                            all matches.</p>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Regex Builder &amp; Tester</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Build, compose, and test regular expressions with professional templates.</p>
                     </div>
-                    <button (click)="testRegex()"
-                        class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
-                        <mat-icon class="text-[18px]! size-[18px]!">search</mat-icon>
-                        Test
-                    </button>
+                    
+                    <div class="flex p-1 rounded-2xl bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border)">
+                        <button (click)="regexActiveSection.set('builder')" 
+                            [class.bg-(--postonsteroids-bg-tertiary)]="regexActiveSection() === 'builder'"
+                            [class.text-(--postonsteroids-text-primary)]="regexActiveSection() === 'builder'"
+                            [class.text-(--postonsteroids-text-secondary)]="regexActiveSection() !== 'builder'"
+                            class="px-4 py-1.5 text-sm font-semibold rounded-xl transition-colors cursor-pointer">
+                            Builder
+                        </button>
+                        <button (click)="regexActiveSection.set('tester')"
+                            [class.bg-(--postonsteroids-bg-tertiary)]="regexActiveSection() === 'tester'"
+                            [class.text-(--postonsteroids-text-primary)]="regexActiveSection() === 'tester'"
+                            [class.text-(--postonsteroids-text-secondary)]="regexActiveSection() !== 'tester'"
+                            class="px-4 py-1.5 text-sm font-semibold rounded-xl transition-colors cursor-pointer">
+                            Tester
+                        </button>
+                    </div>
                 </div>
 
-                <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_auto]">
+                <!-- Current Pattern Bar -->
+                <div class="mt-6 flex flex-col gap-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Current Pattern</span>
+                        <div class="flex items-center gap-x-2">
+                            @if (regexIsValid() === true) {
+                                <span class="text-[11px] font-semibold text-green-400 flex items-center gap-x-1">
+                                    <mat-icon class="text-[14px]! size-[14px]!">check_circle</mat-icon> Valid
+                                </span>
+                            }
+                            @if (regexIsValid() === false) {
+                                <span class="text-[11px] font-semibold text-red-400 flex items-center gap-x-1">
+                                    <mat-icon class="text-[14px]! size-[14px]!">error</mat-icon> Invalid
+                                </span>
+                            }
+                            <button (click)="undoRegexBlock()" title="Undo last block"
+                                [class.opacity-40]="regexBlockHistory().length === 0"
+                                [class.cursor-not-allowed]="regexBlockHistory().length === 0"
+                                class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
+                                <mat-icon class="text-[16px]! size-[16px]!">undo</mat-icon>
+                            </button>
+                            <button (click)="clearRegexPattern()" title="Clear pattern"
+                                class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
+                                <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
+                            </button>
+                            <button (click)="copyText(regexPattern())" title="Copy pattern"
+                                class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
+                                <mat-icon class="text-[16px]! size-[16px]!">content_copy</mat-icon>
+                            </button>
+                        </div>
+                    </div>
                     <div class="flex items-center gap-x-2">
                         <span class="text-sm text-(--postonsteroids-text-muted) shrink-0">/</span>
                         <input type="text" [value]="regexPattern()" (input)="regexPattern.set($any($event.target).value)"
@@ -331,44 +372,165 @@
                             class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
                             aria-label="Regex pattern" />
                         <span class="text-sm text-(--postonsteroids-text-muted) shrink-0">/</span>
+                        <input type="text" [value]="regexFlags()" (input)="regexFlags.set($any($event.target).value)"
+                            placeholder="g"
+                            class="w-20 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none text-center placeholder:text-(--postonsteroids-text-muted)"
+                            aria-label="Regex flags" />
                     </div>
-                    <input type="text" [value]="regexFlags()" (input)="regexFlags.set($any($event.target).value)"
-                        placeholder="g"
-                        class="w-20 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none text-center placeholder:text-(--postonsteroids-text-muted)"
-                        aria-label="Regex flags" />
-                </div>
 
-                <textarea [value]="regexInput()" (input)="regexInput.set($any($event.target).value)" rows="5"
-                    placeholder="Input text to test against..."
-                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
-                    aria-label="Regex test input"></textarea>
-
-                @if (regexError()) {
-                <p class="mt-3 text-sm font-medium text-red-400">{{ regexError() }}</p>
-                }
-
-                @if (regexMatches().length > 0) {
-                <div
-                    class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) overflow-hidden">
-                    <div
-                        class="px-4 py-2 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-between">
-                        <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">{{ regexMatches().length }} match{{ regexMatches().length !== 1 ? 'es' : '' }}</span>
-                    </div>
-                    <div class="p-4 space-y-2 max-h-[200px] overflow-auto">
-                        @for (m of regexMatches(); track $index) {
-                        <div
-                            class="flex items-center gap-x-3 px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-secondary) text-sm">
-                            <span
-                                class="text-[10px] font-mono text-(--postonsteroids-text-muted) shrink-0 min-w-[50px]">idx: {{ m.index }}</span>
-                            <code
-                                class="font-mono text-(--postonsteroids-accent) break-all">"{{ m.match }}"</code>
-                            @if (m.groups.length > 0) {
-                            <span class="text-[10px] text-(--postonsteroids-text-muted)">groups: {{ m.groups.join(', ') }}</span>
-                            }
-                        </div>
+                    <!-- Flag Reference Chips -->
+                    <div class="flex flex-wrap gap-1.5 mt-1">
+                        @for (ref of regexFlagReference; track ref.flag) {
+                            <button (click)="toggleRegexFlag(ref.flag)" [title]="ref.desc"
+                                class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer"
+                                [class.bg-(--postonsteroids-accent)]="regexFlags().includes(ref.flag)"
+                                [class.text-white]="regexFlags().includes(ref.flag)"
+                                [class.border-(--postonsteroids-accent)]="regexFlags().includes(ref.flag)"
+                                [class.bg-(--postonsteroids-bg-primary)]="!regexFlags().includes(ref.flag)"
+                                [class.text-(--postonsteroids-text-secondary)]="!regexFlags().includes(ref.flag)"
+                                [class.border-(--postonsteroids-border)]="!regexFlags().includes(ref.flag)">
+                                {{ ref.flag }}
+                            </button>
                         }
                     </div>
                 </div>
+
+                @if (regexActiveSection() === 'builder') {
+                    <div class="mt-6 flex flex-col gap-y-6">
+
+                        <!-- ── Composition Workspace ── -->
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-x-2">
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-accent)">construction</mat-icon>
+                                    <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Composition Workspace</span>
+                                </div>
+                                @if (regexComposition().length > 0) {
+                                    <button (click)="clearComposition()"
+                                        class="inline-flex items-center gap-x-1 text-[11px] font-semibold text-red-400 hover:text-red-300 transition-colors cursor-pointer">
+                                        <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
+                                        Clear All
+                                    </button>
+                                }
+                            </div>
+
+                            @if (regexComposition().length === 0) {
+                                <div class="flex items-center justify-center py-6 border-2 border-dashed border-(--postonsteroids-border) rounded-xl">
+                                    <span class="text-[12px] text-(--postonsteroids-text-muted) italic">Click building blocks below to compose your regex</span>
+                                </div>
+                            } @else {
+                                <div class="flex flex-wrap gap-2 p-3 rounded-xl border border-(--postonsteroids-border)/50 bg-(--postonsteroids-bg-secondary) min-h-[48px]">
+                                    @for (segment of regexComposition(); track segment.id; let i = $index) {
+                                        <div class="group/seg flex items-center gap-x-1 pl-3 pr-1 py-1.5 rounded-xl border border-(--postonsteroids-accent)/30 bg-(--postonsteroids-accent)/5 transition-all hover:border-(--postonsteroids-accent)/60 hover:bg-(--postonsteroids-accent)/10">
+                                            <!-- Move left -->
+                                            @if (i > 0) {
+                                                <button (click)="moveCompositionSegment(i, -1)"
+                                                    class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)"
+                                                    title="Move left" aria-label="Move segment left">
+                                                    <mat-icon class="text-[12px]! size-[12px]!">chevron_left</mat-icon>
+                                                </button>
+                                            }
+                                            <code class="font-mono text-[12px] font-bold text-(--postonsteroids-accent)">{{ segment.label }}</code>
+                                            <span class="text-[10px] text-(--postonsteroids-text-secondary) hidden sm:inline">{{ segment.desc }}</span>
+                                            <!-- Move right -->
+                                            @if (i < regexComposition().length - 1) {
+                                                <button (click)="moveCompositionSegment(i, 1)"
+                                                    class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)"
+                                                    title="Move right" aria-label="Move segment right">
+                                                    <mat-icon class="text-[12px]! size-[12px]!">chevron_right</mat-icon>
+                                                </button>
+                                            }
+                                            <!-- Remove -->
+                                            <button (click)="removeCompositionSegment(segment.id)"
+                                                class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-red-500/20 transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-red-400 ml-0.5"
+                                                title="Remove segment" aria-label="Remove segment">
+                                                <mat-icon class="text-[12px]! size-[12px]!">close</mat-icon>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+
+                                <!-- Composed output preview -->
+                                <div class="mt-3 flex items-center gap-x-2">
+                                    <span class="text-[11px] text-(--postonsteroids-text-muted) shrink-0">Composed:</span>
+                                    <code class="text-[12px] font-mono text-(--postonsteroids-accent) break-all flex-1 bg-(--postonsteroids-bg-tertiary) px-3 py-1.5 rounded-lg border border-(--postonsteroids-border)/50">{{ regexComposedPattern() }}</code>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- ── Building Blocks Palette ── -->
+                        <div>
+                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider mb-3 block">Building Blocks</span>
+                            <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                                @for (blockGroup of regexBlocks; track blockGroup.category) {
+                                    <div class="flex flex-col gap-y-3">
+                                        <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">{{ blockGroup.category }}</h3>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            @for (item of blockGroup.items; track item.label) {
+                                                <div (click)="blockGroup.category === 'Common Templates' ? useTemplateAsComposition(item) : addCompositionSegment(item)"
+                                                    class="flex flex-col p-2.5 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) cursor-pointer hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-colors group">
+                                                    <code class="font-mono text-[13px] font-bold text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) break-all">{{ item.label }}</code>
+                                                    <span class="text-[11px] text-(--postonsteroids-text-secondary) mt-1">{{ item.desc }}</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (regexActiveSection() === 'tester') {
+                    <div class="mt-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Test Text</span>
+                            <button (click)="testRegex()"
+                                class="inline-flex items-center gap-x-1.5 rounded-full bg-(--postonsteroids-accent) px-3 py-1.5 text-[12px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover) cursor-pointer">
+                                <mat-icon class="text-[16px]! size-[16px]!">search</mat-icon>
+                                Run Test
+                            </button>
+                        </div>
+                        <textarea [value]="regexInput()" (input)="regexInput.set($any($event.target).value)" rows="5"
+                            placeholder="Input text to test against..."
+                            class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
+                            aria-label="Regex test input"></textarea>
+
+                        <!-- Live Highlighted Matches -->
+                        @if (regexPattern() && regexInput()) {
+                            <div class="mt-3">
+                                <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider mb-2 block">Live Highlight</span>
+                                <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) overflow-auto max-h-[200px] whitespace-pre-wrap break-words regex-highlight-container"
+                                    [innerHTML]="regexHighlightedInput()">
+                                </div>
+                            </div>
+                        }
+
+                        @if (regexError()) {
+                            <p class="mt-3 text-sm font-medium text-red-400">{{ regexError() }}</p>
+                        }
+
+                        @if (regexMatches().length > 0) {
+                            <div class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) overflow-hidden">
+                                <div class="px-4 py-2 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-between">
+                                    <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">{{ regexMatches().length }} match{{ regexMatches().length !== 1 ? 'es' : '' }}</span>
+                                    <button (click)="copyAllRegexMatches()"
+                                        class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy All</button>
+                                </div>
+                                <div class="p-4 space-y-2 max-h-[200px] overflow-auto">
+                                    @for (m of regexMatches(); track $index) {
+                                        <div class="flex items-center gap-x-3 px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-secondary) text-sm">
+                                            <span class="text-[10px] font-mono text-(--postonsteroids-text-muted) shrink-0 min-w-[50px]">idx: {{ m.index }}</span>
+                                            <code class="font-mono text-(--postonsteroids-accent) break-all">"{{ m.match }}"</code>
+                                            @if (m.groups.length > 0) {
+                                                <span class="text-[10px] text-(--postonsteroids-text-muted)">groups: {{ m.groups.join(', ') }}</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
                 }
             </section>
         }

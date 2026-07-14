@@ -52,7 +52,7 @@ export class BodyTypesComponent {
 
   setEncryptionField(field: keyof EncryptionState, value: any) {
     const current = this.encryption();
-    const id = this.tabStateService.activeTabId();
+    const id = this.tabId();
     if (id) {
         this.tabStateService.updateState(id, {
         encryption: { ...current, [field]: value }
@@ -78,7 +78,7 @@ export class BodyTypesComponent {
           }
       }
       
-      const id = this.tabStateService.activeTabId();
+      const id = this.tabId();
       if (id) {
           this.tabStateService.updateState(id, {
               encryption: { ...current, encryptedBodyPaths: newEncryptedBodyPaths }
@@ -114,14 +114,14 @@ export class BodyTypesComponent {
   }
 
   setBodyType(type: string) {
-    const id = this.tabStateService.activeTabId();
+    const id = this.tabId();
     if (id) this.tabStateService.updateState(id, { bodyType: type });
   }
 
   selectRawType(type: string) {
-    const id = this.tabStateService.activeTabId();
+    const id = this.tabId();
     if (id) {
-      const state = this.tabStateService.activeTabState();
+      const state = this.tabStateService.getState(id);
       const newRawBody = type === 'JSON' ? state?.rawBodyJson : state?.rawBodyXml;
       this.tabStateService.updateState(id, { 
         rawType: type,
@@ -132,21 +132,21 @@ export class BodyTypesComponent {
 
   // Form-data CRUD
   addFormDataRow() {
-    const id = this.tabStateService.activeTabId();
+    const id = this.tabId();
     if (!id) return;
     const rows = [...this.formData(), { enabled: true, key: '', value: '', type: 'text' as const }];
     this.tabStateService.updateState(id, { formData: rows });
   }
 
   deleteFormDataRow(i: number) {
-    const id = this.tabStateService.activeTabId();
+    const id = this.tabId();
     if (!id) return;
     const rows = this.formData().filter((_, idx) => idx !== i);
     this.tabStateService.updateState(id, { formData: rows.length ? rows : [{ enabled: true, key: '', value: '', type: 'text' }] });
   }
 
   updateFormDataRow(i: number, field: keyof FormDataRow, val: string | boolean) {
-    const id = this.tabStateService.activeTabId();
+    const id = this.tabId();
     if (!id) return;
     const rows = this.formData().map((r, idx) => idx === i ? { ...r, [field]: val } : r);
     this.tabStateService.updateState(id, { formData: rows });

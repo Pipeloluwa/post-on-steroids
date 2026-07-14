@@ -122,7 +122,7 @@
             } @else if (activeMode() === 'Pretty') {
             <div class="w-full h-full">
                 <app-monaco-editor [ngModel]="formattedResponseBody()"
-                    [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="wrapResponse()" [editorId]="'response-body'" class="flex-1 w-full h-full block">
+                    [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="wrapResponse()" [editorId]="'response-body'" [ownerTabId]="tabId()" class="flex-1 w-full h-full block">
                 </app-monaco-editor>
             </div>
 

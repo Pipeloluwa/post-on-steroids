@@ -17,6 +17,7 @@ export class UtilityComponent {
     activeTool = signal<string | null>(null);
     tools = [
         { id: 'uuid', name: 'UUID Generator', description: 'Generate random v4 UUIDs', icon: 'fingerprint' },
+        { id: 'regex', name: 'Regex', description: 'Build and test regular expressions', icon: 'fact_check' },
         { id: 'time', name: 'Timestamp & Epoch', description: 'Convert between epoch and readable dates', icon: 'schedule' },
         { id: 'json', name: 'JSON Formatter', description: 'Format and minify JSON payloads', icon: 'data_object' },
         { id: 'base64', name: 'Base64 Encoder', description: 'Encode and decode Base64 strings', icon: 'swap_horiz' },
@@ -26,7 +27,6 @@ export class UtilityComponent {
         { id: 'jwt', name: 'JWT Decoder', description: 'Decode JSON Web Tokens', icon: 'security' },
         { id: 'lorem', name: 'Lorem Ipsum', description: 'Generate dummy text paragraphs', icon: 'text_snippet' },
         { id: 'diff', name: 'Text Diff', description: 'Compare two text blocks line by line', icon: 'compare_arrows' },
-        { id: 'regex', name: 'Regex Tester', description: 'Test regular expressions against text', icon: 'fact_check' },
         { id: 'color', name: 'Color Converter', description: 'Convert between HEX, RGB, and HSL', icon: 'palette' },
         { id: 'markdown', name: 'Markdown Preview', description: 'Live preview of markdown text', icon: 'description' },
         { id: 'url-parse', name: 'URL Parser', description: 'Parse URLs into their components', icon: 'account_tree' },
@@ -75,12 +75,240 @@ export class UtilityComponent {
     diffTextB = signal('');
     diffResult = signal<{ type: 'same' | 'added' | 'removed'; text: string }[]>([]);
 
-    // ── Regex Tester ──
+    // ── Regex Builder & Tester ──
+    regexActiveSection = signal<'builder' | 'tester'>('builder');
     regexPattern = signal('');
     regexFlags = signal('g');
     regexInput = signal('');
     regexMatches = signal<{ match: string; index: number; groups: string[] }[]>([]);
     regexError = signal('');
+    regexBlockHistory = signal<string[]>([]);
+
+    // Composition workspace: segments that combine to form the regex pattern
+    regexComposition = signal<{ id: number; pattern: string; label: string; desc: string }[]>([]);
+    private regexSegmentIdCounter = 0;
+
+    // Derived pattern from composition workspace — keeps the pattern input in sync
+    regexComposedPattern = computed(() =>
+        this.regexComposition().map(s => s.pattern).join('')
+    );
+
+    regexIsValid = computed(() => {
+        const pattern = this.regexPattern();
+        if (!pattern) return null; // empty = neutral
+        try {
+            new RegExp(pattern, this.regexFlags());
+            return true;
+        } catch {
+            return false;
+        }
+    });
+
+    regexHighlightedInput = computed<SafeHtml>(() => {
+        const pattern = this.regexPattern();
+        const input = this.regexInput();
+        const flags = this.regexFlags();
+        if (!pattern || !input) return this.sanitizer.bypassSecurityTrustHtml(this.escapeHtml(input || ''));
+        try {
+            const regex = new RegExp(pattern, flags.includes('g') ? flags : flags + 'g');
+            const escaped = this.escapeHtml(input);
+            // We need to work on the original string, then escape
+            let result = '';
+            let lastIndex = 0;
+            const re = new RegExp(pattern, flags.includes('g') ? flags : flags + 'g');
+            let m: RegExpExecArray | null;
+            let safety = 0;
+            while ((m = re.exec(input)) !== null && safety < 1000) {
+                const before = this.escapeHtml(input.substring(lastIndex, m.index));
+                const matched = this.escapeHtml(m[0]);
+                result += before + `<mark class="regex-match-highlight">${matched}</mark>`;
+                lastIndex = m.index + m[0].length;
+                if (m[0].length === 0) re.lastIndex++;
+                safety++;
+            }
+            result += this.escapeHtml(input.substring(lastIndex));
+            return this.sanitizer.bypassSecurityTrustHtml(result);
+        } catch {
+            return this.sanitizer.bypassSecurityTrustHtml(this.escapeHtml(input));
+        }
+    });
+
+    regexBlocks = [
+        {
+            category: 'Character Classes',
+            items: [
+                { label: '[a-z]', desc: 'Lowercase letter', pattern: '[a-z]' },
+                { label: '[A-Z]', desc: 'Uppercase letter', pattern: '[A-Z]' },
+                { label: '[0-9]', desc: 'Any digit', pattern: '[0-9]' },
+                { label: '\\w', desc: 'Word char', pattern: '\\w' },
+                { label: '\\d', desc: 'Digit', pattern: '\\d' },
+                { label: '\\s', desc: 'Whitespace', pattern: '\\s' },
+                { label: '.', desc: 'Any char', pattern: '.' },
+            ]
+        },
+        {
+            category: 'Negated Classes',
+            items: [
+                { label: '[^a-z]', desc: 'Not lowercase', pattern: '[^a-z]' },
+                { label: '[^0-9]', desc: 'Not a digit', pattern: '[^0-9]' },
+                { label: '\\W', desc: 'Non-word char', pattern: '\\W' },
+                { label: '\\D', desc: 'Non-digit', pattern: '\\D' },
+                { label: '\\S', desc: 'Non-whitespace', pattern: '\\S' },
+            ]
+        },
+        {
+            category: 'Quantifiers',
+            items: [
+                { label: '*', desc: 'Zero or more', pattern: '*' },
+                { label: '+', desc: 'One or more', pattern: '+' },
+                { label: '?', desc: 'Zero or one', pattern: '?' },
+                { label: '{n}', desc: 'Exactly n times', pattern: '{n}' },
+                { label: '{n,}', desc: 'n or more', pattern: '{n,}' },
+                { label: '{n,m}', desc: 'Between n and m', pattern: '{n,m}' },
+                { label: '*?', desc: 'Lazy zero+', pattern: '*?' },
+                { label: '+?', desc: 'Lazy one+', pattern: '+?' },
+            ]
+        },
+        {
+            category: 'Anchors & Boundaries',
+            items: [
+                { label: '^', desc: 'Start of string', pattern: '^' },
+                { label: '$', desc: 'End of string', pattern: '$' },
+                { label: '\\b', desc: 'Word boundary', pattern: '\\b' },
+                { label: '\\B', desc: 'Non-word boundary', pattern: '\\B' },
+            ]
+        },
+        {
+            category: 'Groups & Lookarounds',
+            items: [
+                { label: '(...)', desc: 'Capturing group', pattern: '()' },
+                { label: '(?:...)', desc: 'Non-capturing', pattern: '(?:)' },
+                { label: '(?=...)', desc: 'Positive lookahead', pattern: '(?=)' },
+                { label: '(?!...)', desc: 'Negative lookahead', pattern: '(?!)' },
+                { label: '(?<=...)', desc: 'Positive lookbehind', pattern: '(?<=)' },
+                { label: '(?<!...)', desc: 'Negative lookbehind', pattern: '(?<!)' },
+                { label: 'a|b', desc: 'Alternation (OR)', pattern: '|' },
+                { label: '\\1', desc: 'Back-reference', pattern: '\\1' },
+            ]
+        },
+        {
+            category: 'Common Templates',
+            items: [
+                { label: 'Email', desc: 'Match email address', pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}' },
+                { label: 'URL', desc: 'Match HTTP/HTTPS URL', pattern: 'https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*)' },
+                { label: 'IPv4', desc: 'Match IPv4 address', pattern: '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)' },
+                { label: 'UUID', desc: 'Match UUID v4', pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' },
+                { label: 'Phone', desc: 'International phone', pattern: '\\+?[1-9]\\d{0,2}[-.\\s]?\\(?\\d{1,4}\\)?[-.\\s]?\\d{1,4}[-.\\s]?\\d{1,9}' },
+                { label: 'Date', desc: 'YYYY-MM-DD', pattern: '\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])' },
+                { label: 'Time', desc: 'HH:MM:SS (24h)', pattern: '([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d' },
+                { label: 'Hex Color', desc: 'Match #RGB / #RRGGBB', pattern: '#([0-9a-fA-F]{3}){1,2}\\b' },
+                { label: 'Credit Card', desc: 'Visa/MC/Amex', pattern: '(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})' },
+                { label: 'HTML Tag', desc: 'Match HTML tags', pattern: '<([a-zA-Z][a-zA-Z0-9]*)\\b[^>]*>(.*?)<\\/\\1>' },
+                { label: 'File Extension', desc: 'Match .ext', pattern: '\\.[a-zA-Z0-9]{1,10}$' },
+                { label: 'MAC Address', desc: 'Match MAC', pattern: '([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}' },
+                { label: 'Username', desc: '3-16 alphanumeric', pattern: '^[a-zA-Z0-9_-]{3,16}$' },
+                { label: 'Strong Password', desc: '8+ chars, mixed', pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}' },
+            ]
+        }
+    ];
+
+    regexFlagReference = [
+        { flag: 'g', desc: 'Global — find all matches' },
+        { flag: 'i', desc: 'Case-insensitive' },
+        { flag: 'm', desc: 'Multiline — ^ and $ match line boundaries' },
+        { flag: 's', desc: 'Dotall — . matches newlines' },
+        { flag: 'u', desc: 'Unicode — full Unicode matching' },
+        { flag: 'y', desc: 'Sticky — match at lastIndex only' },
+    ];
+
+    insertRegexBlock(pattern: string) {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.regexPattern.update(p => p + pattern);
+    }
+
+    useRegexTemplate(pattern: string) {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.regexPattern.set(pattern);
+    }
+
+    clearRegexPattern() {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.regexPattern.set('');
+        this.regexComposition.set([]);
+    }
+
+    undoRegexBlock() {
+        const history = this.regexBlockHistory();
+        if (history.length === 0) return;
+        const prev = history[history.length - 1];
+        this.regexBlockHistory.update(h => h.slice(0, -1));
+        this.regexPattern.set(prev);
+    }
+
+    // ── Composition Workspace Methods ──
+    addCompositionSegment(item: { label: string; desc: string; pattern: string }) {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        const segment = { id: this.regexSegmentIdCounter++, pattern: item.pattern, label: item.label, desc: item.desc };
+        this.regexComposition.update(segments => [...segments, segment]);
+        this.syncPatternFromComposition();
+    }
+
+    useTemplateAsComposition(item: { label: string; desc: string; pattern: string }) {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        const segment = { id: this.regexSegmentIdCounter++, pattern: item.pattern, label: item.label, desc: item.desc };
+        this.regexComposition.set([segment]);
+        this.syncPatternFromComposition();
+    }
+
+    removeCompositionSegment(id: number) {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.regexComposition.update(segments => segments.filter(s => s.id !== id));
+        this.syncPatternFromComposition();
+    }
+
+    moveCompositionSegment(index: number, direction: -1 | 1) {
+        const segments = [...this.regexComposition()];
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= segments.length) return;
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        const temp = segments[index];
+        segments[index] = segments[targetIndex];
+        segments[targetIndex] = temp;
+        this.regexComposition.set(segments);
+        this.syncPatternFromComposition();
+    }
+
+    clearComposition() {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.regexComposition.set([]);
+        this.regexPattern.set('');
+    }
+
+    applyCompositionToPattern() {
+        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.regexPattern.set(this.regexComposedPattern());
+    }
+
+    private syncPatternFromComposition() {
+        this.regexPattern.set(this.regexComposedPattern());
+    }
+
+    private escapeHtml(str: string): string {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    toggleRegexFlag(flag: string) {
+        const current = this.regexFlags();
+        if (current.includes(flag)) {
+            this.regexFlags.set(current.replace(flag, ''));
+        } else {
+            this.regexFlags.set(current + flag);
+        }
+    }
 
     // ── Color Converter ──
     colorHex = signal('#3B82F6');
@@ -549,6 +777,11 @@ export class UtilityComponent {
         } catch (e) {
             this.regexError.set(`Invalid regex: ${e instanceof Error ? e.message : String(e)}`);
         }
+    }
+
+    copyAllRegexMatches(): void {
+        const text = this.regexMatches().map(m => m.match).join('\n');
+        this.copyText(text);
     }
 
     // ── Color Converter ────────────────────────────────────────────────

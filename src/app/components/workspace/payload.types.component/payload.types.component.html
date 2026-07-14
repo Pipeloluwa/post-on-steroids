@@ -248,13 +248,13 @@
                     </div>
                     <app-monaco-editor [ngModel]="scripts().testScript"
                         (ngModelChange)="updateScript('test', $event)" [restrictToFunctionBody]="true"
-                        class="flex-1 min-h-0 block w-full" [editorId]="'script-test'">
+                        class="flex-1 min-h-0 block w-full" [editorId]="'script-test'" [ownerTabId]="tabId()">
                     </app-monaco-editor>
                 </div>
             } @else {
                 <app-monaco-editor [ngModel]="getScriptContent()"
                     (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="true"
-                    class="block w-full h-full" [editorId]="'script-' + activeScriptTab()">
+                    class="block w-full h-full" [editorId]="'script-' + activeScriptTab()" [ownerTabId]="tabId()">
                 </app-monaco-editor>
             }
         </div>
@@ -292,7 +292,7 @@
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
             <app-monaco-editor [ngModel]="encryption().script"
                 (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="true"
-                class="block w-full h-full" [editorId]="'encryption-script'">
+                class="block w-full h-full" [editorId]="'encryption-script'" [ownerTabId]="tabId()">
             </app-monaco-editor>
         </div>
     </div>

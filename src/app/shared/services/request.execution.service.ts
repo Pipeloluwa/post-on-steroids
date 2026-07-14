@@ -57,11 +57,26 @@ export class RequestExecutionService {
 
         try {
             const startTime = performance.now();
+
+            // Flush microtask queue so any pending ngModelChange handlers (e.g. from
+            // the Monaco editor body component) have propagated into the tab state signal.
+            // Without this, a user who corrected the payload after a bad-request error
+            // could still see the OLD payload being sent because the signal update hadn't
+            // committed yet at the time we snapshot the state below.
+            await Promise.resolve();
+
+            // Re-read the LATEST state before preparing payload.
+            // The initial `state` read above was only for the guard check (existence + id match).
+            // Between a previous failed request and the user pressing Send again, the user may
+            // have corrected the body, headers, URL, etc. — we must use the freshest data.
+            const freshState = this.tabStateService.getState(tabId);
+            if (!freshState) return;
+
             // 1. Resolve URL
-            const resolvedUrl = this.variableService.resolve(state.url);
+            const resolvedUrl = this.variableService.resolve(freshState.url);
 
             // 2. Prepare Headers
-            let headers = state.headers
+            let headers = freshState.headers
                 .filter(h => h.enabled && h.key)
                 .map(h => ({
                     key: this.variableService.resolve(h.key),
@@ -69,16 +84,16 @@ export class RequestExecutionService {
                 }));
 
             // Inject Auth Header if applicable
-            if (state.auth.type === 'bearer' && state.auth.token) {
-                headers.push({ key: 'Authorization', value: `Bearer ${this.variableService.resolve(state.auth.token)}` });
-            } else if (state.auth.type === 'basic' && state.auth.token) {
-                const tokenStr = this.variableService.resolve(state.auth.token);
+            if (freshState.auth.type === 'bearer' && freshState.auth.token) {
+                headers.push({ key: 'Authorization', value: `Bearer ${this.variableService.resolve(freshState.auth.token)}` });
+            } else if (freshState.auth.type === 'basic' && freshState.auth.token) {
+                const tokenStr = this.variableService.resolve(freshState.auth.token);
                 headers.push({ key: 'Authorization', value: `Basic ${tokenStr}` });
             }
 
             // Inject globally cached Auto-Auth token if no tab-level auth is configured
             const autoAuthEnabled = this.autoAuthService.isAutoAuthEnabled(tabId);
-            if (autoAuthEnabled && !state.auth.token) {
+            if (autoAuthEnabled && !freshState.auth.token) {
                 const cachedToken = this.autoAuthService.getCachedToken();
                 if (cachedToken) {
                     const alreadyHasAuth = headers.some(h => h.key.toLowerCase() === 'authorization');
@@ -89,24 +104,29 @@ export class RequestExecutionService {
             }
 
             // 3. Prepare Params
-            let params = state.params.filter(p => p.enabled && p.key).map(p => ({ 
+            let params = freshState.params.filter(p => p.enabled && p.key).map(p => ({ 
                 key: this.variableService.resolve(p.key), 
                 value: this.variableService.resolve(p.value) 
             }));
 
             // 4. Prepare Body
             let body: any = null;
-            if (state.method !== 'GET' && state.method !== 'HEAD') {
-                if (state.bodyType === 'raw') {
-                    const resolvedRaw = this.variableService.resolve(state.rawBody || '');
+            if (freshState.method !== 'GET' && freshState.method !== 'HEAD') {
+                if (freshState.bodyType === 'raw') {
+                    // Read from the type-specific field to ensure the latest editor content is used.
+                    // The shared `rawBody` can be stale if the user corrected the payload after a failed request.
+                    const rawBodyContent = freshState.rawType === 'XML'
+                        ? (freshState.rawBodyXml || '')
+                        : (freshState.rawBodyJson || '{}');
+                    const resolvedRaw = this.variableService.resolve(rawBodyContent);
                     try {
                         body = JSON.parse(resolvedRaw);
                     } catch {
                         body = resolvedRaw;
                     }
-                } else if (state.bodyType === 'form-data') {
+                } else if (freshState.bodyType === 'form-data') {
                     // For Sandbox passing we can pass form-data as array
-                    body = state.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({ 
+                    body = freshState.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({ 
                         ...f, 
                         key: this.variableService.resolve(f.key),
                         value: typeof f.value === 'string' ? this.variableService.resolve(f.value) : f.value
@@ -120,7 +140,7 @@ export class RequestExecutionService {
             let preRequestLogs = '';
 
             // 5a. Encryption Script
-            const encryptionScriptCode = state.encryption?.script;
+            const encryptionScriptCode = freshState.encryption?.script;
             let encryptionLogs = '';
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
                 // Serialize body to JSON string for encryption script
@@ -132,11 +152,11 @@ export class RequestExecutionService {
                     headers,
                     body: bodyStr,
                     params,
-                    encryptedHeaders: state.encryption?.encryptedHeaders || [],
-                    encryptedBodyPaths: state.encryption?.encryptedBodyPaths || [],
-                    autoEncryptBody: state.encryption?.autoEncryptBody || false,
-                    autoEncryptHeaders: state.encryption?.autoEncryptHeaders || false,
-                    channelName: state.encryption?.channelName || ''
+                    encryptedHeaders: freshState.encryption?.encryptedHeaders || [],
+                    encryptedBodyPaths: freshState.encryption?.encryptedBodyPaths || [],
+                    autoEncryptBody: freshState.encryption?.autoEncryptBody || false,
+                    autoEncryptHeaders: freshState.encryption?.autoEncryptHeaders || false,
+                    channelName: freshState.encryption?.channelName || ''
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
                 if (cancelToken.cancelled) return;
@@ -175,7 +195,7 @@ export class RequestExecutionService {
                         responseCookies: [],
                         responseSize: new Blob([errorStr]).size,
                         responseTime: Math.floor(performance.now() - startTime),
-                        scripts: { ...state.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
+                        scripts: { ...freshState.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
                     });
                     this.cancellationTokens.delete(tabId);
                     return;
@@ -183,7 +203,7 @@ export class RequestExecutionService {
             }
 
             // 5b. Pre-Request Script
-            const preScriptCode = state.scripts?.preRequest;
+            const preScriptCode = freshState.scripts?.preRequest;
             if (preScriptCode && preScriptCode.trim()) {
                 const context = {
                     headers,
@@ -209,7 +229,7 @@ export class RequestExecutionService {
                         responseCookies: [],
                         responseSize: new Blob([errorStr]).size,
                         responseTime: Math.floor(performance.now() - startTime),
-                        scripts: { ...state.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
+                        scripts: { ...freshState.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
                     });
                     this.cancellationTokens.delete(tabId);
                     return;
@@ -223,7 +243,7 @@ export class RequestExecutionService {
             });
 
             // XML Support: ensure Content-Type is set if raw type is XML
-            if (state.bodyType === 'raw' && state.rawType === 'XML' && !httpHeaders.has('Content-Type')) {
+            if (freshState.bodyType === 'raw' && freshState.rawType === 'XML' && !httpHeaders.has('Content-Type')) {
                 httpHeaders = httpHeaders.set('Content-Type', 'application/xml');
             }
 
@@ -250,7 +270,7 @@ export class RequestExecutionService {
             let finalUrl = resolvedUrl;
 
             // Bypass CORS if enabled and not calling a local network address
-            if (state.settings?.bypassCors) {
+            if (freshState.settings?.bypassCors) {
                 const isLocalhost = finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1');
                 if (!isLocalhost) {
                     finalUrl = `https://corsproxy.io/?${encodeURIComponent(finalUrl)}`;
@@ -259,14 +279,14 @@ export class RequestExecutionService {
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
 
-            console.log('📤 [HTTP Request] Method:', state.method);
+            console.log('📤 [HTTP Request] Method:', freshState.method);
             console.log('📤 [HTTP Request] URL:', finalUrl);
             console.log('📤 [HTTP Request] Body:', body);
             console.log('📤 [HTTP Request] Headers:', httpHeaders.keys().map(k => `${k}: ${httpHeaders.get(k)}`));
 
             try {
               let reqObservable: any;
-              switch (state.method){
+              switch (freshState.method){
                 case 'GET': reqObservable = this.http.get(finalUrl, reqOptions); break;
                 case 'POST': 
                     console.log('📤 [HTTP] Sending POST with body:', body);
@@ -278,7 +298,7 @@ export class RequestExecutionService {
                 case 'PATCH': reqObservable = this.http.patch(finalUrl, body, reqOptions); break;
                 case 'HEAD': reqObservable = this.http.head(finalUrl, reqOptions); break;
                 case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
-                default: reqObservable = this.http.request(state.method, finalUrl, { ...reqOptions, body }); break;
+                default: reqObservable = this.http.request(freshState.method, finalUrl, { ...reqOptions, body }); break;
               }
 
               httpResponse = await new Promise((resolve, reject) => {
@@ -343,7 +363,7 @@ export class RequestExecutionService {
             }
 
             // 9. Post-Response Script Execution
-            const postScriptCode = state.scripts?.postResponse;
+            const postScriptCode = freshState.scripts?.postResponse;
             let postResponseLogs = '';
             if (postScriptCode && postScriptCode.trim()) {
                 const context = {
@@ -424,7 +444,7 @@ export class RequestExecutionService {
                 responseSize,
                 responseHeaders: responseHeaders.map(rh => ({ enabled: true, key: rh.key, value: rh.value })),
                 scripts: {
-                    ...state.scripts,
+                    ...freshState.scripts,
                     preRequestConsole: preRequestLogs,
                     postResponseConsole: postResponseLogs,
                     encryptionConsole: encryptionLogs

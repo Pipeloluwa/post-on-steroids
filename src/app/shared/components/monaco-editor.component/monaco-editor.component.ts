@@ -30,6 +30,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   isBrowser = isPlatformBrowser(this.platformId);
 
   editorId = input<string>('');
+  ownerTabId = input<string>('');
   language = input<string>('javascript');
   readOnly = input<boolean>(false);
   wordWrap = input<boolean>(false);
@@ -63,6 +64,9 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   // Prevents writeValue from calling model.setValue() during a model-restore operation
   // which would destroy Monaco's undo/redo history
   private isRestoringModel = false;
+  // Prevents scroll-save during model-swap (tab switch) — Monaco fires scroll events as part of
+  // restoring a cached model, and those events would overwrite the NEW tab's saved scroll positions.
+  private isSwappingModel = false;
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
   private themeUpdateId = 0;
@@ -103,16 +107,26 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     });
 
     // Reactive effect for cache key creation & model-swapping using activeTabId
+    // CRITICAL: Only swap models when this editor belongs to the currently active tab.
+    // Without this guard, hidden editors (from inactive tabs still in the DOM) would
+    // react to activeTabId changes and cross-contaminate state — loading another tab's
+    // model content and writing it back via onChange, corrupting the owning tab's state.
     effect(() => {
       const editorId = this.editorId();
       const language = this.language();
       const activeTabId = this.tabStateService.activeTabId() || 'default';
+      const owner = this.ownerTabId();
       const editor = this.editorInstance();
+
+      // Skip model-swap if this editor belongs to a different tab than the active one.
+      // When ownerTabId is not provided (empty string), fall through for backward compat.
+      if (owner && owner !== activeTabId) return;
 
       if (editor && editorId && this.isBrowser) {
         const monacoGlobal = (window as any).monaco;
         if (monacoGlobal && monacoGlobal.editor) {
-          const cacheKey = `${activeTabId}-${editorId}-${language}`;
+          const tabKey = owner || activeTabId;
+          const cacheKey = `${tabKey}-${editorId}-${language}`;
           let cachedModel = MonacoEditorComponent.modelCache.get(cacheKey);
           if (cachedModel?.isDisposed?.()) {
             MonacoEditorComponent.modelCache.delete(cacheKey);
@@ -125,6 +139,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               // Set the flag so that writeValue (called by Angular form binding after
               // onChange below) does NOT call model.setValue(), which would destroy history
               this.isRestoringModel = true;
+              this.isSwappingModel = true;
               editor.setModel(cachedModel);
               if (this.enableEncryptionToggles()) {
                 this.updateDecorations();
@@ -136,14 +151,54 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               // which will see isRestoringModel=true and skip setValue)
               this.onChange(cachedValue);
               this.isRestoringModel = false;
+
+              // Restore scroll position for this specific tab and editor
+              const scrollState = owner
+                ? this.tabStateService.getState(owner)
+                : this.tabStateService.activeTabState();
+              if (scrollState && scrollState.editorScrollPositions) {
+                const savedScroll = scrollState.editorScrollPositions[editorId];
+                if (savedScroll) {
+                  requestAnimationFrame(() => {
+                    editor.setScrollTop(savedScroll.scrollTop);
+                    editor.setScrollLeft(savedScroll.scrollLeft);
+                    // Clear flag after scroll restoration so future scroll events save normally
+                    this.isSwappingModel = false;
+                  });
+                } else {
+                  requestAnimationFrame(() => { this.isSwappingModel = false; });
+                }
+              } else {
+                requestAnimationFrame(() => { this.isSwappingModel = false; });
+              }
             }
           } else {
             // No cached model yet — create one with the current value
             const newModel = monacoGlobal.editor.createModel(this.value(), language);
             MonacoEditorComponent.modelCache.set(cacheKey, newModel);
+            this.isSwappingModel = true;
             editor.setModel(newModel);
             if (this.enableEncryptionToggles()) {
               this.updateDecorations();
+            }
+
+            // Restore scroll position for this specific tab and editor
+            const scrollState = owner
+              ? this.tabStateService.getState(owner)
+              : this.tabStateService.activeTabState();
+            if (scrollState && scrollState.editorScrollPositions) {
+              const savedScroll = scrollState.editorScrollPositions[editorId];
+              if (savedScroll) {
+                requestAnimationFrame(() => {
+                  editor.setScrollTop(savedScroll.scrollTop);
+                  editor.setScrollLeft(savedScroll.scrollLeft);
+                  this.isSwappingModel = false;
+                });
+              } else {
+                requestAnimationFrame(() => { this.isSwappingModel = false; });
+              }
+            } else {
+              requestAnimationFrame(() => { this.isSwappingModel = false; });
             }
           }
           this.activeModelCacheKey = cacheKey;
@@ -298,9 +353,14 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       }
 
       editor.onDidScrollChange((e: any) => {
-        const id = this.tabStateService.activeTabId();
+        // Skip saving during model-swap (tab switch) — Monaco fires scroll events
+        // as part of restoring a cached model, which would overwrite the new tab's positions.
+        if (this.isSwappingModel) return;
+        // Use ownerTabId when available so scroll positions are always saved to
+        // the correct tab, not whichever tab happens to be active at the moment.
+        const id = this.ownerTabId() || this.tabStateService.activeTabId();
         if (id && this.editorId()) {
-          const state = this.tabStateService.activeTabState();
+          const state = this.tabStateService.getState(id);
           if (state) {
             const currentScrollPositions = state.editorScrollPositions || {};
             const updatedScrollPositions = {
@@ -387,6 +447,30 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     }
 
     const editor = this.editorInstance();
+
+    // Persist the current scroll position into the tab state before the editor
+    // is destroyed. Without this, switching payload-type tabs (e.g. Encryption →
+    // Scripts → back) or switching request tabs would lose the scroll position
+    // because the onDidScrollChange listener is torn down with the component.
+    if (editor && this.editorId()) {
+      // Use ownerTabId so scroll positions are persisted to the correct tab,
+      // even if this editor is destroyed while another tab is active.
+      const id = this.ownerTabId() || this.tabStateService.activeTabId();
+      if (id) {
+        const scrollTop = editor.getScrollTop?.() ?? 0;
+        const scrollLeft = editor.getScrollLeft?.() ?? 0;
+        const state = this.tabStateService.getState(id);
+        if (state) {
+          const currentScrollPositions = state.editorScrollPositions || {};
+          const updatedScrollPositions = {
+            ...currentScrollPositions,
+            [this.editorId()]: { scrollTop, scrollLeft }
+          };
+          this.tabStateService.updateState(id, { editorScrollPositions: updatedScrollPositions });
+        }
+      }
+    }
+
     if (editor?.setModel) {
       const model = editor.getModel?.();
       if (model && this.activeModelCacheKey && !MonacoEditorComponent.modelCache.has(this.activeModelCacheKey)) {

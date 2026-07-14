@@ -25,12 +25,12 @@
   --postonsteroids-bg-secondary: #F0F0F0;
   --postonsteroids-bg-tertiary: #EEEEEE;
   --postonsteroids-bg-darker: #FAFAFA;
-  --postonsteroids-bg-hover: #F8F8F8;
-  --postonsteroids-accent: #FF6C37;
-  --postonsteroids-accent-hover: #E85A28;
-  --postonsteroids-text-primary: #1F2933;
-  --postonsteroids-text-secondary: #4B5563;
-  --postonsteroids-text-muted: #6B7280;
+  --postonsteroids-bg-hover: #F3F4F6;
+  --postonsteroids-accent: #F05A28;
+  --postonsteroids-accent-hover: #D94E1F;
+  --postonsteroids-text-primary: #2D3748;
+  --postonsteroids-text-secondary: #556270;
+  --postonsteroids-text-muted: #8896A6;
   --postonsteroids-border: #DDDDDD;
   --postonsteroids-shadow: rgba(0, 0, 0, 0.1);
 }
