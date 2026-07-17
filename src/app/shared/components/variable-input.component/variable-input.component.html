@@ -1,6 +1,7 @@
 <div class="relative w-full h-full flex items-center">
     <input #inputField [type]="type()" [value]="value()" (input)="onInput($event)"
         (keyup)="updateCursorPosition()" (click)="updateCursorPosition()" (keydown)="onKeyDown($event)"
+        (paste)="pasteEvent.emit($event)"
         [placeholder]="placeholder()" [class]="customClass()" />
 
     @if(suggestions().length > 0) {

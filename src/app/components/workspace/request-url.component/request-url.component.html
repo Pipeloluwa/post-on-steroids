@@ -1,6 +1,6 @@
-<div class="flex items-center gap-x-2 w-full h-[40px]">
+<div class="flex flex-col md:flex-row items-stretch md:items-center gap-y-2 md:gap-y-0 gap-x-2 w-full h-auto md:h-[40px]">
     <!-- Method and URL Input Container -->
-    <div class="flex-1 flex items-center h-full border rounded-[4px] px-2"
+    <div class="flex-1 flex items-center h-[40px] md:h-full border rounded-[4px] px-2"
         style="background-color: var(--postonsteroids-bg-secondary); border-color: var(--postonsteroids-border);">
 
         <!-- Method Selector -->
@@ -19,9 +19,9 @@
         </div>
 
         <!-- URL Input & Resolved Display -->
-        <div class="flex-1 flex flex-col justify-center h-full">
+        <div class="flex-1 flex flex-col justify-center h-full min-w-0">
             <app-variable-input [ngModel]="url()" (ngModelChange)="onUrlChange($event)"
-                (enter)="onSend()" placeholder="Enter request URL"
+                (enter)="onSend()" (pasteEvent)="onPaste($event)" placeholder="Enter request URL"
                 customClass="w-full bg-transparent border-none font-mono outline-none px-3 text-[13px] text-(--postonsteroids-text-primary)">
             </app-variable-input>
 
@@ -33,7 +33,7 @@
     </div>
 
     <!-- Send Button Group -->
-    <div class="flex h-full relative">
+    <div class="flex h-[40px] md:h-full relative shrink-0">
         <!-- Auto-Auth Split Group -->
         <div class="flex h-full relative shrink-0">
             <!-- Main Auto-Auth Button -->

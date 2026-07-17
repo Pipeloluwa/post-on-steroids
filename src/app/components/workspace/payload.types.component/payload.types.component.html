@@ -1,5 +1,5 @@
 <!-- Tab Buttons -->
-<ul class="h-[30px] flex items-center justify-start gap-x-6 border-b border-(--postonsteroids-border)/50">
+<ul class="h-[30px] flex items-center justify-start gap-x-3 md:gap-x-6 border-b border-(--postonsteroids-border)/50 overflow-x-auto shrink-0 scrollbar-hide">
     @for (type of payloadTypes; track type) {
     <li>
         <input type="button" [id]="type" [value]="type"

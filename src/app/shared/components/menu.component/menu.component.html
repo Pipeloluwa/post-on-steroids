@@ -1,24 +1,23 @@
-<nav [class.w-16]="sidebarService.isCollapsed()" [class.w-42]="!sidebarService.isCollapsed()"
+<nav [class.md:w-16]="sidebarService.isCollapsed()" [class.md:w-42]="!sidebarService.isCollapsed()"
     [class.transition-none]="!sidebarService.isHydrated()"
-    class="w-16 h-full flex flex-col transition-all duration-300 overflow-hidden"
-    style="background-color: var(--postonsteroids-bg-secondary); border-right: 1px solid var(--postonsteroids-border);">
+    class="w-full h-16 md:h-full flex flex-row md:flex-col transition-all duration-300 overflow-x-auto overflow-y-hidden md:overflow-hidden shrink-0 z-20 bg-(--postonsteroids-bg-secondary) border-t md:border-t-0 md:border-r border-(--postonsteroids-border)">
     
-    <ul class="flex flex-col gap-y-2 p-2 mt-4">
+    <ul class="flex flex-row md:flex-col gap-x-2 md:gap-y-2 p-2 md:mt-4 flex-1 items-center md:items-stretch justify-start md:justify-start">
         @for (item of menu(); track item.name) {
         <li [routerLink]="item.path"
             routerLinkActive="bg-(--postonsteroids-accent) text-white shadow-lg shadow-(--postonsteroids-accent)/30"
             class="h-[45px] py-2 px-3 capitalize flex items-center gap-3 rounded-xl cursor-pointer transition-all duration-300 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">
             <mat-icon class="text-[20px]! size-[20px]! shrink-0">{{ item.icon }}</mat-icon>
             @if (!sidebarService.isCollapsed()) {
-            <span class="text-[13px] font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ item.name }}</span>
+            <span class="hidden md:inline text-[13px] font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ item.name }}</span>
             }
         </li>
         }
     </ul>
 
-    <div class="mt-auto p-4 flex flex-col gap-3">
-        <div class="flex items-center justify-between p-1 bg-(--postonsteroids-bg-tertiary) rounded-xl border border-(--postonsteroids-border)/50 transition-all duration-300 gap-x-2 gap-y-4"
-            [class.flex-col]="sidebarService.isCollapsed()">
+    <div class="md:mt-auto p-2 md:p-4 flex flex-col justify-center shrink-0">
+        <div class="flex items-center justify-between p-1 bg-(--postonsteroids-bg-tertiary) rounded-xl border border-(--postonsteroids-border)/50 transition-all duration-300 gap-x-2 md:gap-y-4"
+            [class.md:flex-col]="sidebarService.isCollapsed()">
             <button (click)="themeService.setTheme('light')" 
                 class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"
                 [class.bg-(--postonsteroids-bg-primary)]="themeService.theme() === 'light'"

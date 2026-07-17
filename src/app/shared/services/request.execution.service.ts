@@ -242,6 +242,20 @@ export class RequestExecutionService {
                 httpHeaders = httpHeaders.set(h.key, h.value);
             });
 
+            // Anti-caching headers to prevent Edge Incognito from caching identical requests
+            const cacheControlKey = httpHeaders.keys().find(k => k.toLowerCase() === 'cache-control');
+            if (!cacheControlKey) {
+                httpHeaders = httpHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            }
+            const pragmaKey = httpHeaders.keys().find(k => k.toLowerCase() === 'pragma');
+            if (!pragmaKey) {
+                httpHeaders = httpHeaders.set('Pragma', 'no-cache');
+            }
+            const expiresKey = httpHeaders.keys().find(k => k.toLowerCase() === 'expires');
+            if (!expiresKey) {
+                httpHeaders = httpHeaders.set('Expires', '0');
+            }
+
             // XML Support: ensure Content-Type is set if raw type is XML
             if (freshState.bodyType === 'raw' && freshState.rawType === 'XML' && !httpHeaders.has('Content-Type')) {
                 httpHeaders = httpHeaders.set('Content-Type', 'application/xml');

@@ -35,6 +35,7 @@ export class VariableInputComponent implements ControlValueAccessor {
     onTouch: () => void = () => {};
     
     enter = output<void>();
+    pasteEvent = output<ClipboardEvent>();
 
     @ViewChild('inputField') inputField!: ElementRef<HTMLInputElement>;
     

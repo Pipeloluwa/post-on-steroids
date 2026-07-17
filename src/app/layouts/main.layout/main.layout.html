@@ -31,10 +31,10 @@
 
 
     <!-- Body -->
-    <div class="h-full flex overflow-hidden">
-        <app-menu-component />
+    <div class="h-full flex flex-col-reverse md:flex-row overflow-hidden relative">
+        <app-menu-component class="shrink-0 z-10" />
 
-        <div class="w-full h-full flex flex-col overflow-hidden main-content-area">
+        <div class="w-full h-full flex flex-col overflow-hidden main-content-area min-w-0">
             <router-outlet />
         </div>
     </div>

@@ -138,4 +138,121 @@ export class RequestUrlComponent {
         this.showAutoAuthModal.set(false);
         this.pendingScope = null;
     }
+
+    onPaste(event: ClipboardEvent) {
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return;
+        const pastedText = clipboardData.getData('text');
+        
+        if (pastedText && pastedText.trim().toLowerCase().startsWith('curl ')) {
+            event.preventDefault();
+            this.parseCurlCommand(pastedText.trim());
+        }
+    }
+
+    private parseCurlCommand(curlStr: string) {
+        let method = 'GET';
+        let url = '';
+        const headers: { key: string; value: string; active: boolean }[] = [];
+        let body = '';
+        let isJsonBody = false;
+
+        // Tokenize respecting single and double quotes
+        const tokens: string[] = [];
+        let currentToken = '';
+        let inSingleQuote = false;
+        let inDoubleQuote = false;
+        let escapeNext = false;
+
+        for (let i = 0; i < curlStr.length; i++) {
+            const char = curlStr[i];
+            
+            if (escapeNext) {
+                currentToken += char;
+                escapeNext = false;
+                continue;
+            }
+            if (char === '\\' && !inSingleQuote) {
+                // Bash line continuation or escape. Let's just treat as escape
+                // However, cURL often has \ at the end of the line for continuation.
+                if (curlStr[i+1] === '\n' || curlStr[i+1] === '\r') {
+                    // It's a line continuation, ignore the slash and the newline
+                    continue;
+                }
+                escapeNext = true;
+                continue;
+            }
+
+            if (char === "'" && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+                continue;
+            }
+            if (char === '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+                continue;
+            }
+            if (char === '\n' || char === '\r') {
+                if (!inSingleQuote && !inDoubleQuote) {
+                    if (currentToken.trim()) {
+                        tokens.push(currentToken);
+                        currentToken = '';
+                    }
+                    continue;
+                }
+            }
+            
+            if (char === ' ' && !inSingleQuote && !inDoubleQuote) {
+                if (currentToken.trim()) {
+                    tokens.push(currentToken);
+                    currentToken = '';
+                }
+            } else {
+                currentToken += char;
+            }
+        }
+        if (currentToken.trim()) tokens.push(currentToken);
+
+        // Process tokens
+        for (let i = 1; i < tokens.length; i++) {
+            const token = tokens[i];
+            
+            if (token === '-X' || token === '--request') {
+                method = tokens[++i]?.toUpperCase() || method;
+            } else if (token === '-H' || token === '--header') {
+                const headerStr = tokens[++i];
+                if (headerStr) {
+                    const separatorIdx = headerStr.indexOf(':');
+                    if (separatorIdx > -1) {
+                        const key = headerStr.slice(0, separatorIdx).trim();
+                        const value = headerStr.slice(separatorIdx + 1).trim();
+                        headers.push({ key, value, active: true });
+                        if (key.toLowerCase() === 'content-type' && value.toLowerCase().includes('application/json')) {
+                            isJsonBody = true;
+                        }
+                    }
+                }
+            } else if (token === '-d' || token === '--data' || token === '--data-raw' || token === '--data-binary') {
+                body = tokens[++i] || '';
+                if (method === 'GET') method = 'POST'; // cURL defaults to POST if -d is used
+            } else if (!token.startsWith('-') && !url) {
+                // If it doesn't start with '-' and we don't have a URL yet, it's the URL
+                url = token;
+            }
+        }
+
+        // Apply parsed data to the state
+        const updateData: any = {};
+        if (url) updateData.url = url;
+        if (method) updateData.method = method;
+        if (headers.length > 0) updateData.headers = headers;
+        if (body) {
+            updateData.rawBodyJson = body;
+            updateData.bodyType = 'raw';
+            updateData.rawType = isJsonBody ? 'JSON' : 'Text';
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            this.tabStateService.updateState(this.tabId(), updateData);
+        }
+    }
 }
