@@ -9,6 +9,7 @@ import { RequestExecutionService } from '../../../shared/services/request.execut
 import { AutoAuthService } from '../../../shared/services/auto-auth.service';
 import { AutoAuthModalComponent } from '../../../shared/components/auto-auth.modal.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
+import { NotificationService } from '../../../shared/services/notification.service';
 import { input } from '@angular/core';
 
 @Component({
@@ -27,6 +28,7 @@ export class RequestUrlComponent {
     tabStateService = inject(TabStateService);
     executionService = inject(RequestExecutionService);
     autoAuthService = inject(AutoAuthService);
+    notificationService = inject(NotificationService);
     methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
     tabId = input.required<string>();
@@ -153,7 +155,9 @@ export class RequestUrlComponent {
     private parseCurlCommand(curlStr: string) {
         let method = 'GET';
         let url = '';
-        const headers: { key: string; value: string; active: boolean }[] = [];
+        const headers: { key: string; value: string; enabled: boolean }[] = [];
+        let params: { key: string; value: string; enabled: boolean }[] = [];
+        let auth: any = null;
         let body = '';
         let isJsonBody = false;
 
@@ -173,10 +177,7 @@ export class RequestUrlComponent {
                 continue;
             }
             if (char === '\\' && !inSingleQuote) {
-                // Bash line continuation or escape. Let's just treat as escape
-                // However, cURL often has \ at the end of the line for continuation.
                 if (curlStr[i+1] === '\n' || curlStr[i+1] === '\r') {
-                    // It's a line continuation, ignore the slash and the newline
                     continue;
                 }
                 escapeNext = true;
@@ -225,7 +226,13 @@ export class RequestUrlComponent {
                     if (separatorIdx > -1) {
                         const key = headerStr.slice(0, separatorIdx).trim();
                         const value = headerStr.slice(separatorIdx + 1).trim();
-                        headers.push({ key, value, active: true });
+                        
+                        if (key.toLowerCase() === 'authorization' && value.toLowerCase().startsWith('bearer ')) {
+                            auth = { type: 'bearer', token: value.substring(7).trim() };
+                        } else {
+                            headers.push({ key, value, enabled: true });
+                        }
+                        
                         if (key.toLowerCase() === 'content-type' && value.toLowerCase().includes('application/json')) {
                             isJsonBody = true;
                         }
@@ -235,9 +242,18 @@ export class RequestUrlComponent {
                 body = tokens[++i] || '';
                 if (method === 'GET') method = 'POST'; // cURL defaults to POST if -d is used
             } else if (!token.startsWith('-') && !url) {
-                // If it doesn't start with '-' and we don't have a URL yet, it's the URL
                 url = token;
             }
+        }
+
+        // Parse query params from URL
+        if (url.includes('?')) {
+            const [baseUrl, queryString] = url.split('?', 2);
+            url = baseUrl;
+            const searchParams = new URLSearchParams(queryString);
+            searchParams.forEach((val, key) => {
+                params.push({ key, value: val, enabled: true });
+            });
         }
 
         // Apply parsed data to the state
@@ -245,6 +261,9 @@ export class RequestUrlComponent {
         if (url) updateData.url = url;
         if (method) updateData.method = method;
         if (headers.length > 0) updateData.headers = headers;
+        if (params.length > 0) updateData.params = params;
+        if (auth) updateData.auth = auth;
+        
         if (body) {
             updateData.rawBodyJson = body;
             updateData.bodyType = 'raw';
@@ -253,6 +272,7 @@ export class RequestUrlComponent {
 
         if (Object.keys(updateData).length > 0) {
             this.tabStateService.updateState(this.tabId(), updateData);
+            this.notificationService.notify('cURL command successfully parsed and imported!');
         }
     }
 }
