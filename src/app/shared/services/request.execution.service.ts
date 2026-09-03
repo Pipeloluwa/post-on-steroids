@@ -287,7 +287,7 @@ export class RequestExecutionService {
             if (freshState.settings?.bypassCors) {
                 const isLocalhost = finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1');
                 if (!isLocalhost) {
-                    finalUrl = `https://corsproxy.io/?${encodeURIComponent(finalUrl)}`;
+                    finalUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(finalUrl)}`;
                 }
             }
 
