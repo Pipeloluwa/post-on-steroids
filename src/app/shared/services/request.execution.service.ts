@@ -21,7 +21,7 @@ export class RequestExecutionService {
 
     cancelRequest(tabId: string) {
         this.tabStateService.updateState(tabId, { isLoading: false });
-        
+
         const token = this.cancellationTokens.get(tabId);
         if (token) {
             token.cancelled = true;
@@ -49,10 +49,10 @@ export class RequestExecutionService {
 
         // Set Tab to Loading
         this.tabStateService.updateState(tabId, { isLoading: true });
-        
+
         // Yield to the event loop to allow Angular to paint the "Cancel" button before heavy synchronous work
         await new Promise(resolve => setTimeout(resolve, 0));
-        
+
         if (cancelToken.cancelled) return;
 
         try {
@@ -104,9 +104,9 @@ export class RequestExecutionService {
             }
 
             // 3. Prepare Params
-            let params = freshState.params.filter(p => p.enabled && p.key).map(p => ({ 
-                key: this.variableService.resolve(p.key), 
-                value: this.variableService.resolve(p.value) 
+            let params = freshState.params.filter(p => p.enabled && p.key).map(p => ({
+                key: this.variableService.resolve(p.key),
+                value: this.variableService.resolve(p.value)
             }));
 
             // 4. Prepare Body
@@ -126,8 +126,8 @@ export class RequestExecutionService {
                     }
                 } else if (freshState.bodyType === 'form-data') {
                     // For Sandbox passing we can pass form-data as array
-                    body = freshState.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({ 
-                        ...f, 
+                    body = freshState.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({
+                        ...f,
                         key: this.variableService.resolve(f.key),
                         value: typeof f.value === 'string' ? this.variableService.resolve(f.value) : f.value
                     }));
@@ -167,25 +167,25 @@ export class RequestExecutionService {
                 console.log('🔐 [Encryption] Result context.body:', encResult.context?.body);
 
                 if (encResult.success && encResult.context) {
-                     headers = encResult.context.headers || headers;
-                     // Parse body back to object if it was originally an object
-                     const encryptedBodyStr = encResult.context.body != null ? encResult.context.body : bodyStr;
-                     console.log('🔐 [Encryption] encryptedBodyStr to parse:', encryptedBodyStr);
+                    headers = encResult.context.headers || headers;
+                    // Parse body back to object if it was originally an object
+                    const encryptedBodyStr = encResult.context.body != null ? encResult.context.body : bodyStr;
+                    console.log('🔐 [Encryption] encryptedBodyStr to parse:', encryptedBodyStr);
 
-                     try {
-                         body = JSON.parse(encryptedBodyStr);
-                         console.log('🔐 [Encryption] Parsed body to object:', body);
-                     } catch (parseErr) {
-                         body = encryptedBodyStr;
-                         console.log('🔐 [Encryption] Using encryptedBodyStr as-is (not valid JSON):', body);
-                     }
-                     params = encResult.context.params || params;
-                     console.log('🔐 [Encryption] Final body after encryption:', body);
+                    try {
+                        body = JSON.parse(encryptedBodyStr);
+                        console.log('🔐 [Encryption] Parsed body to object:', body);
+                    } catch (parseErr) {
+                        body = encryptedBodyStr;
+                        console.log('🔐 [Encryption] Using encryptedBodyStr as-is (not valid JSON):', body);
+                    }
+                    params = encResult.context.params || params;
+                    console.log('🔐 [Encryption] Final body after encryption:', body);
                 } else if (encResult.error) {
                     encryptionLogs = `Encryption Error: ${encResult.error}`;
                     preRequestLogs += `\nEncryption Error: ${encResult.error}\n\n`;
                     console.error('🔐 [Encryption] ERROR - Encryption script failed:', encResult.error);
-                    
+
                     const errorStr = `Encryption Script Error:\n${encResult.error}`;
                     this.tabStateService.updateState(tabId, {
                         isLoading: false,
@@ -215,9 +215,9 @@ export class RequestExecutionService {
                 preRequestLogs += result.logs || '';
 
                 if (result.success && result.context) {
-                     headers = result.context.headers || headers;
-                     body = result.context.body !== undefined ? result.context.body : body;
-                     params = result.context.params || params;
+                    headers = result.context.headers || headers;
+                    body = result.context.body !== undefined ? result.context.body : body;
+                    params = result.context.params || params;
                 } else if (result.error) {
                     preRequestLogs += `\nError: ${result.error}`;
                     const errorStr = `Pre-Request Script Error:\n${result.error}`;
@@ -282,16 +282,18 @@ export class RequestExecutionService {
 
             // 7. Make the Call
             let finalUrl = resolvedUrl;
+            let isUsingProxy = false;
 
-            // Bypass CORS if enabled and not calling a local network address
+            // Check if CORS bypass is enabled
             if (freshState.settings?.bypassCors) {
                 const isLocalhost = finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1');
                 if (!isLocalhost) {
-                    finalUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(finalUrl)}`;
+                    isUsingProxy = true;
                 }
             }
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
+            let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;
 
             console.log('📤 [HTTP Request] Method:', freshState.method);
             console.log('📤 [HTTP Request] URL:', finalUrl);
@@ -299,32 +301,73 @@ export class RequestExecutionService {
             console.log('📤 [HTTP Request] Headers:', httpHeaders.keys().map(k => `${k}: ${httpHeaders.get(k)}`));
 
             try {
-              let reqObservable: any;
-              switch (freshState.method){
-                case 'GET': reqObservable = this.http.get(finalUrl, reqOptions); break;
-                case 'POST': 
-                    console.log('📤 [HTTP] Sending POST with body:', body);
-                    reqObservable = this.http.post(finalUrl, body, reqOptions); break;
-                case 'PUT':
-                    console.log('📤 [HTTP] Sending PUT with body:', body);
-                    reqObservable = this.http.put(finalUrl, body, reqOptions); break;
-                case 'DELETE': reqObservable = this.http.delete(finalUrl, reqOptions); break;
-                case 'PATCH': reqObservable = this.http.patch(finalUrl, body, reqOptions); break;
-                case 'HEAD': reqObservable = this.http.head(finalUrl, reqOptions); break;
-                case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
-                default: reqObservable = this.http.request(freshState.method, finalUrl, { ...reqOptions, body }); break;
-              }
+                let reqObservable: any;
 
-              httpResponse = await new Promise((resolve, reject) => {
-                  const sub = reqObservable.subscribe({
-                      next: (res: any) => resolve(res),
-                      error: (err: any) => resolve(err)
-                  });
-                  cancelToken.cancelFn = () => {
-                      sub.unsubscribe();
-                      reject(new Error('Request cancelled'));
-                  };
-              });
+                if (isUsingProxy) {
+                    // Build proxy payload for OnSteroidsApi
+                    const headersObj: Record<string, string> = {};
+                    headers.forEach(h => {
+                        headersObj[h.key] = h.value;
+                    });
+
+                    // Construct full URL including query params
+                    let targetUrl = resolvedUrl;
+                    const queryString = httpParams.toString();
+                    if (queryString) {
+                        targetUrl += (targetUrl.includes('?') ? '&' : '?') + queryString;
+                    }
+
+                    let bodyPayload: string | null = null;
+                    if (body !== undefined && body !== null) {
+                        bodyPayload = typeof body === 'string' ? body : JSON.stringify(body);
+                    }
+
+                    const proxyPayload = {
+                        url: targetUrl,
+                        method: freshState.method,
+                        headers: headersObj,
+                        body: bodyPayload
+                    };
+
+                    const proxyUrl = 'https://localhost:7131/api/v1/Proxy';
+                    reqObservable = this.http.post<any>(proxyUrl, proxyPayload, {
+                        headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
+                        observe: 'response' as const
+                    });
+                } else {
+                    switch (freshState.method) {
+                        case 'GET': reqObservable = this.http.get(finalUrl, reqOptions); break;
+                        case 'POST':
+                            console.log('📤 [HTTP] Sending POST with body:', body);
+                            reqObservable = this.http.post(finalUrl, body, reqOptions); break;
+                        case 'PUT':
+                            console.log('📤 [HTTP] Sending PUT with body:', body);
+                            reqObservable = this.http.put(finalUrl, body, reqOptions); break;
+                        case 'DELETE': reqObservable = this.http.delete(finalUrl, reqOptions); break;
+                        case 'PATCH': reqObservable = this.http.patch(finalUrl, body, reqOptions); break;
+                        case 'HEAD': reqObservable = this.http.head(finalUrl, reqOptions); break;
+                        case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
+                        default: reqObservable = this.http.request(freshState.method, finalUrl, { ...reqOptions, body }); break;
+                    }
+                }
+
+                const rawResult: any = await new Promise((resolve, reject) => {
+                    const sub = reqObservable.subscribe({
+                        next: (res: any) => resolve(res),
+                        error: (err: any) => resolve(err)
+                    });
+                    cancelToken.cancelFn = () => {
+                        sub.unsubscribe();
+                        reject(new Error('Request cancelled'));
+                    };
+                });
+
+                if (isUsingProxy && !(rawResult instanceof HttpErrorResponse) && rawResult?.body) {
+                    // Unpack the new BaseSuccessResponse wrapper if it exists
+                    proxyReturnedResponse = rawResult.body.data ? rawResult.body.data : rawResult.body;
+                } else {
+                    httpResponse = rawResult;
+                }
             } catch (err: any) {
                 if (err.message === 'Request cancelled') {
                     console.log('🚫 [HTTP] Request cancelled by user');
@@ -337,20 +380,45 @@ export class RequestExecutionService {
             }
 
             const endTime = performance.now();
-            const responseTime = Math.floor(endTime - startTime);
+            let responseTime = Math.floor(endTime - startTime);
 
             // 8. Process Response
-            const status = httpResponse?.status || 0;
-            let rawResponseBody = (httpResponse as any)?.error;
-            if (rawResponseBody === undefined || rawResponseBody === null) {
-                rawResponseBody = (httpResponse as HttpResponse<string>)?.body || (httpResponse as any)?.message || '';
-            }
-            
-            // Handle ProgressEvent (Network Errors) which stringify to {}
-            if (rawResponseBody && typeof rawResponseBody === 'object') {
-                if (rawResponseBody instanceof Event || rawResponseBody.type === 'error' || rawResponseBody.name === 'HttpErrorResponse') {
-                    rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue';
+            let status = 0;
+            let rawResponseBody: any = '';
+            const responseHeaders: { key: string, value: string }[] = [];
+
+            if (proxyReturnedResponse) {
+                status = proxyReturnedResponse.statusCode;
+                rawResponseBody = proxyReturnedResponse.body ?? '';
+                if ((proxyReturnedResponse as any).responseTimeMs !== undefined) {
+                    responseTime = (proxyReturnedResponse as any).responseTimeMs;
                 }
+                if (proxyReturnedResponse.headers) {
+                    Object.entries(proxyReturnedResponse.headers).forEach(([k, v]) => {
+                        responseHeaders.push({ key: k, value: v });
+                    });
+                }
+            } else {
+                status = httpResponse?.status || 0;
+                rawResponseBody = (httpResponse as any)?.error;
+                if (rawResponseBody === undefined || rawResponseBody === null) {
+                    rawResponseBody = (httpResponse as HttpResponse<string>)?.body || (httpResponse as any)?.message || '';
+                }
+
+                // Handle ProgressEvent (Network Errors) which stringify to {}
+                if (rawResponseBody && typeof rawResponseBody === 'object') {
+                    if (rawResponseBody instanceof Event || rawResponseBody.type === 'error' || rawResponseBody.name === 'HttpErrorResponse') {
+                        if (isUsingProxy) {
+                            rawResponseBody = 'Failed to connect to local proxy (OnSteroidsApi at https://localhost:7131). Please ensure OnSteroidsApi is running.';
+                        } else {
+                            rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue';
+                        }
+                    }
+                }
+
+                httpResponse?.headers?.keys().forEach(key => {
+                    responseHeaders.push({ key, value: httpResponse!.headers.get(key) || '' });
+                });
             }
 
             let responseSize = 0;
@@ -361,11 +429,6 @@ export class RequestExecutionService {
                 const str = JSON.stringify(rawResponseBody);
                 responseSize = new Blob([str]).size;
             }
-
-            const responseHeaders: { key: string, value: string }[] = [];
-            httpResponse?.headers?.keys().forEach(key => {
-                responseHeaders.push({ key, value: httpResponse!.headers.get(key) || '' });
-            });
 
             let responseBodyParsed = rawResponseBody;
             if (typeof rawResponseBody === 'string') {
@@ -392,7 +455,7 @@ export class RequestExecutionService {
                 postResponseLogs = result.logs || '';
 
                 if (result.success && result.context) {
-                     // Allow scripts to read results
+                    // Allow scripts to read results
                 } else if (result.error) {
                     postResponseLogs += `\nError: ${result.error}`;
                 }
