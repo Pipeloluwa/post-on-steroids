@@ -15,7 +15,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @NewId UNIQUEIDENTIFIER = NEWSEQUENTIALID();
+    DECLARE @NewId UNIQUEIDENTIFIER = NEWID();
 
     INSERT INTO [dbo].[RequestHistory] (
         [Id], [UserId], [Method], [Url], 

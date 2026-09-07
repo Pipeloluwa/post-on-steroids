@@ -1,10 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
-import { TabStateService, RequestState, FormDataRow } from './tab.state.service';
+import { TabStateService, FormDataRow } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
-import { firstValueFrom } from 'rxjs';
 
 @Injectable({
     providedIn: 'root'
@@ -145,8 +144,8 @@ export class RequestExecutionService {
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
                 // Serialize body to JSON string for encryption script
                 const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
-                console.log('🔐 [Encryption] Initial body:', body);
-                console.log('🔐 [Encryption] Serialized bodyStr:', bodyStr);
+                console.log(' [Encryption] Initial body:', body);
+                console.log(' [Encryption] Serialized bodyStr:', bodyStr);
 
                 const encContext = {
                     headers,
@@ -163,28 +162,28 @@ export class RequestExecutionService {
                 encryptionLogs = encResult.logs || '';
                 if (encResult.logs) preRequestLogs += 'Encryption Logs:\n' + encResult.logs + '\n\n';
 
-                console.log('🔐 [Encryption] Script result:', encResult);
-                console.log('🔐 [Encryption] Result context.body:', encResult.context?.body);
+                console.log(' [Encryption] Script result:', encResult);
+                console.log(' [Encryption] Result context.body:', encResult.context?.body);
 
                 if (encResult.success && encResult.context) {
                     headers = encResult.context.headers || headers;
                     // Parse body back to object if it was originally an object
                     const encryptedBodyStr = encResult.context.body != null ? encResult.context.body : bodyStr;
-                    console.log('🔐 [Encryption] encryptedBodyStr to parse:', encryptedBodyStr);
+                    console.log(' [Encryption] encryptedBodyStr to parse:', encryptedBodyStr);
 
                     try {
                         body = JSON.parse(encryptedBodyStr);
-                        console.log('🔐 [Encryption] Parsed body to object:', body);
+                        console.log(' [Encryption] Parsed body to object:', body);
                     } catch (parseErr) {
                         body = encryptedBodyStr;
-                        console.log('🔐 [Encryption] Using encryptedBodyStr as-is (not valid JSON):', body);
+                        console.log(' [Encryption] Using encryptedBodyStr as-is (not valid JSON):', body);
                     }
                     params = encResult.context.params || params;
-                    console.log('🔐 [Encryption] Final body after encryption:', body);
+                    console.log(' [Encryption] Final body after encryption:', body);
                 } else if (encResult.error) {
                     encryptionLogs = `Encryption Error: ${encResult.error}`;
                     preRequestLogs += `\nEncryption Error: ${encResult.error}\n\n`;
-                    console.error('🔐 [Encryption] ERROR - Encryption script failed:', encResult.error);
+                    console.error(' [Encryption] ERROR - Encryption script failed:', encResult.error);
 
                     const errorStr = `Encryption Script Error:\n${encResult.error}`;
                     this.tabStateService.updateState(tabId, {
@@ -295,10 +294,10 @@ export class RequestExecutionService {
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
             let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;
 
-            console.log('📤 [HTTP Request] Method:', freshState.method);
-            console.log('📤 [HTTP Request] URL:', finalUrl);
-            console.log('📤 [HTTP Request] Body:', body);
-            console.log('📤 [HTTP Request] Headers:', httpHeaders.keys().map(k => `${k}: ${httpHeaders.get(k)}`));
+            console.log(' [HTTP Request] Method:', freshState.method);
+            console.log(' [HTTP Request] URL:', finalUrl);
+            console.log(' [HTTP Request] Body:', body);
+            console.log(' [HTTP Request] Headers:', httpHeaders.keys().map(k => `${k}: ${httpHeaders.get(k)}`));
 
             try {
                 let reqObservable: any;
@@ -338,10 +337,10 @@ export class RequestExecutionService {
                     switch (freshState.method) {
                         case 'GET': reqObservable = this.http.get(finalUrl, reqOptions); break;
                         case 'POST':
-                            console.log('📤 [HTTP] Sending POST with body:', body);
+                            console.log(' [HTTP] Sending POST with body:', body);
                             reqObservable = this.http.post(finalUrl, body, reqOptions); break;
                         case 'PUT':
-                            console.log('📤 [HTTP] Sending PUT with body:', body);
+                            console.log(' [HTTP] Sending PUT with body:', body);
                             reqObservable = this.http.put(finalUrl, body, reqOptions); break;
                         case 'DELETE': reqObservable = this.http.delete(finalUrl, reqOptions); break;
                         case 'PATCH': reqObservable = this.http.patch(finalUrl, body, reqOptions); break;
@@ -370,7 +369,7 @@ export class RequestExecutionService {
                 }
             } catch (err: any) {
                 if (err.message === 'Request cancelled') {
-                    console.log('🚫 [HTTP] Request cancelled by user');
+                    console.log(' [HTTP] Request cancelled by user');
                     this.tabStateService.updateState(tabId, { isLoading: false });
                     return; // Stop processing
                 }
@@ -465,11 +464,11 @@ export class RequestExecutionService {
             if (status === 401 && !isAutoAuthRetry && this.autoAuthService.isAutoAuthEnabled(tabId)) {
                 const endpointId = this.autoAuthService.getAutoAuthEndpointId();
                 if (endpointId) {
-                    console.log('🔄 [Auto Auth] 401 Detected. Attempting auto authentication...');
+                    console.log(' [Auto Auth] 401 Detected. Attempting auto authentication...');
 
                     // If a cached token existed but got 401, it has expired — clear it
                     if (this.autoAuthService.getCachedToken()) {
-                        console.log('🔄 [Auto Auth] Cached token expired. Clearing and re-authenticating.');
+                        console.log(' [Auto Auth] Cached token expired. Clearing and re-authenticating.');
                         this.autoAuthService.clearCachedToken();
                     }
 
@@ -481,7 +480,7 @@ export class RequestExecutionService {
                     if (authState && authState.responseStatus === 200) {
                         const token = this.autoAuthService.extractAccessToken(authState.responseBody);
                         if (token) {
-                            console.log('🔄 [Auto Auth] Token extracted & cached globally. Retrying original request...');
+                            console.log('[Auto Auth] Token extracted & cached globally. Retrying original request...');
 
                             // Cache the token globally so all other tabs can reuse it
                             this.autoAuthService.setCachedToken(token);
@@ -502,13 +501,13 @@ export class RequestExecutionService {
                             await this.executeRequest(tabId, true);
                             return; // Exit here as retry will handle state update
                         } else {
-                            console.warn('🔄 [Auto Auth] Could not extract token from auth response.');
+                            console.warn(' [Auto Auth] Could not extract token from auth response.');
                         }
                     } else {
-                        console.warn('🔄 [Auto Auth] Auth request failed with status:', authState?.responseStatus);
+                        console.warn(' [Auto Auth] Auth request failed with status:', authState?.responseStatus);
                     }
 
-                    console.log('🔄 [Auto Auth] Complete.');
+                    console.log(' [Auto Auth] Complete.');
                 }
             }
 

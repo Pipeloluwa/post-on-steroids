@@ -12,7 +12,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @NewId UNIQUEIDENTIFIER = NEWSEQUENTIALID();
+    DECLARE @NewId UNIQUEIDENTIFIER = NEWID();
 
     INSERT INTO [dbo].[Variable] ([Id], [UserId], [VariableKey], [VariableValue], [IsEnabled])
     VALUES (@NewId, @UserId, @VariableKey, @VariableValue, @IsEnabled);
@@ -96,7 +96,7 @@ BEGIN
             -- Try to use provided valid GUID, otherwise generate a new one
             COALESCE(
                 TRY_CAST(JSON_VALUE(value, '$.id') AS UNIQUEIDENTIFIER),
-                NEWSEQUENTIALID()
+                NEWID()
             ),
             @UserId,
             JSON_VALUE(value, '$.key'),

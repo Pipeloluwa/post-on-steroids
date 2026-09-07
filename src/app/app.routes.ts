@@ -6,11 +6,17 @@ import { ExportComponent } from './components/export.component/export.component'
 import { ImportComponent } from './components/import.component/import.component';
 import { HistoryComponent } from './components/history.component/history.component';
 import { UtilityComponent } from './components/utility.component/utility.component';
+import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
     {
+        path: 'login',
+        loadComponent: () => import('./components/login/login.component').then(m => m.LoginComponent)
+    },
+    {
         path: '',
         component: MainLayout,
+        canActivate: [authGuard],
         children: [
             {
                 path: '',
@@ -42,5 +48,9 @@ export const routes: Routes = [
                 component: HistoryComponent
             }
         ]
+    },
+    {
+        path: '**',
+        redirectTo: ''
     }
 ];

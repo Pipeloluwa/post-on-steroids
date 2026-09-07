@@ -10,7 +10,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @NewId UNIQUEIDENTIFIER = NEWSEQUENTIALID();
+    DECLARE @NewId UNIQUEIDENTIFIER = NEWID();
 
     INSERT INTO [dbo].[Capsule] ([Id], [UserId], [Name])
     VALUES (@NewId, @UserId, @Name);

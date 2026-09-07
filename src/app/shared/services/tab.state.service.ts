@@ -1,12 +1,15 @@
 import { Injectable, signal, computed, effect, inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { AuthService } from './auth.service';
+import { API_BASE_URL } from '../constants/api.constants';
 
 export interface KeyValue {
     enabled: boolean;
     key: string;
     value: string;
 }
-
 export interface FormDataRow {
     enabled: boolean;
     key: string;
@@ -108,6 +111,8 @@ export interface Capsule {
 export class TabStateService {
     private platformId = inject(PLATFORM_ID);
     private isBrowser = isPlatformBrowser(this.platformId);
+    private http = inject(HttpClient);
+    private authService = inject(AuthService);
     private states = signal<Map<string, RequestState>>(new Map());
     private openTabIds = signal<string[]>([]);
 
@@ -164,6 +169,12 @@ export class TabStateService {
                 localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
                 localStorage.setItem('autoAuthEnabled', String(this.autoAuthEnabled()));
                 localStorage.setItem('autoAuthEndpointId', this.autoAuthEndpointId() || '');
+            }
+        });
+
+        effect(() => {
+            if (this.authService.isLoggedIn()) {
+                this.loadBackendData();
             }
         });
 
@@ -255,6 +266,7 @@ export class TabStateService {
     switchCapsule(capsule: { id: string; name: string }) {
         this.activeCapsuleId.set(capsule.id);
         this.activeCapsuleName.set(capsule.name);
+        this.loadRequestsForCapsule(capsule.id);
     }
 
     updateState(id: string, partialState: Partial<RequestState>, recordHistory = true) {
@@ -369,6 +381,63 @@ export class TabStateService {
 
         const currentState = this.states().get(id);
         if (currentState) {
+            // Persist to backend only when Save button is pressed
+            if (this.authService.isLoggedIn()) {
+                try {
+                    const payload = {
+                        id: currentState.id,
+                        capsuleId: this.activeCapsuleId(),
+                        capsuleName: this.activeCapsuleName(),
+                        name: currentState.name,
+                        url: currentState.url,
+                        method: currentState.method,
+                        payloadType: currentState.payloadType,
+                        bodyType: currentState.bodyType,
+                        rawType: currentState.rawType,
+                        rawBody: currentState.rawBody,
+                        rawBodyJson: currentState.rawBodyJson,
+                        rawBodyXml: currentState.rawBodyXml,
+                        auth: {
+                            type: currentState.auth.type,
+                            token: currentState.auth.token
+                        },
+                        scripts: {
+                            preRequest: currentState.scripts.preRequest,
+                            postResponse: currentState.scripts.postResponse
+                        },
+                        encryption: currentState.encryption,
+                        settings: currentState.settings,
+                        params: currentState.params.map(p => ({ enabled: p.enabled, key: p.key, value: p.value })),
+                        headers: currentState.headers.map(h => ({ enabled: h.enabled, key: h.key, value: h.value })),
+                        formData: currentState.formData.map(f => ({ enabled: f.enabled, key: f.key, value: f.value, type: f.type }))
+                    };
+
+                    const response = await firstValueFrom(
+                        this.http.post<{ data: any }>(`${API_BASE_URL}/request/save`, payload)
+                    );
+
+                    if (response?.data) {
+                        const savedData = response.data;
+                        if (savedData.id && savedData.id !== currentState.id) {
+                            const oldId = currentState.id;
+                            const updatedState = { ...currentState, id: savedData.id, isDirty: false };
+                            this.states.update(map => {
+                                const next = new Map(map);
+                                next.delete(oldId);
+                                next.set(savedData.id, updatedState);
+                                return next;
+                            });
+                            this.openTabIds.update(ids => ids.map(tid => tid === oldId ? savedData.id : tid));
+                            if (this.activeTabId() === oldId) {
+                                this.activeTabId.set(savedData.id);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to persist request state to backend', err);
+                }
+            }
+
             this.savedCapsules.update(col => {
                 const idx = col.findIndex(r => r.id === id);
                 if (idx >= 0) {
@@ -384,6 +453,117 @@ export class TabStateService {
         }
 
         this.isSaving.set(false);
+    }
+
+    async loadBackendData(): Promise<void> {
+        if (!this.isBrowser || !this.authService.isLoggedIn()) return;
+
+        try {
+            const capRes = await firstValueFrom(
+                this.http.get<{ data: any[] }>(`${API_BASE_URL}/capsule`)
+            );
+            if (capRes?.data && capRes.data.length > 0) {
+                const caps: Capsule[] = capRes.data.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    createdAt: new Date(c.createdAt).getTime() || Date.now()
+                }));
+                this.capsules.set(caps);
+
+                const currentCapId = this.activeCapsuleId();
+                const matched = caps.find(c => c.id === currentCapId) || caps[0];
+                this.activeCapsuleId.set(matched.id);
+                this.activeCapsuleName.set(matched.name);
+
+                await this.loadRequestsForCapsule(matched.id);
+            }
+        } catch (e) {
+            console.error('Failed to load capsules from backend', e);
+        }
+    }
+
+    async loadRequestsForCapsule(capsuleId: string): Promise<void> {
+        if (!this.isBrowser || !this.authService.isLoggedIn()) return;
+
+        try {
+            const reqRes = await firstValueFrom(
+                this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${capsuleId}`)
+            );
+            if (reqRes?.data) {
+                const mapped = reqRes.data.map(dto => this.mapDtoToState(dto));
+                this.savedCapsules.set(mapped);
+            }
+        } catch (e) {
+            console.error('Failed to load requests for capsule', e);
+        }
+    }
+
+    private mapDtoToState(dto: any): RequestState {
+        const base = this.getDefaultState(dto.id || this.createId());
+        let encHeaders: string[] = [];
+        let encBodyPaths: string[] = [];
+        try {
+            if (dto.encryptedHeaders) encHeaders = JSON.parse(dto.encryptedHeaders);
+            if (dto.encryptedBodyPaths) encBodyPaths = JSON.parse(dto.encryptedBodyPaths);
+        } catch (e) { }
+
+        return {
+            ...base,
+            id: dto.id,
+            name: dto.name || 'New Request',
+            url: dto.url || '',
+            method: dto.method || 'GET',
+            payloadType: dto.payloadType || 'params',
+            bodyType: dto.bodyType || 'none',
+            rawType: dto.rawType || 'JSON',
+            rawBody: dto.rawBody || '',
+            rawBodyJson: dto.rawBodyJson || '',
+            rawBodyXml: dto.rawBodyXml || '',
+            auth: {
+                type: (dto.authType as any) || 'none',
+                token: dto.authToken || ''
+            },
+            scripts: {
+                ...base.scripts,
+                preRequest: dto.preRequestScript || '',
+                postResponse: dto.postResponseScript || ''
+            },
+            encryption: {
+                ...base.encryption,
+                algorithm: (dto.encryptionAlgorithm as any) || 'none',
+                key: dto.encryptionKey || '',
+                autoEncryptBody: dto.autoEncryptBody ?? false,
+                autoEncryptHeaders: dto.autoEncryptHeaders ?? false,
+                channelName: dto.encryptionChannel || '',
+                encryptedHeaders: encHeaders,
+                encryptedBodyPaths: encBodyPaths,
+                script: dto.encryptionScript || base.encryption.script
+            },
+            settings: {
+                followRedirects: dto.followRedirects ?? true,
+                verifySsl: dto.verifySsl ?? true,
+                enableCookies: dto.enableCookies ?? true,
+                bypassCors: dto.bypassCors ?? true
+            },
+            params: (dto.params || []).map((p: any) => ({
+                enabled: p.isEnabled ?? true,
+                key: p.paramKey ?? '',
+                value: p.paramValue ?? ''
+            })),
+            headers: (dto.headers || []).map((h: any) => ({
+                enabled: h.isEnabled ?? true,
+                key: h.headerKey ?? '',
+                value: h.headerValue ?? ''
+            })),
+            formData: (dto.formData || []).map((f: any) => ({
+                enabled: f.isEnabled ?? true,
+                key: f.fieldKey ?? '',
+                value: f.fieldValue ?? '',
+                type: (f.fieldType as any) || 'text'
+            })),
+            isDirty: false,
+            isLoading: false
+        };
     }
 
     duplicateTab(id: string): string | null {

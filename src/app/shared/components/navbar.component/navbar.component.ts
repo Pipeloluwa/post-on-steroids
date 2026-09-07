@@ -16,6 +16,7 @@ export class NavbarComponent {
     userEmail = input.required<string>();
 
     onToggleAuth = output<void>();
+    onLogout = output<void>();
     sidebarService = inject(SidebarService);
 
     toggleSidebar() {

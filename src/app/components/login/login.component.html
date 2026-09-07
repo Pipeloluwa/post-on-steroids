@@ -1,0 +1,115 @@
+<div class="w-full min-h-screen flex items-center justify-center p-4 bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) relative overflow-hidden selection:bg-(--postonsteroids-accent)/30">
+    <!-- Subtle Background Glows -->
+    <div class="absolute -top-32 -left-32 w-96 h-96 bg-(--postonsteroids-accent)/15 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-(--postonsteroids-accent)/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="w-full max-w-[420px] bg-(--postonsteroids-bg-secondary) rounded-2xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden relative z-10 transition-all">
+        <!-- Brand Header -->
+        <div class="p-8 pb-6 border-b border-(--postonsteroids-border) text-center">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-(--postonsteroids-accent)/10 border border-(--postonsteroids-accent)/20 text-(--postonsteroids-accent) mb-4 shadow-inner">
+                <mat-icon class="text-[32px]! size-[32px]!">rocket_launch</mat-icon>
+            </div>
+            <h1 class="text-2xl font-black tracking-tight text-(--postonsteroids-text-primary)">
+                PostOnSteroids<span class="text-(--postonsteroids-accent)">.</span>
+            </h1>
+            <p class="text-[13px] font-medium text-(--postonsteroids-text-secondary) mt-1">
+                {{ authService.isOtpSent() ? 'Verify your identity' : 'Sign in to access your workspace' }}
+            </p>
+        </div>
+
+        <!-- Form Body -->
+        <div class="p-8 pt-6 space-y-6">
+            <!-- Error Banner -->
+            @if (authService.errorMessage()) {
+            <div class="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-[13px] flex items-start gap-2.5 animate-in fade-in">
+                <mat-icon class="text-[18px]! size-[18px]! shrink-0 mt-0.5">error_outline</mat-icon>
+                <span>{{ authService.errorMessage() }}</span>
+            </div>
+            }
+
+            <!-- Success Banner -->
+            @if (authService.successMessage()) {
+            <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[13px] flex items-start gap-2.5 animate-in fade-in">
+                <mat-icon class="text-[18px]! size-[18px]! shrink-0 mt-0.5">check_circle_outline</mat-icon>
+                <span>{{ authService.successMessage() }}</span>
+            </div>
+            }
+
+            @if (!authService.isOtpSent()) {
+            <!-- Step 1: Email Form -->
+            <form (ngSubmit)="onSendOtp()" class="space-y-4">
+                <div>
+                    <label for="user-email" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-2">
+                        Work or Personal Email
+                    </label>
+                    <div class="relative">
+                        <input id="user-email" type="email" [ngModel]="authService.userEmail()"
+                            (ngModelChange)="authService.userEmail.set($event)" name="email" required
+                            placeholder="name@company.com"
+                            autocomplete="email"
+                            class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
+                    </div>
+                </div>
+
+                <button type="submit" [disabled]="authService.isAuthenticating() || !authService.userEmail()"
+                    class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
+                    @if (authService.isAuthenticating()) {
+                    <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Sending Code...</span>
+                    } @else {
+                    <span>Send Login Code</span>
+                    <mat-icon class="text-[18px]! size-[18px]!">arrow_forward</mat-icon>
+                    }
+                </button>
+            </form>
+            } @else {
+            <!-- Step 2: OTP Verification Form -->
+            <form (ngSubmit)="onAuthenticate()" class="space-y-4">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label for="otp-input" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                            6-Digit Security Code
+                        </label>
+                        <button type="button" (click)="onBackToEmail()"
+                            class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                            Change email
+                        </button>
+                    </div>
+                    <input id="otp-input" type="text" [ngModel]="authService.otp()"
+                        (ngModelChange)="authService.otp.set($event)" name="otp" required maxlength="10"
+                        placeholder="••••••"
+                        class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[20px] font-mono text-center tracking-[0.5em] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
+                    <p class="text-[11px] text-(--postonsteroids-text-muted) mt-1.5 text-center">
+                        Sent to <strong class="text-(--postonsteroids-text-secondary)">{{ authService.userEmail() }}</strong>
+                    </p>
+                </div>
+
+                <button type="submit" [disabled]="authService.isAuthenticating() || !authService.otp()"
+                    class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
+                    @if (authService.isAuthenticating()) {
+                    <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Verifying...</span>
+                    } @else {
+                    <span>Verify & Enter Workspace</span>
+                    <mat-icon class="text-[18px]! size-[18px]!">login</mat-icon>
+                    }
+                </button>
+
+                <div class="pt-2 text-center">
+                    <button type="button" (click)="onSendOtp()" [disabled]="authService.isAuthenticating()"
+                        class="text-[12px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline transition-colors cursor-pointer">
+                        Didn't receive code? Resend
+                    </button>
+                </div>
+            </form>
+            }
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-(--postonsteroids-bg-tertiary) p-4 border-t border-(--postonsteroids-border) text-center">
+            <p class="text-[11px] text-(--postonsteroids-text-muted)">
+                By signing in, you access your cloud capsules and saved state securely.
+            </p>
+        </div>
+    </div>
+</div>
