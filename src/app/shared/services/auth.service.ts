@@ -64,15 +64,34 @@ export class AuthService {
                 this.currentUser.set(user);
                 this.userEmail.set(user.email);
                 this.isLoggedIn.set(true);
+                this.showAuthModal.set(false);
+            } else {
+                this.showAuthModal.set(true);
             }
         } catch (e) {
             console.error('Failed to load session from localStorage', e);
             this.clearStorage();
+            this.showAuthModal.set(true);
         }
     }
 
     toggleAuthModal() {
         this.showAuthModal.update(v => !v);
+        this.errorMessage.set(null);
+    }
+
+    openAuthModal() {
+        this.showAuthModal.set(true);
+        this.errorMessage.set(null);
+    }
+
+    closeAuthModal() {
+        this.showAuthModal.set(false);
+        this.errorMessage.set(null);
+    }
+
+    continueWithoutSignIn() {
+        this.showAuthModal.set(false);
         this.errorMessage.set(null);
     }
 
@@ -161,7 +180,7 @@ export class AuthService {
         this.userEmail.set('');
         this.otp.set('');
         this.isOtpSent.set(false);
-        this.router.navigate(['/login']);
+        this.showAuthModal.set(true);
     }
 
     private clearStorage() {

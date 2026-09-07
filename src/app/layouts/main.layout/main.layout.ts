@@ -34,6 +34,10 @@ export class MainLayout {
     this.authService.toggleAuthModal();
   }
 
+  closeAuthModal() {
+    this.authService.closeAuthModal();
+  }
+
   sendOtp() {
     this.authService.sendOtp();
   }

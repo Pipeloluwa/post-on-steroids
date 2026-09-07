@@ -308,6 +308,11 @@ export class RequestExecutionService {
                     headers.forEach(h => {
                         headersObj[h.key] = h.value;
                     });
+                    if (!Object.keys(headersObj).some(k => k.toLowerCase() === 'x-request-id')) {
+                        headersObj['X-Request-ID'] = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                            ? crypto.randomUUID()
+                            : (freshState.id || 'req-' + Date.now());
+                    }
 
                     // Construct full URL including query params
                     let targetUrl = resolvedUrl;

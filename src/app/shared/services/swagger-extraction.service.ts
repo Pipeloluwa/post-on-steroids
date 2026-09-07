@@ -11,6 +11,8 @@ import { firstValueFrom } from 'rxjs';
 })
 export class SwaggerExtractionService {
     private http = inject(HttpClient);
+    private proxyUrl = 'https://localhost:7131/api/v1/Proxy';
+    private proxyFallbackUrl = 'http://localhost:5131/api/v1/Proxy';
 
     /**
      * Extracts OpenAPI spec from a Swagger URL
@@ -37,7 +39,76 @@ export class SwaggerExtractionService {
     }
 
     /**
-     * Tries common direct JSON endpoints (most reliable method)
+     * Fetches a resource through the local OnSteroids proxy to bypass CORS restrictions.
+     * Falls back to direct HTTP get if proxy is unavailable.
+     */
+    private async fetchWithProxy(targetUrl: string, accept = 'application/json'): Promise<{ ok: boolean; status: number; text: string; json: any }> {
+        const proxyEndpoints = [this.proxyUrl, this.proxyFallbackUrl];
+        for (const proxyEndpoint of proxyEndpoints) {
+            try {
+                const proxyPayload = {
+                    url: targetUrl,
+                    method: 'GET',
+                    headers: { 'Accept': accept }
+                };
+
+                const res = await firstValueFrom(
+                    this.http.post<any>(proxyEndpoint, proxyPayload, {
+                        headers: { 'Content-Type': 'application/json' },
+                        observe: 'response' as const
+                    })
+                );
+
+                const data = res.body?.data || res.body;
+                if (data && data.statusCode >= 200 && data.statusCode < 400) {
+                    let parsedJson: any = null;
+                    try {
+                        parsedJson = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
+                    } catch { }
+
+                    return {
+                        ok: true,
+                        status: data.statusCode,
+                        text: typeof data.body === 'string' ? data.body : JSON.stringify(data.body),
+                        json: parsedJson
+                    };
+                }
+            } catch {
+                // Try next proxy endpoint
+            }
+        }
+
+        // Direct fetch fallback in case proxy is offline or target is local
+        try {
+            const rawText = await firstValueFrom(
+                this.http.get(targetUrl, {
+                    responseType: 'text' as const,
+                    headers: { 'Accept': accept }
+                })
+            );
+            let parsedJson: any = null;
+            try {
+                parsedJson = JSON.parse(rawText);
+            } catch { }
+
+            return {
+                ok: true,
+                status: 200,
+                text: rawText,
+                json: parsedJson
+            };
+        } catch {
+            return {
+                ok: false,
+                status: 0,
+                text: '',
+                json: null
+            };
+        }
+    }
+
+    /**
+     * Tries common direct JSON endpoints (most reliable method) using proxy to avoid CORS
      */
     private async tryDirectJsonEndpoints(baseUrl: string): Promise<Record<string, any> | null> {
         const endpoints = [
@@ -52,16 +123,10 @@ export class SwaggerExtractionService {
         for (const endpoint of endpoints) {
             try {
                 const jsonUrl = new URL(endpoint, baseUrl).toString();
-                const response = await firstValueFrom(
-                    this.http.get<Record<string, any>>(jsonUrl, {
-                        responseType: 'json' as const,
-                        headers: { 'Accept': 'application/json' }
-                    })
-                );
+                const res = await this.fetchWithProxy(jsonUrl, 'application/json');
 
-                // Validate it's a proper OpenAPI spec
-                if (response && (response['openapi'] || response['swagger'])) {
-                    return response;
+                if (res.ok && res.json && (res.json['openapi'] || res.json['swagger'])) {
+                    return res.json;
                 }
             } catch {
                 // Continue to next endpoint
@@ -77,9 +142,11 @@ export class SwaggerExtractionService {
      */
     private async extractFromHtml(swaggerUrl: string): Promise<Record<string, any> | null> {
         try {
-            const html = await firstValueFrom(
-                this.http.get(swaggerUrl, { responseType: 'text' as const })
-            );
+            const htmlRes = await this.fetchWithProxy(swaggerUrl, 'text/html,application/xhtml+xml,*/*');
+            if (!htmlRes.ok || !htmlRes.text) {
+                throw new Error(`Unable to load Swagger UI content from ${swaggerUrl}.`);
+            }
+            const html = htmlRes.text;
 
             let jsonUrl =
                 this.extractUrlFromSwaggerUIBundle(html) ||
@@ -88,18 +155,14 @@ export class SwaggerExtractionService {
 
             if (!jsonUrl) {
                 const scriptUrl = new URL('index.js', swaggerUrl).toString();
-                let script: string;
-
-                try {
-                    script = await firstValueFrom(
-                        this.http.get(scriptUrl, { responseType: 'text' as const })
-                    );
-                } catch {
+                const scriptRes = await this.fetchWithProxy(scriptUrl, '*/*');
+                if (!scriptRes.ok || !scriptRes.text) {
                     throw new Error(
                         `Unable to load Swagger UI script at ${scriptUrl}. ` +
                         'Ensure the Swagger UI bundle is served correctly and index.js is reachable.'
                     );
                 }
+                const script = scriptRes.text;
 
                 jsonUrl =
                     this.extractUrlFromJsonParse(script) ||
@@ -237,15 +300,9 @@ export class SwaggerExtractionService {
 
     private async fetchOpenApiSpec(absoluteUrl: string): Promise<Record<string, any> | null> {
         try {
-            const response = await firstValueFrom(
-                this.http.get<Record<string, any>>(absoluteUrl, {
-                    responseType: 'json' as const,
-                    headers: { 'Accept': 'application/json' }
-                })
-            );
-
-            if (response && (response['openapi'] || response['swagger'])) {
-                return response;
+            const res = await this.fetchWithProxy(absoluteUrl, 'application/json');
+            if (res.ok && res.json && (res.json['openapi'] || res.json['swagger'])) {
+                return res.json;
             }
         } catch {
             // ignore and return null

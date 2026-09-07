@@ -20,6 +20,7 @@ export class RequestDetailsComponent {
     onNotify = output<string>();
 
     waitingForAuth = signal<boolean>(false);
+    pendingAction = signal<'share' | 'save' | null>(null);
     tabStateService = inject(TabStateService);
     notificationService = inject(NotificationService);
     isSaving = computed(() => this.tabStateService.isSaving());
@@ -40,9 +41,14 @@ export class RequestDetailsComponent {
     constructor() {
         effect(() => {
             if (this.isLoggedIn() && this.waitingForAuth()) {
+                const action = this.pendingAction();
                 this.waitingForAuth.set(false);
-                // Small delay to ensure modal is closed and UI is ready
-                setTimeout(() => this.shareCapsule(), 500);
+                this.pendingAction.set(null);
+                if (action === 'save') {
+                    setTimeout(() => this.saveRequest(), 500);
+                } else if (action === 'share') {
+                    setTimeout(() => this.shareCapsule(), 500);
+                }
             }
         });
     }
@@ -66,7 +72,9 @@ export class RequestDetailsComponent {
     shareCapsule() {
         if (!this.isLoggedIn()) {
             this.waitingForAuth.set(true);
+            this.pendingAction.set('share');
             this.onAuthRequired.emit();
+            this.onNotify.emit('Please sign in to share this capsule.');
             return;
         }
 
@@ -110,6 +118,14 @@ export class RequestDetailsComponent {
     }
 
     async saveRequest() {
+        if (!this.isLoggedIn()) {
+            this.waitingForAuth.set(true);
+            this.pendingAction.set('save');
+            this.onAuthRequired.emit();
+            this.onNotify.emit('Please sign in to save your request to a capsule.');
+            return;
+        }
+
         await this.tabStateService.saveToCapsule(this.tabId());
         this.onNotify.emit('Request saved successfully!');
     }

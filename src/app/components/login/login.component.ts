@@ -39,4 +39,8 @@ export class LoginComponent implements OnInit {
         this.authService.errorMessage.set(null);
         this.authService.successMessage.set(null);
     }
+
+    continueAsGuest() {
+        this.router.navigate(['/steroid']);
+    }
 }

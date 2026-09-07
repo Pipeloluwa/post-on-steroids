@@ -1,4 +1,4 @@
-import { Component, signal, inject, PLATFORM_ID, HostListener } from '@angular/core';
+import { Component, signal, inject, PLATFORM_ID } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
@@ -29,7 +29,8 @@ import { TabStateService } from '../../shared/services/tab.state.service';
     styleUrl: './workspace.component.css',
     host: {
         '(document:mousemove)': 'onMouseMove($event)',
-        '(document:mouseup)': 'onMouseUp()'
+        '(document:mouseup)': 'onMouseUp()',
+        '(document:keydown)': 'handleKeyboardShortcuts($event)'
     }
 })
 export class WorkspaceComponent {
@@ -93,7 +94,7 @@ export class WorkspaceComponent {
     }
 
     toggleAuthModal() {
-        this.authService.toggleAuthModal();
+        this.authService.openAuthModal();
     }
 
     toggleSidebar() {
@@ -143,7 +144,6 @@ export class WorkspaceComponent {
         return name;
     }
 
-    @HostListener('document:keydown', ['$event'])
     handleKeyboardShortcuts(event: KeyboardEvent) {
         if (!this.isBrowser) return;
 
@@ -161,7 +161,19 @@ export class WorkspaceComponent {
         const isCtrlOrCmd = isMac ? event.metaKey : event.ctrlKey;
 
         if (isCtrlOrCmd) {
-            if (event.key.toLowerCase() === 'z') {
+            if (event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                const activeId = this.tabStateService.activeTabId();
+                if (activeId) {
+                    if (!this.authService.isLoggedIn()) {
+                        this.authService.openAuthModal();
+                        this.notificationService.notify('Please sign in to save your request.');
+                    } else {
+                        this.tabStateService.saveToCapsule(activeId);
+                        this.notificationService.notify('Request saved successfully!');
+                    }
+                }
+            } else if (event.key.toLowerCase() === 'z') {
                 if (event.shiftKey) {
                     this.tabStateService.redo();
                 } else {

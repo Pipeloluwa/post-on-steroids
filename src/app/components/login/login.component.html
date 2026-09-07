@@ -10,10 +10,10 @@
                 <mat-icon class="text-[32px]! size-[32px]!">rocket_launch</mat-icon>
             </div>
             <h1 class="text-2xl font-black tracking-tight text-(--postonsteroids-text-primary)">
-                PostOnSteroids<span class="text-(--postonsteroids-accent)">.</span>
+                OnSteroids<span class="text-(--postonsteroids-accent)">.</span>
             </h1>
             <p class="text-[13px] font-medium text-(--postonsteroids-text-secondary) mt-1">
-                {{ authService.isOtpSent() ? 'Verify your identity' : 'Sign in to access your workspace' }}
+                {{ authService.isOtpSent() ? 'Verify your identity' : 'Sign in to sync your capsules, or continue as guest' }}
             </p>
         </div>
 
@@ -103,12 +103,20 @@
                 </div>
             </form>
             }
+            <!-- Continue without logging in -->
+            <div class="pt-2 border-t border-(--postonsteroids-border)/60">
+                <button type="button" (click)="continueAsGuest()"
+                    class="w-full h-11 bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/40 font-semibold rounded-xl text-[13px] transition-all flex items-center justify-center gap-x-2 cursor-pointer group shadow-xs">
+                    <span>Continue without signing in</span>
+                    <mat-icon class="text-[16px]! size-4! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-accent) group-hover:translate-x-0.5 transition-all">arrow_forward</mat-icon>
+                </button>
+            </div>
         </div>
 
         <!-- Footer -->
         <div class="bg-(--postonsteroids-bg-tertiary) p-4 border-t border-(--postonsteroids-border) text-center">
             <p class="text-[11px] text-(--postonsteroids-text-muted)">
-                By signing in, you access your cloud capsules and saved state securely.
+                You can use OnSteroids as a guest. Signing in is only needed to persist capsules to the cloud.
             </p>
         </div>
     </div>

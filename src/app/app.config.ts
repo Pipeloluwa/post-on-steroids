@@ -7,12 +7,13 @@ import { routes } from './app.routes';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
 import { CustomRouteReuseStrategy } from './custom-route-reuse.strategy';
 import { authInterceptor } from './shared/interceptors/auth.interceptor';
+import { requestIdInterceptor } from './shared/interceptors/request-id.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    provideHttpClient(withFetch(), withInterceptors([authInterceptor])),
+    provideHttpClient(withFetch(), withInterceptors([requestIdInterceptor, authInterceptor])),
     provideClientHydration(withEventReplay()),
     importProvidersFrom(MonacoEditorModule.forRoot()),
     { provide: RouteReuseStrategy, useClass: CustomRouteReuseStrategy }

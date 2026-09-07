@@ -53,13 +53,13 @@
             </button>
         </div>
         } @else {
-        <a routerLink="/login"
+        <button (click)="onToggleAuth.emit()"
             class="flex items-center gap-x-2 px-3 py-1.5 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-300 cursor-pointer group">
             <mat-icon
                 class="text-[18px]! size-4.5! text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary)">account_circle</mat-icon>
             <span
                 class="text-[12px] font-bold text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary)">Login</span>
-        </a>
+        </button>
         }
     </div>
 </nav>
