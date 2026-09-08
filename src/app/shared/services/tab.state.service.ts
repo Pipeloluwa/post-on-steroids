@@ -40,6 +40,7 @@ export interface CookieRow {
     expires: string;
 }
 
+
 export interface TestResult {
     name: string;
     passed: boolean;
@@ -65,6 +66,7 @@ export interface SettingsState {
 
 export interface RequestState {
     id: string;
+    capsuleId?: string;
     url: string;
     method: string;
     name: string;
@@ -263,10 +265,122 @@ export class TabStateService {
         this.activeCapsuleName.set(name);
     }
 
-    switchCapsule(capsule: { id: string; name: string }) {
+    createAndOpenNewTab(): string {
+        const newId = this.createId();
+        const newState = this.getDefaultState(newId);
+        newState.capsuleId = this.activeCapsuleId();
+        this.states.update(map => {
+            const next = new Map(map);
+            next.set(newId, newState);
+            return next;
+        });
+        this.openTabIds.update(ids => [...ids, newId]);
+        this.activeTabId.set(newId);
+        return newId;
+    }
+
+    async switchCapsule(capsule: { id: string; name: string }): Promise<void> {
         this.activeCapsuleId.set(capsule.id);
         this.activeCapsuleName.set(capsule.name);
-        this.loadRequestsForCapsule(capsule.id);
+        if (this.isBrowser) {
+            localStorage.setItem('onsteroids_active_capsule', capsule.id);
+        }
+
+        await this.loadRequestsForCapsule(capsule.id);
+
+        const requestsInCapsule = this.savedCapsules();
+        if (requestsInCapsule.length > 0) {
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const req of requestsInCapsule) {
+                    next.set(req.id, req);
+                }
+                return next;
+            });
+            const reqIds = requestsInCapsule.map(r => r.id);
+            this.openTabIds.set(reqIds);
+            this.activeTabId.set(reqIds[0]);
+        } else {
+            const newId = this.createId();
+            const blankState = this.getDefaultState(newId);
+            blankState.capsuleId = capsule.id;
+            this.states.set(new Map([[newId, blankState]]));
+            this.openTabIds.set([newId]);
+            this.activeTabId.set(newId);
+        }
+    }
+
+    async createCapsule(name: string): Promise<Capsule> {
+        const trimmed = name.trim() || 'New Capsule';
+        let newCap: Capsule = {
+            id: this.createId(),
+            name: trimmed,
+            createdAt: Date.now()
+        };
+
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                const res = await firstValueFrom(
+                    this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { name: trimmed })
+                );
+                if (res?.data) {
+                    newCap = {
+                        id: res.data.id,
+                        name: res.data.name,
+                        createdAt: new Date(res.data.createdAt).getTime() || Date.now()
+                    };
+                }
+            } catch (err) {
+                console.error('Failed to create capsule on backend', err);
+            }
+        }
+
+        this.capsules.update(list => [...list, newCap]);
+        await this.switchCapsule(newCap);
+        return newCap;
+    }
+
+    async deleteCapsule(id: string): Promise<void> {
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                await firstValueFrom(
+                    this.http.delete(`${API_BASE_URL}/capsule/${id}`)
+                );
+            } catch (err) {
+                console.error('Failed to delete capsule on backend', err);
+            }
+        }
+
+        this.capsules.update(list => list.filter(c => c.id !== id));
+
+        if (this.activeCapsuleId() === id) {
+            const remaining = this.capsules();
+            if (remaining.length > 0) {
+                await this.switchCapsule(remaining[0]);
+            } else {
+                await this.createCapsule('My Capsule');
+            }
+        }
+    }
+
+    async renameCapsule(id: string, name: string): Promise<void> {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                await firstValueFrom(
+                    this.http.put(`${API_BASE_URL}/capsule/${id}`, { name: trimmed })
+                );
+            } catch (err) {
+                console.error('Failed to rename capsule on backend', err);
+            }
+        }
+
+        this.capsules.update(list => list.map(c => c.id === id ? { ...c, name: trimmed } : c));
+        if (this.activeCapsuleId() === id) {
+            this.activeCapsuleName.set(trimmed);
+        }
     }
 
     updateState(id: string, partialState: Partial<RequestState>, recordHistory = true) {
@@ -470,12 +584,40 @@ export class TabStateService {
                 }));
                 this.capsules.set(caps);
 
-                const currentCapId = this.activeCapsuleId();
-                const matched = caps.find(c => c.id === currentCapId) || caps[0];
+                const storedCapId = localStorage.getItem('onsteroids_active_capsule');
+                const matched = caps.find(c => c.id === storedCapId) || caps.find(c => c.id === this.activeCapsuleId()) || caps[0];
                 this.activeCapsuleId.set(matched.id);
                 this.activeCapsuleName.set(matched.name);
+                localStorage.setItem('onsteroids_active_capsule', matched.id);
 
                 await this.loadRequestsForCapsule(matched.id);
+
+                const requests = this.savedCapsules();
+                if (requests.length > 0) {
+                    this.states.update(map => {
+                        const next = new Map(map);
+                        for (const req of requests) {
+                            next.set(req.id, req);
+                        }
+                        return next;
+                    });
+                    const reqIds = requests.map(r => r.id);
+                    this.openTabIds.set(reqIds);
+
+                    const storedActiveTab = localStorage.getItem('onsteroids_active_tab');
+                    if (storedActiveTab && reqIds.includes(storedActiveTab)) {
+                        this.activeTabId.set(storedActiveTab);
+                    } else {
+                        this.activeTabId.set(reqIds[0]);
+                    }
+                } else {
+                    const newId = this.createId();
+                    const blankState = this.getDefaultState(newId);
+                    blankState.capsuleId = matched.id;
+                    this.states.set(new Map([[newId, blankState]]));
+                    this.openTabIds.set([newId]);
+                    this.activeTabId.set(newId);
+                }
             }
         } catch (e) {
             console.error('Failed to load capsules from backend', e);
@@ -510,6 +652,7 @@ export class TabStateService {
         return {
             ...base,
             id: dto.id,
+            capsuleId: dto.capsuleId || this.activeCapsuleId(),
             name: dto.name || 'New Request',
             url: dto.url || '',
             method: dto.method || 'GET',
@@ -622,6 +765,7 @@ export class TabStateService {
     getDefaultState(id: string): RequestState {
         return {
             id,
+            capsuleId: this.activeCapsuleId(),
             url: '',
             method: 'GET',
             name: 'New Request',
@@ -853,11 +997,15 @@ export class TabStateService {
         };
     }
 
-    private createId(): string {
+    createId(): string {
         if (this.isBrowser && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
             return crypto.randomUUID();
         }
 
-        return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+        });
     }
 }

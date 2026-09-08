@@ -22,19 +22,15 @@ export class CollectionsComponent {
     editingId = signal<string | null>(null);
     editNameValue = signal<string>('');
 
-    createCapsule() {
-        if (!this.newCapsuleName().trim()) return;
-        const newId = Math.random().toString(36).substring(7);
-        this.tabStateService.capsules.update(c => [...c, {
-            id: newId,
-            name: this.newCapsuleName(),
-            createdAt: Date.now()
-        }]);
+    async createCapsule() {
+        const name = this.newCapsuleName().trim();
+        if (!name) return;
+        await this.tabStateService.createCapsule(name);
         this.newCapsuleName.set('');
     }
 
-    deleteCapsule(id: string) {
-        this.tabStateService.capsules.update(c => c.filter(item => item.id !== id));
+    async deleteCapsule(id: string) {
+        await this.tabStateService.deleteCapsule(id);
     }
 
     startEdit(item: Capsule) {
@@ -42,11 +38,11 @@ export class CollectionsComponent {
         this.editNameValue.set(item.name);
     }
 
-    saveEdit() {
-        if (!this.editingId()) return;
-        this.tabStateService.capsules.update(c => c.map(item =>
-            item.id === this.editingId() ? { ...item, name: this.editNameValue() } : item
-        ));
+    async saveEdit() {
+        const id = this.editingId();
+        const newName = this.editNameValue().trim();
+        if (!id || !newName) return;
+        await this.tabStateService.renameCapsule(id, newName);
         this.editingId.set(null);
     }
 

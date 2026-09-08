@@ -17,6 +17,9 @@
                             {{ c.name }}
                         </option>
                     }
+                    <option value="__create_new__" class="bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-accent) font-semibold">
+                        + New Capsule...
+                    </option>
                 </select>
             }
             <button (click)="toggleSidebar()" title="Toggle Sidebar"
@@ -95,6 +98,23 @@
         <app-request-tabs-component />
 
         <div class="w-full flex-1 min-h-0 p-2 flex flex-col relative">
+            @if (tabStateService.openTabs().length === 0) {
+            <div class="absolute inset-0 flex flex-col items-center justify-center gap-y-4 text-center select-none p-6 z-20">
+                <div class="w-14 h-14 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) flex items-center justify-center shadow-sm">
+                    <mat-icon class="text-(--postonsteroids-accent) text-[28px]! size-[28px]!">tab_unselected</mat-icon>
+                </div>
+                <div class="max-w-xs">
+                    <h4 class="text-sm font-semibold text-(--postonsteroids-text-primary)">No Open Requests</h4>
+                    <p class="text-[12px] text-(--postonsteroids-text-muted) mt-1">All tabs in "{{ tabStateService.activeCapsuleName() }}" are closed. Create a new request to get started.</p>
+                </div>
+                <button (click)="addNewRequest()" type="button"
+                    class="inline-flex items-center gap-x-1.5 px-4 py-2 rounded-lg bg-(--postonsteroids-accent) text-white text-xs font-semibold shadow hover:bg-(--postonsteroids-accent-hover) transition-colors cursor-pointer">
+                    <mat-icon class="text-[16px]! size-[16px]!">add</mat-icon>
+                    New Request
+                </button>
+            </div>
+            }
+
             @for (tab of tabStateService.openTabs(); track tab.id) {
             @defer (when tabStateService.activeTabId() === tab.id) {
             <div [class]="tabStateService.activeTabId() === tab.id ? 'absolute inset-2 flex flex-col' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">

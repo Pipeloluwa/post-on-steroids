@@ -4,7 +4,8 @@
     <div class="flex items-center z-10">
         <button (click)="toggleSidebar()"
             class="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
-            <mat-icon>{{ sidebarService.isCollapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left' }}</mat-icon>
+            <mat-icon>{{ sidebarService.isCollapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left'
+                }}</mat-icon>
         </button>
     </div>
 
@@ -36,14 +37,13 @@
                     {{ userInitials() }}
                 </div>
                 <div class="flex items-center gap-x-1.5 min-w-0">
-                    <span
-                        class="text-xs font-semibold text-(--postonsteroids-text-secondary) max-w-36 truncate" [title]="userEmail()">
+                    <span class="text-xs font-semibold text-(--postonsteroids-text-secondary) max-w-36 truncate"
+                        [title]="userEmail()">
                         {{ userEmail() }}
                     </span>
-                    <div
-                        class="size-3.5 flex items-center justify-center rounded-full bg-green-500 shadow-sm shadow-green-500/50 shrink-0">
-                        <mat-icon
-                            class="text-[9px]! size-3.5! flex items-center justify-center text-white font-black">check</mat-icon>
+                    <div class="size-3.5 flex items-center justify-center rounded-full bg-green-500 shadow-sm shadow-green-500/50 shrink-0">
+                       <mat-icon
+                            class="text-[9px]! size-3.5! text-center content-center text-white font-black">check</mat-icon>
                     </div>
                 </div>
             </div>

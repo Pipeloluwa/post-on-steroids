@@ -29,7 +29,8 @@ export class RequestDetailsComponent {
     
     requestName = computed(() => this.tabStateService.getState(this.tabId())?.name || '');
     capsules = computed(() => {
-        return this.tabStateService.capsules().map(c => c.name);
+        const names = this.tabStateService.capsules().map(c => c.name);
+        return [...names, '+ New Capsule...'];
     });
     
     selectedCapsule = computed(() => {
@@ -61,11 +62,18 @@ export class RequestDetailsComponent {
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
 
-    setCapsule(collectionName: string) {
+    async setCapsule(collectionName: string) {
+        if (collectionName === '+ New Capsule...') {
+            const name = prompt('Enter a name for the new capsule:', 'My New Capsule');
+            if (name && name.trim()) {
+                await this.tabStateService.createCapsule(name.trim());
+                this.onNotify.emit(`Capsule "${name.trim()}" created successfully`);
+            }
+            return;
+        }
         const capsule = this.tabStateService.capsules().find(c => c.name === collectionName);
         if (capsule) {
-            this.tabStateService.switchCapsule(capsule);
-            this.tabStateService.fetchCapsuleData(collectionName);
+            await this.tabStateService.switchCapsule(capsule);
         }
     }
 
@@ -97,7 +105,7 @@ export class RequestDetailsComponent {
             this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
         } else if (option === 'Export Capsule') {
             const collectionName = this.selectedCapsule();
-            const collectionRequests = this.tabStateService.savedCapsules().filter(r => r.name === collectionName);
+            const collectionRequests = this.tabStateService.savedCapsules();
             const exportData = {
                 collection: collectionName,
                 exportedAt: new Date().toISOString(),

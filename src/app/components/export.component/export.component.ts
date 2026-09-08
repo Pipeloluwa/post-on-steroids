@@ -12,12 +12,7 @@ import { TabStateService } from '../../shared/services/tab.state.service';
 export class ExportComponent {
     tabStateService = inject(TabStateService);
     
-    // Mock collections for UI - in real app would come from a service
-    capsules = signal([
-        { id: '1', name: 'My Capsule', createdAt: Date.now() - 10000 },
-        { id: '2', name: 'API Project A', createdAt: Date.now() - 5000 },
-        { id: '3', name: 'Personal Sandbox', createdAt: Date.now() }
-    ]);
+    capsules = this.tabStateService.capsules;
 
     selectedCapsules = signal<Set<string>>(new Set());
 
@@ -33,6 +28,8 @@ export class ExportComponent {
     exportSelected() {
         const selectedIds = this.selectedCapsules();
         const selectedData = this.capsules().filter(c => selectedIds.has(c.id));
+        const activeId = this.tabStateService.activeCapsuleId();
+        const activeRequests = this.tabStateService.savedCapsules();
         
         const exportData = {
             version: "1.0.0",
@@ -40,7 +37,9 @@ export class ExportComponent {
             capsules: selectedData.map(c => ({
                 id: c.id,
                 name: c.name,
-                requests: this.tabStateService.savedCapsules().filter(r => r.name === c.name)
+                requests: c.id === activeId
+                    ? activeRequests
+                    : activeRequests.filter(r => r.capsuleId === c.id)
             }))
         };
 

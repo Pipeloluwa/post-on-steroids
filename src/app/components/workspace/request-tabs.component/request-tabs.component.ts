@@ -145,15 +145,17 @@ export class RequestTabsComponent {
     closeTab(id: string, event: Event) {
         event.stopPropagation();
         const currentTabs = this.tabs();
-        if (currentTabs.length === 1) return;
 
         const tabIndex = currentTabs.findIndex(t => t.id === id);
         this.tabStateService.closeTab(id);
 
         if (this.activeTabId() === id) {
-            const newTab = this.tabs()[tabIndex] || this.tabs()[tabIndex - 1];
+            const remaining = this.tabs();
+            const newTab = remaining[tabIndex] || remaining[tabIndex - 1] || null;
             if (newTab) {
                 this.tabStateService.setActiveTab(newTab.id);
+            } else {
+                this.tabStateService.activeTabId.set(null);
             }
         }
 
@@ -196,6 +198,8 @@ export class RequestTabsComponent {
 
     scrollLeft() {
         if (this.scrollContainer) {
+
+
             this.scrollContainer.nativeElement.scrollBy({ left: -200, behavior: 'smooth' });
             setTimeout(() => this.updateScrollState(), 300);
         }
@@ -220,8 +224,7 @@ export class RequestTabsComponent {
     }
 
     addTab() {
-        const newId = Date.now().toString();
-        this.tabStateService.setActiveTab(newId);
+        const newId = this.tabStateService.createAndOpenNewTab();
 
         setTimeout(() => {
             if (this.scrollContainer) {

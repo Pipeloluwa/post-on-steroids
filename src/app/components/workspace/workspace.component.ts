@@ -101,10 +101,22 @@ export class WorkspaceComponent {
         this.isSidebarOpen.update(v => !v);
     }
 
-    onCapsuleChange(capsuleId: string) {
+    async onCapsuleChange(capsuleId: string) {
+        if (capsuleId === '__create_new__') {
+            await this.createNewCapsulePrompt();
+            return;
+        }
         const capsule = this.tabStateService.capsules().find(c => c.id === capsuleId);
         if (capsule) {
-            this.tabStateService.switchCapsule(capsule);
+            await this.tabStateService.switchCapsule(capsule);
+        }
+    }
+
+    async createNewCapsulePrompt() {
+        const name = prompt('Enter a name for the new capsule:', 'My New Capsule');
+        if (name && name.trim()) {
+            await this.tabStateService.createCapsule(name.trim());
+            this.triggerNotification(`Capsule "${name.trim()}" created successfully`);
         }
     }
 
@@ -124,15 +136,19 @@ export class WorkspaceComponent {
         this.tabStateService.setActiveTab(request.id);
     }
 
+    addNewRequest() {
+        this.tabStateService.createAndOpenNewTab();
+    }
+
     closeTabFromSidebar(id: string, event: Event) {
         event.stopPropagation();
-        const tabs = this.tabStateService.openTabs();
-        if (tabs.length === 1) return; // never close the last tab
         this.tabStateService.closeTab(id);
         if (this.tabStateService.activeTabId() === id) {
             const remaining = this.tabStateService.openTabs();
             if (remaining.length > 0) {
                 this.tabStateService.setActiveTab(remaining[0].id);
+            } else {
+                this.tabStateService.activeTabId.set(null);
             }
         }
     }
