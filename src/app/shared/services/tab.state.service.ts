@@ -73,6 +73,7 @@ export interface RequestState {
     isDirty: boolean;
     isLoading: boolean;
     autoAuthEnabled?: boolean;
+    postTriggerTabId?: string | null;
     // Payload type tabs
     payloadType: string;
     params: KeyValue[];
@@ -128,6 +129,7 @@ export class TabStateService {
     autoAuthEndpointId = signal<string | null>(null);
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
+    requestExamplesMap = signal<Map<string, any[]>>(new Map());
 
     private historyStack = new Map<string, { past: Partial<RequestState>[], future: Partial<RequestState>[] }>();
 
@@ -700,39 +702,87 @@ export class TabStateService {
     }
 
     async createExample(requestId: string, name: string, exampleData: any): Promise<any> {
+        const newEx = {
+            id: 'ex_' + this.createId(),
+            requestId,
+            name,
+            requestSnapshot: JSON.stringify(exampleData),
+            createdAt: new Date().toISOString()
+        };
+
+        // Immediately reflect in tree
+        this.requestExamplesMap.update(map => {
+            const next = new Map(map);
+            const current = next.get(requestId) || this.getLocalExamples(requestId);
+            next.set(requestId, [...current, newEx]);
+            return next;
+        });
+
+        const localExamples = this.getLocalExamples(requestId);
+        this.saveLocalExamples(requestId, [...localExamples, newEx]);
+
         if (!this.authService.isLoggedIn()) {
-            const localExamples = this.getLocalExamples(requestId);
-            const newEx = {
-                id: this.createId(),
-                requestId,
-                name,
-                requestSnapshot: JSON.stringify(exampleData),
-                createdAt: new Date().toISOString()
-            };
-            localExamples.push(newEx);
-            this.saveLocalExamples(requestId, localExamples);
             return newEx;
         }
 
-        const res = await firstValueFrom(
-            this.http.post<{ data: any }>(`${API_BASE_URL}/request/${requestId}/example`, {
-                name,
-                requestSnapshot: JSON.stringify(exampleData)
-            })
-        );
-        return res?.data;
+        try {
+            const res = await firstValueFrom(
+                this.http.post<{ data: any }>(`${API_BASE_URL}/request/${requestId}/example`, {
+                    name,
+                    requestSnapshot: JSON.stringify(exampleData)
+                })
+            );
+
+            if (res?.data) {
+                // Silently update optimistic item with actual backend record
+                this.requestExamplesMap.update(map => {
+                    const next = new Map(map);
+                    const list = (next.get(requestId) || []).map(ex => ex.id === newEx.id ? res.data : ex);
+                    next.set(requestId, list);
+                    return next;
+                });
+                const updatedLocal = this.getLocalExamples(requestId).map(ex => ex.id === newEx.id ? res.data : ex);
+                this.saveLocalExamples(requestId, updatedLocal);
+                return res.data;
+            }
+            return newEx;
+        } catch (err) {
+            // Rollback optimistic example on error
+            this.requestExamplesMap.update(map => {
+                const next = new Map(map);
+                const list = (next.get(requestId) || []).filter(ex => ex.id !== newEx.id);
+                next.set(requestId, list);
+                return next;
+            });
+            const revertedLocal = this.getLocalExamples(requestId).filter(ex => ex.id !== newEx.id);
+            this.saveLocalExamples(requestId, revertedLocal);
+            throw err;
+        }
     }
 
     async getExamples(requestId: string): Promise<any[]> {
+        let examples: any[] = [];
         if (this.authService.isLoggedIn()) {
             try {
                 const res = await firstValueFrom(
                     this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/${requestId}/example`)
                 );
-                if (res?.data && res.data.length > 0) return res.data;
+                if (res?.data && res.data.length > 0) {
+                    examples = res.data;
+                }
             } catch { }
         }
-        return this.getLocalExamples(requestId);
+        if (examples.length === 0) {
+            examples = this.getLocalExamples(requestId);
+        }
+
+        this.requestExamplesMap.update(map => {
+            const next = new Map(map);
+            next.set(requestId, examples);
+            return next;
+        });
+
+        return examples;
     }
 
     async deleteExample(requestId: string, exampleId: string): Promise<void> {
@@ -745,6 +795,13 @@ export class TabStateService {
         }
         const local = this.getLocalExamples(requestId).filter(e => e.id !== exampleId);
         this.saveLocalExamples(requestId, local);
+
+        this.requestExamplesMap.update(map => {
+            const next = new Map(map);
+            const current = next.get(requestId) || [];
+            next.set(requestId, current.filter(e => e.id !== exampleId));
+            return next;
+        });
     }
 
     private getLocalExamples(requestId: string): any[] {
@@ -1264,6 +1321,7 @@ export class TabStateService {
             isDirty: false,
             isLoading: false,
             autoAuthEnabled: false,
+            postTriggerTabId: null,
             payloadType: 'params',
             params: [{ enabled: true, key: '', value: '' }],
             headers: [

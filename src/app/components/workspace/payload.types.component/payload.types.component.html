@@ -55,7 +55,7 @@
                         </app-variable-input>
                     </td>
                     <td class="py-1 text-center whitespace-nowrap">
-                        <button (click)="addKeyValueToVariable(row.key, row.value)" title="Add to Global Variables"
+                        <button (click)="addKeyValueToVariable(row.key, row.value, 'param')" title="Add to Global Variables"
                             class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) mr-1 text-[10px] px-1 py-0.5 rounded hover:bg-(--postonsteroids-accent)/10">
                             +Var
                         </button>
@@ -185,7 +185,7 @@
                         </app-variable-input>
                     </td>
                     <td class="py-1 text-center whitespace-nowrap">
-                        <button (click)="addKeyValueToVariable(row.key, row.value)" title="Add to Global Variables"
+                        <button (click)="addKeyValueToVariable(row.key, row.value, 'header')" title="Add to Global Variables"
                             class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) mr-1 text-[10px] px-1 py-0.5 rounded hover:bg-(--postonsteroids-accent)/10">
                             +Var
                         </button>

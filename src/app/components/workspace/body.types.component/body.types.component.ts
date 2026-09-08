@@ -1,4 +1,4 @@
-import { Component, signal, inject, computed, PLATFORM_ID, input, ViewChild } from '@angular/core';
+import { Component, signal, inject, computed, PLATFORM_ID, input, viewChild } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -9,6 +9,8 @@ import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ChangeDetectionStrategy } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
+
+import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle } from '../../../shared/utils/format.utils';
 
 @Component({
   selector: 'app-body-types-component',
@@ -27,7 +29,11 @@ export class BodyTypesComponent {
   private variableService = inject(VariableService);
   private notificationService = inject(NotificationService);
   tabId = input.required<string>();
-  wrapResponse = signal(true);
+
+  wrapStyles = WRAP_STYLE_OPTIONS;
+  wrapStyle = signal<WrapStyle>('pretty');
+  isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
+  wrapResponse = computed(() => this.isWordWrap());
   
   rawBodyContent = computed(() => {
     const state = this.tabStateService.getState(this.tabId());
@@ -170,49 +176,51 @@ export class BodyTypesComponent {
     }
   }
 
-  toggleWrap() {
-    const nextWrap = !this.wrapResponse();
-    this.wrapResponse.set(nextWrap);
+  monacoEditor = viewChild(MonacoEditorComponent);
 
+  wrapPretty() {
+    this.wrapStyle.set('pretty');
+    this.applyWrapTransformation('pretty');
+  }
+
+  wrapKeyField() {
+    this.wrapStyle.set('key-field');
+    this.applyWrapTransformation('key-field');
+  }
+
+  wrapSoft() {
+    this.wrapStyle.set('word-wrap');
+    this.applyWrapTransformation('word-wrap');
+  }
+
+  wrapCollapsed() {
+    this.wrapStyle.set('collapsed');
+    this.applyWrapTransformation('collapsed');
+  }
+
+  private applyWrapTransformation(style: WrapStyle) {
     const id = this.tabId();
     if (!id) return;
-    const content = this.rawBodyContent();
+    const editor = this.monacoEditor() || MonacoEditorComponent.lastFocusedEditor;
+    const content = editor?.getEditorValue() || this.rawBodyContent() || '';
     if (!content) return;
 
-    if (!nextWrap) {
-      // Unwrap: collapse into one single line
-      try {
-        const parsed = JSON.parse(content);
-        const singleLine = JSON.stringify(parsed);
-        this.tabStateService.updateState(id, {
-          rawBody: singleLine,
-          rawBodyJson: singleLine
-        });
-      } catch {
-        const collapsed = content.replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
-        this.tabStateService.updateState(id, {
-          rawBody: collapsed,
-          ...(this.rawType() === 'XML' ? { rawBodyXml: collapsed } : { rawBodyJson: collapsed })
-        });
-      }
+    const isXml = this.rawType() === 'XML';
+    const transformed = formatBodyByStyle(content, style, this.rawType());
+    
+    if (editor) {
+      editor.setEditorValue(transformed);
     } else {
-      // Wrap: pretty format
-      try {
-        const parsed = JSON.parse(content);
-        const pretty = JSON.stringify(parsed, null, 2);
-        this.tabStateService.updateState(id, {
-          rawBody: pretty,
-          rawBodyJson: pretty
-        });
-      } catch { }
+      this.tabStateService.updateState(id, {
+        rawBody: transformed,
+        ...(isXml ? { rawBodyXml: transformed } : { rawBodyJson: transformed })
+      });
     }
   }
 
-  @ViewChild(MonacoEditorComponent) monacoEditor?: MonacoEditorComponent;
-
   addBodyToVariable() {
-    const extracted = this.monacoEditor?.extractCurrentKeyValue()
-      || MonacoEditorComponent.lastFocusedEditor?.extractCurrentKeyValue();
+    const editor = this.monacoEditor() || MonacoEditorComponent.lastFocusedEditor;
+    const extracted = editor?.extractCurrentKeyValue();
 
     let key = extracted?.key || '';
     let value = extracted?.value || '';
@@ -246,6 +254,10 @@ export class BodyTypesComponent {
       }
     }
 
-    this.variableService.openAddModal(key, value);
+    this.variableService.openAddModal(key, value, {
+      tabId: this.tabId(),
+      type: 'body',
+      propertyKey: key
+    });
   }
 }

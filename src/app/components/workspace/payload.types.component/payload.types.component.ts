@@ -86,8 +86,12 @@ export class PayloadTypesComponent {
   }
 
   // ── Params ───────────────────────────────────────────────────────────
-  addKeyValueToVariable(key: string, value: string) {
-    this.variableService.openAddModal(key || '', value || '');
+  addKeyValueToVariable(key: string, value: string, type: 'param' | 'header' = 'param') {
+    this.variableService.openAddModal(key || '', value || '', {
+      tabId: this.tabId(),
+      type,
+      propertyKey: key || ''
+    });
   }
 
   updateParam(i: number, key: keyof KeyValue, val: string | boolean) { this.updateKVField('params', i, key, val); }

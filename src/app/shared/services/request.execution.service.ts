@@ -5,6 +5,7 @@ import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
 import { AuthService } from './auth.service';
+import { NotificationService } from './notification.service';
 import { API_BASE_URL } from '../constants/api.constants';
 
 @Injectable({
@@ -17,6 +18,7 @@ export class RequestExecutionService {
     private sandboxService = inject(SandboxExecutionService);
     private autoAuthService = inject(AutoAuthService);
     private authService = inject(AuthService);
+    private notificationService = inject(NotificationService);
 
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
 
@@ -31,7 +33,7 @@ export class RequestExecutionService {
         }
     }
 
-    async executeRequest(tabId: string, isAutoAuthRetry: boolean = false): Promise<void> {
+    async executeRequest(tabId: string, isAutoAuthRetry: boolean = false, chainDepth: number = 0): Promise<void> {
         const state = this.tabStateService.getState(tabId);
         if (!state || state.id !== tabId) return;
 
@@ -557,6 +559,23 @@ export class RequestExecutionService {
                 responseTime,
                 responseSize
             });
+
+            // Post-Response Request Chaining (Trigger Next Request)
+            if (freshState.postTriggerTabId) {
+                const targetTabId = freshState.postTriggerTabId;
+                if (chainDepth >= 5) {
+                    this.notificationService.notify('Chained request depth limit reached (max 5) to prevent infinite loops.');
+                } else {
+                    const targetState = this.tabStateService.getState(targetTabId);
+                    if (targetState) {
+                        this.notificationService.notify(`Triggering chained request: "${targetState.name || 'Request'}"...`);
+                        this.tabStateService.setActiveTab(targetTabId);
+                        setTimeout(() => {
+                            this.executeRequest(targetTabId, false, chainDepth + 1);
+                        }, 250);
+                    }
+                }
+            }
 
         } catch (globalErr: any) {
             console.error("Critical Execution Error:", globalErr);

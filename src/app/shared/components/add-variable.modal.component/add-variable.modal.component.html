@@ -47,6 +47,17 @@
                     class="w-full px-3 py-2 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-xs outline-none focus:border-(--postonsteroids-accent) transition-all font-mono resize-none"></textarea>
             </div>
 
+            <!-- Dynamic Link Indicator -->
+            @if (variableService.modalSource(); as src) {
+            <div class="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between text-[11px]">
+                <div class="flex items-center gap-1.5 text-blue-400">
+                    <mat-icon class="text-[14px]! size-[14px]!">link</mat-icon>
+                    <span class="font-semibold">Dynamically linked to {{ src.type }} <span class="font-mono text-white">({{ src.propertyKey }})</span></span>
+                </div>
+                <span class="text-[10px] text-blue-300/80 italic">Auto-syncs live</span>
+            </div>
+            }
+
             <!-- Interpolation syntax hint -->
             <div class="p-2.5 rounded-xl bg-(--postonsteroids-bg-tertiary)/60 border border-(--postonsteroids-border)/40 flex items-center justify-between text-[11px]">
                 <span class="text-(--postonsteroids-text-muted)">Reference in requests as:</span>

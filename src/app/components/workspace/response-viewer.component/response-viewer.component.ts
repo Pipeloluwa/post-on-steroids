@@ -9,6 +9,8 @@ import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.
 import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
+import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle } from '../../../shared/utils/format.utils';
+
 @Component({
     selector: 'app-response-viewer-component',
     changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,7 +27,11 @@ export class ResponseViewerComponent {
     activeMode = signal('Pretty');
     responseType = signal('JSON');
     responseTypes = signal(['JSON', 'XML']);
-    wrapResponse = signal(true);
+    
+    wrapStyles = WRAP_STYLE_OPTIONS;
+    wrapStyle = signal<WrapStyle>('pretty');
+    isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
+    wrapResponse = computed(() => this.isWordWrap());
     wrapConsole = signal(false);
 
     tabId = input.required<string>();
@@ -37,26 +43,7 @@ export class ResponseViewerComponent {
     formattedResponseBody = computed(() => {
         const body = this.responseBody();
         if (body === null) return '';
-        if (!this.wrapResponse()) {
-            if (typeof body === 'string') {
-                try {
-                    const parsed = JSON.parse(body);
-                    return JSON.stringify(parsed);
-                } catch {
-                    return body.replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
-                }
-            }
-            return JSON.stringify(body);
-        }
-        if (typeof body === 'string') {
-            try {
-                const parsed = JSON.parse(body);
-                return JSON.stringify(parsed, null, 2);
-            } catch {
-                return body;
-            }
-        }
-        return JSON.stringify(body, null, 2);
+        return formatBodyByStyle(body, this.wrapStyle(), this.responseType());
     });
     responseStatus = computed(() => this.tabState()?.responseStatus ?? null);
     responseTime = computed(() => this.tabState()?.responseTime ?? null);
@@ -131,8 +118,20 @@ export class ResponseViewerComponent {
 
     @ViewChild(MonacoEditorComponent) monacoEditor?: MonacoEditorComponent;
 
-    toggleWrap() {
-        this.wrapResponse.update(v => !v);
+    wrapPretty() {
+        this.wrapStyle.set('pretty');
+    }
+
+    wrapKeyField() {
+        this.wrapStyle.set('key-field');
+    }
+
+    wrapSoft() {
+        this.wrapStyle.set('word-wrap');
+    }
+
+    wrapCollapsed() {
+        this.wrapStyle.set('collapsed');
     }
 
     addResponseToVariable() {
@@ -165,7 +164,11 @@ export class ResponseViewerComponent {
             }
         }
 
-        this.variableService.openAddModal(key, value);
+        this.variableService.openAddModal(key, value, {
+            tabId: this.tabId(),
+            type: 'response',
+            propertyKey: key
+        });
     }
 
     async saveAsExample() {
@@ -189,7 +192,7 @@ export class ResponseViewerComponent {
                 responseSize: this.responseSize(),
                 responseHeaders: this.responseHeaders()
             });
-            this.notificationService.notify(`Saved example "${name.trim()}".`);
+            // Intentionally silent on success as requested
         } catch (e: any) {
             this.notificationService.notify(`Failed to save example: ${e.message || 'Error'}`);
         }

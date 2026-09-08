@@ -82,13 +82,14 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const theme = this.themeService.isDarkMode() ? 'vs-dark' : 'vs';
       const readOnly = this.disabled() || this.readOnly();
       const glyphMargin = this.enableEncryptionToggles();
+      const wordWrap = this.wordWrap() ? 'on' : 'off';
       const editor = this.editorInstance();
       if (editor) {
         const monacoGlobal = (window as any).monaco;
         if (monacoGlobal && monacoGlobal.editor) {
            monacoGlobal.editor.setTheme(theme);
         }
-        editor.updateOptions({ readOnly, glyphMargin });
+        editor.updateOptions({ readOnly, glyphMargin, wordWrap });
 
         if (this.enableEncryptionToggles()) {
            this.themeUpdateId++; // Increment so class name changes
@@ -570,6 +571,32 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         this.updateDecorations();
       }
     }
+  }
+
+  getEditorValue(): string {
+    const editor = this.editorInstance();
+    if (editor) {
+      const model = editor.getModel();
+      if (model) return model.getValue();
+    }
+    return this.value();
+  }
+
+  setEditorValue(val: string): void {
+    const safeVal = val || '';
+    this.value.set(safeVal);
+    this.lastValidContent = safeVal;
+    const editor = this.editorInstance();
+    if (editor) {
+      const model = editor.getModel();
+      if (model && model.getValue() !== safeVal) {
+        model.setValue(safeVal);
+      }
+      if (this.enableEncryptionToggles()) {
+        this.updateDecorations();
+      }
+    }
+    this.onChange(safeVal);
   }
 
   extractCurrentKeyValue(): { key: string; value: string } {

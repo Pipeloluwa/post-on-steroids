@@ -28,7 +28,7 @@ export class AddVariableModalComponent {
             return;
         }
 
-        this.variableService.addVariable(key, value);
+        this.variableService.addVariable(key, value, this.variableService.modalSource());
         this.notificationService.notify(`Added variable "{{${key}}}" to Global Variables.`);
         this.close();
     }

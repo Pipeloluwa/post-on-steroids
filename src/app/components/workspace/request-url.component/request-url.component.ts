@@ -42,6 +42,22 @@ export class RequestUrlComponent {
     pendingScope: 'off' | 'individual' | 'global' | null = null;
     lastEnabledScope: 'individual' | 'global' = 'individual';
 
+    // Post Trigger Request Chaining State
+    isTriggerDropdownOpen = signal(false);
+    postTriggerTabId = computed(() => this.tabState()?.postTriggerTabId || null);
+
+    availableTriggerRequests = computed(() => {
+        const currentId = this.tabId();
+        const all = this.tabStateService.allCapsuleRequests();
+        return all.filter(r => r.id !== currentId);
+    });
+
+    targetTriggerRequest = computed(() => {
+        const targetId = this.postTriggerTabId();
+        if (!targetId) return null;
+        return this.tabStateService.getState(targetId) || this.tabStateService.allCapsuleRequests().find(r => r.id === targetId) || null;
+    });
+
     // Auto Auth Modal State
     showAutoAuthModal = signal(false);
     detectedEndpoint = signal<any>(null);
@@ -85,11 +101,35 @@ export class RequestUrlComponent {
     toggleDropdown(event: MouseEvent) {
         event.stopPropagation();
         this.isDropdownOpen.update(v => !v);
+        this.isTriggerDropdownOpen.set(false);
+    }
+
+    toggleTriggerDropdown(event: MouseEvent) {
+        event.stopPropagation();
+        this.isTriggerDropdownOpen.update(v => !v);
+        this.isDropdownOpen.set(false);
+    }
+
+    onMainTriggerClick() {
+        if (this.postTriggerTabId()) {
+            this.selectTriggerTarget(null);
+        } else {
+            this.isTriggerDropdownOpen.set(true);
+            this.isDropdownOpen.set(false);
+        }
+    }
+
+    selectTriggerTarget(targetId: string | null) {
+        this.tabStateService.updateState(this.tabId(), { postTriggerTabId: targetId });
+        this.isTriggerDropdownOpen.set(false);
     }
 
     onDocumentClick() {
         if (this.isDropdownOpen()) {
             this.isDropdownOpen.set(false);
+        }
+        if (this.isTriggerDropdownOpen()) {
+            this.isTriggerDropdownOpen.set(false);
         }
     }
 

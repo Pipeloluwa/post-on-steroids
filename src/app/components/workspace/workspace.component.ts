@@ -204,7 +204,7 @@ export class WorkspaceComponent {
 
     // Request Examples
     expandedExampleRequestId = signal<string | null>(null);
-    requestExamplesMap = signal<Map<string, any[]>>(new Map());
+    requestExamplesMap = this.tabStateService.requestExamplesMap;
 
     async toggleExamples(requestId: string, event: Event) {
         event.stopPropagation();
@@ -213,12 +213,7 @@ export class WorkspaceComponent {
             return;
         }
         this.expandedExampleRequestId.set(requestId);
-        const examples = await this.tabStateService.getExamples(requestId);
-        this.requestExamplesMap.update(map => {
-            const next = new Map(map);
-            next.set(requestId, examples);
-            return next;
-        });
+        await this.tabStateService.getExamples(requestId);
     }
 
     loadExample(example: any, event: Event) {
@@ -240,12 +235,6 @@ export class WorkspaceComponent {
         event.stopPropagation();
         if (!window.confirm('Are you sure you want to delete this example?')) return;
         await this.tabStateService.deleteExample(requestId, exampleId);
-        const examples = await this.tabStateService.getExamples(requestId);
-        this.requestExamplesMap.update(map => {
-            const next = new Map(map);
-            next.set(requestId, examples);
-            return next;
-        });
         this.notificationService.notify('Example deleted.');
     }
 

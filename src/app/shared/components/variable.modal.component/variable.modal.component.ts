@@ -6,7 +6,6 @@ import { VariableService } from '../../services/variable.service';
 import { IGlobalVariable } from '../../../interfaces/services/IVariableService';
 
 @Component({
-    standalone: true,
     selector: 'app-variable-modal',
     imports: [CommonModule, FormsModule, MatIcon],
     templateUrl: './variable.modal.component.html',
