@@ -33,10 +33,15 @@
 
         <!-- Share Capsule Button -->
         <div class="flex items-center ml-2">
-            <button (click)="shareCapsule()"
-                class="flex items-center gap-x-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) rounded transition-all duration-200 cursor-pointer">
-                <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px]">share</mat-icon>
-                Share
+            <button (click)="shareCapsule()" [disabled]="isSharing()"
+                class="flex items-center gap-x-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) rounded transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                @if (isSharing()) {
+                    <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px] animate-spin">sync</mat-icon>
+                    <span>Sharing...</span>
+                } @else {
+                    <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px]">share</mat-icon>
+                    <span>Share</span>
+                }
             </button>
         </div>
     </div>
@@ -55,11 +60,15 @@
                 {{ isSaving() ? 'Saving...' : 'Save' }}
             </button>
 
-            <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="120"
+            <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="140"
                 [absoluteStartLeft]="false" (outputSelectedValue)="onSaveOptionSelected($event)">
                 <div
-                    class="px-1 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center">
-                    <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px]">expand_more</mat-icon>
+                    class="px-1.5 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center">
+                    @if (isExporting()) {
+                        <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px] animate-spin text-(--postonsteroids-accent)">sync</mat-icon>
+                    } @else {
+                        <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px]">expand_more</mat-icon>
+                    }
                 </div>
             </app-scrollable-select-component>
         </div>

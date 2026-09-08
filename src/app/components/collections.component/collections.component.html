@@ -1,25 +1,61 @@
 <div class="p-6 h-full flex flex-col gap-6 bg-(--postonsteroids-bg-primary)">
     <div class="flex items-center justify-between">
-        <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">Capsules</h2>
+        <div class="flex items-center gap-3">
+            <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">Capsules</h2>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-muted) border border-(--postonsteroids-border)">
+                {{ sortedCapsules().length }}
+            </span>
+        </div>
+
+        @if (selectedCapsuleIds().size > 0) {
+            <div class="flex items-center gap-2 animate-fadeIn">
+                <span class="text-xs text-(--postonsteroids-text-muted)">
+                    {{ selectedCapsuleIds().size }} selected
+                </span>
+                <button (click)="deleteSelectedCapsules()" [disabled]="isBatchDeleting()"
+                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-500 border border-red-500/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    @if (isBatchDeleting()) {
+                        <mat-icon class="text-[14px]! size-[14px]! animate-spin">sync</mat-icon>
+                        <span>Deleting...</span>
+                    } @else {
+                        <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
+                        <span>Delete Selected ({{ selectedCapsuleIds().size }})</span>
+                    }
+                </button>
+            </div>
+        }
     </div>
 
-    <div class="flex gap-2">
-        <input type="text" [(ngModel)]="newCapsuleName" placeholder="New capsule name..."
-            class="flex-1 px-4 py-2 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)">
-        <button (click)="createCapsule()"
-            class="px-4 py-2 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white font-bold rounded-lg transition-all cursor-pointer">
-            Create
-        </button>
+    <div class="flex items-center justify-between gap-3">
+        <div class="flex-1 flex gap-2">
+            <input type="text" [(ngModel)]="newCapsuleName" (keydown.enter)="createCapsule()" placeholder="New capsule name..."
+                class="flex-1 px-4 py-2 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) text-sm">
+            <button (click)="createCapsule()"
+                class="px-4 py-2 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white font-bold rounded-lg transition-all cursor-pointer text-sm">
+                Create
+            </button>
+        </div>
+
+        @if (sortedCapsules().length > 0) {
+            <button (click)="toggleSelectAll()"
+                class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) border border-(--postonsteroids-border) transition-all cursor-pointer">
+                <input type="checkbox" [checked]="isAllSelected()" (click)="$event.stopPropagation(); toggleSelectAll()" class="rounded border-(--postonsteroids-border) text-(--postonsteroids-accent) cursor-pointer">
+                <span>Select All</span>
+            </button>
+        }
     </div>
 
     <div class="flex-1 overflow-auto space-y-2">
         @for (item of sortedCapsules(); track item.id) {
         <div
-            class="flex items-center justify-between p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/50 transition-all">
+            class="flex items-center justify-between p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border transition-all"
+            [class.border-(--postonsteroids-accent)]="tabStateService.activeCapsuleId() === item.id"
+            [class.border-(--postonsteroids-border)]="tabStateService.activeCapsuleId() !== item.id"
+            [class.bg-(--postonsteroids-accent)/5]="selectedCapsuleIds().has(item.id)">
             
             @if (editingId() === item.id) {
                 <div class="flex-1 flex gap-2">
-                    <input type="text" [(ngModel)]="editNameValue"
+                    <input type="text" [(ngModel)]="editNameValue" (keydown.enter)="saveEdit()"
                         class="flex-1 px-3 py-1 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-accent) text-(--postonsteroids-text-primary) outline-none">
                     <button (click)="saveEdit()" class="text-green-500 hover:text-green-400 cursor-pointer">
                         <mat-icon>check</mat-icon>
@@ -28,14 +64,27 @@
                         <mat-icon>close</mat-icon>
                     </button>
                 </div>
-                } @else {
-                <span class="text-[14px] font-medium text-(--postonsteroids-text-primary)">{{ item.name }}</span>
-                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button (click)="startEdit(item)"
+            } @else {
+                <div class="flex items-center gap-3">
+                    <input type="checkbox"
+                        [checked]="selectedCapsuleIds().has(item.id)"
+                        (click)="$event.stopPropagation(); toggleSelectCapsule(item.id)"
+                        class="rounded border-(--postonsteroids-border) text-(--postonsteroids-accent) cursor-pointer">
+                    <div class="flex items-center gap-2 cursor-pointer" (click)="tabStateService.switchCapsule(item)">
+                        <span class="text-[14px] font-medium text-(--postonsteroids-text-primary)">{{ item.name }}</span>
+                        @if (tabStateService.activeCapsuleId() === item.id) {
+                            <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent) border border-(--postonsteroids-accent)/30">
+                                Active
+                            </span>
+                        }
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button (click)="startEdit(item)" title="Rename capsule"
                         class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
                         <mat-icon class="text-[18px]! size-[18px]!">edit</mat-icon>
                     </button>
-                    <button (click)="deleteCapsule(item)" [disabled]="deletingCapsuleId() === item.id"
+                    <button (click)="deleteCapsule(item)" [disabled]="deletingCapsuleId() === item.id" title="Delete capsule"
                         class="p-1.5 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-500 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
                         @if (deletingCapsuleId() === item.id) {
                             <mat-icon class="text-[18px]! size-[18px]! animate-spin text-red-500">sync</mat-icon>
@@ -44,8 +93,8 @@
                         }
                     </button>
                 </div>
-                }
-            </div>
+            }
+        </div>
         }
 
         @if (sortedCapsules().length === 0) {

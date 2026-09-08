@@ -476,6 +476,292 @@ export class TabStateService {
         }
     }
 
+    async batchDeleteCapsules(ids: string[]): Promise<void> {
+        if (!ids || ids.length === 0) return;
+
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                await firstValueFrom(
+                    this.http.post(`${API_BASE_URL}/capsule/batch-delete`, { ids })
+                );
+            } catch (err) {
+                console.error('Failed to batch delete capsules on backend', err);
+            }
+        }
+
+        const idSet = new Set(ids);
+        this.capsules.update(list => list.filter(c => !idSet.has(c.id)));
+
+        if (this.isBrowser) {
+            for (const id of ids) {
+                localStorage.removeItem(`onsteroids_open_tab_ids_${id}`);
+                localStorage.removeItem(`onsteroids_active_tab_${id}`);
+            }
+            localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+        }
+
+        if (this.activeCapsuleId() && idSet.has(this.activeCapsuleId())) {
+            const remaining = this.capsules();
+            if (remaining.length > 0) {
+                await this.switchCapsule(remaining[0]);
+            } else {
+                this.activeCapsuleId.set('');
+                this.activeCapsuleName.set('');
+                this.savedCapsules.set([]);
+                this.states.set(new Map());
+                this.openTabIds.set([]);
+                this.activeTabId.set(null);
+            }
+        }
+    }
+
+    async deleteRequest(id: string): Promise<void> {
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                await firstValueFrom(
+                    this.http.delete(`${API_BASE_URL}/request/${id}`)
+                );
+            } catch (err) {
+                console.error(`Failed to delete request ${id} on backend`, err);
+            }
+        }
+
+        this.savedCapsules.update(col => col.filter(r => r.id !== id));
+        this.openTabIds.update(ids => ids.filter(tabId => tabId !== id));
+        this.states.update(map => {
+            const next = new Map(map);
+            next.delete(id);
+            return next;
+        });
+        this.historyStack.delete(id);
+
+        if (this.activeTabId() === id) {
+            const remaining = this.openTabIds();
+            this.activeTabId.set(remaining.length > 0 ? remaining[0] : null);
+        }
+    }
+
+    async batchDeleteRequests(ids: string[]): Promise<void> {
+        if (!ids || ids.length === 0) return;
+
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                await firstValueFrom(
+                    this.http.post(`${API_BASE_URL}/request/batch-delete`, { ids })
+                );
+            } catch (err) {
+                console.error('Failed to batch delete requests on backend', err);
+            }
+        }
+
+        const idSet = new Set(ids);
+        this.savedCapsules.update(col => col.filter(r => !idSet.has(r.id)));
+        this.openTabIds.update(openIds => openIds.filter(id => !idSet.has(id)));
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const id of ids) {
+                next.delete(id);
+                this.historyStack.delete(id);
+            }
+            return next;
+        });
+
+        if (this.activeTabId() && idSet.has(this.activeTabId()!)) {
+            const remaining = this.openTabIds();
+            this.activeTabId.set(remaining.length > 0 ? remaining[0] : null);
+        }
+    }
+
+    closeOtherTabs(keepId: string) {
+        this.openTabIds.set([keepId]);
+        this.activeTabId.set(keepId);
+    }
+
+    resolveRequestTitle(name?: string, url?: string): string {
+        if (name && name.trim() !== '' && name.trim() !== 'New Request') {
+            return name.trim();
+        }
+        if (url && url.trim() !== '') {
+            try {
+                const parsed = new URL(url.startsWith('http') ? url : `http://${url}`);
+                const path = parsed.pathname;
+                if (path && path !== '/' && path.trim() !== '') {
+                    return path;
+                }
+                return parsed.hostname;
+            } catch {
+                return url.split('?')[0];
+            }
+        }
+        return name || 'New Request';
+    }
+
+    cacheResponse(id: string, url: string, responseData: {
+        responseBody: any;
+        responseStatus: number | null;
+        responseTime: number | null;
+        responseSize: number | null;
+        responseCookies?: CookieRow[];
+        responseHeaders?: KeyValue[];
+        testResults?: TestResult[];
+    }) {
+        if (!this.isBrowser) return;
+        try {
+            const stored = localStorage.getItem('onsteroids_responses');
+            const map = stored ? JSON.parse(stored) : {};
+            map[id] = responseData;
+            if (url) {
+                map[`url_${url}`] = responseData;
+            }
+            localStorage.setItem('onsteroids_responses', JSON.stringify(map));
+        } catch (e) {
+            console.warn('Could not cache response to storage', e);
+        }
+    }
+
+    getCachedResponse(id: string, url?: string): any {
+        if (!this.isBrowser) return null;
+        try {
+            const stored = localStorage.getItem('onsteroids_responses');
+            if (!stored) return null;
+            const map = JSON.parse(stored);
+            if (map[id]) return map[id];
+            if (url && map[`url_${url}`]) return map[`url_${url}`];
+        } catch (e) { }
+        return null;
+    }
+
+    async shareCapsule(capsuleId: string): Promise<string> {
+        if (!this.isBrowser || !this.authService.isLoggedIn()) {
+            throw new Error('Please sign in to share this capsule.');
+        }
+
+        const res = await firstValueFrom(
+            this.http.post<{ data: { shareToken: string; shareUrl: string } }>(
+                `${API_BASE_URL}/capsule/${capsuleId}/share`,
+                {}
+            )
+        );
+
+        if (res?.data) {
+            const origin = window.location.origin;
+            return `${origin}/import?share=${res.data.shareToken}`;
+        }
+        throw new Error('Failed to generate share link');
+    }
+
+    async importCapsuleFromUrl(urlOrToken: string): Promise<{ capsuleName: string; requestsCount: number }> {
+        let token = urlOrToken.trim();
+        if (token.includes('share=')) {
+            const url = new URL(token);
+            token = url.searchParams.get('share') || token;
+        } else if (token.includes('/share/')) {
+            const parts = token.split('/share/');
+            token = parts[parts.length - 1].split('?')[0].split('#')[0];
+        }
+
+        const res = await firstValueFrom(
+            this.http.get<{ data: any }>(`${API_BASE_URL}/capsule/shared/${token}`)
+        );
+
+        if (!res?.data) {
+            throw new Error('Shared capsule not found or link has expired.');
+        }
+
+        const shared = res.data;
+        const newCap = await this.createCapsule(shared.capsuleName || 'Imported Capsule');
+        
+        const requestsToSave: RequestState[] = [];
+        if (shared.requests && Array.isArray(shared.requests)) {
+            for (const r of shared.requests) {
+                const reqState = this.mapDtoToState({ ...r, capsuleId: newCap.id });
+                requestsToSave.push(reqState);
+            }
+        }
+
+        if (requestsToSave.length > 0) {
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const req of requestsToSave) {
+                    next.set(req.id, req);
+                }
+                return next;
+            });
+            this.savedCapsules.set(requestsToSave);
+            this.openTabIds.set(requestsToSave.map(r => r.id));
+            this.activeTabId.set(requestsToSave[0].id);
+
+            for (const r of requestsToSave) {
+                await this.saveToCapsule(r.id);
+            }
+        }
+
+        return { capsuleName: newCap.name, requestsCount: requestsToSave.length };
+    }
+
+    async createExample(requestId: string, name: string, exampleData: any): Promise<any> {
+        if (!this.authService.isLoggedIn()) {
+            const localExamples = this.getLocalExamples(requestId);
+            const newEx = {
+                id: this.createId(),
+                requestId,
+                name,
+                requestSnapshot: JSON.stringify(exampleData),
+                createdAt: new Date().toISOString()
+            };
+            localExamples.push(newEx);
+            this.saveLocalExamples(requestId, localExamples);
+            return newEx;
+        }
+
+        const res = await firstValueFrom(
+            this.http.post<{ data: any }>(`${API_BASE_URL}/request/${requestId}/example`, {
+                name,
+                requestSnapshot: JSON.stringify(exampleData)
+            })
+        );
+        return res?.data;
+    }
+
+    async getExamples(requestId: string): Promise<any[]> {
+        if (this.authService.isLoggedIn()) {
+            try {
+                const res = await firstValueFrom(
+                    this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/${requestId}/example`)
+                );
+                if (res?.data && res.data.length > 0) return res.data;
+            } catch { }
+        }
+        return this.getLocalExamples(requestId);
+    }
+
+    async deleteExample(requestId: string, exampleId: string): Promise<void> {
+        if (this.authService.isLoggedIn()) {
+            try {
+                await firstValueFrom(
+                    this.http.delete(`${API_BASE_URL}/request/example/${exampleId}`)
+                );
+            } catch { }
+        }
+        const local = this.getLocalExamples(requestId).filter(e => e.id !== exampleId);
+        this.saveLocalExamples(requestId, local);
+    }
+
+    private getLocalExamples(requestId: string): any[] {
+        if (!this.isBrowser) return [];
+        try {
+            const raw = localStorage.getItem(`onsteroids_examples_${requestId}`);
+            return raw ? JSON.parse(raw) : [];
+        } catch { return []; }
+    }
+
+    private saveLocalExamples(requestId: string, examples: any[]) {
+        if (!this.isBrowser) return;
+        try {
+            localStorage.setItem(`onsteroids_examples_${requestId}`, JSON.stringify(examples));
+        } catch { }
+    }
+
     async renameCapsule(id: string, name: string): Promise<void> {
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -562,16 +848,38 @@ export class TabStateService {
     }
 
     addOpenTab(state: RequestState) {
+        let hydrated = { ...state };
+        if (hydrated.responseBody === null || hydrated.responseBody === undefined) {
+            const cached = this.getCachedResponse(hydrated.id, hydrated.url);
+            if (cached) {
+                hydrated = {
+                    ...hydrated,
+                    responseBody: cached.responseBody ?? hydrated.responseBody,
+                    responseStatus: cached.responseStatus ?? hydrated.responseStatus,
+                    responseTime: cached.responseTime ?? hydrated.responseTime,
+                    responseSize: cached.responseSize ?? hydrated.responseSize,
+                    responseCookies: cached.responseCookies ?? hydrated.responseCookies,
+                    responseHeaders: cached.responseHeaders ?? hydrated.responseHeaders,
+                    testResults: cached.testResults ?? hydrated.testResults
+                };
+            }
+        }
+
         this.states.update(map => {
             const next = new Map(map);
-            if (!next.has(state.id)) {
-                next.set(state.id, state);
+            if (!next.has(hydrated.id)) {
+                next.set(hydrated.id, hydrated);
+            } else {
+                const existing = next.get(hydrated.id)!;
+                if (existing.responseBody === null && hydrated.responseBody !== null) {
+                    next.set(hydrated.id, { ...existing, ...hydrated });
+                }
             }
             return next;
         });
 
-        if (!this.openTabIds().includes(state.id)) {
-            this.openTabIds.update(ids => [...ids, state.id]);
+        if (!this.openTabIds().includes(hydrated.id)) {
+            this.openTabIds.update(ids => [...ids, hydrated.id]);
         }
     }
 
@@ -824,6 +1132,8 @@ export class TabStateService {
             if (dto.encryptedBodyPaths) encBodyPaths = JSON.parse(dto.encryptedBodyPaths);
         } catch (e) { }
 
+        const cached = this.getCachedResponse(dto.id, dto.url);
+
         return {
             ...base,
             id: dto.id,
@@ -879,6 +1189,13 @@ export class TabStateService {
                 value: f.fieldValue ?? '',
                 type: (f.fieldType as any) || 'text'
             })),
+            responseBody: cached?.responseBody ?? base.responseBody,
+            responseStatus: cached?.responseStatus ?? base.responseStatus,
+            responseTime: cached?.responseTime ?? base.responseTime,
+            responseSize: cached?.responseSize ?? base.responseSize,
+            responseCookies: cached?.responseCookies ?? base.responseCookies,
+            responseHeaders: cached?.responseHeaders ?? base.responseHeaders,
+            testResults: cached?.testResults ?? base.testResults,
             isDirty: false,
             isLoading: false
         };

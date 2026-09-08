@@ -29,7 +29,8 @@
         (cdkDropListDropped)="dropTab($event)"
         class="w-full h-full flex items-center overflow-hidden overflow-x-auto no-scrollbar scroll-smooth">
         @for (tab of tabs(); track tab.id) {
-        <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)" [title]="tab.name"
+        <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)"
+            (contextmenu)="onTabContextMenu($event, tab.id)" [title]="tab.name"
             (cdkDragMoved)="onDragMoved($event)"
             class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group min-w-fit"
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
@@ -116,3 +117,31 @@
 
 <app-variable-modal #variableModal />
 <app-swagger-import-modal #swaggerModal />
+
+<!-- Right-Click Context Menu -->
+@if (contextMenu().isOpen) {
+<div class="fixed inset-0 z-500" (click)="closeContextMenu()" (contextmenu)="$event.preventDefault(); closeContextMenu()">
+    <div class="absolute bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl py-1 min-w-[170px] z-501 text-[12px] text-(--postonsteroids-text-primary) select-none"
+         [style.left.px]="contextMenu().x"
+         [style.top.px]="contextMenu().y"
+         (click)="$event.stopPropagation()">
+        <button (click)="onCloseTabFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>Close Tab</span>
+        </button>
+        <button (click)="onCloseOtherTabsFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>Close Other Tabs</span>
+        </button>
+        <button (click)="onCloseAllTabsFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer text-red-400">
+            <span>Close All Tabs</span>
+        </button>
+        <div class="h-px bg-(--postonsteroids-border)/50 my-1"></div>
+        <button (click)="onDuplicateTabFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>Duplicate Tab</span>
+        </button>
+    </div>
+</div>
+}

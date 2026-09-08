@@ -4,6 +4,8 @@ import { TabStateService, FormDataRow } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
+import { AuthService } from './auth.service';
+import { API_BASE_URL } from '../constants/api.constants';
 
 @Injectable({
     providedIn: 'root'
@@ -13,8 +15,8 @@ export class RequestExecutionService {
     private tabStateService = inject(TabStateService);
     private variableService = inject(VariableService);
     private sandboxService = inject(SandboxExecutionService);
-    // Use injector for AutoAuthService to avoid circular dependency if needed, but here it might be fine.
     private autoAuthService = inject(AutoAuthService);
+    private authService = inject(AuthService);
 
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
 
@@ -517,8 +519,7 @@ export class RequestExecutionService {
             }
 
             // 11. Update Tab State
-            this.tabStateService.updateState(tabId, {
-                isLoading: false,
+            const responseData = {
                 responseBody: responseBodyParsed,
                 responseStatus: status,
                 responseTime,
@@ -530,6 +531,31 @@ export class RequestExecutionService {
                     postResponseConsole: postResponseLogs,
                     encryptionConsole: encryptionLogs
                 }
+            };
+
+            this.tabStateService.updateState(tabId, {
+                isLoading: false,
+                ...responseData
+            });
+
+            this.tabStateService.cacheResponse(tabId, freshState.url, {
+                responseBody: responseBodyParsed,
+                responseStatus: status,
+                responseTime,
+                responseSize,
+                responseHeaders: responseData.responseHeaders
+            });
+
+            this.recordHistory({
+                method: freshState.method,
+                url: resolvedUrl || freshState.url,
+                requestSnapshot: JSON.stringify({
+                    ...freshState,
+                    ...responseData
+                }),
+                responseStatus: status,
+                responseTime,
+                responseSize
             });
 
         } catch (globalErr: any) {
@@ -543,6 +569,34 @@ export class RequestExecutionService {
             if (isAutoAuthRetry && originalTabId && originalTabId !== tabId) {
                 this.tabStateService.setActiveTab(originalTabId);
             }
+        }
+    }
+
+    private recordHistory(entry: {
+        method: string;
+        url: string;
+        requestSnapshot: string;
+        responseStatus: number;
+        responseTime: number;
+        responseSize: number;
+    }) {
+        try {
+            const raw = localStorage.getItem('onsteroids_history');
+            const list = raw ? JSON.parse(raw) : [];
+            const historyItem = {
+                id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+                ...entry,
+                createdAt: new Date().toISOString()
+            };
+            list.unshift(historyItem);
+            if (list.length > 200) list.pop();
+            localStorage.setItem('onsteroids_history', JSON.stringify(list));
+        } catch (e) { }
+
+        if (this.authService.isLoggedIn()) {
+            this.http.post(`${API_BASE_URL}/History`, entry).subscribe({
+                error: (err) => console.warn('Could not persist history to backend', err)
+            });
         }
     }
 }

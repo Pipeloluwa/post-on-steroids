@@ -1,5 +1,7 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
 import { SwaggerImportModalComponent } from '../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
@@ -11,17 +13,50 @@ interface ParsedCapsuleGroup {
 
 @Component({
     selector: 'app-import-component',
-    imports: [CommonModule, MatIcon, SwaggerImportModalComponent],
+    imports: [CommonModule, FormsModule, MatIcon, SwaggerImportModalComponent],
     templateUrl: './import.component.html',
-    styleUrl: './import.component.css'
+    styleUrl: './import.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ImportComponent {
+export class ImportComponent implements OnInit {
     tabStateService = inject(TabStateService);
+    private route = inject(ActivatedRoute);
+    private router = inject(Router);
     
     importStatus = signal<string>('');
     importError = signal<boolean>(false);
     isImporting = signal<boolean>(false);
     private importStatusTimeout: number | null = null;
+
+    showShareUrlModal = signal<boolean>(false);
+    shareUrlInput = signal<string>('');
+
+    ngOnInit() {
+        this.route.queryParams.subscribe(params => {
+            if (params['share']) {
+                this.shareUrlInput.set(params['share']);
+                this.showShareUrlModal.set(true);
+            }
+        });
+    }
+
+    async importFromShareLink() {
+        const input = this.shareUrlInput().trim();
+        if (!input || this.isImporting()) return;
+
+        this.isImporting.set(true);
+        try {
+            const res = await this.tabStateService.importCapsuleFromUrl(input);
+            this.showStatus(`Successfully imported capsule "${res.capsuleName}" with ${res.requestsCount} request(s)!`, false);
+            this.showShareUrlModal.set(false);
+            this.shareUrlInput.set('');
+        } catch (err: any) {
+            console.error('Import from share link failed:', err);
+            this.showStatus(err?.message || 'Failed to import shared capsule. Link may be invalid or expired.', true);
+        } finally {
+            this.isImporting.set(false);
+        }
+    }
 
     onFileSelected(event: Event) {
         const input = event.target as HTMLInputElement;

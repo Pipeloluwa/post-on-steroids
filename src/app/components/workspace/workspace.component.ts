@@ -140,17 +140,113 @@ export class WorkspaceComponent {
         this.tabStateService.createAndOpenNewTab();
     }
 
-    closeTabFromSidebar(id: string, event: Event) {
+    // Batch selection
+    selectedRequestIds = signal<Set<string>>(new Set());
+    isDeletingRequests = signal<boolean>(false);
+
+    toggleSelectRequest(id: string, event: Event) {
         event.stopPropagation();
-        this.tabStateService.closeTab(id);
-        if (this.tabStateService.activeTabId() === id) {
-            const remaining = this.tabStateService.openTabs();
-            if (remaining.length > 0) {
-                this.tabStateService.setActiveTab(remaining[0].id);
-            } else {
-                this.tabStateService.activeTabId.set(null);
-            }
+        const current = new Set(this.selectedRequestIds());
+        if (current.has(id)) {
+            current.delete(id);
+        } else {
+            current.add(id);
         }
+        this.selectedRequestIds.set(current);
+    }
+
+    toggleSelectAllRequests() {
+        const allReqs = this.tabStateService.allCapsuleRequests();
+        if (this.selectedRequestIds().size === allReqs.length) {
+            this.selectedRequestIds.set(new Set());
+        } else {
+            this.selectedRequestIds.set(new Set(allReqs.map(r => r.id)));
+        }
+    }
+
+    async deleteRequestFromSidebar(request: any, event: Event) {
+        event.stopPropagation();
+        const displayName = this.tabStateService.resolveRequestTitle(request.name, request.url);
+        const confirmMsg = `Are you sure you want to delete request "${displayName}"?`;
+        if (!window.confirm(confirmMsg)) return;
+
+        try {
+            await this.tabStateService.deleteRequest(request.id);
+            this.selectedRequestIds.update(set => {
+                const next = new Set(set);
+                next.delete(request.id);
+                return next;
+            });
+            this.notificationService.notify(`Request "${displayName}" deleted.`);
+        } catch (e: any) {
+            this.notificationService.notify(`Failed to delete request: ${e.message || 'Error'}`);
+        }
+    }
+
+    async batchDeleteSelectedRequests() {
+        const ids = Array.from(this.selectedRequestIds());
+        if (ids.length === 0) return;
+
+        const confirmMsg = `Are you sure you want to delete ${ids.length} selected request(s)?`;
+        if (!window.confirm(confirmMsg)) return;
+
+        this.isDeletingRequests.set(true);
+        try {
+            await this.tabStateService.batchDeleteRequests(ids);
+            this.selectedRequestIds.set(new Set());
+            this.notificationService.notify(`Deleted ${ids.length} request(s) successfully.`);
+        } catch (e: any) {
+            this.notificationService.notify(`Failed to delete requests: ${e.message || 'Error'}`);
+        } finally {
+            this.isDeletingRequests.set(false);
+        }
+    }
+
+    // Request Examples
+    expandedExampleRequestId = signal<string | null>(null);
+    requestExamplesMap = signal<Map<string, any[]>>(new Map());
+
+    async toggleExamples(requestId: string, event: Event) {
+        event.stopPropagation();
+        if (this.expandedExampleRequestId() === requestId) {
+            this.expandedExampleRequestId.set(null);
+            return;
+        }
+        this.expandedExampleRequestId.set(requestId);
+        const examples = await this.tabStateService.getExamples(requestId);
+        this.requestExamplesMap.update(map => {
+            const next = new Map(map);
+            next.set(requestId, examples);
+            return next;
+        });
+    }
+
+    loadExample(example: any, event: Event) {
+        event.stopPropagation();
+        try {
+            const snapshot = typeof example.requestSnapshot === 'string' ? JSON.parse(example.requestSnapshot) : example.requestSnapshot;
+            const targetId = example.requestId || this.tabStateService.activeTabId();
+            if (targetId) {
+                this.tabStateService.updateState(targetId, snapshot);
+                this.tabStateService.setActiveTab(targetId);
+                this.notificationService.notify(`Loaded example "${example.name}".`);
+            }
+        } catch (e) {
+            console.error('Failed to load example', e);
+        }
+    }
+
+    async deleteExample(requestId: string, exampleId: string, event: Event) {
+        event.stopPropagation();
+        if (!window.confirm('Are you sure you want to delete this example?')) return;
+        await this.tabStateService.deleteExample(requestId, exampleId);
+        const examples = await this.tabStateService.getExamples(requestId);
+        this.requestExamplesMap.update(map => {
+            const next = new Map(map);
+            next.set(requestId, examples);
+            return next;
+        });
+        this.notificationService.notify('Example deleted.');
     }
 
     formatRequestName(name: string): string {

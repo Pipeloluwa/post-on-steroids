@@ -1,7 +1,8 @@
-<div class="p-6 h-full bg-(--postonsteroids-bg-primary)">
+<div class="p-6 h-full bg-(--postonsteroids-bg-primary) relative">
     <h2 class="text-xl font-bold text-(--postonsteroids-text-primary) mb-8">Import Data</h2>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Card 1: Import JSON Data -->
         <div (click)="fileInput.click()"
             class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative">
 
@@ -19,6 +20,7 @@
             </div>
         </div>
 
+        <!-- Card 2: Import from Swagger -->
         <div (click)="swaggerModal.open()" (keydown.enter)="swaggerModal.open()" tabindex="0"
             class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative"
             title="Import from Swagger">
@@ -34,9 +36,79 @@
                 </div>
             </div>
         </div>
+
+        <!-- Card 3: Import from Share Link -->
+        <div (click)="showShareUrlModal.set(true)" (keydown.enter)="showShareUrlModal.set(true)" tabindex="0"
+            class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative"
+            title="Import from Share Link">
+            <div class="flex items-center gap-x-4">
+                <div
+                    class="size-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-all">
+                    <mat-icon class="text-[24px]">share</mat-icon>
+                </div>
+                <div class="flex flex-col gap-y-1">
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Import Shared Capsule</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a shared capsule link or share token to import requests directly.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <app-swagger-import-modal #swaggerModal (onImportStatus)="onSwaggerImportStatus($event)" />
+
+    <!-- Share Link Import Modal -->
+    @if (showShareUrlModal()) {
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fadeIn">
+            <div class="w-full max-w-lg mx-4 p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-5">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <mat-icon class="text-purple-500">link</mat-icon>
+                        <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Import Shared Capsule</h3>
+                    </div>
+                    <button (click)="showShareUrlModal.set(false)" class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
+                        <mat-icon>close</mat-icon>
+                    </button>
+                </div>
+
+                <p class="text-xs text-(--postonsteroids-text-secondary)">
+                    Enter the shared capsule URL or the share token you received to import all its requests into a new capsule in your workspace.
+                </p>
+
+                <div class="flex flex-col gap-2">
+                    <input type="text" [(ngModel)]="shareUrlInput" (keydown.enter)="importFromShareLink()"
+                        placeholder="e.g. https://onsteroids.app/import?share=token or raw token"
+                        class="w-full px-4 py-2.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-sm outline-none focus:border-(--postonsteroids-accent)">
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button (click)="showShareUrlModal.set(false)"
+                        class="px-4 py-2 text-xs font-semibold rounded-lg bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) border border-(--postonsteroids-border) transition-all cursor-pointer">
+                        Cancel
+                    </button>
+                    <button (click)="importFromShareLink()" [disabled]="!shareUrlInput().trim() || isImporting()"
+                        class="flex items-center gap-2 px-5 py-2 text-xs font-semibold rounded-lg bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                        @if (isImporting()) {
+                            <mat-icon class="text-[16px]! size-[16px]! animate-spin">sync</mat-icon>
+                            <span>Importing...</span>
+                        } @else {
+                            <mat-icon class="text-[16px]! size-[16px]!">cloud_download</mat-icon>
+                            <span>Import Capsule</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Loading Indicator Overlay for File / Share Import -->
+    @if (isImporting()) {
+        <div class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-xs animate-fadeIn pointer-events-auto">
+            <div class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) flex flex-col items-center gap-3 shadow-2xl">
+                <mat-icon class="text-[32px]! size-[32px]! animate-spin text-(--postonsteroids-accent)">sync</mat-icon>
+                <span class="text-sm font-semibold text-(--postonsteroids-text-primary)">Importing capsule data...</span>
+            </div>
+        </div>
+    }
 
     @if (importStatus()) {
     <div class="mt-8 p-4 rounded-xl border" [class.bg-green-500/10]="!importError()"

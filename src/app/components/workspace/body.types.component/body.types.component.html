@@ -25,10 +25,15 @@
 
     @if (bodyType() === 'raw') {
     <div class="flex items-center gap-x-2 mr-2">
-        <div class="flex items-center mt-1">
-            <button (click)="toggleWrap()" title="{{ wrapResponse() ? 'Disable wrapping' : 'Enable wrapping' }}"
+        <div class="flex items-center mt-1 gap-x-1">
+            <button (click)="toggleWrap()" title="{{ wrapResponse() ? 'Disable wrapping (Collapse to single line)' : 'Enable wrapping (Pretty format)' }}"
                 class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
                 <mat-icon class="text-[18px]! size-[18px]!">{{ wrapResponse() ? 'wrap_text' : 'text_fields'}}</mat-icon>
+            </button>
+            <button (click)="addBodyToVariable()" title="Add Field / Body to Global Variables"
+                class="flex items-center gap-x-1 px-2 py-0.5 rounded text-[11px] font-medium bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-accent)/20 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer border border-(--postonsteroids-border)/40">
+                <mat-icon class="text-[14px]! size-[14px]!">data_object</mat-icon>
+                <span>+ Var</span>
             </button>
         </div>
 

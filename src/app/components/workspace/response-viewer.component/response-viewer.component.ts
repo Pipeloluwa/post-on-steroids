@@ -7,6 +7,9 @@ import { TabStateService } from '../../../shared/services/tab.state.service';
 import { ChangeDetectionStrategy, input } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
+import { VariableService } from '../../../shared/services/variable.service';
+import { NotificationService } from '../../../shared/services/notification.service';
+
 @Component({
     selector: 'app-response-viewer-component',
     changeDetection: ChangeDetectionStrategy.OnPush,
@@ -16,6 +19,8 @@ import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.
 })
 export class ResponseViewerComponent {
     tabStateService = inject(TabStateService);
+    private variableService = inject(VariableService);
+    private notificationService = inject(NotificationService);
 
     activeTab = signal('Body');
     activeMode = signal('Pretty');
@@ -33,7 +38,25 @@ export class ResponseViewerComponent {
     formattedResponseBody = computed(() => {
         const body = this.responseBody();
         if (body === null) return '';
-        if (typeof body === 'string') return body;
+        if (!this.wrapResponse()) {
+            if (typeof body === 'string') {
+                try {
+                    const parsed = JSON.parse(body);
+                    return JSON.stringify(parsed);
+                } catch {
+                    return body.replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
+                }
+            }
+            return JSON.stringify(body);
+        }
+        if (typeof body === 'string') {
+            try {
+                const parsed = JSON.parse(body);
+                return JSON.stringify(parsed, null, 2);
+            } catch {
+                return body;
+            }
+        }
         return JSON.stringify(body, null, 2);
     });
     responseStatus = computed(() => this.tabState()?.responseStatus ?? null);
@@ -107,6 +130,60 @@ export class ResponseViewerComponent {
     setMode(mode: string) { this.activeMode.set(mode); }
     setResponseType(type: string) { this.responseType.set(type); }
 
+    toggleWrap() {
+        this.wrapResponse.update(v => !v);
+    }
+
+    addResponseToVariable() {
+        const defaultKey = 'responseVar';
+        const key = window.prompt('Enter Variable Name to add to Global Variables:', defaultKey);
+        if (!key || !key.trim()) return;
+
+        let value = '';
+        const body = this.responseBody();
+        const promptVal = window.prompt('Enter Property Path or Value (or leave blank to save full response body):', '');
+        if (promptVal && promptVal.trim()) {
+            const p = promptVal.trim();
+            if (typeof body === 'object' && body !== null && p in body) {
+                value = String((body as any)[p]);
+            } else {
+                value = p;
+            }
+        } else {
+            value = typeof body === 'object' ? JSON.stringify(body) : String(body ?? '');
+        }
+
+        this.variableService.addVariable(key.trim(), value);
+        this.notificationService.notify(`Added variable "{{${key.trim()}}}" to Global Variables.`);
+    }
+
+    async saveAsExample() {
+        const defaultName = `Example - ${new Date().toLocaleTimeString()}`;
+        const name = window.prompt('Enter name for this request/response example:', defaultName);
+        if (!name || !name.trim()) return;
+
+        const state = this.tabState();
+        if (!state) return;
+
+        try {
+            await this.tabStateService.createExample(this.tabId(), name.trim(), {
+                method: state.method,
+                url: state.url,
+                params: state.params,
+                headers: state.headers,
+                rawBody: state.rawBody,
+                responseBody: this.responseBody(),
+                responseStatus: this.responseStatus(),
+                responseTime: this.responseTime(),
+                responseSize: this.responseSize(),
+                responseHeaders: this.responseHeaders()
+            });
+            this.notificationService.notify(`Saved example "${name.trim()}".`);
+        } catch (e: any) {
+            this.notificationService.notify(`Failed to save example: ${e.message || 'Error'}`);
+        }
+    }
+
     copyResponse() {
         const data = JSON.stringify(this.responseBody(), null, 2);
         this.copyToClipboard(data);
@@ -139,10 +216,6 @@ export class ResponseViewerComponent {
         if (!text) return;
         navigator.clipboard.writeText(text);
         // Could also trigger a notification here if we had NotificationService injected
-    }
-
-    toggleWrap() {
-        this.wrapResponse.update(value => !value);
     }
 
     toggleConsoleWrap() {

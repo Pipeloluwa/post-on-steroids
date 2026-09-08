@@ -5,6 +5,8 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService, EncryptionState, FormDataRow } from '../../../shared/services/tab.state.service';
+import { VariableService } from '../../../shared/services/variable.service';
+import { NotificationService } from '../../../shared/services/notification.service';
 import { ChangeDetectionStrategy } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
@@ -22,6 +24,8 @@ export class BodyTypesComponent {
   private platformId = inject(PLATFORM_ID);
   isBrowser = isPlatformBrowser(this.platformId);
   tabStateService = inject(TabStateService);
+  private variableService = inject(VariableService);
+  private notificationService = inject(NotificationService);
   tabId = input.required<string>();
   wrapResponse = signal(true);
   
@@ -167,7 +171,58 @@ export class BodyTypesComponent {
   }
 
   toggleWrap() {
-        this.wrapResponse.update(value => !value);
+    const nextWrap = !this.wrapResponse();
+    this.wrapResponse.set(nextWrap);
+
+    const id = this.tabId();
+    if (!id) return;
+    const content = this.rawBodyContent();
+    if (!content) return;
+
+    if (!nextWrap) {
+      // Unwrap: collapse into one single line
+      try {
+        const parsed = JSON.parse(content);
+        const singleLine = JSON.stringify(parsed);
+        this.tabStateService.updateState(id, {
+          rawBody: singleLine,
+          rawBodyJson: singleLine
+        });
+      } catch {
+        const collapsed = content.replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
+        this.tabStateService.updateState(id, {
+          rawBody: collapsed,
+          ...(this.rawType() === 'XML' ? { rawBodyXml: collapsed } : { rawBodyJson: collapsed })
+        });
+      }
+    } else {
+      // Wrap: pretty format
+      try {
+        const parsed = JSON.parse(content);
+        const pretty = JSON.stringify(parsed, null, 2);
+        this.tabStateService.updateState(id, {
+          rawBody: pretty,
+          rawBodyJson: pretty
+        });
+      } catch { }
+    }
+  }
+
+  addBodyToVariable() {
+    const defaultKey = 'requestBodyVar';
+    const key = window.prompt('Enter Variable Name to add to Global Variables:', defaultKey);
+    if (!key || !key.trim()) return;
+
+    let value = '';
+    const content = this.rawBodyContent();
+    const promptVal = window.prompt('Enter Variable Value (or leave blank to use entire body):', '');
+    if (promptVal && promptVal.trim()) {
+      value = promptVal.trim();
+    } else {
+      value = content;
     }
 
+    this.variableService.addVariable(key.trim(), value);
+    this.notificationService.notify(`Added variable "{{${key.trim()}}}" to Global Variables.`);
+  }
 }

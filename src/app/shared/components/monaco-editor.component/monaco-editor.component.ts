@@ -248,13 +248,34 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               const lineContent = model.getLineContent(position.lineNumber);
               const textBeforeWord = lineContent.substring(0, word.startColumn - 1);
               
-              if (textBeforeWord.endsWith('{{')) {
+              const isDoubleOpen = textBeforeWord.endsWith('{{');
+              const isSingleOpen = !isDoubleOpen && textBeforeWord.endsWith('{');
+
+              if (isDoubleOpen || isSingleOpen) {
+                const textAfterWord = lineContent.substring(word.endColumn - 1);
+                let consumeClosing = 0;
+                if (textAfterWord.startsWith('}}')) {
+                  consumeClosing = 2;
+                } else if (textAfterWord.startsWith('}')) {
+                  consumeClosing = 1;
+                }
+
+                const range = {
+                  startLineNumber: position.lineNumber,
+                  endLineNumber: position.lineNumber,
+                  startColumn: word.startColumn,
+                  endColumn: word.endColumn + consumeClosing
+                };
+
+                const prefix = isSingleOpen ? '{' : '';
                 const variables = this.variableService.variables();
                 const suggestions = variables.map((v: any) => ({
                   label: v.key,
                   kind: monacoGlobal.languages.CompletionItemKind.Variable,
-                  insertText: `${v.key}}}`,
-                  range: range
+                  insertText: `${prefix}${v.key}}}`,
+                  range: range,
+                  detail: `Value: ${v.value || '(empty)'}`,
+                  documentation: `Variable: {{${v.key}}}`
                 }));
                 return { suggestions };
               }

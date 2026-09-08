@@ -30,10 +30,7 @@ export class RequestTabsComponent {
 
     tabs = computed<RequestTab[]>(() => {
         return this.tabStateService.getAllOpenTabs().map(state => {
-            let name = state.name;
-            if (name.includes(' — ')) {
-                name = name.split(' — ')[1];
-            }
+            const name = this.tabStateService.resolveRequestTitle(state.name, state.url);
             return {
                 id: state.id,
                 method: state.method,
@@ -44,6 +41,64 @@ export class RequestTabsComponent {
     });
 
     activeTabId = this.tabStateService.activeTabId;
+
+    // Right click context menu state
+    contextMenu = signal<{ isOpen: boolean; x: number; y: number; tabId: string | null }>({
+        isOpen: false,
+        x: 0,
+        y: 0,
+        tabId: null
+    });
+
+    onTabContextMenu(event: MouseEvent, tabId: string) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.contextMenu.set({
+            isOpen: true,
+            x: event.clientX,
+            y: event.clientY,
+            tabId
+        });
+    }
+
+    closeContextMenu() {
+        if (this.contextMenu().isOpen) {
+            this.contextMenu.set({ isOpen: false, x: 0, y: 0, tabId: null });
+        }
+    }
+
+    onCloseTabFromContext(event: Event) {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        if (tabId) {
+            this.closeTab(tabId, event);
+        }
+        this.closeContextMenu();
+    }
+
+    onCloseOtherTabsFromContext(event: Event) {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        if (tabId) {
+            this.tabStateService.closeOtherTabs(tabId);
+        }
+        this.closeContextMenu();
+    }
+
+    onCloseAllTabsFromContext(event: Event) {
+        event.stopPropagation();
+        this.tabStateService.closeAllTabs();
+        this.closeContextMenu();
+    }
+
+    onDuplicateTabFromContext(event: Event) {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        if (tabId) {
+            this.duplicateTab(tabId, event);
+        }
+        this.closeContextMenu();
+    }
 
     historyStack = signal<string[]>([]);
     historyIndex = signal<number>(-1);

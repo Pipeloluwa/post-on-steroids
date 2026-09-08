@@ -43,46 +43,93 @@
 
         <!-- Capsule Requests list (visible when expanded) -->
         <div class="flex-1 overflow-y-auto overflow-x-hidden py-1" [class.hidden]="!isSidebarOpen()">
-            <div class="flex items-center justify-between px-3 py-1.5 border-b border-(--postonsteroids-border)/40 mb-1">
+            <div class="flex items-center justify-between px-2 py-1.5 border-b border-(--postonsteroids-border)/40 mb-1">
                 <div class="flex items-center gap-x-1.5">
-                    <mat-icon class="text-(--postonsteroids-text-muted) text-[14px]! size-[14px]!">folder_open</mat-icon>
+                    <input type="checkbox"
+                           [checked]="tabStateService.allCapsuleRequests().length > 0 && selectedRequestIds().size === tabStateService.allCapsuleRequests().length"
+                           (change)="toggleSelectAllRequests()"
+                           title="Select all requests"
+                           class="accent-(--postonsteroids-accent) cursor-pointer" />
                     <span class="text-[10px] font-semibold text-(--postonsteroids-text-muted) tracking-widest uppercase">Requests</span>
                 </div>
-                <button (click)="addNewRequest()" title="New Request in Capsule"
-                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
-                    <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
-                </button>
+                <div class="flex items-center gap-x-1">
+                    @if (selectedRequestIds().size > 0) {
+                        <button (click)="batchDeleteSelectedRequests()"
+                                [disabled]="isDeletingRequests()"
+                                title="Delete selected requests"
+                                class="p-0.5 px-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-bold flex items-center gap-x-0.5 cursor-pointer">
+                            <mat-icon class="text-[12px]! size-[12px]!">delete</mat-icon>
+                            <span>{{ selectedRequestIds().size }}</span>
+                        </button>
+                    }
+                    <button (click)="addNewRequest()" title="New Request in Capsule"
+                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
+                        <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
+                    </button>
+                </div>
             </div>
 
             <div class="flex flex-col">
                 @for (req of tabStateService.allCapsuleRequests(); track req.id) {
-                    <div class="flex items-center gap-x-2 pl-3 pr-2 py-1.5 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
-                         [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id"
-                         [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === req.id"
-                         [class.border-transparent]="tabStateService.activeTabId() !== req.id"
-                         [class.opacity-60]="!tabStateService.openTabIds().includes(req.id)"
-                         [title]="req.name + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)')"
-                         (click)="openRequest(req)">
-                        <span class="text-[9px] font-bold w-[30px] shrink-0" [style.color]="getMethodColor(req.method)">
-                            {{ req.method }}
-                        </span>
-                        <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 min-w-0"
-                              [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id">
-                            {{ formatRequestName(req.name) }}
-                        </span>
+                    <div class="flex flex-col border-b border-(--postonsteroids-border)/10">
+                        <div class="flex items-center gap-x-1.5 pl-2 pr-1.5 py-1.5 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
+                             [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id"
+                             [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === req.id"
+                             [class.border-transparent]="tabStateService.activeTabId() !== req.id"
+                             [class.opacity-60]="!tabStateService.openTabIds().includes(req.id)"
+                             [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)')"
+                             (click)="openRequest(req)">
+                            
+                            <input type="checkbox"
+                                   [checked]="selectedRequestIds().has(req.id)"
+                                   (click)="toggleSelectRequest(req.id, $event)"
+                                   class="accent-(--postonsteroids-accent) cursor-pointer shrink-0" />
 
-                        @if (req.isDirty) {
-                            <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"></div>
-                        }
-
-                        @if (tabStateService.openTabIds().includes(req.id)) {
-                            <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-(--postonsteroids-text-primary) text-(--postonsteroids-text-muted)"
-                                    title="Close tab"
-                                    (click)="closeTabFromSidebar(req.id, $event)">
-                                <mat-icon class="text-[14px]! size-[14px]!">close</mat-icon>
+                            <button (click)="toggleExamples(req.id, $event)" title="Toggle Examples"
+                                    class="p-0.5 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0">
+                                <mat-icon class="text-[12px]! size-[12px]! transition-transform"
+                                          [class.rotate-90]="expandedExampleRequestId() === req.id">chevron_right</mat-icon>
                             </button>
-                        } @else {
-                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-text-muted) opacity-0 group-hover/tab:opacity-70 shrink-0" title="Click to open tab">open_in_new</mat-icon>
+
+                            <span class="text-[9px] font-bold w-[28px] shrink-0" [style.color]="getMethodColor(req.method)">
+                                {{ req.method }}
+                            </span>
+                            <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 min-w-0"
+                                  [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id">
+                                {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
+                            </span>
+
+                            @if (req.isDirty) {
+                                <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"></div>
+                            }
+
+                            <!-- Delete request button -->
+                            <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-red-400 text-(--postonsteroids-text-muted) p-0.5"
+                                    title="Delete request"
+                                    (click)="deleteRequestFromSidebar(req, $event)">
+                                <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                            </button>
+                        </div>
+
+                        <!-- Nested Examples list -->
+                        @if (expandedExampleRequestId() === req.id) {
+                            <div class="pl-6 pr-2 py-1 bg-(--postonsteroids-bg-primary)/40 border-t border-(--postonsteroids-border)/10 flex flex-col gap-y-1">
+                                @for (ex of requestExamplesMap().get(req.id) || []; track ex.id) {
+                                    <div (click)="loadExample(ex, $event)"
+                                         class="flex items-center justify-between py-0.5 px-1.5 rounded hover:bg-(--postonsteroids-bg-hover) cursor-pointer group/ex text-[10px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                                        <div class="flex items-center gap-x-1 truncate">
+                                            <mat-icon class="text-[12px]! size-[12px]! text-(--postonsteroids-accent)">bookmark</mat-icon>
+                                            <span class="truncate">{{ ex.name }}</span>
+                                        </div>
+                                        <button (click)="deleteExample(req.id, ex.id, $event)"
+                                                class="opacity-0 group-hover/ex:opacity-100 hover:text-red-400 cursor-pointer">
+                                            <mat-icon class="text-[11px]! size-[11px]!">delete</mat-icon>
+                                        </button>
+                                    </div>
+                                } @empty {
+                                    <span class="text-[10px] text-(--postonsteroids-text-muted) italic px-1">No examples saved yet</span>
+                                }
+                            </div>
                         }
                     </div>
                 }

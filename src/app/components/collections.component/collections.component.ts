@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
@@ -11,7 +11,8 @@ import { inject } from '@angular/core';
     selector: 'app-collections-component',
     imports: [CommonModule, MatIcon, FormsModule],
     templateUrl: './collections.component.html',
-    styleUrl: './collections.component.css'
+    styleUrl: './collections.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CollectionsComponent {
     tabStateService = inject(TabStateService);
@@ -25,6 +26,52 @@ export class CollectionsComponent {
     editingId = signal<string | null>(null);
     editNameValue = signal<string>('');
     deletingCapsuleId = signal<string | null>(null);
+
+    selectedCapsuleIds = signal<Set<string>>(new Set());
+    isBatchDeleting = signal<boolean>(false);
+
+    isAllSelected = computed(() => {
+        const list = this.sortedCapsules();
+        return list.length > 0 && this.selectedCapsuleIds().size === list.length;
+    });
+
+    toggleSelectCapsule(id: string) {
+        const next = new Set(this.selectedCapsuleIds());
+        if (next.has(id)) {
+            next.delete(id);
+        } else {
+            next.add(id);
+        }
+        this.selectedCapsuleIds.set(next);
+    }
+
+    toggleSelectAll() {
+        if (this.isAllSelected()) {
+            this.selectedCapsuleIds.set(new Set());
+        } else {
+            this.selectedCapsuleIds.set(new Set(this.sortedCapsules().map(c => c.id)));
+        }
+    }
+
+    async deleteSelectedCapsules() {
+        const ids = Array.from(this.selectedCapsuleIds());
+        if (ids.length === 0 || this.isBatchDeleting()) return;
+
+        const count = ids.length;
+        const confirmMsg = `Are you sure you want to delete ${count} selected capsule${count > 1 ? 's' : ''}? This action cannot be undone.`;
+        if (!window.confirm(confirmMsg)) return;
+
+        this.isBatchDeleting.set(true);
+        try {
+            await this.tabStateService.batchDeleteCapsules(ids);
+            this.selectedCapsuleIds.set(new Set());
+            this.notificationService.notify(`Successfully deleted ${count} capsule${count > 1 ? 's' : ''}.`);
+        } catch (e: any) {
+            this.notificationService.notify(`Failed to delete capsules: ${e?.message || 'Unknown error'}`);
+        } finally {
+            this.isBatchDeleting.set(false);
+        }
+    }
 
     async createCapsule() {
         const name = this.newCapsuleName().trim();

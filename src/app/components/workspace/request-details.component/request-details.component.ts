@@ -1,4 +1,4 @@
-import { Component, effect, input, output, signal, computed, ViewChild } from '@angular/core';
+import { Component, ChangeDetectionStrategy, effect, input, output, signal, computed, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { MatIcon } from '@angular/material/icon';
@@ -14,6 +14,7 @@ import { inject } from '@angular/core';
     imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CreateCapsuleModalComponent],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RequestDetailsComponent {
     isLoggedIn = input<boolean>(false);
@@ -25,6 +26,8 @@ export class RequestDetailsComponent {
     tabStateService = inject(TabStateService);
     notificationService = inject(NotificationService);
     isSaving = computed(() => this.tabStateService.isSaving());
+    isSharing = signal<boolean>(false);
+    isExporting = signal<boolean>(false);
 
     tabId = input.required<string>();
     
@@ -76,7 +79,7 @@ export class RequestDetailsComponent {
         }
     }
 
-    shareCapsule() {
+    async shareCapsule() {
         if (!this.isLoggedIn()) {
             this.waitingForAuth.set(true);
             this.pendingAction.set('share');
@@ -85,9 +88,22 @@ export class RequestDetailsComponent {
             return;
         }
 
-        const shareLink = `https://onsteroids.app/share/${Math.random().toString(36).substring(7)}`;
-        this.generatedLink.set(shareLink);
-        this.showShareModal.set(true);
+        const capsuleId = this.tabStateService.activeCapsuleId();
+        if (!capsuleId) {
+            this.onNotify.emit('No active capsule selected to share.');
+            return;
+        }
+
+        this.isSharing.set(true);
+        try {
+            const shareUrl = await this.tabStateService.shareCapsule(capsuleId);
+            this.generatedLink.set(shareUrl);
+            this.showShareModal.set(true);
+        } catch (e: any) {
+            this.onNotify.emit(e?.message || 'Failed to share capsule.');
+        } finally {
+            this.isSharing.set(false);
+        }
     }
 
     copyLink() {
@@ -97,20 +113,27 @@ export class RequestDetailsComponent {
         });
     }
 
-    onSaveOptionSelected(option: string) {
-        if (option === 'Export Endpoint') {
-            const state = this.tabStateService.getState(this.tabId());
-            if (!state) return;
-            this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
-        } else if (option === 'Export Capsule') {
-            const collectionName = this.selectedCapsule();
-            const collectionRequests = this.tabStateService.savedCapsules();
-            const exportData = {
-                collection: collectionName,
-                exportedAt: new Date().toISOString(),
-                requests: collectionRequests
-            };
-            this.downloadJson(exportData, `capsule_${collectionName}.json`);
+    async onSaveOptionSelected(option: string) {
+        this.isExporting.set(true);
+        try {
+            if (option === 'Export Endpoint') {
+                const state = this.tabStateService.getState(this.tabId());
+                if (!state) return;
+                this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
+                this.onNotify.emit('Endpoint exported successfully.');
+            } else if (option === 'Export Capsule') {
+                const collectionName = this.selectedCapsule();
+                const collectionRequests = this.tabStateService.savedCapsules();
+                const exportData = {
+                    collection: collectionName,
+                    exportedAt: new Date().toISOString(),
+                    requests: collectionRequests
+                };
+                this.downloadJson(exportData, `capsule_${collectionName}.json`);
+                this.onNotify.emit(`Capsule "${collectionName}" exported successfully.`);
+            }
+        } finally {
+            setTimeout(() => this.isExporting.set(false), 300);
         }
     }
 

@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, KeyValue, AuthState, EncryptionState, SettingsState } from '../../../shared/services/tab.state.service';
 import { VariableService } from '../../../shared/services/variable.service';
+import { NotificationService } from '../../../shared/services/notification.service';
 import { ChangeDetectionStrategy, input } from '@angular/core';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { BodyTypesComponent } from "../body.types.component/body.types.component";
@@ -24,6 +25,7 @@ import { VariableInputComponent } from '../../../shared/components/variable-inpu
 export class PayloadTypesComponent {
   tabStateService = inject(TabStateService);
   variableService = inject(VariableService);
+  private notificationService = inject(NotificationService);
 
   payloadTypes = ['params', 'auth', 'headers', 'body', 'scripts', 'encryption', 'settings'];
   authTypes: AuthState['type'][] = ['none', 'bearer'];
@@ -84,6 +86,15 @@ export class PayloadTypesComponent {
   }
 
   // ── Params ───────────────────────────────────────────────────────────
+  addKeyValueToVariable(key: string, value: string) {
+    if (!key || !key.trim()) {
+      this.notificationService.notify('Cannot add variable without a key name.');
+      return;
+    }
+    this.variableService.addVariable(key.trim(), value || '');
+    this.notificationService.notify(`Added variable "{{${key.trim()}}}" to Global Variables.`);
+  }
+
   updateParam(i: number, key: keyof KeyValue, val: string | boolean) { this.updateKVField('params', i, key, val); }
   addParam() {
     this.tabStateService.updateState(this.tabId(), { params: [...this.params(), { enabled: true, key: '', value: '' }] });
