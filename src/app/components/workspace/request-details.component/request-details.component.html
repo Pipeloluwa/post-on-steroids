@@ -68,4 +68,7 @@
     <!-- Share Link Modal -->
     <app-share-modal-component [show]="showShareModal()" [link]="generatedLink()" (onClose)="showShareModal.set(false)"
         (onCopy)="copyLink()" />
+
+    <!-- Create Capsule Modal -->
+    <app-create-capsule-modal #createCapsuleModal />
 </div>

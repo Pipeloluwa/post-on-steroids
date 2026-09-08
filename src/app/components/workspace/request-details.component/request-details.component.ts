@@ -1,16 +1,17 @@
-import { Component, effect, input, output, signal, computed } from '@angular/core';
+import { Component, effect, input, output, signal, computed, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { MatIcon } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
+import { CreateCapsuleModalComponent } from '../../../shared/components/create-capsule.modal.component/create-capsule.modal.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { inject } from '@angular/core';
 
 @Component({
     selector: 'app-request-details-component',
-    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent],
+    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CreateCapsuleModalComponent],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
 })
@@ -62,13 +63,11 @@ export class RequestDetailsComponent {
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
 
+    @ViewChild('createCapsuleModal') createCapsuleModal?: CreateCapsuleModalComponent;
+
     async setCapsule(collectionName: string) {
         if (collectionName === '+ New Capsule...') {
-            const name = prompt('Enter a name for the new capsule:', 'My New Capsule');
-            if (name && name.trim()) {
-                await this.tabStateService.createCapsule(name.trim());
-                this.onNotify.emit(`Capsule "${name.trim()}" created successfully`);
-            }
+            this.createCapsuleModal?.open();
             return;
         }
         const capsule = this.tabStateService.capsules().find(c => c.name === collectionName);

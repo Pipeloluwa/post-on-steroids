@@ -19,7 +19,7 @@ export class MenuComponent {
     { name: 'Capsules', icon: 'collections', path: '/capsules' },
     { name: 'Export', icon: 'file_download', path: '/export' },
     { name: 'Import', icon: 'file_upload', path: '/import' },
-    { name: 'Utilities', icon: 'bolt', path: '/utilities' },
+    { name: 'Utilities', icon: 'handyman', path: '/utilities' },
     { name: 'History', icon: 'history', path: '/history' }
   ]);
 

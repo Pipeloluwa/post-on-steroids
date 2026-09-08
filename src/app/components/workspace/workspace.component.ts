@@ -1,10 +1,11 @@
-import { Component, signal, inject, PLATFORM_ID } from '@angular/core';
+import { Component, signal, inject, PLATFORM_ID, ViewChild } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
 import { RequestDetailsComponent } from './request-details.component/request-details.component';
 import { RequestUrlComponent } from './request-url.component/request-url.component';
 import { PayloadTypesComponent } from './payload.types.component/payload.types.component';
+import { CreateCapsuleModalComponent } from '../../shared/components/create-capsule.modal.component/create-capsule.modal.component';
 
 import { ResponseViewerComponent } from './response-viewer.component/response-viewer.component';
 import { MatIcon } from '@angular/material/icon';
@@ -23,6 +24,7 @@ import { TabStateService } from '../../shared/services/tab.state.service';
         RequestUrlComponent,
         PayloadTypesComponent,
         ResponseViewerComponent,
+        CreateCapsuleModalComponent,
         MatIcon
     ],
     templateUrl: './workspace.component.html',
@@ -101,9 +103,11 @@ export class WorkspaceComponent {
         this.isSidebarOpen.update(v => !v);
     }
 
+    @ViewChild('createCapsuleModal') createCapsuleModal?: CreateCapsuleModalComponent;
+
     async onCapsuleChange(capsuleId: string) {
         if (capsuleId === '__create_new__') {
-            await this.createNewCapsulePrompt();
+            this.createCapsuleModal?.open();
             return;
         }
         const capsule = this.tabStateService.capsules().find(c => c.id === capsuleId);
@@ -112,12 +116,8 @@ export class WorkspaceComponent {
         }
     }
 
-    async createNewCapsulePrompt() {
-        const name = prompt('Enter a name for the new capsule:', 'My New Capsule');
-        if (name && name.trim()) {
-            await this.tabStateService.createCapsule(name.trim());
-            this.triggerNotification(`Capsule "${name.trim()}" created successfully`);
-        }
+    openCreateCapsuleModal() {
+        this.createCapsuleModal?.open();
     }
 
     getMethodColor(method: string): string {

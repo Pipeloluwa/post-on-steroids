@@ -41,40 +41,58 @@
             </div>
         }
 
-        <!-- Open tabs list (visible when expanded) -->
+        <!-- Capsule Requests list (visible when expanded) -->
         <div class="flex-1 overflow-y-auto overflow-x-hidden py-1" [class.hidden]="!isSidebarOpen()">
-            <div class="flex items-center gap-x-1.5 px-3 py-1">
-                <mat-icon class="text-(--postonsteroids-text-muted) text-[14px]! size-[14px]!">layers</mat-icon>
-                <span class="text-[10px] text-(--postonsteroids-text-muted) tracking-widest uppercase">Open tabs</span>
+            <div class="flex items-center justify-between px-3 py-1.5 border-b border-(--postonsteroids-border)/40 mb-1">
+                <div class="flex items-center gap-x-1.5">
+                    <mat-icon class="text-(--postonsteroids-text-muted) text-[14px]! size-[14px]!">folder_open</mat-icon>
+                    <span class="text-[10px] font-semibold text-(--postonsteroids-text-muted) tracking-widest uppercase">Requests</span>
+                </div>
+                <button (click)="addNewRequest()" title="New Request in Capsule"
+                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
+                    <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
+                </button>
             </div>
 
             <div class="flex flex-col">
-                @for (tab of tabStateService.openTabs(); track tab.id) {
-                    <div class="flex items-center gap-x-2 pl-4 pr-2 py-1.5 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
-                         [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === tab.id"
-                         [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === tab.id"
-                         [class.border-transparent]="tabStateService.activeTabId() !== tab.id"
-                         [title]="tab.name"
-                         (click)="openRequest(tab)">
-                        <span class="text-[9px] font-bold w-[30px] shrink-0" [style.color]="getMethodColor(tab.method)">
-                            {{ tab.method }}
+                @for (req of tabStateService.allCapsuleRequests(); track req.id) {
+                    <div class="flex items-center gap-x-2 pl-3 pr-2 py-1.5 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
+                         [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id"
+                         [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === req.id"
+                         [class.border-transparent]="tabStateService.activeTabId() !== req.id"
+                         [class.opacity-60]="!tabStateService.openTabIds().includes(req.id)"
+                         [title]="req.name + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)')"
+                         (click)="openRequest(req)">
+                        <span class="text-[9px] font-bold w-[30px] shrink-0" [style.color]="getMethodColor(req.method)">
+                            {{ req.method }}
                         </span>
-                        <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 min-w-0">
-                            {{ formatRequestName(tab.name) }}
+                        <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 min-w-0"
+                              [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id">
+                            {{ formatRequestName(req.name) }}
                         </span>
-                        @if (tab.isDirty) {
+
+                        @if (req.isDirty) {
                             <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"></div>
                         }
-                        <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-(--postonsteroids-text-primary) text-(--postonsteroids-text-muted)"
-                                (click)="closeTabFromSidebar(tab.id, $event)">
-                            <mat-icon class="text-[14px]! size-[14px]!">close</mat-icon>
-                        </button>
+
+                        @if (tabStateService.openTabIds().includes(req.id)) {
+                            <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-(--postonsteroids-text-primary) text-(--postonsteroids-text-muted)"
+                                    title="Close tab"
+                                    (click)="closeTabFromSidebar(req.id, $event)">
+                                <mat-icon class="text-[14px]! size-[14px]!">close</mat-icon>
+                            </button>
+                        } @else {
+                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-text-muted) opacity-0 group-hover/tab:opacity-70 shrink-0" title="Click to open tab">open_in_new</mat-icon>
+                        }
                     </div>
                 }
 
-                @if (tabStateService.openTabs().length === 0) {
-                    <div class="pl-4 pr-3 py-1 text-[11px] text-(--postonsteroids-text-muted) italic">
-                        No open tabs.
+                @if (tabStateService.allCapsuleRequests().length === 0) {
+                    <div class="pl-4 pr-3 py-3 text-[11px] text-(--postonsteroids-text-muted) italic flex flex-col items-start gap-y-2">
+                        <span>No requests in capsule.</span>
+                        <button (click)="addNewRequest()" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer flex items-center gap-x-1">
+                            <mat-icon class="text-[13px]! size-[13px]!">add</mat-icon> Create Request
+                        </button>
                     </div>
                 }
             </div>
@@ -158,4 +176,7 @@
             }
         </div>
     </div>
+
+    <!-- Create Capsule Modal -->
+    <app-create-capsule-modal #createCapsuleModal />
 </div>

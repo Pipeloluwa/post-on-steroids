@@ -116,7 +116,7 @@ export class TabStateService {
     private http = inject(HttpClient);
     private authService = inject(AuthService);
     private states = signal<Map<string, RequestState>>(new Map());
-    private openTabIds = signal<string[]>([]);
+    openTabIds = signal<string[]>([]);
 
     getState(id: string): RequestState | undefined {
         return this.states().get(id);
@@ -141,6 +141,22 @@ export class TabStateService {
     // In-memory "database" of saved requests
     savedCapsules = signal<RequestState[]>([]);
 
+    // All requests belonging to the active capsule (both saved in backend and local/open tabs)
+    allCapsuleRequests = computed<RequestState[]>(() => {
+        const capId = this.activeCapsuleId();
+        const saved = this.savedCapsules().filter(r => !r.capsuleId || r.capsuleId === capId);
+        const inMemory = Array.from(this.states().values()).filter(s => !s.capsuleId || s.capsuleId === capId);
+
+        const map = new Map<string, RequestState>();
+        for (const req of saved) {
+            map.set(req.id, req);
+        }
+        for (const req of inMemory) {
+            map.set(req.id, req);
+        }
+        return Array.from(map.values());
+    });
+
     // Reactive list of open tabs (mirrors the horizontal tab strip)
     openTabs = computed<RequestState[]>(() => {
         const ids = this.openTabIds();
@@ -161,14 +177,22 @@ export class TabStateService {
         // Persist to storage whenever states change
         effect(() => {
             if (this.isBrowser) {
-                const currentStates = Array.from(this.states().entries()).map(([id, state]) => {
-                    // Strip out heavy response data to prevent massive JSON serialization blocking the UI thread
-                    const { responseBody, responseHeaders, testResults, ...rest } = state;
-                    return [id, rest];
-                });
-                localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
+                const capId = this.activeCapsuleId();
+                try {
+                    const currentStates = Array.from(this.states().entries());
+                    localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
+                } catch (e) {
+                    console.warn('Could not persist all states to localStorage (possibly quota exceeded):', e);
+                }
+
+                if (capId) {
+                    localStorage.setItem('onsteroids_active_capsule', capId);
+                    localStorage.setItem(`onsteroids_active_tab_${capId}`, this.activeTabId() || '');
+                    localStorage.setItem(`onsteroids_open_tab_ids_${capId}`, JSON.stringify(this.openTabIds()));
+                }
                 localStorage.setItem('onsteroids_active_tab', this.activeTabId() || '');
                 localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
+                localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
                 localStorage.setItem('autoAuthEnabled', String(this.autoAuthEnabled()));
                 localStorage.setItem('autoAuthEndpointId', this.autoAuthEndpointId() || '');
             }
@@ -187,10 +211,29 @@ export class TabStateService {
 
     private loadFromStorage() {
         if (!this.isBrowser) return;
-        const savedStates = localStorage.getItem('onsteroids_states');
-        const activeTabId = localStorage.getItem('onsteroids_active_tab');
-        const savedOpenTabIds = localStorage.getItem('onsteroids_open_tab_ids');
 
+        const savedCapsulesList = localStorage.getItem('onsteroids_capsules');
+        if (savedCapsulesList) {
+            try {
+                const parsed = JSON.parse(savedCapsulesList);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.capsules.set(parsed);
+                }
+            } catch (e) {
+                console.error('Failed to parse saved capsules list', e);
+            }
+        }
+
+        const savedActiveCapId = localStorage.getItem('onsteroids_active_capsule');
+        if (savedActiveCapId) {
+            const found = this.capsules().find(c => c.id === savedActiveCapId);
+            if (found) {
+                this.activeCapsuleId.set(found.id);
+                this.activeCapsuleName.set(found.name);
+            }
+        }
+
+        const savedStates = localStorage.getItem('onsteroids_states');
         if (savedStates) {
             try {
                 const parsed = JSON.parse(savedStates);
@@ -200,9 +243,13 @@ export class TabStateService {
             }
         }
 
-        if (savedOpenTabIds) {
+        const currentCapId = this.activeCapsuleId();
+        const capOpenTabs = localStorage.getItem(`onsteroids_open_tab_ids_${currentCapId}`) || localStorage.getItem('onsteroids_open_tab_ids');
+        const capActiveTab = localStorage.getItem(`onsteroids_active_tab_${currentCapId}`) || localStorage.getItem('onsteroids_active_tab');
+
+        if (capOpenTabs) {
             try {
-                const parsed = JSON.parse(savedOpenTabIds);
+                const parsed = JSON.parse(capOpenTabs);
                 if (Array.isArray(parsed)) {
                     this.openTabIds.set(parsed.filter(item => typeof item === 'string'));
                 }
@@ -212,11 +259,16 @@ export class TabStateService {
         }
 
         if (this.openTabIds().length === 0 && this.states().size > 0) {
-            this.openTabIds.set(Array.from(this.states().keys()));
+            const capTabs = Array.from(this.states().values())
+                .filter(s => s.capsuleId === currentCapId || !s.capsuleId)
+                .map(s => s.id);
+            this.openTabIds.set(capTabs.length > 0 ? capTabs : Array.from(this.states().keys()));
         }
 
-        if (activeTabId) {
-            this.activeTabId.set(activeTabId);
+        if (capActiveTab && this.openTabIds().includes(capActiveTab)) {
+            this.activeTabId.set(capActiveTab);
+        } else if (this.openTabIds().length > 0) {
+            this.activeTabId.set(this.openTabIds()[0]);
         }
 
         const savedAutoAuth = localStorage.getItem('autoAuthEnabled');
@@ -280,6 +332,13 @@ export class TabStateService {
     }
 
     async switchCapsule(capsule: { id: string; name: string }): Promise<void> {
+        // Save current capsule's tab layout before switching
+        const prevCapId = this.activeCapsuleId();
+        if (this.isBrowser && prevCapId) {
+            localStorage.setItem(`onsteroids_open_tab_ids_${prevCapId}`, JSON.stringify(this.openTabIds()));
+            localStorage.setItem(`onsteroids_active_tab_${prevCapId}`, this.activeTabId() || '');
+        }
+
         this.activeCapsuleId.set(capsule.id);
         this.activeCapsuleName.set(capsule.name);
         if (this.isBrowser) {
@@ -289,24 +348,62 @@ export class TabStateService {
         await this.loadRequestsForCapsule(capsule.id);
 
         const requestsInCapsule = this.savedCapsules();
+        // Merge saved requests into states, preserving any active response data already in memory
         if (requestsInCapsule.length > 0) {
             this.states.update(map => {
                 const next = new Map(map);
                 for (const req of requestsInCapsule) {
-                    next.set(req.id, req);
+                    const existing = next.get(req.id);
+                    if (existing) {
+                        next.set(req.id, {
+                            ...req,
+                            responseBody: existing.responseBody ?? req.responseBody,
+                            responseStatus: existing.responseStatus ?? req.responseStatus,
+                            responseTime: existing.responseTime ?? req.responseTime,
+                            responseSize: existing.responseSize ?? req.responseSize,
+                            responseCookies: existing.responseCookies ?? req.responseCookies,
+                            responseHeaders: existing.responseHeaders ?? req.responseHeaders,
+                            testResults: existing.testResults ?? req.testResults
+                        });
+                    } else {
+                        next.set(req.id, req);
+                    }
                 }
                 return next;
             });
-            const reqIds = requestsInCapsule.map(r => r.id);
-            this.openTabIds.set(reqIds);
-            this.activeTabId.set(reqIds[0]);
+        }
+
+        // Restore open tabs for this target capsule
+        let targetOpenIds: string[] = [];
+        const savedCapOpen = this.isBrowser ? localStorage.getItem(`onsteroids_open_tab_ids_${capsule.id}`) : null;
+        if (savedCapOpen) {
+            try {
+                const parsed = JSON.parse(savedCapOpen);
+                if (Array.isArray(parsed)) {
+                    targetOpenIds = parsed.filter(id => this.states().has(id));
+                }
+            } catch (e) { }
+        }
+
+        if (targetOpenIds.length === 0) {
+            if (requestsInCapsule.length > 0) {
+                targetOpenIds = requestsInCapsule.map(r => r.id);
+            } else {
+                const newId = this.createId();
+                const blankState = this.getDefaultState(newId);
+                blankState.capsuleId = capsule.id;
+                this.states.update(map => new Map(map).set(newId, blankState));
+                targetOpenIds = [newId];
+            }
+        }
+
+        this.openTabIds.set(targetOpenIds);
+
+        const savedActive = this.isBrowser ? localStorage.getItem(`onsteroids_active_tab_${capsule.id}`) : null;
+        if (savedActive && targetOpenIds.includes(savedActive)) {
+            this.activeTabId.set(savedActive);
         } else {
-            const newId = this.createId();
-            const blankState = this.getDefaultState(newId);
-            blankState.capsuleId = capsule.id;
-            this.states.set(new Map([[newId, blankState]]));
-            this.openTabIds.set([newId]);
-            this.activeTabId.set(newId);
+            this.activeTabId.set(targetOpenIds[0] || null);
         }
     }
 
@@ -353,12 +450,28 @@ export class TabStateService {
 
         this.capsules.update(list => list.filter(c => c.id !== id));
 
+        if (this.isBrowser) {
+            localStorage.removeItem(`onsteroids_open_tab_ids_${id}`);
+            localStorage.removeItem(`onsteroids_active_tab_${id}`);
+            localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+        }
+
         if (this.activeCapsuleId() === id) {
             const remaining = this.capsules();
             if (remaining.length > 0) {
                 await this.switchCapsule(remaining[0]);
             } else {
-                await this.createCapsule('My Capsule');
+                this.activeCapsuleId.set('');
+                this.activeCapsuleName.set('');
+                this.savedCapsules.set([]);
+                this.states.set(new Map());
+                this.openTabIds.set([]);
+                this.activeTabId.set(null);
+                if (this.isBrowser) {
+                    localStorage.removeItem('onsteroids_active_capsule');
+                    localStorage.removeItem('onsteroids_active_tab');
+                    localStorage.removeItem('onsteroids_open_tab_ids');
+                }
             }
         }
     }
@@ -451,7 +564,9 @@ export class TabStateService {
     addOpenTab(state: RequestState) {
         this.states.update(map => {
             const next = new Map(map);
-            next.set(state.id, state);
+            if (!next.has(state.id)) {
+                next.set(state.id, state);
+            }
             return next;
         });
 
@@ -462,11 +577,16 @@ export class TabStateService {
 
     closeTab(id: string) {
         this.openTabIds.update(ids => ids.filter(tabId => tabId !== id));
-        this.states.update(map => {
-            const next = new Map(map);
-            next.delete(id);
-            return next;
-        });
+        // Only delete from states if it was an empty, untouched unsaved request
+        const state = this.states().get(id);
+        const isSaved = this.savedCapsules().some(r => r.id === id);
+        if (!isSaved && (!state || (!state.url && state.name === 'New Request'))) {
+            this.states.update(map => {
+                const next = new Map(map);
+                next.delete(id);
+                return next;
+            });
+        }
         this.historyStack.delete(id);
     }
 
@@ -493,37 +613,55 @@ export class TabStateService {
     async saveToCapsule(id: string): Promise<void> {
         this.isSaving.set(true);
 
-        const currentState = this.states().get(id);
-        if (currentState) {
-            // Persist to backend only when Save button is pressed
+        const currentCapId = this.activeCapsuleId();
+        const currentCapName = this.activeCapsuleName();
+
+        // Collect all open tabs belonging to this capsule so full capsule state is saved
+        const tabsToSave: RequestState[] = [];
+        const activeTabState = this.states().get(id);
+        if (activeTabState) {
+            tabsToSave.push(activeTabState);
+        }
+
+        for (const tabId of this.openTabIds()) {
+            if (tabId !== id) {
+                const s = this.states().get(tabId);
+                if (s && (s.capsuleId === currentCapId || !s.capsuleId)) {
+                    tabsToSave.push(s);
+                }
+            }
+        }
+
+        for (const tabState of tabsToSave) {
+            let savedId = tabState.id;
             if (this.authService.isLoggedIn()) {
                 try {
                     const payload = {
-                        id: currentState.id,
-                        capsuleId: this.activeCapsuleId(),
-                        capsuleName: this.activeCapsuleName(),
-                        name: currentState.name,
-                        url: currentState.url,
-                        method: currentState.method,
-                        payloadType: currentState.payloadType,
-                        bodyType: currentState.bodyType,
-                        rawType: currentState.rawType,
-                        rawBody: currentState.rawBody,
-                        rawBodyJson: currentState.rawBodyJson,
-                        rawBodyXml: currentState.rawBodyXml,
+                        id: tabState.id,
+                        capsuleId: currentCapId,
+                        capsuleName: currentCapName,
+                        name: tabState.name,
+                        url: tabState.url,
+                        method: tabState.method,
+                        payloadType: tabState.payloadType,
+                        bodyType: tabState.bodyType,
+                        rawType: tabState.rawType,
+                        rawBody: tabState.rawBody,
+                        rawBodyJson: tabState.rawBodyJson,
+                        rawBodyXml: tabState.rawBodyXml,
                         auth: {
-                            type: currentState.auth.type,
-                            token: currentState.auth.token
+                            type: tabState.auth.type,
+                            token: tabState.auth.token
                         },
                         scripts: {
-                            preRequest: currentState.scripts.preRequest,
-                            postResponse: currentState.scripts.postResponse
+                            preRequest: tabState.scripts.preRequest,
+                            postResponse: tabState.scripts.postResponse
                         },
-                        encryption: currentState.encryption,
-                        settings: currentState.settings,
-                        params: currentState.params.map(p => ({ enabled: p.enabled, key: p.key, value: p.value })),
-                        headers: currentState.headers.map(h => ({ enabled: h.enabled, key: h.key, value: h.value })),
-                        formData: currentState.formData.map(f => ({ enabled: f.enabled, key: f.key, value: f.value, type: f.type }))
+                        encryption: tabState.encryption,
+                        settings: tabState.settings,
+                        params: tabState.params.map(p => ({ enabled: p.enabled, key: p.key, value: p.value })),
+                        headers: tabState.headers.map(h => ({ enabled: h.enabled, key: h.key, value: h.value })),
+                        formData: tabState.formData.map(f => ({ enabled: f.enabled, key: f.key, value: f.value, type: f.type }))
                     };
 
                     const response = await firstValueFrom(
@@ -532,38 +670,44 @@ export class TabStateService {
 
                     if (response?.data) {
                         const savedData = response.data;
-                        if (savedData.id && savedData.id !== currentState.id) {
-                            const oldId = currentState.id;
-                            const updatedState = { ...currentState, id: savedData.id, isDirty: false };
+                        if (savedData.id && savedData.id !== tabState.id) {
+                            const oldId = tabState.id;
+                            savedId = savedData.id;
+                            const updatedState = { ...tabState, id: savedId, capsuleId: currentCapId, isDirty: false };
                             this.states.update(map => {
                                 const next = new Map(map);
                                 next.delete(oldId);
-                                next.set(savedData.id, updatedState);
+                                next.set(savedId, updatedState);
                                 return next;
                             });
-                            this.openTabIds.update(ids => ids.map(tid => tid === oldId ? savedData.id : tid));
+                            this.openTabIds.update(ids => ids.map(tid => tid === oldId ? savedId : tid));
                             if (this.activeTabId() === oldId) {
-                                this.activeTabId.set(savedData.id);
+                                this.activeTabId.set(savedId);
                             }
                         }
                     }
                 } catch (err) {
-                    console.error('Failed to persist request state to backend', err);
+                    console.error(`Failed to persist request ${tabState.id} to backend`, err);
                 }
             }
 
+            const finalState = this.states().get(savedId) || tabState;
             this.savedCapsules.update(col => {
-                const idx = col.findIndex(r => r.id === id);
+                const idx = col.findIndex(r => r.id === savedId);
                 if (idx >= 0) {
                     const updated = [...col];
-                    updated[idx] = { ...currentState, isDirty: false };
+                    updated[idx] = { ...finalState, isDirty: false };
                     return updated;
                 } else {
-                    return [...col, { ...currentState, isDirty: false }];
+                    return [...col, { ...finalState, isDirty: false }];
                 }
             });
-            // Mark tab as clean after save
-            this.updateState(id, { isDirty: false });
+            this.updateState(savedId, { isDirty: false, capsuleId: currentCapId });
+        }
+
+        if (this.isBrowser && currentCapId) {
+            localStorage.setItem(`onsteroids_open_tab_ids_${currentCapId}`, JSON.stringify(this.openTabIds()));
+            localStorage.setItem(`onsteroids_active_tab_${currentCapId}`, this.activeTabId() || '');
         }
 
         this.isSaving.set(false);
@@ -597,26 +741,57 @@ export class TabStateService {
                     this.states.update(map => {
                         const next = new Map(map);
                         for (const req of requests) {
-                            next.set(req.id, req);
+                            const existing = next.get(req.id);
+                            if (existing) {
+                                next.set(req.id, {
+                                    ...req,
+                                    responseBody: existing.responseBody ?? req.responseBody,
+                                    responseStatus: existing.responseStatus ?? req.responseStatus,
+                                    responseTime: existing.responseTime ?? req.responseTime,
+                                    responseSize: existing.responseSize ?? req.responseSize,
+                                    responseCookies: existing.responseCookies ?? req.responseCookies,
+                                    responseHeaders: existing.responseHeaders ?? req.responseHeaders,
+                                    testResults: existing.testResults ?? req.testResults
+                                });
+                            } else {
+                                next.set(req.id, req);
+                            }
                         }
                         return next;
                     });
-                    const reqIds = requests.map(r => r.id);
-                    this.openTabIds.set(reqIds);
+                }
 
-                    const storedActiveTab = localStorage.getItem('onsteroids_active_tab');
-                    if (storedActiveTab && reqIds.includes(storedActiveTab)) {
-                        this.activeTabId.set(storedActiveTab);
+                // Restore open tabs for this capsule
+                let targetOpenIds: string[] = [];
+                const savedCapOpen = localStorage.getItem(`onsteroids_open_tab_ids_${matched.id}`) || localStorage.getItem('onsteroids_open_tab_ids');
+                if (savedCapOpen) {
+                    try {
+                        const parsed = JSON.parse(savedCapOpen);
+                        if (Array.isArray(parsed)) {
+                            targetOpenIds = parsed.filter(id => this.states().has(id));
+                        }
+                    } catch (e) { }
+                }
+
+                if (targetOpenIds.length === 0) {
+                    if (requests.length > 0) {
+                        targetOpenIds = requests.map(r => r.id);
                     } else {
-                        this.activeTabId.set(reqIds[0]);
+                        const newId = this.createId();
+                        const blankState = this.getDefaultState(newId);
+                        blankState.capsuleId = matched.id;
+                        this.states.update(map => new Map(map).set(newId, blankState));
+                        targetOpenIds = [newId];
                     }
+                }
+
+                this.openTabIds.set(targetOpenIds);
+
+                const storedActiveTab = localStorage.getItem(`onsteroids_active_tab_${matched.id}`) || localStorage.getItem('onsteroids_active_tab');
+                if (storedActiveTab && targetOpenIds.includes(storedActiveTab)) {
+                    this.activeTabId.set(storedActiveTab);
                 } else {
-                    const newId = this.createId();
-                    const blankState = this.getDefaultState(newId);
-                    blankState.capsuleId = matched.id;
-                    this.states.set(new Map([[newId, blankState]]));
-                    this.openTabIds.set([newId]);
-                    this.activeTabId.set(newId);
+                    this.activeTabId.set(targetOpenIds[0] || null);
                 }
             }
         } catch (e) {

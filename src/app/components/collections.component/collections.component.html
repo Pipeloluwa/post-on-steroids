@@ -35,12 +35,22 @@
                         class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
                         <mat-icon class="text-[18px]! size-[18px]!">edit</mat-icon>
                     </button>
-                    <button (click)="deleteCapsule(item.id)"
-                        class="p-1.5 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-500 transition-all cursor-pointer">
-                        <mat-icon class="text-[18px]! size-[18px]!">delete</mat-icon>
+                    <button (click)="deleteCapsule(item)" [disabled]="deletingCapsuleId() === item.id"
+                        class="p-1.5 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-500 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+                        @if (deletingCapsuleId() === item.id) {
+                            <mat-icon class="text-[18px]! size-[18px]! animate-spin text-red-500">sync</mat-icon>
+                        } @else {
+                            <mat-icon class="text-[18px]! size-[18px]!">delete</mat-icon>
+                        }
                     </button>
                 </div>
                 }
+            </div>
+        }
+
+        @if (sortedCapsules().length === 0) {
+            <div class="p-8 text-center text-(--postonsteroids-text-muted) italic border border-dashed border-(--postonsteroids-border) rounded-xl">
+                No capsules found. Create your first capsule using the input above.
             </div>
         }
     </div>

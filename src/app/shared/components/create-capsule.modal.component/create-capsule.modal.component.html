@@ -1,0 +1,60 @@
+﻿@if (isOpen()) {
+<div class="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4" (click)="close()">
+    <div class="w-full max-w-md rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-6 shadow-xl" (click)="$event.stopPropagation()">
+        <!-- Header -->
+        <div class="flex items-start justify-between gap-x-3 mb-4">
+            <div class="flex items-center gap-x-2.5">
+                <div class="size-9 rounded-xl bg-(--postonsteroids-accent)/10 flex items-center justify-center text-(--postonsteroids-accent)">
+                    <mat-icon class="text-[20px]! size-[20px]!">collections</mat-icon>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-(--postonsteroids-text-primary)">Create Capsule</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-muted) mt-0.5">Organize your requests in a dedicated workspace capsule.</p>
+                </div>
+            </div>
+            <button (click)="close()" type="button" class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) rounded-full p-1 cursor-pointer transition-colors">
+                <mat-icon class="text-[18px]! size-[18px]!">close</mat-icon>
+            </button>
+        </div>
+
+        <!-- Form -->
+        <div class="space-y-3">
+            <div>
+                <label for="capsuleNameInput" class="block text-[12px] font-medium text-(--postonsteroids-text-secondary) mb-1.5">Capsule Name</label>
+                <input id="capsuleNameInput" type="text"
+                    [value]="capsuleName()"
+                    (input)="capsuleName.set($any($event.target).value); errorMessage.set('')"
+                    (keydown.enter)="create()"
+                    placeholder="e.g. Payments API, Auth Service"
+                    class="w-full rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3.5 py-2.5 text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) transition-colors"
+                    autofocus />
+            </div>
+
+            @if (errorMessage()) {
+            <p class="text-xs text-red-500 font-medium flex items-center gap-x-1">
+                <mat-icon class="text-[14px]! size-[14px]!">error</mat-icon>
+                {{ errorMessage() }}
+            </p>
+            }
+        </div>
+
+        <!-- Actions -->
+        <div class="mt-6 flex items-center justify-end gap-x-3">
+            <button (click)="close()" type="button" [disabled]="isCreating()"
+                class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-2 text-xs font-semibold text-(--postonsteroids-text-secondary) hover:bg-(--postonsteroids-bg-hover) hover:text-(--postonsteroids-text-primary) cursor-pointer transition-colors disabled:opacity-50">
+                Cancel
+            </button>
+            <button (click)="create()" type="button" [disabled]="isCreating()"
+                class="inline-flex items-center gap-x-1.5 rounded-xl bg-(--postonsteroids-accent) px-4 py-2 text-xs font-semibold text-white hover:bg-(--postonsteroids-accent-hover) cursor-pointer shadow transition-all disabled:opacity-50">
+                @if (isCreating()) {
+                    <mat-icon class="text-[14px]! size-[14px]! animate-spin">sync</mat-icon>
+                    Creating...
+                } @else {
+                    <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
+                    Create Capsule
+                }
+            </button>
+        </div>
+    </div>
+</div>
+}
