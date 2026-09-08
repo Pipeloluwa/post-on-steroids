@@ -595,6 +595,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
     // 1. If user has selected text
     if (selectedText) {
+      // Check if user selected both key and value: "key": "value"
       const kvMatch = selectedText.match(/^\s*"?([^":\s]+)"?\s*:\s*(.+)$/);
       if (kvMatch) {
         let val = kvMatch[2].trim();
@@ -604,7 +605,77 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         }
         return { key: kvMatch[1].replace(/["']/g, ''), value: val };
       }
-      return { key: selectedText.replace(/["']/g, ''), value: selectedText.replace(/["']/g, '') };
+
+      // Check if user selected XML tag pair: <key>value</key>
+      const xmlSelMatch = selectedText.match(/<([a-zA-Z0-9_\-:]+)>(.*?)<\/\1>/);
+      if (xmlSelMatch) {
+        return { key: xmlSelMatch[1], value: xmlSelMatch[2] };
+      }
+
+      const cleanKey = selectedText.replace(/["':]/g, '').trim();
+      const cursorLineNum = selection ? selection.startLineNumber : lineNumber;
+      const cursorLineText = model.getLineContent(cursorLineNum);
+      const startCol = selection ? selection.startColumn : position.column;
+      const endCol = selection ? selection.endColumn : startCol;
+
+      // Check if selection is a field name followed by ':' on the same cursor line
+      const textAfter = cursorLineText.substring(endCol - 1);
+      const afterColonMatch = textAfter.match(/^\s*"?\s*:\s*(.+)$/);
+      if (afterColonMatch) {
+        let val = afterColonMatch[1].trim();
+        if (val.startsWith('"')) {
+          const qm = val.match(/^"((?:\\.|[^"\\])*)"/);
+          if (qm) return { key: cleanKey, value: qm[1] };
+        } else if (val.startsWith("'")) {
+          const qm = val.match(/^'((?:\\.|[^'\\])*)'/);
+          if (qm) return { key: cleanKey, value: qm[1] };
+        } else {
+          const unquoted = val.match(/^([^,;}\]]+)/);
+          if (unquoted) return { key: cleanKey, value: unquoted[1].trim() };
+        }
+        if (val.endsWith(',')) val = val.substring(0, val.length - 1).trim();
+        return { key: cleanKey, value: val };
+      }
+
+      // Check if selection is inside an XML element on the cursor line: <key>val</key>
+      const xmlValMatch = textAfter.match(/^>?\s*([^<]+)\s*<\//);
+      if (xmlValMatch) {
+        return { key: cleanKey, value: xmlValMatch[1].trim() };
+      }
+
+      // Check if user selected the value instead of the key at cursor position
+      const textBefore = cursorLineText.substring(0, startCol - 1);
+      const beforeKeyMatch = textBefore.match(/["']?([a-zA-Z0-9_\-]+)["']?\s*:\s*"?\s*$/);
+      if (beforeKeyMatch) {
+        let val = selectedText;
+        if (val.startsWith('"') && val.endsWith('"') && val.length >= 2) {
+          val = val.substring(1, val.length - 1);
+        } else if (val.startsWith("'") && val.endsWith("'") && val.length >= 2) {
+          val = val.substring(1, val.length - 1);
+        }
+        return { key: beforeKeyMatch[1], value: val };
+      }
+
+      // Check if the cursor line contains the selected field name and property value
+      const escapedKey = cleanKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const cursorLinePropMatch = cursorLineText.match(new RegExp(`["']?${escapedKey}["']?\\s*:\\s*(.+)`));
+      if (cursorLinePropMatch) {
+        let val = cursorLinePropMatch[1].trim();
+        if (val.startsWith('"')) {
+          const qm = val.match(/^"((?:\\.|[^"\\])*)"/);
+          if (qm) return { key: cleanKey, value: qm[1] };
+        } else if (val.startsWith("'")) {
+          const qm = val.match(/^'((?:\\.|[^'\\])*)'/);
+          if (qm) return { key: cleanKey, value: qm[1] };
+        } else {
+          const unquoted = val.match(/^([^,;}\]]+)/);
+          if (unquoted) return { key: cleanKey, value: unquoted[1].trim() };
+        }
+        if (val.endsWith(',')) val = val.substring(0, val.length - 1).trim();
+        return { key: cleanKey, value: val };
+      }
+
+      return { key: cleanKey, value: '' };
     }
 
     // 2. Check current line for JSON property pattern: "key": "value", or "key": 123

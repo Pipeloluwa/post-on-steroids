@@ -93,7 +93,8 @@
                             <span class="text-[10px] font-bold w-[32px] shrink-0" [style.color]="getMethodColor(req.method)">
                                 {{ req.method }}
                             </span>
-                            <span class="text-[12px] font-medium text-(--postonsteroids-text-primary) truncate flex-1 min-w-0">
+                            <span class="text-[12px] font-normal text-(--postonsteroids-text-primary) truncate flex-1 min-w-0"
+                                  [class.font-medium]="tabStateService.activeTabId() === req.id">
                                 {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
                             </span>
 

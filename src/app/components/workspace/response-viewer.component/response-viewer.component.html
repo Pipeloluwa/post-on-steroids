@@ -52,16 +52,16 @@
         <div class="flex items-center gap-x-2">
             <!-- Pretty / Raw toggle -->
             <div
-                class="flex p-0.5 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30">
+                class="flex p-0.5 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 h-[28px] items-center">
                 <button (click)="setMode('Pretty')"
-                    class="px-3 py-1 text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
+                    class="h-full px-3 flex items-center justify-center text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
                     [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Pretty'"
                     [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Pretty'"
                     [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Pretty'">
                     Pretty
                 </button>
                 <button (click)="setMode('Raw')"
-                    class="px-3 py-1 text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
+                    class="h-full px-3 flex items-center justify-center text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
                     [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Raw'"
                     [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Raw'"
                     [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Raw'">
@@ -73,7 +73,7 @@
             <app-scrollable-select-component [activeValue]="responseType()" [optionValues]="responseTypes()"
                 [verticalPosition]="28" [modalWidth]="100" (outputSelectedValue)="setResponseType($event)">
                 <div
-                    class="flex items-center gap-x-1.5 px-3 py-1 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors h-[28px]">
+                    class="flex items-center gap-x-1.5 px-3 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors h-[28px]">
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-secondary)">{{ responseType() }}</span>
                     <mat-icon
                         class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">expand_more</mat-icon>
@@ -82,9 +82,11 @@
         </div>
 
         <div class="flex items-center gap-x-1.5">
-            <button (click)="toggleWrap()" title="{{ wrapResponse() ? 'Disable wrapping (Collapse to single line)' : 'Enable wrapping (Pretty format)' }}"
-                class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                <mat-icon class="text-[18px]! size-[18px]!">{{ wrapResponse() ? 'wrap_text' : 'text_fields' }}</mat-icon>
+            <button (click)="toggleWrap()" [title]="wrapResponse() ? 'Wrapping active (Click to collapse into single line)' : 'Single-line collapsed (Click to wrap & pretty format)'"
+                class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer"
+                [class.text-(--postonsteroids-accent)]="wrapResponse()"
+                [class.text-(--postonsteroids-text-muted)]="!wrapResponse()">
+                <mat-icon class="text-[18px]! size-[18px]!">{{ wrapResponse() ? 'wrap_text' : 'density_small'}}</mat-icon>
             </button>
             <button (click)="addResponseToVariable()" title="Add Field / Response to Global Variables"
                 class="flex items-center gap-x-1 px-2 py-1 rounded text-[11px] font-medium bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-accent)/20 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer border border-(--postonsteroids-border)/40">
