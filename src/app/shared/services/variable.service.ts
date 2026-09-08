@@ -11,6 +11,21 @@ export class VariableService {
 
     variables = signal<IGlobalVariable[]>([]);
 
+    // Confirmation Modal state for adding a variable
+    showAddModal = signal<boolean>(false);
+    modalKey = signal<string>('');
+    modalValue = signal<string>('');
+
+    openAddModal(key: string = '', value: string = '') {
+        this.modalKey.set(key);
+        this.modalValue.set(value);
+        this.showAddModal.set(true);
+    }
+
+    closeAddModal() {
+        this.showAddModal.set(false);
+    }
+
     constructor() {
         this.loadVariables();
     }

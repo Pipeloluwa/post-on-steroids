@@ -87,12 +87,7 @@ export class PayloadTypesComponent {
 
   // ── Params ───────────────────────────────────────────────────────────
   addKeyValueToVariable(key: string, value: string) {
-    if (!key || !key.trim()) {
-      this.notificationService.notify('Cannot add variable without a key name.');
-      return;
-    }
-    this.variableService.addVariable(key.trim(), value || '');
-    this.notificationService.notify(`Added variable "{{${key.trim()}}}" to Global Variables.`);
+    this.variableService.openAddModal(key || '', value || '');
   }
 
   updateParam(i: number, key: keyof KeyValue, val: string | boolean) { this.updateKVField('params', i, key, val); }

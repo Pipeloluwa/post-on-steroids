@@ -3,6 +3,7 @@ import { MenuComponent } from '../../shared/components/menu.component/menu.compo
 import { NavbarComponent } from '../../shared/components/navbar.component/navbar.component';
 import { AuthModalComponent } from '../../shared/components/auth.modal.component/auth.modal.component';
 import { NotificationComponent } from '../../shared/components/notification.component/notification.component';
+import { AddVariableModalComponent } from '../../shared/components/add-variable.modal.component/add-variable.modal.component';
 import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../shared/services/auth.service';
@@ -19,6 +20,7 @@ import { MatIcon } from '@angular/material/icon';
     NavbarComponent,
     AuthModalComponent,
     NotificationComponent,
+    AddVariableModalComponent,
     MatIcon
   ],
   templateUrl: './main.layout.html'

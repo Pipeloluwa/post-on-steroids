@@ -74,6 +74,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
   private static modelCache = new Map<string, any>();
   private static completionProvidersRegistered = new Set<string>();
+  public static lastFocusedEditor: MonacoEditorComponent | null = null;
 
   constructor() {
     // Dynamically update editor options when theme changes without recreating the editor
@@ -223,6 +224,13 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
   onEditorInit(editor: any) {
     this.editorInstance.set(editor);
+
+    editor.onDidFocusEditorText?.(() => {
+      MonacoEditorComponent.lastFocusedEditor = this;
+    });
+    editor.onDidChangeCursorPosition?.(() => {
+      MonacoEditorComponent.lastFocusedEditor = this;
+    });
 
     if (this.restrictToFunctionBody()) {
       this.setupFunctionBodyRestriction(editor as MonacoEditor);
@@ -562,6 +570,68 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         this.updateDecorations();
       }
     }
+  }
+
+  extractCurrentKeyValue(): { key: string; value: string } {
+    const editor = this.editorInstance();
+    if (!editor) {
+      return { key: '', value: this.value() || '' };
+    }
+
+    const model = editor.getModel();
+    const selection = editor.getSelection();
+    let selectedText = '';
+    if (model && selection && !selection.isEmpty()) {
+      selectedText = model.getValueInRange(selection).trim();
+    }
+
+    const position = editor.getPosition();
+    if (!model || !position) {
+      return { key: '', value: selectedText || this.value() || '' };
+    }
+
+    const lineNumber = position.lineNumber;
+    const lineContent = model.getLineContent(lineNumber);
+
+    // 1. If user has selected text
+    if (selectedText) {
+      const kvMatch = selectedText.match(/^\s*"?([^":\s]+)"?\s*:\s*(.+)$/);
+      if (kvMatch) {
+        let val = kvMatch[2].trim();
+        if (val.endsWith(',')) val = val.substring(0, val.length - 1).trim();
+        if (val.startsWith('"') && val.endsWith('"') && val.length >= 2) {
+          val = val.substring(1, val.length - 1);
+        }
+        return { key: kvMatch[1].replace(/["']/g, ''), value: val };
+      }
+      return { key: selectedText.replace(/["']/g, ''), value: selectedText.replace(/["']/g, '') };
+    }
+
+    // 2. Check current line for JSON property pattern: "key": "value", or "key": 123
+    const jsonMatch = lineContent.match(/^\s*"([^"]+)"\s*:\s*(.+)$/);
+    if (jsonMatch) {
+      const key = jsonMatch[1];
+      let val = jsonMatch[2].trim();
+      if (val.endsWith(',')) val = val.substring(0, val.length - 1).trim();
+      if (val.startsWith('"') && val.endsWith('"') && val.length >= 2) {
+        val = val.substring(1, val.length - 1);
+      }
+      return { key, value: val };
+    }
+
+    // 3. Check XML tag pattern: <key>value</key>
+    const xmlMatch = lineContent.match(/<([a-zA-Z0-9_\-:]+)>(.*?)<\/\1>/);
+    if (xmlMatch) {
+      return { key: xmlMatch[1], value: xmlMatch[2] };
+    }
+
+    // 4. Word at position
+    const word = model.getWordAtPosition(position);
+    if (word && word.word) {
+      return { key: word.word, value: '' };
+    }
+
+    return { key: '', value: '' };
   }
 
   registerOnChange(fn: (val: string) => void): void {

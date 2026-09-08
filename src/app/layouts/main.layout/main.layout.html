@@ -47,4 +47,5 @@
         (onAuthenticate)="authenticate()" (onBackToEmail)="authService.isOtpSent.set(false)" />
 
     <app-notification-component [show]="notificationService.show()" [message]="notificationService.message()" />
+    <app-add-variable-modal-component />
 </div>

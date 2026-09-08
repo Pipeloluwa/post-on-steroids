@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
 import { API_BASE_URL, AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../constants/api.constants';
+import { NotificationService } from './notification.service';
 
 export interface UserAuth {
     id: string;
@@ -32,6 +33,7 @@ export interface ApiResponse<T> {
 export class AuthService {
     private http = inject(HttpClient);
     private router = inject(Router);
+    private notificationService = inject(NotificationService);
     private platformId = inject(PLATFORM_ID);
     private isBrowser = isPlatformBrowser(this.platformId);
 
@@ -181,6 +183,7 @@ export class AuthService {
         this.otp.set('');
         this.isOtpSent.set(false);
         this.showAuthModal.set(true);
+        this.notificationService.notify('Successfully logged out.');
     }
 
     private clearStorage() {

@@ -49,19 +49,19 @@
     <!-- Actions Bar (only for Body tab) -->
     @if (activeTab() === 'Body') {
     <div class="flex items-center justify-between px-2 py-2 border-b border-(--postonsteroids-border)/50">
-        <div class="flex items-center gap-x-1">
+        <div class="flex items-center gap-x-2">
             <!-- Pretty / Raw toggle -->
             <div
-                class="flex p-0.5 rounded bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30">
+                class="flex p-0.5 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30">
                 <button (click)="setMode('Pretty')"
-                    class="px-4 py-1 text-[11px] rounded transition-all duration-200 cursor-pointer font-medium"
+                    class="px-3 py-1 text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
                     [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Pretty'"
                     [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Pretty'"
                     [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Pretty'">
                     Pretty
                 </button>
                 <button (click)="setMode('Raw')"
-                    class="px-4 py-1 text-[11px] rounded transition-all duration-200 cursor-pointer font-medium"
+                    class="px-3 py-1 text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
                     [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Raw'"
                     [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Raw'"
                     [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Raw'">
@@ -69,20 +69,16 @@
                 </button>
             </div>
 
-            @if (activeMode() === 'Pretty') {
-            <div class="ml-2">
-                <app-scrollable-select-component [activeValue]="responseType()" [optionValues]="responseTypes()"
-                    [verticalPosition]="28" [modalWidth]="100" (outputSelectedValue)="setResponseType($event)">
-                    <div
-                        class="flex items-center gap-x-1.5 px-3 py-1.5 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors">
-                        <span class="text-[11px] font-bold text-(--postonsteroids-text-secondary)">{{ responseType()
-                            }}</span>
-                        <mat-icon
-                            class="text-[14px] w-[14px] h-[14px] leading-[14px] text-(--postonsteroids-text-muted)">expand_more</mat-icon>
-                    </div>
-                </app-scrollable-select-component>
-            </div>
-            }
+            <!-- Conforming JSON / Type Selector Card -->
+            <app-scrollable-select-component [activeValue]="responseType()" [optionValues]="responseTypes()"
+                [verticalPosition]="28" [modalWidth]="100" (outputSelectedValue)="setResponseType($event)">
+                <div
+                    class="flex items-center gap-x-1.5 px-3 py-1 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors h-[28px]">
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-secondary)">{{ responseType() }}</span>
+                    <mat-icon
+                        class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                </div>
+            </app-scrollable-select-component>
         </div>
 
         <div class="flex items-center gap-x-1.5">

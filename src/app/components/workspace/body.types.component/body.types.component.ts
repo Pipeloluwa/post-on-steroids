@@ -1,4 +1,4 @@
-import { Component, signal, inject, computed, PLATFORM_ID, input } from '@angular/core';
+import { Component, signal, inject, computed, PLATFORM_ID, input, ViewChild } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -208,21 +208,44 @@ export class BodyTypesComponent {
     }
   }
 
-  addBodyToVariable() {
-    const defaultKey = 'requestBodyVar';
-    const key = window.prompt('Enter Variable Name to add to Global Variables:', defaultKey);
-    if (!key || !key.trim()) return;
+  @ViewChild(MonacoEditorComponent) monacoEditor?: MonacoEditorComponent;
 
-    let value = '';
-    const content = this.rawBodyContent();
-    const promptVal = window.prompt('Enter Variable Value (or leave blank to use entire body):', '');
-    if (promptVal && promptVal.trim()) {
-      value = promptVal.trim();
-    } else {
-      value = content;
+  addBodyToVariable() {
+    const extracted = this.monacoEditor?.extractCurrentKeyValue()
+      || MonacoEditorComponent.lastFocusedEditor?.extractCurrentKeyValue();
+
+    let key = extracted?.key || '';
+    let value = extracted?.value || '';
+
+    if (!key) {
+      const content = this.rawBodyContent();
+      if (content) {
+        try {
+          const parsed = JSON.parse(content);
+          if (typeof parsed === 'object' && parsed !== null) {
+            const keys = Object.keys(parsed);
+            if (keys.length > 0) {
+              key = keys[0];
+              const val = parsed[key];
+              value = typeof val === 'object' ? JSON.stringify(val) : String(val ?? '');
+            } else {
+              key = 'body';
+              value = content;
+            }
+          } else {
+            key = 'body';
+            value = content;
+          }
+        } catch {
+          key = 'body';
+          value = content;
+        }
+      } else {
+        key = 'bodyVar';
+        value = '';
+      }
     }
 
-    this.variableService.addVariable(key.trim(), value);
-    this.notificationService.notify(`Added variable "{{${key.trim()}}}" to Global Variables.`);
+    this.variableService.openAddModal(key, value);
   }
 }

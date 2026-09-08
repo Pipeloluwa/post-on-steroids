@@ -1,10 +1,9 @@
-import { Component, signal, computed, inject } from '@angular/core';
+import { Component, signal, computed, inject, ViewChild, ChangeDetectionStrategy, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
-import { ChangeDetectionStrategy, input } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
 import { VariableService } from '../../../shared/services/variable.service';
@@ -130,31 +129,43 @@ export class ResponseViewerComponent {
     setMode(mode: string) { this.activeMode.set(mode); }
     setResponseType(type: string) { this.responseType.set(type); }
 
+    @ViewChild(MonacoEditorComponent) monacoEditor?: MonacoEditorComponent;
+
     toggleWrap() {
         this.wrapResponse.update(v => !v);
     }
 
     addResponseToVariable() {
-        const defaultKey = 'responseVar';
-        const key = window.prompt('Enter Variable Name to add to Global Variables:', defaultKey);
-        if (!key || !key.trim()) return;
+        // Extract key & value from cursor position or text selection in Monaco editor
+        const extracted = this.monacoEditor?.extractCurrentKeyValue()
+            || MonacoEditorComponent.lastFocusedEditor?.extractCurrentKeyValue();
 
-        let value = '';
-        const body = this.responseBody();
-        const promptVal = window.prompt('Enter Property Path or Value (or leave blank to save full response body):', '');
-        if (promptVal && promptVal.trim()) {
-            const p = promptVal.trim();
-            if (typeof body === 'object' && body !== null && p in body) {
-                value = String((body as any)[p]);
+        let key = extracted?.key || '';
+        let value = extracted?.value || '';
+
+        // If no key extracted from cursor, fallback to sensible defaults
+        if (!key) {
+            const body = this.responseBody();
+            if (typeof body === 'object' && body !== null) {
+                const keys = Object.keys(body);
+                if (keys.length > 0) {
+                    key = keys[0];
+                    const val = (body as any)[key];
+                    value = typeof val === 'object' ? JSON.stringify(val) : String(val ?? '');
+                } else {
+                    key = 'responseBody';
+                    value = JSON.stringify(body);
+                }
+            } else if (body !== null && body !== undefined) {
+                key = 'response';
+                value = String(body);
             } else {
-                value = p;
+                key = 'responseVar';
+                value = '';
             }
-        } else {
-            value = typeof body === 'object' ? JSON.stringify(body) : String(body ?? '');
         }
 
-        this.variableService.addVariable(key.trim(), value);
-        this.notificationService.notify(`Added variable "{{${key.trim()}}}" to Global Variables.`);
+        this.variableService.openAddModal(key, value);
     }
 
     async saveAsExample() {

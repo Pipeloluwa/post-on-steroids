@@ -50,7 +50,7 @@
                            (change)="toggleSelectAllRequests()"
                            title="Select all requests"
                            class="accent-(--postonsteroids-accent) cursor-pointer" />
-                    <span class="text-[10px] font-semibold text-(--postonsteroids-text-muted) tracking-widest uppercase">Requests</span>
+                    <span class="text-[10px] font-bold text-(--postonsteroids-text-secondary) tracking-widest uppercase">Requests</span>
                 </div>
                 <div class="flex items-center gap-x-1">
                     @if (selectedRequestIds().size > 0) {
@@ -72,11 +72,10 @@
             <div class="flex flex-col">
                 @for (req of tabStateService.allCapsuleRequests(); track req.id) {
                     <div class="flex flex-col border-b border-(--postonsteroids-border)/10">
-                        <div class="flex items-center gap-x-1.5 pl-2 pr-1.5 py-1.5 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
+                        <div class="flex items-center gap-x-1.5 pl-2 pr-1.5 py-2 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
                              [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id"
                              [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === req.id"
                              [class.border-transparent]="tabStateService.activeTabId() !== req.id"
-                             [class.opacity-60]="!tabStateService.openTabIds().includes(req.id)"
                              [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)')"
                              (click)="openRequest(req)">
                             
@@ -86,16 +85,15 @@
                                    class="accent-(--postonsteroids-accent) cursor-pointer shrink-0" />
 
                             <button (click)="toggleExamples(req.id, $event)" title="Toggle Examples"
-                                    class="p-0.5 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0">
-                                <mat-icon class="text-[12px]! size-[12px]! transition-transform"
+                                    class="p-0.5 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0">
+                                <mat-icon class="text-[13px]! size-[13px]! transition-transform"
                                           [class.rotate-90]="expandedExampleRequestId() === req.id">chevron_right</mat-icon>
                             </button>
 
-                            <span class="text-[9px] font-bold w-[28px] shrink-0" [style.color]="getMethodColor(req.method)">
+                            <span class="text-[10px] font-bold w-[32px] shrink-0" [style.color]="getMethodColor(req.method)">
                                 {{ req.method }}
                             </span>
-                            <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 min-w-0"
-                                  [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id">
+                            <span class="text-[12px] font-medium text-(--postonsteroids-text-primary) truncate flex-1 min-w-0">
                                 {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
                             </span>
 

@@ -1,0 +1,73 @@
+@if (variableService.showAddModal()) {
+<div class="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-4" (click)="close()">
+    <div class="w-full max-w-md my-auto max-h-[90vh] overflow-y-auto p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-4 relative" (click)="$event.stopPropagation()">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between pb-3 border-b border-(--postonsteroids-border)">
+            <div class="flex items-center gap-2.5">
+                <div class="size-9 rounded-xl bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent) flex items-center justify-center shadow-sm">
+                    <mat-icon class="text-[20px]! size-[20px]!">data_object</mat-icon>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">Add to Global Variables</h3>
+                    <p class="text-[11px] text-(--postonsteroids-text-muted)">Edit and confirm the key and value to save</p>
+                </div>
+            </div>
+            <button (click)="close()" class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
+                <mat-icon class="text-[18px]! size-[18px]!">close</mat-icon>
+            </button>
+        </div>
+
+        <!-- Form fields -->
+        <div class="space-y-3 text-xs">
+            <!-- Variable Key -->
+            <div>
+                <label for="varKeyInput" class="block font-semibold text-(--postonsteroids-text-secondary) mb-1">
+                    Variable Key / Name
+                </label>
+                <input id="varKeyInput" type="text"
+                    [ngModel]="variableService.modalKey()"
+                    (ngModelChange)="variableService.modalKey.set($event)"
+                    (keydown.enter)="save()"
+                    placeholder="e.g. token, userId, customerId"
+                    autofocus
+                    class="w-full px-3 py-2 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-xs outline-none focus:border-(--postonsteroids-accent) transition-all font-mono" />
+            </div>
+
+            <!-- Variable Value -->
+            <div>
+                <label for="varValueInput" class="block font-semibold text-(--postonsteroids-text-secondary) mb-1">
+                    Variable Value
+                </label>
+                <textarea id="varValueInput" rows="5"
+                    [ngModel]="variableService.modalValue()"
+                    (ngModelChange)="variableService.modalValue.set($event)"
+                    (keydown.control.enter)="save()"
+                    placeholder="Value to store in global variables"
+                    class="w-full px-3 py-2 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-xs outline-none focus:border-(--postonsteroids-accent) transition-all font-mono resize-none"></textarea>
+            </div>
+
+            <!-- Interpolation syntax hint -->
+            <div class="p-2.5 rounded-xl bg-(--postonsteroids-bg-tertiary)/60 border border-(--postonsteroids-border)/40 flex items-center justify-between text-[11px]">
+                <span class="text-(--postonsteroids-text-muted)">Reference in requests as:</span>
+                <code class="px-2 py-0.5 rounded bg-(--postonsteroids-accent)/10 text-(--postonsteroids-accent) font-mono font-bold">
+                    {{ '{{' + (variableService.modalKey().trim() || 'variable') + '}}' }}
+                </code>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-(--postonsteroids-border)">
+            <button (click)="close()"
+                class="px-4 py-1.5 text-xs font-semibold rounded-xl bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) border border-(--postonsteroids-border) transition-all cursor-pointer">
+                Cancel
+            </button>
+            <button (click)="save()" [disabled]="!variableService.modalKey().trim()"
+                class="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-xl bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                <mat-icon class="text-[16px]! size-[16px]!">check</mat-icon>
+                <span>Save Variable</span>
+            </button>
+        </div>
+    </div>
+</div>
+}
