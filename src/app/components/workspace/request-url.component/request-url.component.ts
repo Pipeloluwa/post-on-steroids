@@ -18,6 +18,7 @@ import { input } from '@angular/core';
     templateUrl: './request-url.component.html',
     styleUrl: './request-url.component.css',
     host: {
+        class: 'block relative z-40',
         '(document:click)': 'onDocumentClick()'
     }
 })

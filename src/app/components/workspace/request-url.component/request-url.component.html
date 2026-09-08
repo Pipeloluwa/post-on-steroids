@@ -33,12 +33,13 @@
     </div>
 
     <!-- Send Button Group -->
-    <div class="flex h-[40px] md:h-full relative shrink-0">
+    <!-- Send Button Group -->
+    <div class="flex items-center gap-x-2.5 h-[40px] md:h-full relative shrink-0">
         <!-- Auto-Auth Split Group -->
-        <div class="flex h-full relative shrink-0">
+        <div class="flex h-full relative shrink-0 rounded-[4px] overflow-hidden border border-white/10 shadow-xs">
             <!-- Main Auto-Auth Button -->
             <button (click)="onMainAutoAuthClick()" title="Auto Auth on 401"
-                class="px-3 h-full border-r border-white/20 transition-colors duration-200 cursor-pointer flex items-center gap-x-1.5 rounded-l-[4px]"
+                class="px-3 h-full border-r border-white/20 transition-colors duration-200 cursor-pointer flex items-center gap-x-1.5"
                 [class.bg-(--postonsteroids-bg-secondary)]="!isAutoAuthEnabled()"
                 [class.bg-(--postonsteroids-bg-hover)]="!isAutoAuthEnabled()"
                 [class.hover:bg-(--postonsteroids-bg-tertiary)]="!isAutoAuthEnabled()"
@@ -59,7 +60,7 @@
 
             <!-- Dropdown Arrow Button -->
             <button (click)="toggleDropdown($event)" title="Choose Auto Auth Scope"
-                class="px-2 h-full border-r border-white/20 transition-colors duration-200 cursor-pointer flex items-center justify-center"
+                class="px-2 h-full transition-colors duration-200 cursor-pointer flex items-center justify-center"
                 [class.bg-(--postonsteroids-bg-secondary)]="!isAutoAuthEnabled()"
                 [class.bg-(--postonsteroids-bg-hover)]="!isAutoAuthEnabled()"
                 [class.hover:bg-(--postonsteroids-bg-tertiary)]="!isAutoAuthEnabled()"
@@ -95,11 +96,11 @@
             }
         </div>
 
-        <!-- Trigger Next Request Split Group -->
+        <!-- Trigger Next Request Unified Button & Dropdown -->
         <div class="flex h-full relative shrink-0">
-            <!-- Main Trigger Button -->
-            <button (click)="onMainTriggerClick()" title="Trigger another request after response"
-                class="px-3 h-full border-r border-white/20 transition-colors duration-200 cursor-pointer flex items-center gap-x-1.5"
+            <!-- Unified Trigger Button (Whole button toggles request dropdown) -->
+            <button (click)="toggleTriggerDropdown($event)" title="Select next request to trigger after response"
+                class="px-3 h-full border border-white/10 transition-colors duration-200 cursor-pointer flex items-center gap-x-1.5 rounded-[4px] shadow-xs"
                 [class.bg-(--postonsteroids-bg-secondary)]="!postTriggerTabId()"
                 [class.bg-(--postonsteroids-bg-hover)]="!postTriggerTabId()"
                 [class.hover:bg-(--postonsteroids-bg-tertiary)]="!postTriggerTabId()"
@@ -110,70 +111,62 @@
                 <mat-icon class="text-[17px]! size-[17px]!">alt_route</mat-icon>
                 <span class="text-[12px] font-bold">Trigger</span>
                 @if (targetTriggerRequest(); as tr) {
-                    <span class="text-[9px] bg-white/25 px-1.5 py-0.5 rounded font-mono truncate max-w-[80px]" [title]="tr.name">
+                    <span class="text-[9px] bg-white/25 px-1.5 py-0.5 rounded font-mono truncate max-w-[85px]" [title]="tr.name">
                         {{ tr.name || 'Next' }}
                     </span>
                 }
-            </button>
-
-            <!-- Dropdown Arrow Button -->
-            <button (click)="toggleTriggerDropdown($event)" title="Select next request to trigger"
-                class="px-2 h-full border-r border-white/20 transition-colors duration-200 cursor-pointer flex items-center justify-center"
-                [class.bg-(--postonsteroids-bg-secondary)]="!postTriggerTabId()"
-                [class.bg-(--postonsteroids-bg-hover)]="!postTriggerTabId()"
-                [class.hover:bg-(--postonsteroids-bg-tertiary)]="!postTriggerTabId()"
-                [class.text-(--postonsteroids-text-muted)]="!postTriggerTabId()"
-                [class.bg-emerald-600]="!!postTriggerTabId()"
-                [class.hover:bg-emerald-700]="!!postTriggerTabId()"
-                [class.text-white]="!!postTriggerTabId()">
-                <mat-icon class="text-[16px]! size-[16px]!">expand_more</mat-icon>
+                <mat-icon class="text-[16px]! size-[16px]! opacity-80 transition-transform duration-200"
+                    [class.rotate-180]="isTriggerDropdownOpen()">expand_more</mat-icon>
             </button>
 
             <!-- Dropdown Menu Overlay -->
             @if (isTriggerDropdownOpen()) {
-            <div class="absolute left-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-50 py-1 min-w-[220px] max-h-[280px] overflow-y-auto flex flex-col">
-                <button (click)="selectTriggerTarget(null)" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
+            <div class="absolute right-0 md:left-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-50 py-1 min-w-[240px] max-w-[340px] flex flex-col">
+                <button (click)="selectTriggerTarget(null)" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer shrink-0">
                     <div class="flex items-center gap-1.5">
                         <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted)">block</mat-icon>
-                        <span class="font-medium text-(--postonsteroids-text-muted)">Disabled</span>
+                        <span class="font-medium text-(--postonsteroids-text-muted)">Disabled (None)</span>
                     </div>
                     @if (!postTriggerTabId()) {
                         <mat-icon class="text-[16px]! size-[16px]! text-emerald-500">check</mat-icon>
                     }
                 </button>
 
-                <div class="h-px bg-(--postonsteroids-border)/50 my-1"></div>
-                <div class="px-3 py-1 text-[10px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider">
-                    Chain Next Request
+                <div class="h-px bg-(--postonsteroids-border)/50 my-1 shrink-0"></div>
+                <div class="px-3 py-1 text-[10px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider shrink-0">
+                    Select Request to Call
                 </div>
 
-                @for (req of availableTriggerRequests(); track req.id) {
-                    <button (click)="selectTriggerTarget(req.id)" class="w-full text-left px-3 py-1.5 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer group">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <span class="text-[10px] font-mono font-bold px-1 py-0.5 rounded"
-                                  [style.color]="getMethodColor(req.method)">
-                                {{ req.method }}
-                            </span>
-                            <span class="truncate font-medium group-hover:text-(--postonsteroids-text-primary)">
-                                {{ req.name || 'Untitled Request' }}
-                            </span>
+                <!-- Scrollable list of available requests -->
+                <div class="max-h-[240px] overflow-y-auto flex flex-col flex-1 divide-y divide-(--postonsteroids-border)/10">
+                    @for (req of availableTriggerRequests(); track req.id) {
+                        <button (click)="selectTriggerTarget(req.id)" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer group">
+                            <div class="flex items-center gap-2 min-w-0 pr-2">
+                                <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary)"
+                                      [style.color]="getMethodColor(req.method)">
+                                    {{ req.method }}
+                                </span>
+                                <span class="truncate font-medium group-hover:text-(--postonsteroids-text-primary)" [title]="req.name || 'Untitled Request'">
+                                    {{ req.name || 'Untitled Request' }}
+                                </span>
+                            </div>
+                            @if (postTriggerTabId() === req.id) {
+                                <mat-icon class="text-[16px]! size-[16px]! text-emerald-500 shrink-0">check</mat-icon>
+                            }
+                        </button>
+                    } @empty {
+                        <div class="px-3 py-3 text-[11px] text-(--postonsteroids-text-muted) italic text-center">
+                            No other requests in capsule
                         </div>
-                        @if (postTriggerTabId() === req.id) {
-                            <mat-icon class="text-[16px]! size-[16px]! text-emerald-500 shrink-0">check</mat-icon>
-                        }
-                    </button>
-                } @empty {
-                    <div class="px-3 py-2 text-[11px] text-(--postonsteroids-text-muted) italic">
-                        No other requests in capsule
-                    </div>
-                }
+                    }
+                </div>
             </div>
             }
         </div>
 
         <!-- Send / Cancel Button -->
         <button (click)="isLoading() ? onCancel() : onSend()"
-            class="text-white px-10 font-bold text-[13px] flex items-center h-full transition-colors duration-200 cursor-pointer min-w-[120px] justify-center rounded-r-[4px]"
+            class="text-white px-8 font-bold text-[13px] flex items-center h-full transition-colors duration-200 cursor-pointer min-w-[110px] justify-center rounded-[4px] shadow-xs"
             [class.bg-[#097BED]]="!isLoading()" [class.hover:bg-[#0766C6]]="!isLoading()"
             [class.bg-[#FF5233]]="isLoading()" [class.hover:bg-[#E0482D]]="isLoading()">
             @if (isLoading()) {
