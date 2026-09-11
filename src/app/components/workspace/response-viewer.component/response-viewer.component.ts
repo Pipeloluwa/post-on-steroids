@@ -141,10 +141,10 @@ export class ResponseViewerComponent {
 
         let key = extracted?.key || '';
         let value = extracted?.value || '';
+        const body = this.responseBody();
 
         // If no key extracted from cursor, fallback to sensible defaults
         if (!key) {
-            const body = this.responseBody();
             if (typeof body === 'object' && body !== null) {
                 const keys = Object.keys(body);
                 if (keys.length > 0) {
@@ -164,11 +164,65 @@ export class ResponseViewerComponent {
             }
         }
 
+        const fullPath = this.findPathInObject(body, key, value);
+        const state = this.tabState();
         this.variableService.openAddModal(key, value, {
             tabId: this.tabId(),
+            requestId: state?.id,
+            requestName: state?.name,
+            requestUrl: state?.url,
             type: 'response',
-            propertyKey: key
+            propertyKey: fullPath || key
         });
+    }
+
+    private findPathInObject(obj: any, targetKey: string, targetVal?: string): string | null {
+        if (!obj || typeof obj !== 'object' || !targetKey) return null;
+        let parsed = obj;
+        if (typeof parsed === 'string') {
+            try { parsed = JSON.parse(parsed); } catch { return null; }
+        }
+        if (!parsed || typeof parsed !== 'object') return null;
+
+        const lowerKey = targetKey.toLowerCase();
+
+        function search(curr: any, path: string[]): string | null {
+            if (!curr || typeof curr !== 'object') return null;
+
+            if (Array.isArray(curr)) {
+                for (let i = 0; i < curr.length; i++) {
+                    const res = search(curr[i], [...path, String(i)]);
+                    if (res) return res;
+                }
+                return null;
+            }
+
+            for (const k of Object.keys(curr)) {
+                if (k.toLowerCase() === lowerKey) {
+                    if (targetVal !== undefined && targetVal !== '') {
+                        const v = curr[k];
+                        const s = typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
+                        if (s === targetVal) {
+                            return [...path, k].join('.');
+                        }
+                    } else {
+                        return [...path, k].join('.');
+                    }
+                }
+            }
+
+            for (const k of Object.keys(curr)) {
+                const child = curr[k];
+                if (child && typeof child === 'object') {
+                    const res = search(child, [...path, k]);
+                    if (res) return res;
+                }
+            }
+
+            return null;
+        }
+
+        return search(parsed, []);
     }
 
     async saveAsExample() {

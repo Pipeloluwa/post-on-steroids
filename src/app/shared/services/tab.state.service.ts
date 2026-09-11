@@ -1,9 +1,10 @@
-import { Injectable, signal, computed, effect, inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, computed, effect, untracked, inject, PLATFORM_ID, Injector } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { AuthService } from './auth.service';
+import { AuthService, UserAuth } from './auth.service';
 import { API_BASE_URL } from '../constants/api.constants';
+import { VariableService } from './variable.service';
 
 export interface KeyValue {
     enabled: boolean;
@@ -116,12 +117,330 @@ export class TabStateService {
     private isBrowser = isPlatformBrowser(this.platformId);
     private http = inject(HttpClient);
     private authService = inject(AuthService);
+    private injector = inject(Injector);
     private states = signal<Map<string, RequestState>>(new Map());
     openTabIds = signal<string[]>([]);
+
+    private getVariableService(): VariableService | null {
+        try {
+            return this.injector.get(VariableService);
+        } catch {
+            return null;
+        }
+    }
+
+    snapshotCurrentSession(userParam?: UserAuth | null) {
+        if (!this.isBrowser) return;
+
+        // CRITICAL GUARD: Never overwrite a valid saved session with an empty workspace!
+        if (this.openTabIds().length === 0 && this.states().size === 0) {
+            return;
+        }
+
+        const user = userParam || this.authService.currentUser();
+        const effectiveId = user?.id || user?.email || 'default';
+        try {
+            const currentStates = Array.from(this.states().entries());
+            let storedResponses: Record<string, any> = {};
+            try {
+                const rawResp = localStorage.getItem('onsteroids_responses');
+                if (rawResp) storedResponses = JSON.parse(rawResp);
+            } catch {}
+
+            // Ensure all live responses from tab states are captured
+            for (const [id, s] of currentStates) {
+                if (s.responseBody !== null && s.responseBody !== undefined) {
+                    storedResponses[id] = {
+                        responseBody: s.responseBody,
+                        responseStatus: s.responseStatus,
+                        responseTime: s.responseTime,
+                        responseSize: s.responseSize,
+                        responseCookies: s.responseCookies,
+                        responseHeaders: s.responseHeaders,
+                        testResults: s.testResults
+                    };
+                }
+            }
+
+            const vs = this.getVariableService();
+
+            const sessionData = {
+                userId: effectiveId,
+                activeCapsuleId: this.activeCapsuleId(),
+                activeCapsuleName: this.activeCapsuleName(),
+                capsules: this.capsules(),
+                openTabIds: this.openTabIds(),
+                activeTabId: this.activeTabId(),
+                states: currentStates,
+                responses: storedResponses,
+                variables: vs ? vs.variables() : [],
+                autoAuthEnabled: this.autoAuthEnabled(),
+                autoAuthEndpointId: this.autoAuthEndpointId(),
+                timestamp: Date.now()
+            };
+
+            const serialized = JSON.stringify(sessionData);
+            localStorage.setItem(`onsteroids_user_session_${effectiveId}`, serialized);
+            localStorage.setItem('onsteroids_last_session', serialized);
+            if (user?.id) localStorage.setItem(`onsteroids_user_session_${user.id}`, serialized);
+            if (user?.email) localStorage.setItem(`onsteroids_user_session_${user.email}`, serialized);
+
+            if (this.authService.isLoggedIn() && vs) {
+                clearTimeout(this.backendSyncTimeout);
+                this.backendSyncTimeout = setTimeout(() => {
+                    vs.syncVariablesToBackend().catch(() => {});
+                }, 2000);
+            }
+        } catch (e) {
+            console.error('Error snapshotting session', e);
+        }
+    }
+
+    restoreUserSession(user?: UserAuth | null): boolean {
+        if (!this.isBrowser) return false;
+        const u = user || this.authService.currentUser();
+        try {
+            const keysToTry: string[] = [];
+            if (u?.id) keysToTry.push(`onsteroids_user_session_${u.id}`);
+            if (u?.email) keysToTry.push(`onsteroids_user_session_${u.email}`);
+            keysToTry.push('onsteroids_last_session');
+
+            let sessionRaw: string | null = null;
+            for (const k of keysToTry) {
+                sessionRaw = localStorage.getItem(k);
+                if (sessionRaw) {
+                    try {
+                        const parsed = JSON.parse(sessionRaw);
+                        // Make sure parsed session isn't empty
+                        if (parsed && (
+                            (Array.isArray(parsed.openTabIds) && parsed.openTabIds.length > 0) ||
+                            (Array.isArray(parsed.states) && parsed.states.length > 0)
+                        )) {
+                            break;
+                        }
+                    } catch {}
+                }
+            }
+
+            if (!sessionRaw) return false;
+
+            const session = JSON.parse(sessionRaw);
+            if (!session) return false;
+
+            // 1. Restore capsules
+            if (Array.isArray(session.capsules) && session.capsules.length > 0) {
+                this.capsules.set(session.capsules);
+            }
+
+            // 2. Restore active capsule
+            if (session.activeCapsuleId) {
+                this.activeCapsuleId.set(session.activeCapsuleId);
+                localStorage.setItem('onsteroids_active_capsule', session.activeCapsuleId);
+            }
+            if (session.activeCapsuleName) {
+                this.activeCapsuleName.set(session.activeCapsuleName);
+            }
+
+            // 3. Restore states (hydrating response bodies & test results)
+            if (Array.isArray(session.states) && session.states.length > 0) {
+                const restoredMap = new Map<string, RequestState>(session.states);
+                if (session.responses && typeof session.responses === 'object') {
+                    for (const [id, state] of restoredMap.entries()) {
+                        const resp = session.responses[id];
+                        if (resp) {
+                            restoredMap.set(id, {
+                                ...state,
+                                responseBody: state.responseBody ?? resp.responseBody,
+                                responseStatus: state.responseStatus ?? resp.responseStatus,
+                                responseTime: state.responseTime ?? resp.responseTime,
+                                responseSize: state.responseSize ?? resp.responseSize,
+                                responseCookies: state.responseCookies ?? resp.responseCookies,
+                                responseHeaders: state.responseHeaders ?? resp.responseHeaders,
+                                testResults: state.testResults ?? resp.testResults
+                            });
+                        }
+                    }
+                }
+                this.states.set(restoredMap);
+            }
+
+            // 4. Restore open tabs and active tab
+            if (Array.isArray(session.openTabIds) && session.openTabIds.length > 0) {
+                this.openTabIds.set(session.openTabIds);
+                localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(session.openTabIds));
+                if (session.activeCapsuleId) {
+                    localStorage.setItem(`onsteroids_open_tab_ids_${session.activeCapsuleId}`, JSON.stringify(session.openTabIds));
+                }
+            }
+            if (session.activeTabId) {
+                this.activeTabId.set(session.activeTabId);
+                localStorage.setItem('onsteroids_active_tab', session.activeTabId);
+                if (session.activeCapsuleId) {
+                    localStorage.setItem(`onsteroids_active_tab_${session.activeCapsuleId}`, session.activeTabId);
+                }
+            }
+
+            // 5. Restore responses in localStorage
+            if (session.responses) {
+                localStorage.setItem('onsteroids_responses', JSON.stringify(session.responses));
+            }
+
+            // 6. Restore auto-auth
+            if (session.autoAuthEnabled) {
+                this.autoAuthEnabled.set(session.autoAuthEnabled);
+            }
+            if (session.autoAuthEndpointId) {
+                this.autoAuthEndpointId.set(session.autoAuthEndpointId);
+            }
+
+            // 7. Restore variables in VariableService
+            const vs = this.getVariableService();
+            if (vs) {
+                if (Array.isArray(session.variables) && session.variables.length > 0) {
+                    vs.setVariables(session.variables);
+                } else {
+                    vs.restoreUserVariables(u);
+                }
+            }
+
+            return true;
+        } catch (e) {
+            console.error('Failed to restore user session', e);
+            return false;
+        }
+    }
+
+    async saveFinalSessionBeforeLogout(): Promise<void> {
+        if (!this.isBrowser || !this.authService.isLoggedIn()) return;
+        try {
+            this.snapshotCurrentSession();
+            const vs = this.getVariableService();
+            if (vs) {
+                vs.saveVariables(false);
+                await vs.syncVariablesToBackend();
+            }
+        } catch (e) {
+            console.error('Error saving session before logout', e);
+        }
+    }
+
+    getBackendSessionPayload(): any {
+        try {
+            const currentStates = Array.from(this.states().entries());
+            let storedResponses: Record<string, any> = {};
+            try {
+                const rawResp = localStorage.getItem('onsteroids_responses');
+                if (rawResp) storedResponses = JSON.parse(rawResp);
+            } catch {}
+
+            for (const [id, s] of currentStates) {
+                if (s.responseBody !== null && s.responseBody !== undefined) {
+                    storedResponses[id] = {
+                        responseBody: s.responseBody,
+                        responseStatus: s.responseStatus,
+                        responseTime: s.responseTime,
+                        responseSize: s.responseSize,
+                        responseCookies: s.responseCookies,
+                        responseHeaders: s.responseHeaders,
+                        testResults: s.testResults
+                    };
+                }
+            }
+
+            const vs = this.getVariableService();
+
+            return {
+                activeCapsuleId: this.activeCapsuleId(),
+                activeCapsuleName: this.activeCapsuleName(),
+                openTabIds: this.openTabIds(),
+                activeTabId: this.activeTabId(),
+                states: currentStates,
+                responses: storedResponses,
+                variables: vs ? vs.variables() : [],
+                autoAuthEnabled: this.autoAuthEnabled(),
+                autoAuthEndpointId: this.autoAuthEndpointId(),
+                timestamp: Date.now()
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    applyBackendSession(session: any) {
+        if (!session) return;
+
+        if (session.activeCapsuleId) {
+            this.activeCapsuleId.set(session.activeCapsuleId);
+            if (this.isBrowser) {
+                localStorage.setItem('onsteroids_active_capsule', session.activeCapsuleId);
+            }
+        }
+        if (session.activeCapsuleName) {
+            this.activeCapsuleName.set(session.activeCapsuleName);
+        }
+
+        // Restore tab states (e.g. unsaved draft tabs, modified settings, etc.)
+        if (Array.isArray(session.states) && session.states.length > 0) {
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const [id, state] of session.states) {
+                    if (!next.has(id)) {
+                        next.set(id, state);
+                    } else {
+                        next.set(id, { ...next.get(id), ...state });
+                    }
+                }
+                return next;
+            });
+        }
+
+        if (session.responses && typeof session.responses === 'object') {
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const [id, state] of next.entries()) {
+                    const resp = session.responses[id];
+                    if (resp) {
+                        next.set(id, {
+                            ...state,
+                            responseBody: state.responseBody ?? resp.responseBody,
+                            responseStatus: state.responseStatus ?? resp.responseStatus,
+                            responseTime: state.responseTime ?? resp.responseTime,
+                            responseSize: state.responseSize ?? resp.responseSize,
+                            responseCookies: state.responseCookies ?? resp.responseCookies,
+                            responseHeaders: state.responseHeaders ?? resp.responseHeaders,
+                            testResults: state.testResults ?? resp.testResults
+                        });
+                    }
+                }
+                return next;
+            });
+
+            if (this.isBrowser) {
+                try {
+                    localStorage.setItem('onsteroids_responses', JSON.stringify(session.responses));
+                } catch {}
+            }
+        }
+
+        if (Array.isArray(session.openTabIds) && session.openTabIds.length > 0) {
+            this.openTabIds.set(session.openTabIds);
+        }
+        if (session.activeTabId) {
+            this.activeTabId.set(session.activeTabId);
+        }
+
+        if (session.autoAuthEnabled) {
+            this.autoAuthEnabled.set(session.autoAuthEnabled);
+        }
+        if (session.autoAuthEndpointId) {
+            this.autoAuthEndpointId.set(session.autoAuthEndpointId);
+        }
+    }
 
     getState(id: string): RequestState | undefined {
         return this.states().get(id);
     }
+    private backendSyncTimeout: any;
     activeTabId = signal<string | null>(null);
     activeCapsuleName = signal<string>('My Capsule');
     activeCapsuleId = signal<string>('1');
@@ -130,6 +449,11 @@ export class TabStateService {
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
     requestExamplesMap = signal<Map<string, any[]>>(new Map());
+    examplesLoadingMap = signal<Set<string>>(new Set());
+
+    isExamplesLoading(requestId: string): boolean {
+        return this.examplesLoadingMap().has(requestId);
+    }
 
     private historyStack = new Map<string, { past: Partial<RequestState>[], future: Partial<RequestState>[] }>();
 
@@ -171,22 +495,21 @@ export class TabStateService {
         return id ? this.states().get(id) || this.getDefaultState(id) : null;
     });
 
+    private isLoadingBackendData = false;
+    private hasInitialBackendLoaded = false;
+    private statesSaveTimeout: any = null;
+    private fetchedExamplesIds = new Set<string>();
+    private inFlightExampleRequests = new Map<string, Promise<any[]>>();
+
     constructor() {
         if (this.isBrowser) {
             this.loadFromStorage();
         }
 
-        // Persist to storage whenever states change
+        // 1. Lightweight tab & capsule metadata persisted immediately
         effect(() => {
             if (this.isBrowser) {
                 const capId = this.activeCapsuleId();
-                try {
-                    const currentStates = Array.from(this.states().entries());
-                    localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
-                } catch (e) {
-                    console.warn('Could not persist all states to localStorage (possibly quota exceeded):', e);
-                }
-
                 if (capId) {
                     localStorage.setItem('onsteroids_active_capsule', capId);
                     localStorage.setItem(`onsteroids_active_tab_${capId}`, this.activeTabId() || '');
@@ -200,10 +523,44 @@ export class TabStateService {
             }
         });
 
+        // 2. Heavy states JSON serialization debounced by 300ms (eliminates lag during tab clicks)
         effect(() => {
-            if (this.authService.isLoggedIn()) {
-                this.loadBackendData();
+            const statesMap = this.states();
+            if (this.isBrowser) {
+                if (this.statesSaveTimeout) {
+                    clearTimeout(this.statesSaveTimeout);
+                }
+                this.statesSaveTimeout = setTimeout(() => {
+                    try {
+                        const currentStates = Array.from(statesMap.entries());
+                        localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
+                    } catch (e) {
+                        console.warn('Could not persist all states to localStorage:', e);
+                    }
+                }, 300);
             }
+        });
+
+        // 3. One-time backend loading on login/startup (untracked to prevent reactive loops)
+        effect(() => {
+            const loggedIn = this.authService.isLoggedIn();
+            if (loggedIn && !this.hasInitialBackendLoaded) {
+                untracked(() => {
+                    this.loadBackendData();
+                });
+            }
+        });
+
+        this.authService.onLogout.subscribe((user) => {
+            this.hasInitialBackendLoaded = false;
+            this.fetchedExamplesIds.clear();
+            this.inFlightExampleRequests.clear();
+            this.clearWorkspace(user);
+        });
+
+        this.authService.onLogin.subscribe((user) => {
+            this.restoreUserSession(user);
+            this.loadBackendData();
         });
 
         if (this.states().size === 0) {
@@ -213,6 +570,11 @@ export class TabStateService {
 
     private loadFromStorage() {
         if (!this.isBrowser) return;
+
+        if (this.authService.isLoggedIn()) {
+            const restored = this.restoreUserSession(this.authService.currentUser());
+            if (restored) return;
+        }
 
         const savedCapsulesList = localStorage.getItem('onsteroids_capsules');
         if (savedCapsulesList) {
@@ -287,6 +649,8 @@ export class TabStateService {
         if (savedAutoAuthId) {
             this.autoAuthEndpointId.set(savedAutoAuthId);
         }
+
+        this.preloadAllExamples();
     }
 
     setActiveTab(id: string) {
@@ -310,9 +674,63 @@ export class TabStateService {
             .filter((state): state is RequestState => Boolean(state));
     }
 
+    getAllStates(): RequestState[] {
+        return Array.from(this.states().values());
+    }
+
     closeAllTabs() {
         this.openTabIds.set([]);
         this.activeTabId.set(null);
+    }
+
+    clearWorkspace(userParam?: UserAuth | null) {
+        this.snapshotCurrentSession(userParam);
+        const vs = this.getVariableService();
+        if (vs && this.authService.isLoggedIn()) {
+            vs.syncVariablesToBackend();
+        }
+
+        this.openTabIds.set([]);
+        this.activeTabId.set(null);
+        this.states.set(new Map());
+        this.savedCapsules.set([]);
+        this.requestExamplesMap.set(new Map());
+        this.historyStack.clear();
+        this.activeCapsuleId.set('1');
+        this.activeCapsuleName.set('My Capsule');
+        this.capsules.set([
+            { id: '1', name: 'My Capsule', createdAt: Date.now() }
+        ]);
+        this.autoAuthEnabled.set('off');
+        this.autoAuthEndpointId.set(null);
+
+        if (this.isBrowser) {
+            try {
+                const keysToRemove: string[] = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (
+                        key.startsWith('onsteroids_') ||
+                        key.startsWith('autoAuth') ||
+                        key === 'request_history'
+                    )) {
+                        if (
+                            key.startsWith('onsteroids_user_session_') ||
+                            key.startsWith('onsteroids_user_vars_') ||
+                            key === 'onsteroids_last_session' ||
+                            key === 'onsteroids_last_vars' ||
+                            key === 'onsteroids_responses'
+                        ) {
+                            continue;
+                        }
+                        keysToRemove.push(key);
+                    }
+                }
+                keysToRemove.forEach(k => localStorage.removeItem(k));
+            } catch (e) {
+                console.error('Error clearing workspace storage on logout', e);
+            }
+        }
     }
 
     setActiveCapsuleName(name: string) {
@@ -407,6 +825,8 @@ export class TabStateService {
         } else {
             this.activeTabId.set(targetOpenIds[0] || null);
         }
+
+        this.preloadAllExamples();
     }
 
     async createCapsule(name: string): Promise<Capsule> {
@@ -720,6 +1140,7 @@ export class TabStateService {
 
         const localExamples = this.getLocalExamples(requestId);
         this.saveLocalExamples(requestId, [...localExamples, newEx]);
+        this.fetchedExamplesIds.delete(requestId);
 
         if (!this.authService.isLoggedIn()) {
             return newEx;
@@ -760,32 +1181,85 @@ export class TabStateService {
         }
     }
 
-    async getExamples(requestId: string): Promise<any[]> {
-        let examples: any[] = [];
-        if (this.authService.isLoggedIn()) {
+    async getExamples(requestId: string, forceRefresh = false): Promise<any[]> {
+        // Seed from local storage cache immediately so UI shows instantly if cached
+        const local = this.getLocalExamples(requestId);
+        if (local.length > 0 && !this.requestExamplesMap().has(requestId)) {
+            this.requestExamplesMap.update(map => new Map(map).set(requestId, local));
+        }
+
+        // Deduplication: Return ongoing promise or already-fetched cache unless forceRefresh
+        if (!forceRefresh) {
+            if (this.inFlightExampleRequests.has(requestId)) {
+                return this.inFlightExampleRequests.get(requestId)!;
+            }
+            if (this.fetchedExamplesIds.has(requestId)) {
+                return this.requestExamplesMap().get(requestId) || local;
+            }
+        }
+
+        const task = (async () => {
+            this.examplesLoadingMap.update(set => new Set(set).add(requestId));
+
+            let examples: any[] = [];
             try {
-                const res = await firstValueFrom(
-                    this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/${requestId}/example`)
-                );
-                if (res?.data && res.data.length > 0) {
-                    examples = res.data;
+                if (this.authService.isLoggedIn()) {
+                    try {
+                        const res = await firstValueFrom(
+                            this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/${requestId}/example`)
+                        );
+                        if (res?.data && Array.isArray(res.data)) {
+                            examples = res.data;
+                            this.saveLocalExamples(requestId, examples);
+                        }
+                    } catch { }
                 }
-            } catch { }
-        }
-        if (examples.length === 0) {
-            examples = this.getLocalExamples(requestId);
-        }
+                if (examples.length === 0 && local.length > 0) {
+                    examples = local;
+                }
 
-        this.requestExamplesMap.update(map => {
-            const next = new Map(map);
-            next.set(requestId, examples);
-            return next;
-        });
+                this.requestExamplesMap.update(map => {
+                    const next = new Map(map);
+                    next.set(requestId, examples);
+                    return next;
+                });
 
-        return examples;
+                this.fetchedExamplesIds.add(requestId);
+                return examples;
+            } finally {
+                this.inFlightExampleRequests.delete(requestId);
+                this.examplesLoadingMap.update(set => {
+                    const next = new Set(set);
+                    next.delete(requestId);
+                    return next;
+                });
+            }
+        })();
+
+        this.inFlightExampleRequests.set(requestId, task);
+        return task;
+    }
+
+    preloadAllExamples(): void {
+        if (!this.isBrowser) return;
+        const requests = this.allCapsuleRequests();
+        for (const req of requests) {
+            const local = this.getLocalExamples(req.id);
+            if (local.length > 0) {
+                this.requestExamplesMap.update(map => {
+                    const next = new Map(map);
+                    if (!next.has(req.id)) next.set(req.id, local);
+                    return next;
+                });
+            }
+            if (this.authService.isLoggedIn() && !this.fetchedExamplesIds.has(req.id) && !this.inFlightExampleRequests.has(req.id)) {
+                this.getExamples(req.id).catch(() => {});
+            }
+        }
     }
 
     async deleteExample(requestId: string, exampleId: string): Promise<void> {
+        this.fetchedExamplesIds.delete(requestId);
         if (this.authService.isLoggedIn()) {
             try {
                 await firstValueFrom(
@@ -866,6 +1340,13 @@ export class TabStateService {
             map.set(id, { ...currentState, ...partialState });
             return new Map(map);
         });
+
+        if (partialState.headers || partialState.params || partialState.rawBody || partialState.rawBodyJson) {
+            const updated = this.states().get(id);
+            if (updated) {
+                this.getVariableService()?.syncVariablesFromInputs(id, updated);
+            }
+        }
     }
 
     undo() {
@@ -975,113 +1456,199 @@ export class TabStateService {
         this.updateState(id, { ...dummyData, isLoading: false });
     }
 
-    async saveToCapsule(id: string): Promise<void> {
+    async saveToCapsule(id?: string): Promise<void> {
         this.isSaving.set(true);
 
-        const currentCapId = this.activeCapsuleId();
-        const currentCapName = this.activeCapsuleName();
+        try {
+            const currentCapId = this.activeCapsuleId();
+            const currentCapName = this.activeCapsuleName();
 
-        // Collect all open tabs belonging to this capsule so full capsule state is saved
-        const tabsToSave: RequestState[] = [];
-        const activeTabState = this.states().get(id);
-        if (activeTabState) {
-            tabsToSave.push(activeTabState);
-        }
+            // 1. Ensure all variables are synced to backend API
+            const vs = this.getVariableService();
+            if (vs) {
+                vs.saveVariables(false);
+                await vs.syncVariablesToBackend();
+            }
 
-        for (const tabId of this.openTabIds()) {
-            if (tabId !== id) {
-                const s = this.states().get(tabId);
-                if (s && (s.capsuleId === currentCapId || !s.capsuleId)) {
-                    tabsToSave.push(s);
+            // 2. Collect all requests belonging to this capsule
+            const tabsToSave: RequestState[] = [];
+            const seenIds = new Set<string>();
+
+            if (id) {
+                const activeTabState = this.states().get(id);
+                if (activeTabState) {
+                    tabsToSave.push(activeTabState);
+                    seenIds.add(id);
                 }
             }
-        }
 
-        for (const tabState of tabsToSave) {
-            let savedId = tabState.id;
-            if (this.authService.isLoggedIn()) {
+            for (const s of this.states().values()) {
+                if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
+                    tabsToSave.push(s);
+                    seenIds.add(s.id);
+                }
+            }
+
+            for (const s of this.savedCapsules()) {
+                if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
+                    tabsToSave.push(s);
+                    seenIds.add(s.id);
+                }
+            }
+
+            // 3. If logged in, sync capsule and requests to backend
+            let effectiveCapId = currentCapId;
+            if (this.authService.isLoggedIn() && currentCapId) {
                 try {
-                    const payload = {
-                        id: tabState.id,
-                        capsuleId: currentCapId,
-                        capsuleName: currentCapName,
-                        name: tabState.name,
-                        url: tabState.url,
-                        method: tabState.method,
-                        payloadType: tabState.payloadType,
-                        bodyType: tabState.bodyType,
-                        rawType: tabState.rawType,
-                        rawBody: tabState.rawBody,
-                        rawBodyJson: tabState.rawBodyJson,
-                        rawBodyXml: tabState.rawBodyXml,
-                        auth: {
-                            type: tabState.auth.type,
-                            token: tabState.auth.token
-                        },
-                        scripts: {
-                            preRequest: tabState.scripts.preRequest,
-                            postResponse: tabState.scripts.postResponse
-                        },
-                        encryption: tabState.encryption,
-                        settings: tabState.settings,
-                        params: tabState.params.map(p => ({ enabled: p.enabled, key: p.key, value: p.value })),
-                        headers: tabState.headers.map(h => ({ enabled: h.enabled, key: h.key, value: h.value })),
-                        formData: tabState.formData.map(f => ({ enabled: f.enabled, key: f.key, value: f.value, type: f.type }))
-                    };
+                    const existing = this.capsules().find(c => c.id === currentCapId);
+                    if (!existing || currentCapId === '1' || currentCapId.length < 8) {
+                        const res = await firstValueFrom(
+                            this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { name: currentCapName })
+                        );
+                        if (res?.data?.id) {
+                            const oldId = currentCapId;
+                            effectiveCapId = res.data.id;
+                            this.activeCapsuleId.set(effectiveCapId);
+                            this.capsules.update(list => list.map(c => c.id === oldId ? { ...c, id: effectiveCapId, name: currentCapName } : c));
+                            for (const tabState of tabsToSave) {
+                                tabState.capsuleId = effectiveCapId;
+                            }
+                        }
+                    } else {
+                        await firstValueFrom(
+                            this.http.put(`${API_BASE_URL}/capsule/${currentCapId}`, { name: currentCapName })
+                        ).catch(() => {});
+                    }
+                } catch (e) {
+                    console.warn('Capsule sync note:', e);
+                }
+            }
 
-                    const response = await firstValueFrom(
-                        this.http.post<{ data: any }>(`${API_BASE_URL}/request/save`, payload)
-                    );
+            for (const tabState of tabsToSave) {
+                let savedId = tabState.id;
+                if (this.authService.isLoggedIn()) {
+                    try {
+                        const payload = {
+                            id: tabState.id,
+                            capsuleId: effectiveCapId,
+                            capsuleName: currentCapName,
+                            name: tabState.name,
+                            url: tabState.url,
+                            method: tabState.method,
+                            payloadType: tabState.payloadType,
+                            bodyType: tabState.bodyType,
+                            rawType: tabState.rawType,
+                            rawBody: tabState.rawBody,
+                            rawBodyJson: tabState.rawBodyJson,
+                            rawBodyXml: tabState.rawBodyXml,
+                            auth: {
+                                type: tabState.auth.type,
+                                token: tabState.auth.token
+                            },
+                            scripts: {
+                                preRequest: tabState.scripts.preRequest,
+                                postResponse: tabState.scripts.postResponse,
+                                testScript: tabState.scripts.testScript,
+                                testScriptEnabled: tabState.scripts.testScriptEnabled
+                            },
+                            encryption: tabState.encryption,
+                            settings: tabState.settings,
+                            params: tabState.params.map(p => ({ enabled: p.enabled, key: p.key, value: p.value })),
+                            headers: tabState.headers.map(h => ({ enabled: h.enabled, key: h.key, value: h.value })),
+                            formData: tabState.formData.map(f => ({ enabled: f.enabled, key: f.key, value: f.value, type: f.type }))
+                        };
 
-                    if (response?.data) {
-                        const savedData = response.data;
-                        if (savedData.id && savedData.id !== tabState.id) {
+                        const response = await firstValueFrom(
+                            this.http.post<{ data: any }>(`${API_BASE_URL}/request/save`, payload)
+                        );
+
+                        if (response?.data) {
+                            const savedData = response.data;
                             const oldId = tabState.id;
-                            savedId = savedData.id;
-                            const updatedState = { ...tabState, id: savedId, capsuleId: currentCapId, isDirty: false };
+                            savedId = savedData.id || oldId;
+                            if (savedId !== oldId) {
+                                this.getVariableService()?.updateTabIdInSources(oldId, savedId);
+                            }
+
+                            const mappedSaved = this.mapDtoToState(savedData);
+                            const updatedState: RequestState = {
+                                ...mappedSaved,
+                                id: savedId,
+                                capsuleId: effectiveCapId,
+                                isDirty: false,
+                                autoAuthEnabled: tabState.autoAuthEnabled,
+                                postTriggerTabId: tabState.postTriggerTabId,
+                                responseBody: tabState.responseBody ?? mappedSaved.responseBody,
+                                responseStatus: tabState.responseStatus ?? mappedSaved.responseStatus,
+                                responseTime: tabState.responseTime ?? mappedSaved.responseTime,
+                                responseSize: tabState.responseSize ?? mappedSaved.responseSize,
+                                responseCookies: tabState.responseCookies ?? mappedSaved.responseCookies,
+                                responseHeaders: tabState.responseHeaders ?? mappedSaved.responseHeaders,
+                                testResults: tabState.testResults ?? mappedSaved.testResults
+                            };
+
                             this.states.update(map => {
                                 const next = new Map(map);
-                                next.delete(oldId);
+                                if (savedId !== oldId) next.delete(oldId);
                                 next.set(savedId, updatedState);
                                 return next;
                             });
-                            this.openTabIds.update(ids => ids.map(tid => tid === oldId ? savedId : tid));
-                            if (this.activeTabId() === oldId) {
-                                this.activeTabId.set(savedId);
+
+                            if (savedId !== oldId) {
+                                this.openTabIds.update(ids => ids.map(tid => tid === oldId ? savedId : tid));
+                                if (this.activeTabId() === oldId) {
+                                    this.activeTabId.set(savedId);
+                                }
                             }
                         }
+                    } catch (err) {
+                        console.error(`Failed to persist request ${tabState.id} to backend`, err);
                     }
-                } catch (err) {
-                    console.error(`Failed to persist request ${tabState.id} to backend`, err);
                 }
+
+                const finalState = this.states().get(savedId) || tabState;
+                this.savedCapsules.update(col => {
+                    const idx = col.findIndex(r => r.id === savedId);
+                    if (idx >= 0) {
+                        const updated = [...col];
+                        updated[idx] = { ...finalState, isDirty: false, capsuleId: effectiveCapId };
+                        return updated;
+                    } else {
+                        return [...col, { ...finalState, isDirty: false, capsuleId: effectiveCapId }];
+                    }
+                });
+                this.updateState(savedId, { isDirty: false, capsuleId: effectiveCapId });
             }
 
-            const finalState = this.states().get(savedId) || tabState;
-            this.savedCapsules.update(col => {
-                const idx = col.findIndex(r => r.id === savedId);
-                if (idx >= 0) {
-                    const updated = [...col];
-                    updated[idx] = { ...finalState, isDirty: false };
-                    return updated;
-                } else {
-                    return [...col, { ...finalState, isDirty: false }];
-                }
-            });
-            this.updateState(savedId, { isDirty: false, capsuleId: currentCapId });
-        }
+            // 4. Update backend session in Variable table with newly saved IDs and state
+            if (vs && this.authService.isLoggedIn()) {
+                await vs.syncVariablesToBackend();
+            }
 
-        if (this.isBrowser && currentCapId) {
-            localStorage.setItem(`onsteroids_open_tab_ids_${currentCapId}`, JSON.stringify(this.openTabIds()));
-            localStorage.setItem(`onsteroids_active_tab_${currentCapId}`, this.activeTabId() || '');
+            if (this.isBrowser && effectiveCapId) {
+                localStorage.setItem(`onsteroids_open_tab_ids_${effectiveCapId}`, JSON.stringify(this.openTabIds()));
+                localStorage.setItem(`onsteroids_active_tab_${effectiveCapId}`, this.activeTabId() || '');
+                localStorage.setItem('onsteroids_active_capsule', effectiveCapId);
+                localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+                try {
+                    const currentStates = Array.from(this.states().entries());
+                    localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
+                } catch {}
+                this.snapshotCurrentSession();
+            }
+        } finally {
+            this.isSaving.set(false);
         }
-
-        this.isSaving.set(false);
     }
 
     async loadBackendData(): Promise<void> {
         if (!this.isBrowser || !this.authService.isLoggedIn()) return;
+        if (this.isLoadingBackendData) return;
+        this.isLoadingBackendData = true;
 
         try {
+            this.hasInitialBackendLoaded = true;
+            // 1. Fetch capsules from backend
             const capRes = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/capsule`)
             );
@@ -1093,19 +1660,28 @@ export class TabStateService {
                 }));
                 this.capsules.set(caps);
 
-                const storedCapId = localStorage.getItem('onsteroids_active_capsule');
-                const matched = caps.find(c => c.id === storedCapId) || caps.find(c => c.id === this.activeCapsuleId()) || caps[0];
-                this.activeCapsuleId.set(matched.id);
-                this.activeCapsuleName.set(matched.name);
-                localStorage.setItem('onsteroids_active_capsule', matched.id);
+                // 2. Fetch requests across ALL user capsules so the workspace tree has full data
+                const allLoadedRequests: RequestState[] = [];
+                for (const cap of caps) {
+                    try {
+                        const reqRes = await firstValueFrom(
+                            this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${cap.id}`)
+                        );
+                        if (reqRes?.data && Array.isArray(reqRes.data)) {
+                            const mapped = reqRes.data.map(dto => this.mapDtoToState(dto));
+                            allLoadedRequests.push(...mapped);
+                        }
+                    } catch (err) {
+                        console.warn(`Could not load requests for capsule ${cap.id}`, err);
+                    }
+                }
 
-                await this.loadRequestsForCapsule(matched.id);
+                this.savedCapsules.set(allLoadedRequests);
 
-                const requests = this.savedCapsules();
-                if (requests.length > 0) {
+                if (allLoadedRequests.length > 0) {
                     this.states.update(map => {
                         const next = new Map(map);
-                        for (const req of requests) {
+                        for (const req of allLoadedRequests) {
                             const existing = next.get(req.id);
                             if (existing) {
                                 next.set(req.id, {
@@ -1125,42 +1701,53 @@ export class TabStateService {
                         return next;
                     });
                 }
+            }
 
-                // Restore open tabs for this capsule
-                let targetOpenIds: string[] = [];
-                const savedCapOpen = localStorage.getItem(`onsteroids_open_tab_ids_${matched.id}`) || localStorage.getItem('onsteroids_open_tab_ids');
-                if (savedCapOpen) {
-                    try {
-                        const parsed = JSON.parse(savedCapOpen);
-                        if (Array.isArray(parsed)) {
-                            targetOpenIds = parsed.filter(id => this.states().has(id));
-                        }
-                    } catch (e) { }
-                }
+            // 3. Load variables and workspace session from backend API
+            const vs = this.getVariableService();
+            if (vs) {
+                await vs.loadVariablesFromBackend();
+            }
 
-                if (targetOpenIds.length === 0) {
-                    if (requests.length > 0) {
-                        targetOpenIds = requests.map(r => r.id);
-                    } else {
-                        const newId = this.createId();
-                        const blankState = this.getDefaultState(newId);
-                        blankState.capsuleId = matched.id;
-                        this.states.update(map => new Map(map).set(newId, blankState));
-                        targetOpenIds = [newId];
-                    }
-                }
+            // 4. Ensure active capsule is valid
+            const currentCapId = this.activeCapsuleId();
+            const matchingCap = this.capsules().find(c => c.id === currentCapId) || this.capsules()[0];
+            if (matchingCap) {
+                this.activeCapsuleId.set(matchingCap.id);
+                this.activeCapsuleName.set(matchingCap.name);
+            }
 
-                this.openTabIds.set(targetOpenIds);
-
-                const storedActiveTab = localStorage.getItem(`onsteroids_active_tab_${matched.id}`) || localStorage.getItem('onsteroids_active_tab');
-                if (storedActiveTab && targetOpenIds.includes(storedActiveTab)) {
-                    this.activeTabId.set(storedActiveTab);
+            // 5. Restore open tabs
+            let targetOpenIds = this.openTabIds().filter(id => this.states().has(id));
+            if (targetOpenIds.length === 0) {
+                const capRequests = this.savedCapsules().filter(r => r.capsuleId === this.activeCapsuleId());
+                if (capRequests.length > 0) {
+                    targetOpenIds = capRequests.map(r => r.id);
+                } else if (this.savedCapsules().length > 0) {
+                    targetOpenIds = [this.savedCapsules()[0].id];
                 } else {
-                    this.activeTabId.set(targetOpenIds[0] || null);
+                    const newId = this.createId();
+                    const blankState = this.getDefaultState(newId);
+                    blankState.capsuleId = this.activeCapsuleId();
+                    this.states.update(map => new Map(map).set(newId, blankState));
+                    targetOpenIds = [newId];
                 }
             }
+
+            this.openTabIds.set(targetOpenIds);
+
+            const currentActive = this.activeTabId();
+            if (currentActive && targetOpenIds.includes(currentActive)) {
+                // Retain current active tab
+            } else {
+                this.activeTabId.set(targetOpenIds[0] || null);
+            }
+
+            this.preloadAllExamples();
         } catch (e) {
-            console.error('Failed to load capsules from backend', e);
+            console.error('Failed to load backend data', e);
+        } finally {
+            this.isLoadingBackendData = false;
         }
     }
 
@@ -1231,20 +1818,20 @@ export class TabStateService {
                 bypassCors: dto.bypassCors ?? true
             },
             params: (dto.params || []).map((p: any) => ({
-                enabled: p.isEnabled ?? true,
-                key: p.paramKey ?? '',
-                value: p.paramValue ?? ''
+                enabled: p.isEnabled ?? p.enabled ?? true,
+                key: p.paramKey ?? p.key ?? '',
+                value: p.paramValue ?? p.value ?? ''
             })),
             headers: (dto.headers || []).map((h: any) => ({
-                enabled: h.isEnabled ?? true,
-                key: h.headerKey ?? '',
-                value: h.headerValue ?? ''
+                enabled: h.isEnabled ?? h.enabled ?? true,
+                key: h.headerKey ?? h.key ?? '',
+                value: h.headerValue ?? h.value ?? ''
             })),
             formData: (dto.formData || []).map((f: any) => ({
-                enabled: f.isEnabled ?? true,
-                key: f.fieldKey ?? '',
-                value: f.fieldValue ?? '',
-                type: (f.fieldType as any) || 'text'
+                enabled: f.isEnabled ?? f.enabled ?? true,
+                key: f.fieldKey ?? f.key ?? '',
+                value: f.fieldValue ?? f.value ?? '',
+                type: (f.fieldType as any) || (f.type as any) || 'text'
             })),
             responseBody: cached?.responseBody ?? base.responseBody,
             responseStatus: cached?.responseStatus ?? base.responseStatus,

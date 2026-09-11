@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, output, model } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, output, model, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
@@ -19,6 +19,12 @@ export class AuthModalComponent {
     userEmail = model<string>('');
     otp = model<string>('');
 
+    isOtpMasked = signal<boolean>(true);
+
+    toggleOtpMask() {
+        this.isOtpMasked.update(m => !m);
+    }
+
     onClose = output<void>();
     onSendOtp = output<void>();
     onAuthenticate = output<void>();
@@ -26,7 +32,19 @@ export class AuthModalComponent {
     onContinueWithoutSignIn = output<void>();
 
     toggleModal() {
+        this.isOtpMasked.set(true);
         this.onClose.emit();
+    }
+
+    onOtpInput(event: Event) {
+        const input = event.target as HTMLInputElement;
+        const clean = (input.value || '').replace(/\D/g, '').slice(0, 6);
+        input.value = clean;
+        this.otp.set(clean);
+
+        if (clean.length === 6 && !this.isAuthenticating()) {
+            this.onAuthenticate.emit();
+        }
     }
 
     continueWithoutSignIn() {

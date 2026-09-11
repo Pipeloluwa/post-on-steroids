@@ -148,15 +148,16 @@ export class RequestDetailsComponent {
     }
 
     async saveRequest() {
+        await this.tabStateService.saveToCapsule(this.tabId());
+
         if (!this.isLoggedIn()) {
             this.waitingForAuth.set(true);
             this.pendingAction.set('save');
             this.onAuthRequired.emit();
-            this.onNotify.emit('Please sign in to save your request to a capsule.');
+            this.onNotify.emit('Saved locally! Sign in to sync with cloud.');
             return;
         }
 
-        await this.tabStateService.saveToCapsule(this.tabId());
-        this.onNotify.emit('Request saved successfully!');
+        this.onNotify.emit('Capsule, requests, and variables saved successfully!');
     }
 }

@@ -4,12 +4,11 @@
         <!-- HTTP Icon (Placeholder style from image) -->
         <div
             class="flex items-center justify-center w-6 h-6 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border)">
-            <mat-icon
-                class="text-[14px] w-[14px] h-[14px] leading-[14px] text-(--postonsteroids-accent)">swap_horiz</mat-icon>
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">swap_horiz</mat-icon>
         </div>
 
         <!-- Request Name Input (styled like the text in image) -->
-        <input type="text" [(ngModel)]="requestName" (ngModelChange)="onNameChange($event)"
+        <input type="text" [ngModel]="requestName()" (ngModelChange)="onNameChange($event)"
             class="bg-transparent border-none outline-none font-semibold text-[13px] text-(--postonsteroids-text-primary) min-w-[200px] flex-1 truncate"
             placeholder="Request Name" />
 
@@ -26,7 +25,7 @@
                     <span class="text-[12px] text-(--postonsteroids-text-secondary)">
                         {{ selectedCapsule() }}
                     </span>
-                    <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px] opacity-60">expand_more</mat-icon>
+                    <mat-icon class="text-[14px]! size-[14px]! opacity-60">expand_more</mat-icon>
                 </div>
             </app-scrollable-select-component>
         </div>
@@ -36,11 +35,11 @@
             <button (click)="shareCapsule()" [disabled]="isSharing()"
                 class="flex items-center gap-x-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) rounded transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 @if (isSharing()) {
-                    <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px] animate-spin">sync</mat-icon>
-                    <span>Sharing...</span>
+                <mat-icon class="text-[14px]! size-[14px]! animate-spin">sync</mat-icon>
+                <span>Sharing...</span>
                 } @else {
-                    <mat-icon class="text-[14px] w-[14px] h-[14px] leading-[14px]">share</mat-icon>
-                    <span>Share</span>
+                <mat-icon class="text-[14px]! size-[14px]!">share</mat-icon>
+                <span>Share</span>
                 }
             </button>
         </div>
@@ -49,13 +48,14 @@
     <!-- Right Section: Save Button Group -->
     <div class="flex items-center gap-x-2">
         <div
-            class="flex h-[30px] rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)">
+            class="flex items-center h-[30px] rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)">
             <button (click)="saveRequest()" [disabled]="isSaving()"
                 class="px-3 flex items-center gap-x-2 text-[12px] font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 @if (isSaving()) {
-                <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px] animate-spin text-(--postonsteroids-text-secondary)">sync</mat-icon>
+                <mat-icon
+                    class="text-[16px]! size-[16px]! animate-spin text-(--postonsteroids-text-secondary)">sync</mat-icon>
                 } @else {
-                <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px] text-(--postonsteroids-text-secondary)">save</mat-icon>
+                <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary)">save</mat-icon>
                 }
                 {{ isSaving() ? 'Saving...' : 'Save' }}
             </button>
@@ -63,11 +63,12 @@
             <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="140"
                 [absoluteStartLeft]="false" (outputSelectedValue)="onSaveOptionSelected($event)">
                 <div
-                    class="px-1.5 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center">
+                    class="px-1.5 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center justify-center">
                     @if (isExporting()) {
-                        <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px] animate-spin text-(--postonsteroids-accent)">sync</mat-icon>
+                    <mat-icon
+                        class="text-[16px]! size-[16px]! animate-spin text-(--postonsteroids-accent)">sync</mat-icon>
                     } @else {
-                        <mat-icon class="text-[16px] w-[16px] h-[16px] leading-[16px]">expand_more</mat-icon>
+                    <mat-icon class="text-[16px]! size-[16px]!">expand_more</mat-icon>
                     }
                 </div>
             </app-scrollable-select-component>

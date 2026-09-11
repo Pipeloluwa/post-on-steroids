@@ -1,7 +1,8 @@
-import { Injectable, signal, inject, PLATFORM_ID } from '@angular/core';
+import { Injectable, signal, inject, PLATFORM_ID, Injector } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
+import { Subject, firstValueFrom } from 'rxjs';
 import { API_BASE_URL, AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../constants/api.constants';
 import { NotificationService } from './notification.service';
 
@@ -36,10 +37,13 @@ export class AuthService {
     private notificationService = inject(NotificationService);
     private platformId = inject(PLATFORM_ID);
     private isBrowser = isPlatformBrowser(this.platformId);
+    private injector = inject(Injector);
 
     isLoggedIn = signal<boolean>(false);
     currentUser = signal<UserAuth | null>(null);
     token = signal<string | null>(null);
+    onLogout = new Subject<UserAuth | null>();
+    onLogin = new Subject<UserAuth>();
 
     userEmail = signal<string>('');
     otp = signal<string>('');
@@ -155,6 +159,7 @@ export class AuthService {
                         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
                     }
 
+                    this.onLogin.next(data.user);
                     resolve(true);
                 },
                 error: (err) => {
@@ -167,14 +172,29 @@ export class AuthService {
         });
     }
 
-    logout() {
+    async logout() {
+        const user = this.currentUser();
         const userToken = this.token();
-        if (userToken) {
-            this.http.post(`${API_BASE_URL}/auth/logout`, {}).subscribe({
-                error: () => { /* ignore logout errors */ }
-            });
+
+        // 1. Save workspace session and variables to backend API while token is still valid
+        try {
+            const { TabStateService } = await import('./tab.state.service');
+            const tabStateService = this.injector.get(TabStateService);
+            if (tabStateService) {
+                await tabStateService.saveFinalSessionBeforeLogout();
+            }
+        } catch (e) {
+            console.error('Error persisting state before logout', e);
         }
 
+        if (userToken) {
+            firstValueFrom(this.http.post(`${API_BASE_URL}/auth/logout`, {})).catch(() => {});
+        }
+
+        // 2. Notify subscribers (TabStateService, VariableService) with user object
+        this.onLogout.next(user);
+
+        // 3. Clear auth credentials
         this.clearStorage();
         this.isLoggedIn.set(false);
         this.currentUser.set(null);

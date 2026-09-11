@@ -47,6 +47,14 @@
                     class="w-full px-3 py-2 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-xs outline-none focus:border-(--postonsteroids-accent) transition-all font-mono resize-none"></textarea>
             </div>
 
+            <!-- Duplicate Key Warning -->
+            @if (isDuplicateKey()) {
+            <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-[11px] text-amber-400">
+                <mat-icon class="text-[16px]! size-[16px]!">info</mat-icon>
+                <span>A variable named <strong>"{{ variableService.modalKey().trim() }}"</strong> already exists and will be updated.</span>
+            </div>
+            }
+
             <!-- Dynamic Link Indicator -->
             @if (variableService.modalSource(); as src) {
             <div class="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between text-[11px]">

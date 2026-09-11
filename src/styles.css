@@ -3,6 +3,46 @@
 @import "tailwindcss";
 @import "jsoneditor/dist/jsoneditor.min.css";
 
+/* Local Material Icons font definition */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/material-icons.woff2') format('woff2'),
+       url('/fonts/material-icons.ttf') format('truetype');
+  font-display: block;
+}
+
+.material-icons,
+.mat-icon,
+mat-icon {
+  font-family: 'Material Icons' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1 !important;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'liga';
+  box-sizing: border-box;
+}
+
+.mat-icon,
+mat-icon {
+  width: 1em;
+  height: 1em;
+}
+
 /* Postman Dark Theme Color Variables */
 :root[data-theme="dark"] {
   --postonsteroids-bg-primary: #212121;

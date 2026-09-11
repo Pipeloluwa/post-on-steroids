@@ -4,10 +4,10 @@
     <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-(--postonsteroids-accent)/10 rounded-full blur-3xl pointer-events-none"></div>
 
     <div class="w-full max-w-[420px] bg-(--postonsteroids-bg-secondary) rounded-2xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden relative z-10 transition-all">
-        <!-- Brand Header -->
+            <!-- Brand Header -->
         <div class="p-8 pb-6 border-b border-(--postonsteroids-border) text-center">
-            <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-(--postonsteroids-accent)/10 border border-(--postonsteroids-accent)/20 text-(--postonsteroids-accent) mb-4 shadow-inner">
-                <mat-icon class="text-[32px]! size-[32px]!">rocket_launch</mat-icon>
+            <div class="inline-flex items-center justify-center mb-4">
+                <img src="/icons/onsteroids-icon.svg" alt="OnSteroids" width="56" height="56" loading="eager" fetchpriority="high" class="size-14 rounded-2xl shadow-lg shadow-(--postonsteroids-accent)/25" />
             </div>
             <h1 class="text-2xl font-black tracking-tight text-(--postonsteroids-text-primary)">
                 OnSteroids<span class="text-(--postonsteroids-accent)">.</span>
@@ -75,25 +75,37 @@
                             Change email
                         </button>
                     </div>
-                    <input id="otp-input" type="text" [ngModel]="authService.otp()"
-                        (ngModelChange)="authService.otp.set($event)" name="otp" required maxlength="10"
-                        placeholder="••••••"
-                        class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[20px] font-mono text-center tracking-[0.5em] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
-                    <p class="text-[11px] text-(--postonsteroids-text-muted) mt-1.5 text-center">
-                        Sent to <strong class="text-(--postonsteroids-text-secondary)">{{ authService.userEmail() }}</strong>
-                    </p>
+                    <div class="relative">
+                        <input id="otp-input" [type]="isOtpMasked() ? 'password' : 'text'" [ngModel]="authService.otp()"
+                            (input)="onOtpInput($event)" name="otp" required maxlength="6"
+                            inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+                            placeholder="••••••"
+                            class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-12 text-[22px] font-mono text-center tracking-[0.5em] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
+                        <button type="button" (click)="toggleOtpMask()"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer flex items-center justify-center"
+                            [title]="isOtpMasked() ? 'Show verification code' : 'Hide verification code'"
+                            aria-label="Toggle OTP visibility">
+                            <mat-icon class="text-[18px]! size-[18px]!">{{ isOtpMasked() ? 'visibility' : 'visibility_off' }}</mat-icon>
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between mt-2 text-[11px]">
+                        <span class="text-(--postonsteroids-text-muted)">
+                            Sent to <strong class="text-(--postonsteroids-text-secondary)">{{ authService.userEmail() }}</strong>
+                        </span>
+                        <span [class.text-emerald-400]="authService.otp().length === 6"
+                              [class.text-(--postonsteroids-text-muted)]="authService.otp().length < 6"
+                              class="font-mono font-medium">
+                            {{ authService.otp().length }}/6 digits
+                        </span>
+                    </div>
                 </div>
 
-                <button type="submit" [disabled]="authService.isAuthenticating() || !authService.otp()"
-                    class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
-                    @if (authService.isAuthenticating()) {
-                    <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Verifying...</span>
-                    } @else {
-                    <span>Verify & Enter Workspace</span>
-                    <mat-icon class="text-[18px]! size-[18px]!">login</mat-icon>
-                    }
-                </button>
+                @if (authService.isAuthenticating()) {
+                <div class="h-12 rounded-xl bg-(--postonsteroids-accent)/10 border border-(--postonsteroids-accent)/30 flex items-center justify-center gap-x-2.5 text-(--postonsteroids-accent) text-xs font-semibold animate-in fade-in">
+                    <div class="w-4 h-4 border-2 border-(--postonsteroids-accent)/30 border-t-(--postonsteroids-accent) rounded-full animate-spin"></div>
+                    <span>Verifying code & entering workspace...</span>
+                </div>
+                }
 
                 <div class="pt-2 text-center">
                     <button type="button" (click)="onSendOtp()" [disabled]="authService.isAuthenticating()"

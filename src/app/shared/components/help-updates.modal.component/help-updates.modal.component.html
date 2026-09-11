@@ -1,5 +1,5 @@
 @if (show()) {
-<div class="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-4" (click)="onClose.emit()">
+<div class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-4" (click)="onClose.emit()">
     <div class="w-full max-w-2xl my-auto max-h-[88vh] p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-4 relative overflow-hidden" (click)="$event.stopPropagation()">
         
         <!-- Header -->
@@ -60,55 +60,55 @@
                 <!-- Section 2 -->
                 <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                     <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
-                        <mat-icon class="text-blue-500 text-[18px]! size-[18px]!">send</mat-icon>
-                        <span>Sending Requests & Payloads</span>
+                        <mat-icon class="text-purple-500 text-[18px]! size-[18px]!">data_object</mat-icon>
+                        <span>Dynamic Variables (<code class="text-purple-400 font-mono">{{ '{{var}}' }}</code>) & +Var</span>
                     </div>
                     <p class="leading-relaxed">
-                        Support for all standard HTTP verbs (GET, POST, PUT, DELETE, PATCH, etc.). Configure query parameters, headers, or body (JSON, XML, Form-Data, or raw text). When unwrapped, payload text collapses to a single minified line for quick inspection.
+                        Reference variables anywhere in URLs, headers, params, or request bodies with <code class="text-purple-400 font-mono">{{ '{{variableName}}' }}</code> syntax. Use the <strong>+Var</strong> button or highlight text in Monaco Editor to bind a variable directly to a response property, header, or param. When the source request executes, bound variables automatically sync with the latest values, preventing stale data or duplicate entries.
                     </p>
                 </div>
 
                 <!-- Section 3 -->
                 <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                     <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
-                        <mat-icon class="text-purple-500 text-[18px]! size-[18px]!">data_object</mat-icon>
-                        <span>Global Variables (<code class="text-purple-400 font-mono">{{ '{{var}}' }}</code>)</span>
+                        <mat-icon class="text-cyan-500 text-[18px]! size-[18px]!">alt_route</mat-icon>
+                        <span>Chained Request Triggers</span>
                     </div>
                     <p class="leading-relaxed">
-                        Reference global variables anywhere in your URL, headers, query parameters, or request body using double braces syntax: <code class="text-purple-400 font-mono">{{ '{{baseUrl}}' }}</code>. Use the <strong>+ Var</strong> buttons in request rows or response viewer to instantly save any value into Global Variables.
+                        Chain multi-step API sequences with the <strong>Trigger</strong> dropdown located right next to Auto-Auth. Select any request in your capsule to be automatically fired once the current request returns a successful response.
                     </p>
                 </div>
 
                 <!-- Section 4 -->
                 <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                     <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
-                        <mat-icon class="text-emerald-500 text-[18px]! size-[18px]!">javascript</mat-icon>
-                        <span>Pre-Request & Post-Response Scripts</span>
+                        <mat-icon class="text-emerald-500 text-[18px]! size-[18px]!">fact_check</mat-icon>
+                        <span>Test Scripts & Standard Assertions</span>
                     </div>
                     <p class="leading-relaxed">
-                        Write scripts to compute authentication tokens, inject dynamic timestamps into headers, or evaluate automated assertions on status codes and response bodies.
+                        Verify API behavior with the built-in Sandbox. Choose from 19 standard assertions via the <em>Add Snippet...</em> dropdown covering status codes (200, 201, 204, 2xx, 4xx, 5xx), performance thresholds (&lt;200ms, &lt;500ms, &lt;1000ms), JSON body properties, nested token existence, array checks, and headers.
                     </p>
                 </div>
 
                 <!-- Section 5 -->
                 <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                     <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
-                        <mat-icon class="text-rose-500 text-[18px]! size-[18px]!">share</mat-icon>
-                        <span>Sharing & Importing Capsules</span>
+                        <mat-icon class="text-blue-500 text-[18px]! size-[18px]!">bookmarks</mat-icon>
+                        <span>Saved Examples & Background Pre-loading</span>
                     </div>
                     <p class="leading-relaxed">
-                        Share any capsule with teammates via one-click generated links. Recipients can import the entire collection using the Import Shared Capsule card or by pasting the share token.
+                        Save successful request/response snapshots as examples for quick reference. Examples are pre-fetched asynchronously in the background so they are instantly ready when expanding any request's chevron.
                     </p>
                 </div>
 
                 <!-- Section 6 -->
                 <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                     <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
-                        <mat-icon class="text-indigo-500 text-[18px]! size-[18px]!">mouse</mat-icon>
-                        <span>Right-Click Tab Actions</span>
+                        <mat-icon class="text-rose-500 text-[18px]! size-[18px]!">sync_saved_locally</mat-icon>
+                        <span>Full Session & Response Persistence</span>
                     </div>
                     <p class="leading-relaxed">
-                        Right-click any horizontal tab to reveal context actions: <em>Close Tab</em>, <em>Close Other Tabs</em>, <em>Close All Tabs</em>, or <em>Duplicate Tab</em>.
+                        Your workspace state—including active capsules, open tabs, active tab focus, variables, and complete response viewer results (status, body, headers, timing, and test reports)—is automatically preserved across logout and restored upon sign-in.
                     </p>
                 </div>
             </div>
@@ -123,7 +123,7 @@
                     <div class="space-y-1">
                         <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">Progressive App Updates</h3>
                         <p class="leading-relaxed">
-                            Incoming updates will be progressive and pushed directly to the app in real-time. New features, bug fixes, and performance improvements are deployed continuously without disrupting your active requests or capsule states.
+                            Incoming updates are progressive and pushed continuously to your workspace. New features, enhancements, and performance optimizations deploy seamlessly without interrupting your active sessions or inflight requests.
                         </p>
                     </div>
                 </div>
@@ -165,7 +165,22 @@
                     
                     <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-2">
                         <div class="flex items-center justify-between text-xs font-bold text-(--postonsteroids-text-primary)">
-                            <span>Release 1.0.0 (Production Ready)</span>
+                            <span>Release 1.2.0 — Dynamic Variables, Trigger Chains & Background Sync</span>
+                            <span class="text-(--postonsteroids-text-muted) font-normal">September 2026</span>
+                        </div>
+                        <ul class="list-disc list-inside space-y-1 text-[11px] leading-relaxed">
+                            <li><strong>Dynamic +Var Variable Sync:</strong> Highlight text in Monaco or click +Var to bind variables to live responses, headers, or params. Variables auto-sync dynamically upon request execution without duplicates.</li>
+                            <li><strong>Chained Request Triggers:</strong> Post-response trigger button beside Auto-Auth to automatically fire another tab request in sequence with a scrollable selector.</li>
+                            <li><strong>Standard Test Scripts Library:</strong> 19 pre-configured test assertion snippets (status codes, response times, JSON body properties, nested token extractions, headers).</li>
+                            <li><strong>Asynchronous Examples Pre-fetching:</strong> Request snapshots and examples pre-fetch in the background on startup, showing live progress without premature "no examples" states.</li>
+                            <li><strong>Full Session & Response Persistence:</strong> Complete tab state, active tab, active capsule, variables, and full response viewer data restored across logout and login.</li>
+                            <li><strong>Monaco Wrap Modes & Dynamic Cursor:</strong> Word-wrap, key-field, and collapsed modes with cursor-aligned +Var buttons.</li>
+                        </ul>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-2">
+                        <div class="flex items-center justify-between text-xs font-bold text-(--postonsteroids-text-primary)">
+                            <span>Release 1.0.0 — Production Core</span>
                             <span class="text-(--postonsteroids-text-muted) font-normal">September 2026</span>
                         </div>
                         <ul class="list-disc list-inside space-y-1 text-[11px] leading-relaxed">
@@ -174,9 +189,6 @@
                             <li><strong>Batch Delete:</strong> Multi-selection and bulk deletion for both vertical requests and capsules.</li>
                             <li><strong>Response Hydration:</strong> Cached execution responses automatically rehydrate across sessions.</li>
                             <li><strong>URL Capsule Sharing & Import:</strong> One-click share links with token resolution and import modal.</li>
-                            <li><strong>History Submenu:</strong> Full restoration of past requests directly into active workspace tab.</li>
-                            <li><strong>Variable Inclusion:</strong> Direct +Var button on payload rows, headers, and response viewers.</li>
-                            <li><strong>Single-Line Wrap/Unwrap:</strong> Collapse text to a single line or pretty-format on demand.</li>
                         </ul>
                     </div>
                 </div>

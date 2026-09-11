@@ -1,5 +1,6 @@
 <nav
-    class="w-full h-12 shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) z-40 relative px-4">
+    class="w-full h-12 shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-4"
+    [class.z-[99999]]="showHelpModal() || showAboutModal()">
     <div class="w-full h-full flex items-center justify-between gap-4">
         
         <!-- Left Section: Sidebar Toggle & Menu Tabs (File, About, Help/Updates) -->
@@ -121,9 +122,7 @@
 
         <!-- Center Section: Logo & Brand Title (Positioned cleanly in the middle between sections) -->
         <a routerLink="/steroid" class="flex-1 flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline">
-            <div class="flex items-center justify-center size-6 rounded-lg bg-(--postonsteroids-accent) shadow-sm shadow-(--postonsteroids-accent)/30 group-hover:scale-105 transition-transform">
-                <mat-icon class="text-white text-[15px]! size-[15px]!">bolt</mat-icon>
-            </div>
+            <img src="/icons/onsteroids-icon.svg" alt="OnSteroids" width="24" height="24" loading="eager" fetchpriority="high" class="size-6 rounded-lg shadow-sm shadow-(--postonsteroids-accent)/30 group-hover:scale-105 transition-transform" />
             <span class="text-[14px] font-bold tracking-wider text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
                 OnSteroids
             </span>

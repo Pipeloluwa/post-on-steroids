@@ -6,6 +6,7 @@ import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
+import { NetworkService } from './network.service';
 import { API_BASE_URL } from '../constants/api.constants';
 
 @Injectable({
@@ -19,6 +20,7 @@ export class RequestExecutionService {
     private autoAuthService = inject(AutoAuthService);
     private authService = inject(AuthService);
     private notificationService = inject(NotificationService);
+    private networkService = inject(NetworkService);
 
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
 
@@ -416,10 +418,12 @@ export class RequestExecutionService {
                 // Handle ProgressEvent (Network Errors) which stringify to {}
                 if (rawResponseBody && typeof rawResponseBody === 'object') {
                     if (rawResponseBody instanceof Event || rawResponseBody.type === 'error' || rawResponseBody.name === 'HttpErrorResponse') {
-                        if (isUsingProxy) {
+                        if (!this.networkService.isOnline()) {
+                            rawResponseBody = 'Internet connection lost. Please check your network and try again.';
+                        } else if (isUsingProxy) {
                             rawResponseBody = 'Failed to connect to local proxy (OnSteroidsApi at https://localhost:7131). Please ensure OnSteroidsApi is running.';
                         } else {
-                            rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue';
+                            rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue. Ensure the endpoint is reachable.';
                         }
                     }
                 }
@@ -466,6 +470,44 @@ export class RequestExecutionService {
                     // Allow scripts to read results
                 } else if (result.error) {
                     postResponseLogs += `\nError: ${result.error}`;
+                }
+            }
+
+            // 9.5 Test Script Execution
+            const testScriptCode = freshState.scripts?.testScript;
+            let testResults: any[] = [];
+            if (freshState.scripts?.testScriptEnabled && testScriptCode && testScriptCode.trim()) {
+                const testContext = {
+                    responseStatus: status,
+                    responseTime,
+                    responseBody: responseBodyParsed,
+                    responseHeaders,
+                    responseHeader: responseHeaders,
+                    headers,
+                    body,
+                    params
+                };
+                const testResult = await this.sandboxService.executeScript(testScriptCode, testContext);
+                if (testResult.context?.testResults && Array.isArray(testResult.context.testResults)) {
+                    testResults = testResult.context.testResults;
+                } else if (testResult.logs) {
+                    const lines = testResult.logs.split('\n');
+                    for (const line of lines) {
+                        const m = line.match(/^(PASS|FAIL):\s*(.*)/i);
+                        if (m) {
+                            testResults.push({
+                                name: m[2].trim(),
+                                passed: m[1].toUpperCase() === 'PASS'
+                            });
+                        }
+                    }
+                }
+                if (testResult.error) {
+                    testResults.push({
+                        name: 'Test Execution Error',
+                        passed: false,
+                        error: testResult.error
+                    });
                 }
             }
 
@@ -527,6 +569,7 @@ export class RequestExecutionService {
                 responseTime,
                 responseSize,
                 responseHeaders: responseHeaders.map(rh => ({ enabled: true, key: rh.key, value: rh.value })),
+                testResults,
                 scripts: {
                     ...freshState.scripts,
                     preRequestConsole: preRequestLogs,
@@ -540,12 +583,22 @@ export class RequestExecutionService {
                 ...responseData
             });
 
+            // Dynamically sync any variables sourced from this request's response or headers
+            this.variableService.syncVariablesFromResponse(
+                tabId,
+                responseBodyParsed,
+                responseData.responseHeaders,
+                freshState,
+                resolvedUrl
+            );
+
             this.tabStateService.cacheResponse(tabId, freshState.url, {
                 responseBody: responseBodyParsed,
                 responseStatus: status,
                 responseTime,
                 responseSize,
-                responseHeaders: responseData.responseHeaders
+                responseHeaders: responseData.responseHeaders,
+                testResults
             });
 
             this.recordHistory({

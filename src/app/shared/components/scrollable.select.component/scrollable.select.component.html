@@ -14,7 +14,7 @@
     @if (searchable()) {
     <div class="px-2 py-1 mb-1 flex items-center border-b border-(--postonsteroids-border) gap-2">
       <mat-icon
-        class="text-[14px] w-[14px] h-[14px] leading-[14px] text-(--postonsteroids-text-muted)">search</mat-icon>
+        class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">search</mat-icon>
       <input type="text" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Search..."
         class="bg-transparent border-none outline-none text-[12px] w-full text-(--postonsteroids-text-primary)"
         (click)="eventHelpers.preventPropagation($event)">

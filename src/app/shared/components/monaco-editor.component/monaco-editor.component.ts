@@ -39,6 +39,13 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   encryptedPaths = input<string[]>([]);
   autoEncrypt = input<boolean>(false);
   toggleEncryption = output<string>();
+  enableFloatingVar = input<boolean>(true);
+  addVariableClick = output<void>();
+
+  showFloatingVar = signal<boolean>(false);
+  floatingVarPosition = signal<{ top: number; left: number }>({ top: 0, left: 0 });
+  private isMouseDownOnFloatingVar = false;
+  private selectionDisposables: any[] = [];
 
   value = signal<string>('');
   disabled = signal<boolean>(false);
@@ -232,6 +239,33 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     editor.onDidChangeCursorPosition?.(() => {
       MonacoEditorComponent.lastFocusedEditor = this;
     });
+
+    if (this.enableFloatingVar()) {
+      const selSub = editor.onDidChangeCursorSelection?.(() => {
+        MonacoEditorComponent.lastFocusedEditor = this;
+        this.updateFloatingVarPosition();
+      });
+      if (selSub) this.selectionDisposables.push(selSub);
+
+      const scrollSub = editor.onDidScrollChange?.(() => {
+        this.updateFloatingVarPosition();
+      });
+      if (scrollSub) this.selectionDisposables.push(scrollSub);
+
+      const contentSub = editor.onDidChangeModelContent?.(() => {
+        this.updateFloatingVarPosition();
+      });
+      if (contentSub) this.selectionDisposables.push(contentSub);
+
+      const blurSub = editor.onDidBlurEditorWidget?.(() => {
+        setTimeout(() => {
+          if (!this.isMouseDownOnFloatingVar) {
+            this.showFloatingVar.set(false);
+          }
+        }, 250);
+      });
+      if (blurSub) this.selectionDisposables.push(blurSub);
+    }
 
     if (this.restrictToFunctionBody()) {
       this.setupFunctionBodyRestriction(editor as MonacoEditor);
@@ -472,8 +506,12 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.selectionDisposables.forEach(d => d?.dispose?.());
+    this.selectionDisposables = [];
+
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
+      this.resizeObserver = null;
     }
 
     const editor = this.editorInstance();
@@ -750,6 +788,69 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       this.onChange(newVal);
       this.onTouch();
     }
+  }
+
+  private updateFloatingVarPosition() {
+    const editor = this.editorInstance();
+    if (!editor || !this.isBrowser || !this.enableFloatingVar()) {
+      this.showFloatingVar.set(false);
+      return;
+    }
+
+    const selection = editor.getSelection();
+    if (!selection || selection.isEmpty()) {
+      this.showFloatingVar.set(false);
+      return;
+    }
+
+    const model = editor.getModel();
+    if (model) {
+      const selectedText = model.getValueInRange(selection);
+      if (!selectedText || !selectedText.trim()) {
+        this.showFloatingVar.set(false);
+        return;
+      }
+    }
+
+    const endPos = selection.getEndPosition();
+    const pos = editor.getScrolledVisiblePosition(endPos);
+    if (!pos) {
+      this.showFloatingVar.set(false);
+      return;
+    }
+
+    const layout = editor.getLayoutInfo();
+    const editorWidth = layout?.width || 400;
+    const editorHeight = layout?.height || 300;
+
+    let top = pos.top - 28;
+    if (top < 4) {
+      top = pos.top + (pos.height || 19) + 4;
+    }
+    top = Math.max(2, Math.min(top, editorHeight - 28));
+
+    let left = pos.left + 4;
+    left = Math.max(4, Math.min(left, editorWidth - 68));
+
+    this.floatingVarPosition.set({ top, left });
+    this.showFloatingVar.set(true);
+  }
+
+  onFloatingVarMouseDown(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isMouseDownOnFloatingVar = true;
+  }
+
+  onFloatingVarClick(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isMouseDownOnFloatingVar = false;
+
+    MonacoEditorComponent.lastFocusedEditor = this;
+
+    this.addVariableClick.emit();
+    this.showFloatingVar.set(false);
   }
 }
 

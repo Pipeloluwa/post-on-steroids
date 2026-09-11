@@ -122,6 +122,9 @@ export class RequestTabsComponent {
                 const currentStack = this.historyStack().slice(0, this.historyIndex() + 1);
                 this.historyStack.set([...currentStack, activeId]);
                 this.historyIndex.set(this.historyStack().length - 1);
+            } else if (!activeId) {
+                this.historyStack.set([]);
+                this.historyIndex.set(-1);
             }
         });
 

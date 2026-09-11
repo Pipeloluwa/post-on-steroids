@@ -1,6 +1,9 @@
 
 export interface VariableSource {
     tabId: string;
+    requestId?: string;
+    requestName?: string;
+    requestUrl?: string;
     type: 'header' | 'param' | 'body' | 'response';
     propertyKey?: string;
 }

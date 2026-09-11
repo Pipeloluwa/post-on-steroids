@@ -48,7 +48,7 @@
                     </div>
                     <div class="flex flex-col min-w-0">
                         <input type="text" [ngModel]="v.source ? variableService.getVariableValue(v) : v.value"
-                            (ngModelChange)="v.value = $event; updateVar(v)" placeholder="Value"
+                            (ngModelChange)="v.value = $event; v.source = undefined; updateVar(v)" placeholder="Value"
                             class="bg-transparent border-none outline-none text-sm text-(--postonsteroids-text-secondary) placeholder:text-(--postonsteroids-text-muted)">
                         @if (v.source) {
                             <span class="text-[9px] text-(--postonsteroids-text-muted) italic">Live dynamic value</span>

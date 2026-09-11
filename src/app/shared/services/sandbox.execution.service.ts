@@ -61,17 +61,52 @@ window.addEventListener("message", async (event) => {
       "pm['" + k + "'] = " + k + ";"
     ).join("\\n");
 
+    let testResults = [];
+    let testPassed = true;
+    const test = (name, fn) => {
+      try {
+        const res = typeof fn === 'function' ? fn() : fn;
+        if (res === false) {
+          testResults.push({ name, passed: false, error: 'Assertion failed' });
+          testPassed = false;
+        } else {
+          testResults.push({ name, passed: true });
+        }
+      } catch (err) {
+        testResults.push({ name, passed: false, error: String(err) });
+        testPassed = false;
+      }
+    };
+
     const fnBody = "return (async () => {\\n"
       + paramDeclarations + "\\n"
       + code + "\\n"
       + "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params); if (_preReturn !== undefined) { body = _preReturn; } }\\n"
       + "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params); }\\n"
+      + "if (typeof testScript === 'function') { const _testReturn = await testScript(responseStatus, responseTime, responseBody, responseHeaders || responseHeader); if (_testReturn !== undefined) { testPassed = !!_testReturn; } }\\n"
       + "if (typeof encryptScript === 'function') { const _encReturn = await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); if (_encReturn !== undefined) { body = _encReturn; } }\\n"
       + paramWriteBack + "\\n"
       + "})();";
       
-    const executeInSandbox = new Function("pm", "context", fnBody);
-    await executeInSandbox(pm, context);
+    const executeInSandbox = new Function("pm", "context", "test", fnBody);
+    await executeInSandbox(pm, context, test);
+
+    // Extract test results from PASS/FAIL console logs if any
+    for (const log of logs) {
+      const match = log.match(/^(PASS|FAIL):\s*(.*)/i);
+      if (match) {
+        const logName = match[2].trim();
+        if (!testResults.some(t => t.name === logName)) {
+          testResults.push({
+            name: logName,
+            passed: match[1].toUpperCase() === 'PASS'
+          });
+        }
+      }
+    }
+
+    pm['testResults'] = testResults;
+    pm['testPassed'] = testPassed;
 
     parent.postMessage({ id, success: true, context: pm, logs: logs.join("\\n") }, "*");
   } catch (err) {

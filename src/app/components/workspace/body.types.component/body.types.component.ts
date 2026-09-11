@@ -254,8 +254,11 @@ export class BodyTypesComponent {
       }
     }
 
+    const state = this.tabStateService.getState(this.tabId());
     this.variableService.openAddModal(key, value, {
       tabId: this.tabId(),
+      requestName: state?.name,
+      requestUrl: state?.url,
       type: 'body',
       propertyKey: key
     });

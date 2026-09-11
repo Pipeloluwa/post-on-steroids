@@ -23,6 +23,8 @@ import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/c
     styleUrl: './navbar.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: {
+        class: 'block relative z-50',
+        '[class.z-[99999]]': 'showHelpModal() || showAboutModal()',
         '(document:click)': 'onDocumentClick()',
         '(window:keydown)': 'onKeydown($event)'
     }
@@ -99,7 +101,7 @@ export class NavbarComponent {
             return;
         }
         await this.tabStateService.saveToCapsule(activeId);
-        this.notificationService.notify('Request saved successfully to capsule.');
+        this.notificationService.notify('Capsule, requests, and variables saved successfully!');
     }
 
     importOpen() {

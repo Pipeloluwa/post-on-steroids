@@ -16,6 +16,7 @@ export class VariableModalComponent {
     isOpen = signal(false);
 
     close() {
+        this.variableService.saveVariables();
         this.isOpen.set(false);
     }
 

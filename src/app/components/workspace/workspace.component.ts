@@ -1,4 +1,4 @@
-import { Component, signal, inject, PLATFORM_ID, ViewChild } from '@angular/core';
+import { Component, signal, inject, effect, PLATFORM_ID, ViewChild } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
@@ -56,6 +56,14 @@ export class WorkspaceComponent {
             const height = parseInt(savedHeight, 10);
             if (!isNaN(height)) {
                 this.requestHeight.set(this.clampHeight(height));
+            }
+        }
+
+        if (this.isBrowser) {
+            const savedExpanded = localStorage.getItem('onsteroids_expanded_example_req');
+            if (savedExpanded) {
+                this.expandedExampleRequestId.set(savedExpanded);
+                this.tabStateService.getExamples(savedExpanded).catch(() => {});
             }
         }
     }
@@ -206,13 +214,23 @@ export class WorkspaceComponent {
     expandedExampleRequestId = signal<string | null>(null);
     requestExamplesMap = this.tabStateService.requestExamplesMap;
 
+    isExamplesLoading(requestId: string): boolean {
+        return this.tabStateService.isExamplesLoading(requestId);
+    }
+
     async toggleExamples(requestId: string, event: Event) {
         event.stopPropagation();
         if (this.expandedExampleRequestId() === requestId) {
             this.expandedExampleRequestId.set(null);
+            if (this.isBrowser) {
+                localStorage.removeItem('onsteroids_expanded_example_req');
+            }
             return;
         }
         this.expandedExampleRequestId.set(requestId);
+        if (this.isBrowser) {
+            localStorage.setItem('onsteroids_expanded_example_req', requestId);
+        }
         await this.tabStateService.getExamples(requestId);
     }
 
@@ -266,12 +284,12 @@ export class WorkspaceComponent {
                 event.preventDefault();
                 const activeId = this.tabStateService.activeTabId();
                 if (activeId) {
+                    this.tabStateService.saveToCapsule(activeId);
                     if (!this.authService.isLoggedIn()) {
                         this.authService.openAuthModal();
-                        this.notificationService.notify('Please sign in to save your request.');
+                        this.notificationService.notify('Saved locally! Sign in to sync with cloud.');
                     } else {
-                        this.tabStateService.saveToCapsule(activeId);
-                        this.notificationService.notify('Request saved successfully!');
+                        this.notificationService.notify('Capsule, requests, and variables saved successfully!');
                     }
                 }
             } else if (event.key.toLowerCase() === 'z') {

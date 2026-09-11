@@ -1,5 +1,21 @@
 @if (isBrowser) {
-<ngx-monaco-editor class="w-full h-full monaco-wrapper-custom" [options]="monacoOptions()"
-    [class.opacity-50]="disabled()" (onInit)="onEditorInit($event)">
-</ngx-monaco-editor>
+<div class="relative w-full h-full overflow-hidden">
+    <ngx-monaco-editor class="w-full h-full monaco-wrapper-custom block" [options]="monacoOptions()"
+        [class.opacity-50]="disabled()" (onInit)="onEditorInit($event)">
+    </ngx-monaco-editor>
+
+    @if (enableFloatingVar() && showFloatingVar()) {
+    <button type="button"
+        (mousedown)="onFloatingVarMouseDown($event)"
+        (click)="onFloatingVarClick($event)"
+        [style.top.px]="floatingVarPosition().top"
+        [style.left.px]="floatingVarPosition().left"
+        title="Add to Global Variables"
+        aria-label="Add highlighted field to Global Variables"
+        class="absolute z-50 flex items-center gap-x-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-(--postonsteroids-accent) text-white shadow-lg hover:brightness-110 active:scale-95 transition-transform duration-100 cursor-pointer pointer-events-auto border border-white/20 select-none">
+        <span class="text-[12px] font-bold leading-none">+</span>
+        <span class="leading-none">var</span>
+    </button>
+    }
+</div>
 }

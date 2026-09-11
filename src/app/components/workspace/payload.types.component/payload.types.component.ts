@@ -10,6 +10,7 @@ import { ScrollableSelectComponent } from '../../../shared/components/scrollable
 import { BodyTypesComponent } from "../body.types.component/body.types.component";
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
+import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/test.snippets.constants';
 
 
 @Component({
@@ -40,6 +41,11 @@ export class PayloadTypesComponent {
   // State for Scripts
   activeScriptTab = signal<'preRequest' | 'postResponse' | 'test'>('preRequest');
   scriptOptions = signal(['Pre-request Script', 'Post-response Script', 'Test Script']);
+
+  // Standard Test Snippets
+  standardTestSnippets = signal<TestSnippet[]>(STANDARD_TEST_SNIPPETS);
+  testSnippetOptions = computed(() => ['Add Snippet...', ...this.standardTestSnippets().map(s => s.name)]);
+  selectedTestSnippet = signal<string>('Add Snippet...');
 
   displayScriptTab = computed(() => {
     const tab = this.activeScriptTab();
@@ -87,8 +93,11 @@ export class PayloadTypesComponent {
 
   // ── Params ───────────────────────────────────────────────────────────
   addKeyValueToVariable(key: string, value: string, type: 'param' | 'header' = 'param') {
+    const state = this.tabState();
     this.variableService.openAddModal(key || '', value || '', {
       tabId: this.tabId(),
+      requestName: state?.name,
+      requestUrl: state?.url,
       type,
       propertyKey: key || ''
     });
@@ -211,6 +220,44 @@ export class PayloadTypesComponent {
   toggleTestScript() {
     const current = this.scripts();
     this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScriptEnabled: !current.testScriptEnabled } });
+  }
+
+  addTestSnippet(snippetName: string) {
+    if (!snippetName || snippetName === 'Add Snippet...') return;
+    const snippet = this.standardTestSnippets().find(s => s.name === snippetName);
+    if (!snippet) return;
+
+    const currentScript = this.scripts().testScript || '';
+    let updatedScript = '';
+
+    if (!currentScript.trim()) {
+      updatedScript = `function testScript(responseStatus, responseTime, responseBody){\n    let passed = true;\n\n${snippet.code}\n\n    return passed;\n}`;
+    } else if (currentScript.includes('return passed;')) {
+      updatedScript = currentScript.replace(
+        'return passed;',
+        `${snippet.code}\n\n    return passed;`
+      );
+    } else if (currentScript.includes('return ')) {
+      const lastReturnIndex = currentScript.lastIndexOf('return ');
+      updatedScript = currentScript.slice(0, lastReturnIndex) + `${snippet.code}\n\n    ` + currentScript.slice(lastReturnIndex);
+    } else if (currentScript.lastIndexOf('}') !== -1) {
+      const lastCloseBrace = currentScript.lastIndexOf('}');
+      updatedScript = currentScript.slice(0, lastCloseBrace) + `\n${snippet.code}\n` + currentScript.slice(lastCloseBrace);
+    } else {
+      updatedScript = currentScript + `\n\n${snippet.code}`;
+    }
+
+    const currentScripts = this.scripts();
+    this.tabStateService.updateState(this.tabId(), {
+      scripts: {
+        ...currentScripts,
+        testScript: updatedScript,
+        testScriptEnabled: true
+      }
+    });
+
+    this.notificationService.notify(`Added test snippet: ${snippet.name}`);
+    setTimeout(() => this.selectedTestSnippet.set('Add Snippet...'), 200);
   }
 
   getScriptContent(): string {

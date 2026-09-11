@@ -4,13 +4,19 @@
     <div (click)="$event.stopPropagation()"
         class="w-full max-w-[400px] bg-(--postonsteroids-bg-secondary) rounded-2xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         <div class="p-6">
-            <!-- Header -->
+            <!-- Header with local eager icon -->
             <div class="flex items-center justify-between mb-6">
-                <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">
-                    {{ isOtpSent() ? 'Enter Verification Code' : 'Sign in to OnSteroids' }}
-                </h2>
+                <div class="flex items-center gap-3">
+                    <img src="/icons/onsteroids-icon.svg" alt="OnSteroids" width="38" height="38" loading="eager" fetchpriority="high" class="size-[38px] rounded-xl shadow-md shadow-(--postonsteroids-accent)/20 shrink-0" />
+                    <div>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary) leading-tight">
+                            {{ isOtpSent() ? 'Enter Verification Code' : 'Sign in to OnSteroids' }}
+                        </h2>
+                        <span class="text-[11px] text-(--postonsteroids-text-muted)">Sync workspace & capsules</span>
+                    </div>
+                </div>
                 <button (click)="toggleModal()"
-                    class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
+                    class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer p-1">
                     <mat-icon>close</mat-icon>
                 </button>
             </div>
@@ -52,20 +58,34 @@
             <div class="space-y-4 font-bold">
                 <p class="text-[13px] text-(--postonsteroids-text-secondary)">We've sent a 6-digit code to <span
                         class="text-(--postonsteroids-text-primary)">{{ userEmail() }}</span></p>
-                <div class="flex justify-between gap-x-2">
-                    <input type="text" [(ngModel)]="otp" (keydown.enter)="onAuthenticate.emit()" placeholder="Enter Code"
-                        class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[18px] text-center tracking-[0.5em] outline-none focus:border-(--postonsteroids-accent) transition-all" />
+                <div>
+                    <div class="relative">
+                        <input [type]="isOtpMasked() ? 'password' : 'text'" [ngModel]="otp()" (input)="onOtpInput($event)" (keydown.enter)="onAuthenticate.emit()"
+                            placeholder="••••••" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+                            class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-12 text-[22px] font-mono text-center tracking-[0.5em] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) transition-all" />
+                        <button type="button" (click)="toggleOtpMask()"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer flex items-center justify-center"
+                            [title]="isOtpMasked() ? 'Show verification code' : 'Hide verification code'"
+                            aria-label="Toggle OTP visibility">
+                            <mat-icon class="text-[18px]! size-[18px]!">{{ isOtpMasked() ? 'visibility' : 'visibility_off' }}</mat-icon>
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between mt-1.5 text-[11px] font-normal">
+                        <span class="text-(--postonsteroids-text-muted)">Security code</span>
+                        <span [class.text-emerald-400]="otp().length === 6"
+                              [class.text-(--postonsteroids-text-muted)]="otp().length < 6"
+                              class="font-mono">
+                            {{ otp().length }}/6 digits
+                        </span>
+                    </div>
                 </div>
-                <button (click)="onAuthenticate.emit()" [disabled]="isAuthenticating()"
-                    class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/20 flex items-center justify-center gap-x-2 cursor-pointer">
-                    @if (isAuthenticating()) {
-                    <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    Verifying...
-                    } @else {
-                    Authenticate
-                    }
-                </button>
-                <button (click)="onBackToEmail.emit()"
+                @if (isAuthenticating()) {
+                <div class="h-11 rounded-xl bg-(--postonsteroids-accent)/10 border border-(--postonsteroids-accent)/30 flex items-center justify-center gap-x-2 text-(--postonsteroids-accent) text-xs font-semibold animate-in fade-in">
+                    <div class="w-4 h-4 border-2 border-(--postonsteroids-accent)/30 border-t-(--postonsteroids-accent) rounded-full animate-spin"></div>
+                    <span>Verifying code & syncing session...</span>
+                </div>
+                }
+                <button (click)="isOtpMasked.set(true); onBackToEmail.emit()"
                     class="w-full text-[12px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer">
                     Back to email
                 </button>

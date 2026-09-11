@@ -160,7 +160,9 @@
             } @else if (activeMode() === 'Pretty') {
             <div class="w-full h-full">
                 <app-monaco-editor [ngModel]="formattedResponseBody()"
-                    [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="isWordWrap()" [editorId]="'response-body'" [ownerTabId]="tabId()" class="flex-1 w-full h-full block">
+                    [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="isWordWrap()" [editorId]="'response-body'" [ownerTabId]="tabId()"
+                    (addVariableClick)="addResponseToVariable()"
+                    class="flex-1 w-full h-full block">
                 </app-monaco-editor>
             </div>
 
@@ -363,7 +365,7 @@
                                 {{ displayScriptConsoleTab() }}
                             </span>
                             <mat-icon
-                                class="text-[14px] w-[14px] h-[14px] leading-[14px] ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                                class="text-[14px]! size-[14px]! ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
                         </div>
                     </app-scrollable-select-component>
                 </div>

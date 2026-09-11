@@ -8,7 +8,9 @@ import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
+import { TabStateService } from '../../shared/services/tab.state.service';
 import { SidebarService } from '../../shared/services/sidebar.service';
+import { NetworkService } from '../../shared/services/network.service';
 import { MatIcon } from '@angular/material/icon';
 
 @Component({
@@ -17,11 +19,11 @@ import { MatIcon } from '@angular/material/icon';
     MenuComponent,
     RouterOutlet,
     CommonModule,
+    MatIcon,
     NavbarComponent,
     AuthModalComponent,
     NotificationComponent,
-    AddVariableModalComponent,
-    MatIcon
+    AddVariableModalComponent
   ],
   templateUrl: './main.layout.html'
 })
@@ -29,8 +31,14 @@ export class MainLayout {
   authService = inject(AuthService);
   notificationService = inject(NotificationService);
   sidebarService = inject(SidebarService);
+  tabStateService = inject(TabStateService);
+  networkService = inject(NetworkService);
 
   protected readonly title = signal('OnSteroids');
+
+  handleLogout() {
+    this.authService.logout();
+  }
 
   toggleAuthModal() {
     this.authService.toggleAuthModal();

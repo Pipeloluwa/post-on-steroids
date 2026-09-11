@@ -227,7 +227,7 @@
                             {{ displayScriptTab() }}
                         </span>
                         <mat-icon
-                            class="text-[14px] w-[14px] h-[14px] leading-[14px] ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                            class="text-[14px]! size-[14px]! ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
                     </div>
                 </app-scrollable-select-component>
             </div>
@@ -235,7 +235,7 @@
             <button (click)="resetScript()"
                 class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-3 py-1 transition-colors group">
                 <mat-icon
-                    class="text-[14px] w-[14px] h-[14px] leading-[14px] mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
+                    class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
                 <span
                     class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">Reset</span>
             </button>
@@ -244,24 +244,43 @@
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
             @if (activeScriptTab() === 'test') {
                 <div class="w-full h-full flex flex-col">
-                    <div class="flex items-center justify-between px-3 py-2 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)">
-                        <span class="text-[11px] text-(--postonsteroids-text-muted) font-semibold">Enable Test Execution</span>
-                        <button type="button" (click)="toggleTestScript()"
-                            class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
-                            [class.bg-(--postonsteroids-accent)]="scripts().testScriptEnabled"
-                            [class.bg-(--postonsteroids-bg-tertiary)]="!scripts().testScriptEnabled">
-                            <div class="absolute top-0.75 left-0.75 w-3.5 h-3.5 bg-white rounded-full transition-transform duration-200"
-                                [class.translate-x-4]="scripts().testScriptEnabled"></div>
-                        </button>
+                    <div class="flex items-center justify-between px-3 py-1.5 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)">
+                        <div class="flex items-center gap-x-3">
+                            <span class="text-[11px] text-(--postonsteroids-text-muted) font-semibold">Enable Test Execution</span>
+                            <button type="button" (click)="toggleTestScript()"
+                                class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
+                                [class.bg-(--postonsteroids-accent)]="scripts().testScriptEnabled"
+                                [class.bg-(--postonsteroids-bg-tertiary)]="!scripts().testScriptEnabled">
+                                <div class="absolute top-0.75 left-0.75 w-3.5 h-3.5 bg-white rounded-full transition-transform duration-200"
+                                    [class.translate-x-4]="scripts().testScriptEnabled"></div>
+                            </button>
+                        </div>
+
+                        <!-- Standard Test Snippets Dropdown -->
+                        <div class="flex items-center gap-x-2">
+                            <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
+                            <app-scrollable-select-component [activeValue]="selectedTestSnippet()" [optionValues]="testSnippetOptions()"
+                                [verticalPosition]="28" [modalWidth]="260" [absoluteStartLeft]="false" (outputSelectedValue)="addTestSnippet($event)">
+                                <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                    <div class="flex items-center gap-x-1.5">
+                                        <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">playlist_add</mat-icon>
+                                        <span>Add Standard Test</span>
+                                    </div>
+                                    <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                </div>
+                            </app-scrollable-select-component>
+                        </div>
                     </div>
                     <app-monaco-editor [ngModel]="scripts().testScript"
                         (ngModelChange)="updateScript('test', $event)" [restrictToFunctionBody]="true"
+                        [enableFloatingVar]="false"
                         class="flex-1 min-h-0 block w-full" [editorId]="'script-test'" [ownerTabId]="tabId()">
                     </app-monaco-editor>
                 </div>
             } @else {
                 <app-monaco-editor [ngModel]="getScriptContent()"
                     (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="true"
+                    [enableFloatingVar]="false"
                     class="block w-full h-full" [editorId]="'script-' + activeScriptTab()" [ownerTabId]="tabId()">
                 </app-monaco-editor>
             }
@@ -300,6 +319,7 @@
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
             <app-monaco-editor [ngModel]="encryption().script"
                 (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="true"
+                [enableFloatingVar]="false"
                 class="block w-full h-full" [editorId]="'encryption-script'" [ownerTabId]="tabId()">
             </app-monaco-editor>
         </div>

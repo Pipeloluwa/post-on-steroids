@@ -113,20 +113,27 @@
                         <!-- Nested Examples list -->
                         @if (expandedExampleRequestId() === req.id) {
                             <div class="pl-6 pr-2 py-1 bg-(--postonsteroids-bg-primary)/40 border-t border-(--postonsteroids-border)/10 flex flex-col gap-y-1">
-                                @for (ex of requestExamplesMap().get(req.id) || []; track ex.id) {
-                                    <div (click)="loadExample(ex, $event)"
-                                         class="flex items-center justify-between py-0.5 px-1.5 rounded hover:bg-(--postonsteroids-bg-hover) cursor-pointer group/ex text-[10px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                                        <div class="flex items-center gap-x-1 truncate">
-                                            <mat-icon class="text-[12px]! size-[12px]! text-(--postonsteroids-accent)">bookmark</mat-icon>
-                                            <span class="truncate">{{ ex.name }}</span>
-                                        </div>
-                                        <button (click)="deleteExample(req.id, ex.id, $event)"
-                                                class="opacity-0 group-hover/ex:opacity-100 hover:text-red-400 cursor-pointer">
-                                            <mat-icon class="text-[11px]! size-[11px]!">delete</mat-icon>
-                                        </button>
+                                @if (isExamplesLoading(req.id) && (!requestExamplesMap().get(req.id) || requestExamplesMap().get(req.id)!.length === 0)) {
+                                    <div class="flex items-center gap-x-1.5 py-1 px-1 text-[10px] text-(--postonsteroids-text-muted)">
+                                        <mat-icon class="text-[12px]! size-[12px]! animate-spin text-(--postonsteroids-accent)">progress_activity</mat-icon>
+                                        <span>Loading examples...</span>
                                     </div>
-                                } @empty {
-                                    <span class="text-[10px] text-(--postonsteroids-text-muted) italic px-1">No examples saved yet</span>
+                                } @else {
+                                    @for (ex of requestExamplesMap().get(req.id) || []; track ex.id) {
+                                        <div (click)="loadExample(ex, $event)"
+                                             class="flex items-center justify-between py-0.5 px-1.5 rounded hover:bg-(--postonsteroids-bg-hover) cursor-pointer group/ex text-[10px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                                            <div class="flex items-center gap-x-1 truncate">
+                                                <mat-icon class="text-[12px]! size-[12px]! text-(--postonsteroids-accent)">bookmark</mat-icon>
+                                                <span class="truncate">{{ ex.name }}</span>
+                                            </div>
+                                            <button (click)="deleteExample(req.id, ex.id, $event)"
+                                                    class="opacity-0 group-hover/ex:opacity-100 hover:text-red-400 cursor-pointer">
+                                                <mat-icon class="text-[11px]! size-[11px]!">delete</mat-icon>
+                                            </button>
+                                        </div>
+                                    } @empty {
+                                        <span class="text-[10px] text-(--postonsteroids-text-muted) italic px-1">No examples saved yet</span>
+                                    }
                                 }
                             </div>
                         }

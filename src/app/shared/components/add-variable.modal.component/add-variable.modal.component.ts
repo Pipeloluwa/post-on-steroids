@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
@@ -15,6 +15,12 @@ export class AddVariableModalComponent {
     variableService = inject(VariableService);
     private notificationService = inject(NotificationService);
 
+    isDuplicateKey = computed(() => {
+        const key = this.variableService.modalKey().trim().toLowerCase();
+        if (!key) return false;
+        return this.variableService.variables().some(v => v.key.trim().toLowerCase() === key);
+    });
+
     close() {
         this.variableService.closeAddModal();
     }
@@ -28,8 +34,13 @@ export class AddVariableModalComponent {
             return;
         }
 
+        const isUpdate = this.isDuplicateKey();
         this.variableService.addVariable(key, value, this.variableService.modalSource());
-        this.notificationService.notify(`Added variable "{{${key}}}" to Global Variables.`);
+        if (isUpdate) {
+            this.notificationService.notify(`Updated variable "{{${key}}}" with new value and dynamic source.`);
+        } else {
+            this.notificationService.notify(`Added variable "{{${key}}}" to Global Variables.`);
+        }
         this.close();
     }
 }
