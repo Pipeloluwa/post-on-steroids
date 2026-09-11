@@ -123,7 +123,14 @@ export class RequestExecutionService {
                     const rawBodyContent = freshState.rawType === 'XML'
                         ? (freshState.rawBodyXml || '')
                         : (freshState.rawBodyJson || '{}');
-                    const resolvedRaw = this.variableService.resolve(rawBodyContent);
+                    
+                    let resolvedRaw = this.variableService.resolve(rawBodyContent);
+                    
+                    // Strip comments if the payload is JSON so it can be parsed and sent cleanly
+                    if (freshState.rawType === 'JSON') {
+                        resolvedRaw = resolvedRaw.replace(/"(?:[^"\\]|\\.)*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (m: string, g: string) => g ? '' : m);
+                    }
+
                     try {
                         body = JSON.parse(resolvedRaw);
                     } catch {
