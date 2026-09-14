@@ -8,8 +8,8 @@
   font-family: 'Material Icons';
   font-style: normal;
   font-weight: 400;
-  src: url('/fonts/material-icons.woff2') format('woff2'),
-       url('/fonts/material-icons.ttf') format('truetype');
+  src: url('../public/fonts/material-icons.woff2') format('woff2'),
+       url('../public/fonts/material-icons.ttf') format('truetype');
   font-display: block;
 }
 

@@ -1,4 +1,4 @@
-﻿import { Component, ChangeDetectionStrategy, signal, inject, output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService } from '../../services/tab.state.service';
