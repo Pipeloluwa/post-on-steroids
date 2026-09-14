@@ -1,7 +1,6 @@
 /* You can add global styles to this file, and also import other style files */
 /* In Angular, styles in a component's CSS file (even with ::ng-deep) are scoped to the component's tree */
 @import "tailwindcss";
-@import "jsoneditor/dist/jsoneditor.min.css";
 
 /* Local Material Icons font definition */
 @font-face {

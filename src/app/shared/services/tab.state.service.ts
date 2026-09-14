@@ -293,15 +293,17 @@ export class TabStateService {
                 this.autoAuthEndpointId.set(session.autoAuthEndpointId);
             }
 
-            // 7. Restore variables in VariableService
-            const vs = this.getVariableService();
-            if (vs) {
-                if (Array.isArray(session.variables) && session.variables.length > 0) {
-                    vs.setVariables(session.variables);
-                } else {
-                    vs.restoreUserVariables(u);
+            // 7. Restore variables in VariableService (Deferred to break circular dependency)
+            setTimeout(() => {
+                const vs = this.getVariableService();
+                if (vs) {
+                    if (Array.isArray(session.variables) && session.variables.length > 0) {
+                        vs.setVariables(session.variables);
+                    } else {
+                        vs.restoreUserVariables(u);
+                    }
                 }
-            }
+            }, 0);
 
             return true;
         } catch (e) {
