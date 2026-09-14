@@ -1,13 +1,16 @@
 {
   "name": "post-on-steroids",
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "main": "main.js",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "serve:ssr:post-on-steroids": "node dist/post-on-steroids/server/server.mjs"
+    "serve:ssr:post-on-steroids": "node dist/post-on-steroids/server/server.mjs",
+    "electron": "electron .",
+    "electron:build": "ng build --base-href ./ && electron-builder"
   },
   "prettier": {
     "printWidth": 100,
@@ -47,6 +50,8 @@
     "@tailwindcss/postcss": "^4.1.12",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.19",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
     "jsdom": "^25.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.12",

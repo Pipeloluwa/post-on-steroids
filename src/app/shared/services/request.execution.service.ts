@@ -123,9 +123,9 @@ export class RequestExecutionService {
                     const rawBodyContent = freshState.rawType === 'XML'
                         ? (freshState.rawBodyXml || '')
                         : (freshState.rawBodyJson || '{}');
-                    
+
                     let resolvedRaw = this.variableService.resolve(rawBodyContent);
-                    
+
                     // Strip comments if the payload is JSON so it can be parsed and sent cleanly
                     if (freshState.rawType === 'JSON') {
                         resolvedRaw = resolvedRaw.replace(/"(?:[^"\\]|\\.)*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (m: string, g: string) => g ? '' : m);
@@ -292,17 +292,15 @@ export class RequestExecutionService {
                 responseType: 'text' as const
             };
 
-            // 7. Make the Call
+            // Making the Call
             let finalUrl = resolvedUrl;
-            let isUsingProxy = false;
 
-            // Check if CORS bypass is enabled
-            if (freshState.settings?.bypassCors) {
-                const isLocalhost = finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1');
-                if (!isLocalhost) {
-                    isUsingProxy = true;
-                }
-            }
+            // Check if running inside Electron wrapper
+            const isElectron = /electron/i.test(navigator.userAgent);
+
+            // Check if CORS bypass is enabled (We do not need proxy in Electron because webSecurity is disabled)
+            let isUsingProxy = (freshState.settings?.bypassCors && !isElectron)
+                && (finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1'));
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
             let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;

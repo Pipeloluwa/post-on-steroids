@@ -1,5 +1,6 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, importProvidersFrom } from '@angular/core';
 import { provideRouter, RouteReuseStrategy } from '@angular/router';
+import { LocationStrategy, HashLocationStrategy, PathLocationStrategy, PlatformLocation } from '@angular/common';
 import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { MonacoEditorModule, NgxMonacoEditorConfig } from 'ngx-monaco-editor-v2';
 
@@ -21,10 +22,16 @@ const monacoConfig: NgxMonacoEditorConfig = {
   }
 };
 
+export function locationStrategyFactory(platformLocation: PlatformLocation) {
+  const isElectron = typeof window !== 'undefined' && /electron/i.test(navigator.userAgent);
+  return isElectron ? new HashLocationStrategy(platformLocation) : new PathLocationStrategy(platformLocation);
+}
+
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
+    { provide: LocationStrategy, useFactory: locationStrategyFactory, deps: [PlatformLocation] },
     provideHttpClient(withFetch(), withInterceptors([requestIdInterceptor, authInterceptor])),
     provideClientHydration(withEventReplay()),
     importProvidersFrom(MonacoEditorModule.forRoot(monacoConfig)),

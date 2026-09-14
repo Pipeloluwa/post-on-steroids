@@ -1,0 +1,21 @@
+{
+  "appId": "com.papicnation.onsteroids",
+  "productName": "OnSteroids",
+  "directories": {
+    "output": "release/"
+  },
+  "files": [
+    "main.js",
+    "package.json",
+    "dist/post-on-steroids/browser/**/*"
+  ],
+  "win": {
+    "target": ["nsis"],
+    "icon": "dist/post-on-steroids/browser/icons/onsteroids-icon.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true
+  }
+}
