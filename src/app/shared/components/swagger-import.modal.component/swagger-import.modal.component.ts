@@ -59,15 +59,10 @@ export class SwaggerImportModalComponent {
                 return;
             }
 
-            this.tabStateService.closeAllTabs();
+            const newCapsule = await this.tabStateService.createCapsule(result.collectionName);
             
-            const newCapsule = {
-                id: this.createId(),
-                name: result.collectionName,
-                createdAt: Date.now()
-            };
-            this.tabStateService.capsules.update(c => [...c, newCapsule]);
-            await this.tabStateService.switchCapsule(newCapsule);
+            // Close the default blank tab that switchCapsule generates for new capsules
+            this.tabStateService.closeAllTabs();
             
             result.requests.forEach(req => req.capsuleId = newCapsule.id);
             this.tabStateService.savedCapsules.set(result.requests);
