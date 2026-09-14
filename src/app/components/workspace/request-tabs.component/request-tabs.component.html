@@ -66,6 +66,13 @@
             </button>
         </div>
         }
+        
+        <!-- Add Request Button Beside Last Tab -->
+        <button (click)="addTab()"
+            class="h-[80%] flex items-center justify-center aspect-square ml-1.5 rounded-lg border border-(--postonsteroids-border) border-dashed text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) hover:border-(--postonsteroids-accent) transition-all cursor-pointer bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-accent)/10 shrink-0"
+            title="Create new request">
+            <mat-icon class="text-[16px]! size-[16px]!">add</mat-icon>
+        </button>
     </div>
 
     <!-- Scroll Right Arrow -->
@@ -136,6 +143,15 @@
         <button (click)="onCloseAllTabsFromContext($event)"
                 class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer text-red-400">
             <span>Close All Tabs</span>
+        </button>
+        <div class="h-px bg-(--postonsteroids-border)/50 my-1"></div>
+        <button (click)="onNewTabLeftFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>New Request to Left</span>
+        </button>
+        <button (click)="onNewTabRightFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>New Request to Right</span>
         </button>
         <div class="h-px bg-(--postonsteroids-border)/50 my-1"></div>
         <button (click)="onDuplicateTabFromContext($event)"

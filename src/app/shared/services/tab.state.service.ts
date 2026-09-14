@@ -739,7 +739,7 @@ export class TabStateService {
         this.activeCapsuleName.set(name);
     }
 
-    createAndOpenNewTab(): string {
+    createAndOpenNewTab(insertIndex?: number): string {
         const newId = this.createId();
         const newState = this.getDefaultState(newId);
         newState.capsuleId = this.activeCapsuleId();
@@ -748,7 +748,14 @@ export class TabStateService {
             next.set(newId, newState);
             return next;
         });
-        this.openTabIds.update(ids => [...ids, newId]);
+        this.openTabIds.update(ids => {
+            if (insertIndex !== undefined && insertIndex >= 0 && insertIndex <= ids.length) {
+                const newIds = [...ids];
+                newIds.splice(insertIndex, 0, newId);
+                return newIds;
+            }
+            return [...ids, newId];
+        });
         this.activeTabId.set(newId);
         return newId;
     }

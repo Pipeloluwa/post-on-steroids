@@ -44,6 +44,8 @@ export class BodyTypesComponent {
     const id = this.tabId();
     if (!id) return;
     
+    this.originalPrettyContent = null; // Clear cached source truth on user edit
+    
     if (this.rawType() === 'JSON') {
        this.tabStateService.updateState(id, { rawBodyJson: content, rawBody: content });
     } else {
@@ -178,6 +180,8 @@ export class BodyTypesComponent {
 
   monacoEditor = viewChild(MonacoEditorComponent);
 
+  private originalPrettyContent: string | null = null;
+
   wrapPretty() {
     this.wrapStyle.set('pretty');
     this.applyWrapTransformation('pretty');
@@ -202,8 +206,20 @@ export class BodyTypesComponent {
     const id = this.tabId();
     if (!id) return;
     const editor = this.monacoEditor() || MonacoEditorComponent.lastFocusedEditor;
-    const content = editor?.getEditorValue() || this.rawBodyContent() || '';
+    let content = editor?.getEditorValue() || this.rawBodyContent() || '';
     if (!content) return;
+
+    // Use the pretty indented multi-line wrapper as the source of truth
+    if (style === 'pretty' || style === 'word-wrap') {
+      if (this.originalPrettyContent !== null) {
+         content = this.originalPrettyContent;
+         this.originalPrettyContent = null; // Reset so new edits become the truth
+      }
+    } else {
+      if (this.originalPrettyContent === null) {
+         this.originalPrettyContent = content; // Save current pretty source
+      }
+    }
 
     const isXml = this.rawType() === 'XML';
     const transformed = formatBodyByStyle(content, style, this.rawType());

@@ -100,6 +100,42 @@ export class RequestTabsComponent {
         this.closeContextMenu();
     }
 
+    onNewTabLeftFromContext(event: Event) {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        if (tabId) {
+            const index = this.tabStateService.openTabIds().indexOf(tabId);
+            if (index !== -1) {
+                this.tabStateService.createAndOpenNewTab(index);
+                this.scrollToActiveTab();
+            }
+        }
+        this.closeContextMenu();
+    }
+
+    onNewTabRightFromContext(event: Event) {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        if (tabId) {
+            const index = this.tabStateService.openTabIds().indexOf(tabId);
+            if (index !== -1) {
+                this.tabStateService.createAndOpenNewTab(index + 1);
+                this.scrollToActiveTab();
+            }
+        }
+        this.closeContextMenu();
+    }
+
+    private scrollToActiveTab() {
+        setTimeout(() => {
+            const el = document.getElementById('tab' + this.tabStateService.activeTabId());
+            if (el && this.scrollContainer) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                setTimeout(() => this.updateScrollState(), 300);
+            }
+        }, 0);
+    }
+
     historyStack = signal<string[]>([]);
     historyIndex = signal<number>(-1);
 
