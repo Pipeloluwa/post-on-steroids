@@ -1,6 +1,6 @@
-<div [tabIndex]="0" (focusout)="onBlur($event)" class="w-full relative cursor-pointer">
+<div class="w-full relative cursor-pointer">
 
-  <div (click)="toggleScrollableSelectState(!scrollableSelectState())" (focusout)="onBlur($event)">
+  <div (click)="toggleScrollableSelectState(!scrollableSelectState())">
     <ng-content></ng-content>
   </div>
 

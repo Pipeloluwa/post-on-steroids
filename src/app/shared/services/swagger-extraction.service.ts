@@ -43,38 +43,42 @@ export class SwaggerExtractionService {
      * Falls back to direct HTTP get if proxy is unavailable.
      */
     private async fetchWithProxy(targetUrl: string, accept = 'application/json'): Promise<{ ok: boolean; status: number; text: string; json: any }> {
-        const proxyEndpoints = [this.proxyUrl, this.proxyFallbackUrl];
-        for (const proxyEndpoint of proxyEndpoints) {
-            try {
-                const proxyPayload = {
-                    url: targetUrl,
-                    method: 'GET',
-                    headers: { 'Accept': accept }
-                };
-
-                const res = await firstValueFrom(
-                    this.http.post<any>(proxyEndpoint, proxyPayload, {
-                        headers: { 'Content-Type': 'application/json' },
-                        observe: 'response' as const
-                    })
-                );
-
-                const data = res.body?.data || res.body;
-                if (data && data.statusCode >= 200 && data.statusCode < 400) {
-                    let parsedJson: any = null;
-                    try {
-                        parsedJson = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
-                    } catch { }
-
-                    return {
-                        ok: true,
-                        status: data.statusCode,
-                        text: typeof data.body === 'string' ? data.body : JSON.stringify(data.body),
-                        json: parsedJson
+        const isElectron = /electron/i.test(navigator.userAgent);
+        
+        if (!isElectron) {
+            const proxyEndpoints = [this.proxyUrl, this.proxyFallbackUrl];
+            for (const proxyEndpoint of proxyEndpoints) {
+                try {
+                    const proxyPayload = {
+                        url: targetUrl,
+                        method: 'GET',
+                        headers: { 'Accept': accept }
                     };
+
+                    const res = await firstValueFrom(
+                        this.http.post<any>(proxyEndpoint, proxyPayload, {
+                            headers: { 'Content-Type': 'application/json' },
+                            observe: 'response' as const
+                        })
+                    );
+
+                    const data = res.body?.data || res.body;
+                    if (data && data.statusCode >= 200 && data.statusCode < 400) {
+                        let parsedJson: any = null;
+                        try {
+                            parsedJson = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
+                        } catch { }
+
+                        return {
+                            ok: true,
+                            status: data.statusCode,
+                            text: typeof data.body === 'string' ? data.body : JSON.stringify(data.body),
+                            json: parsedJson
+                        };
+                    }
+                } catch {
+                    // Continue to next proxy
                 }
-            } catch {
-                // Try next proxy endpoint
             }
         }
 

@@ -3,6 +3,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, UserAuth } from './auth.service';
+import { NotificationService } from './notification.service';
 import { API_BASE_URL } from '../constants/api.constants';
 import { VariableService } from './variable.service';
 
@@ -117,6 +118,7 @@ export class TabStateService {
     private isBrowser = isPlatformBrowser(this.platformId);
     private http = inject(HttpClient);
     private authService = inject(AuthService);
+    private notificationService = inject(NotificationService);
     private injector = inject(Injector);
     private states = signal<Map<string, RequestState>>(new Map());
     openTabIds = signal<string[]>([]);
@@ -450,6 +452,7 @@ export class TabStateService {
     autoAuthEndpointId = signal<string | null>(null);
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
+    isSaveCancelled = false;
     requestExamplesMap = signal<Map<string, any[]>>(new Map());
     examplesLoadingMap = signal<Set<string>>(new Set());
 
@@ -761,6 +764,11 @@ export class TabStateService {
     }
 
     async switchCapsule(capsule: { id: string; name: string }): Promise<void> {
+        if (this.isSaving()) {
+            this.notificationService.notify('Please wait for the current save operation to complete or cancel it before switching capsules.');
+            return;
+        }
+
         // Save current capsule's tab layout before switching
         const prevCapId = this.activeCapsuleId();
         if (this.isBrowser && prevCapId) {
@@ -1465,8 +1473,16 @@ export class TabStateService {
         this.updateState(id, { ...dummyData, isLoading: false });
     }
 
+    cancelSave() {
+        if (this.isSaving()) {
+            this.isSaveCancelled = true;
+            this.notificationService.notify('Save operation cancelled.');
+        }
+    }
+
     async saveToCapsule(id?: string): Promise<void> {
         this.isSaving.set(true);
+        this.isSaveCancelled = false;
 
         try {
             const currentCapId = this.activeCapsuleId();
@@ -1479,31 +1495,33 @@ export class TabStateService {
                 await vs.syncVariablesToBackend();
             }
 
-            // 2. Collect all requests belonging to this capsule
+            // 2. Collect all requests belonging to this capsule (deep cloned to capture a snapshot)
             const tabsToSave: RequestState[] = [];
             const seenIds = new Set<string>();
 
             if (id) {
                 const activeTabState = this.states().get(id);
                 if (activeTabState) {
-                    tabsToSave.push(activeTabState);
+                    tabsToSave.push(structuredClone(activeTabState));
                     seenIds.add(id);
                 }
             }
 
             for (const s of this.states().values()) {
                 if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
-                    tabsToSave.push(s);
+                    tabsToSave.push(structuredClone(s));
                     seenIds.add(s.id);
                 }
             }
 
             for (const s of this.savedCapsules()) {
                 if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
-                    tabsToSave.push(s);
+                    tabsToSave.push(structuredClone(s));
                     seenIds.add(s.id);
                 }
             }
+
+            if (this.isSaveCancelled) return;
 
             // 3. If logged in, sync capsule and requests to backend
             let effectiveCapId = currentCapId;
@@ -1534,6 +1552,8 @@ export class TabStateService {
             }
 
             for (const tabState of tabsToSave) {
+                if (this.isSaveCancelled) break;
+                
                 let savedId = tabState.id;
                 if (this.authService.isLoggedIn()) {
                     try {

@@ -1,18 +1,28 @@
-<nav
+<nav style="-webkit-app-region: drag;"
     class="w-full h-12 shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-4"
     [class.z-[99999]]="showHelpModal() || showAboutModal()">
     <div class="w-full h-full flex items-center justify-between gap-4">
         
-        <!-- Left Section: Sidebar Toggle & Menu Tabs (File, About, Help/Updates) -->
+        <!-- Left Section: Logo, Sidebar Toggle & Menu Tabs -->
         <div class="flex items-center gap-x-2 shrink-0">
-            <button (click)="toggleSidebar()"
+            <!-- Logo -->
+            <a routerLink="/steroid" style="-webkit-app-region: no-drag;"
+                class="flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline mr-2">
+                <img src="icons/onsteroids-icon.svg" alt="OnSteroids" width="24" height="24" loading="eager" fetchpriority="high" class="size-6 rounded-lg shadow-sm shadow-(--postonsteroids-accent)/30 group-hover:scale-105 transition-transform" />
+                <span class="text-[14px] font-bold tracking-wider text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
+                    OnSteroids
+                </span>
+            </a>
+
+            <!-- Sidebar Toggle -->
+            <button (click)="toggleSidebar()" style="-webkit-app-region: no-drag;"
                 class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer"
                 [title]="sidebarService.isCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'">
                 <mat-icon class="text-[20px]! size-[20px]!">{{ sidebarService.isCollapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left' }}</mat-icon>
             </button>
 
             <!-- Menu Tabs: File, About, Help/Updates -->
-            <div class="flex items-center gap-x-0.5 border-l border-(--postonsteroids-border) pl-2">
+            <div class="flex items-center gap-x-0.5 border-l border-(--postonsteroids-border) pl-2" style="-webkit-app-region: no-drag;">
                 <!-- File Menu Dropdown Trigger -->
                 <div class="relative">
                     <button (click)="toggleFileMenu($event)"
@@ -120,16 +130,11 @@
             </div>
         </div>
 
-        <!-- Center Section: Logo & Brand Title (Positioned cleanly in the middle between sections) -->
-        <a routerLink="/steroid" class="flex-1 flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline">
-            <img src="icons/onsteroids-icon.svg" alt="OnSteroids" width="24" height="24" loading="eager" fetchpriority="high" class="size-6 rounded-lg shadow-sm shadow-(--postonsteroids-accent)/30 group-hover:scale-105 transition-transform" />
-            <span class="text-[14px] font-bold tracking-wider text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
-                OnSteroids
-            </span>
-        </a>
+        <!-- Center Section: Flexible Space -->
+        <div class="flex-1"></div>
 
         <!-- Right Section: Utilities + Auth (Permanently pinned to far right) -->
-        <div class="flex items-center justify-end gap-x-3 shrink-0">
+        <div class="flex items-center justify-end gap-x-3 shrink-0" style="-webkit-app-region: no-drag;">
             <a routerLink="/utilities" title="Utilities"
                 class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-3 py-1 text-[12px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-200">
                 <mat-icon class="text-[16px]! size-4!">handyman</mat-icon>
@@ -167,6 +172,11 @@
                 <span
                     class="text-[12px] font-medium text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary)">Login</span>
             </button>
+            }
+            
+            @if (isElectron) {
+                <!-- Spacer for Native Window Controls in Electron -->
+                <div class="w-[140px] shrink-0" style="-webkit-app-region: drag;"></div>
             }
         </div>
     </div>

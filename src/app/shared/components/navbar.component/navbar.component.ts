@@ -30,6 +30,7 @@ import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/c
     }
 })
 export class NavbarComponent {
+    isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
     title = input.required<string>();
     isLoggedIn = input.required<boolean>();
     userEmail = input.required<string>();

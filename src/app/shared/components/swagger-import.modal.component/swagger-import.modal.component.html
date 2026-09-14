@@ -12,7 +12,7 @@
         </div>
 
         <label for="swaggerUrlInput" class="block text-[12px] text-(--postonsteroids-text-secondary) mb-2">Swagger URL</label>
-        <input id="swaggerUrlInput" type="url" [value]="swaggerUrl()" (input)="swaggerUrl.set($any($event.target).value)"
+        <input id="swaggerUrlInput" #swaggerUrlInput type="url" [value]="swaggerUrl()" (input)="swaggerUrl.set($any($event.target).value)"
             placeholder="https://example.com/swagger/index.html"
             class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30"
             aria-label="Swagger URL input" />

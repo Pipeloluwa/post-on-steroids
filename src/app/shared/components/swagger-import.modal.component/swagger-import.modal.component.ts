@@ -1,4 +1,4 @@
-import { Component, signal, inject, ChangeDetectionStrategy, output } from '@angular/core';
+import { Component, signal, inject, ChangeDetectionStrategy, output, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
@@ -17,6 +17,7 @@ export class SwaggerImportModalComponent {
     private tabStateService = inject(TabStateService);
 
     onImportStatus = output<{ message: string; isError: boolean }>();
+    @ViewChild('swaggerUrlInput') inputRef?: ElementRef<HTMLInputElement>;
 
     isOpen = signal(false);
     swaggerUrl = signal('');
@@ -29,6 +30,7 @@ export class SwaggerImportModalComponent {
         this.swaggerUrl.set('');
         this.statusMessage.set('');
         this.hasError.set(false);
+        setTimeout(() => this.inputRef?.nativeElement?.focus(), 150);
     }
 
     close() {

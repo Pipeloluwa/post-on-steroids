@@ -60,6 +60,13 @@
                 {{ isSaving() ? 'Saving...' : 'Save' }}
             </button>
 
+            @if (isSaving()) {
+            <button (click)="cancelSave()" title="Cancel Save"
+                class="px-2 flex items-center h-full border-l border-(--postonsteroids-border) hover:bg-red-500/10 text-red-400 transition-colors duration-200 cursor-pointer">
+                <mat-icon class="text-[16px]! size-[16px]!">close</mat-icon>
+            </button>
+            }
+
             <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="140"
                 [absoluteStartLeft]="false" (outputSelectedValue)="onSaveOptionSelected($event)">
                 <div

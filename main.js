@@ -11,6 +11,12 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'OnSteroids',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      height: 48,
+      color: '#2d2d2d',
+      symbolColor: '#ffffff'
+    },
     // icon: path.join(__dirname, 'dist/post-on-steroids/browser/icons/onsteroids-icon.png'),
     webPreferences: {
       nodeIntegration: false,

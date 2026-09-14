@@ -147,6 +147,10 @@ export class RequestDetailsComponent {
         URL.revokeObjectURL(url);
     }
 
+    cancelSave() {
+        this.tabStateService.cancelSave();
+    }
+
     async saveRequest() {
         await this.tabStateService.saveToCapsule(this.tabId());
 
