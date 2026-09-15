@@ -1,4 +1,4 @@
-import { Component, inject, computed, signal, ViewChild, ElementRef } from '@angular/core';
+import { Component, inject, computed, signal, ViewChild, ElementRef, effect } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
@@ -28,6 +28,25 @@ export class PayloadTypesComponent {
   variableService = inject(VariableService);
   private notificationService = inject(NotificationService);
   scriptManagementService = inject(ScriptManagementService);
+
+  constructor() {
+    effect(() => {
+        // Run this effect when encryptionScripts updates
+        const scripts = this.encryptionScripts();
+        
+        // Let's only set this once if active is empty
+        if (!this.activeEncryptionScriptId() && scripts.length > 0) {
+            const encryptScript = scripts.find(s => s.name === 'Encrypt');
+            if (encryptScript) {
+                this.activeEncryptionScriptId.set(encryptScript.id);
+                // If tab state is completely empty, populate it.
+                if (!this.encryption().script) {
+                    this.setEncryptionField('script', encryptScript.content);
+                }
+            }
+        }
+    }, { allowSignalWrites: true });
+  }
 
   payloadTypes = ['params', 'auth', 'headers', 'body', 'scripts', 'encryption', 'settings'];
   authTypes: AuthState['type'][] = ['none', 'bearer'];
@@ -69,12 +88,7 @@ export class PayloadTypesComponent {
     }
   }
 
-  async saveActiveEncryptionScript() {
-    const s = this.encryptionScripts().find(x => x.id === this.activeEncryptionScriptId());
-    if (s) {
-      await this.scriptManagementService.updateScript(s.id, s.name, this.encryption().script);
-    }
-  }
+
 
   async runActiveEncryptionScript() {
     const code = this.encryption().script;
@@ -133,15 +147,7 @@ export class PayloadTypesComponent {
     }
   }
   
-  async saveCurrentPhaseScript() {
-    if (this.activeScriptTab() === 'preRequest') {
-        const s = this.preRequestScripts().find(x => x.id === this.activePreRequestScriptId());
-        if (s) await this.scriptManagementService.updateScript(s.id, s.name, this.scripts().preRequest);
-    } else if (this.activeScriptTab() === 'postResponse') {
-        const s = this.postRequestScripts().find(x => x.id === this.activePostRequestScriptId());
-        if (s) await this.scriptManagementService.updateScript(s.id, s.name, this.scripts().postResponse);
-    }
-  }
+
 
   async runCurrentPhaseScript() {
       const code = this.getScriptContent();

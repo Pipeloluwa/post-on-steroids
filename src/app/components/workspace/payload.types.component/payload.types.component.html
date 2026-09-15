@@ -253,17 +253,13 @@
 
             <div class="flex items-center gap-x-2">
                 @if (activeScriptTab() !== 'test') {
-                <button (click)="saveCurrentPhaseScript()"
-                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-3 py-1 transition-colors group">
-                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">Save</span>
-                </button>
                 <button (click)="runCurrentPhaseScript()"
-                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-green-500/50 rounded px-3 py-1 transition-colors group">
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-green-500/50 rounded px-3 py-1 transition-colors group cursor-pointer">
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-green-500 transition-colors">Run</span>
                 </button>
                 }
                 <button (click)="resetScript()"
-                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-3 py-1 transition-colors group">
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-3 py-1 transition-colors group cursor-pointer">
                     <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">Reset</span>
                 </button>
@@ -337,20 +333,16 @@
             </div>
             
             <div class="flex items-center gap-x-2">
-                <button type="button" (click)="saveActiveEncryptionScript()"
-                    class="text-[11px] font-semibold text-(--postonsteroids-accent) hover:text-(--postonsteroids-accent)/80 transition"
-                    aria-label="Save encryption script">
-                    Save
+                <button type="button" (click)="runActiveEncryptionScript()"
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-green-500/50 rounded px-3 py-1 transition-colors group cursor-pointer"
+                    aria-label="Run encryption script">
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-green-500 transition-colors">Run</span>
                 </button>
                 <button type="button" (click)="resetEncryptionScript()"
-                    class="text-[11px] font-semibold text-(--postonsteroids-accent) hover:text-(--postonsteroids-accent)/80 transition"
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-3 py-1 transition-colors group cursor-pointer"
                     aria-label="Reset encryption script to default">
-                    Reset
-                </button>
-                <button type="button" (click)="runActiveEncryptionScript()"
-                    class="text-[11px] font-semibold text-green-500 hover:text-green-400 transition"
-                    aria-label="Run encryption script">
-                    Run
+                    <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">Reset</span>
                 </button>
             </div>
         </div>
