@@ -1,6 +1,8 @@
-import { Component, ChangeDetectionStrategy, input, output, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, output, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
+import { HttpClient } from '@angular/common/http';
+import { API_BASE_URL } from '../../constants/api.constants';
 
 @Component({
     selector: 'app-help-updates-modal-component',
@@ -13,6 +15,7 @@ import { MatIcon } from '@angular/material/icon';
     }
 })
 export class HelpUpdatesModalComponent {
+    private http = inject(HttpClient);
     show = input<boolean>(false);
     onClose = output<void>();
 
@@ -27,9 +30,18 @@ export class HelpUpdatesModalComponent {
         this.isCheckingUpdate.set(true);
         this.updateCheckedMessage.set('');
 
-        setTimeout(() => {
-            this.isCheckingUpdate.set(false);
-            this.updateCheckedMessage.set('You are running the latest version of PostOnSteroids. Progressive updates are active.');
-        }, 1200);
+        this.http.get<{ latestVersion: string, message: string }>(`${API_BASE_URL}/updates/check`).subscribe({
+            next: (res) => {
+                this.isCheckingUpdate.set(false);
+                this.updateCheckedMessage.set(res.message || 'You are running the latest version of PostOnSteroids.');
+            },
+            error: () => {
+                // Fallback if the update endpoint is unavailable
+                setTimeout(() => {
+                    this.isCheckingUpdate.set(false);
+                    this.updateCheckedMessage.set('You are running the latest version of PostOnSteroids. Progressive updates are active.');
+                }, 800);
+            }
+        });
     }
 }

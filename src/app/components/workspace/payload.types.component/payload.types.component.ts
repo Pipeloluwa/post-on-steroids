@@ -53,22 +53,15 @@ export class PayloadTypesComponent {
   activePostRequestScriptId = signal<string>('');
 
   get activeEncryptionScriptName() {
-    if (!this.activeEncryptionScriptId()) return 'Default Local Script';
     const s = this.encryptionScripts().find(x => x.id === this.activeEncryptionScriptId());
-    return s ? s.name : 'Default Local Script';
+    return s ? s.name : 'Select Script...';
   }
   
   get encryptionScriptOptions() {
-    return ['Default Local Script', ...this.encryptionScripts().map(s => s.name)];
+    return this.encryptionScripts().map(s => s.name);
   }
 
   loadEncryptionScript(name: string) {
-    if (name === 'Default Local Script') {
-        this.activeEncryptionScriptId.set('');
-        const defaultState = this.tabStateService.getDefaultState(this.tabId());
-        this.setEncryptionField('script', defaultState.encryption?.script ?? '');
-        return;
-    }
     const s = this.encryptionScripts().find(x => x.name === name);
     if (s) {
         this.activeEncryptionScriptId.set(s.id);
@@ -113,32 +106,18 @@ export class PayloadTypesComponent {
 
   // Pre-Request and Post-Request Logic
   get activePreRequestScriptName() {
-    if (!this.activePreRequestScriptId()) return 'Default Local Script';
     const s = this.preRequestScripts().find(x => x.id === this.activePreRequestScriptId());
-    return s ? s.name : 'Default Local Script';
+    return s ? s.name : 'Select Script...';
   }
-  get preRequestScriptOptions() { return ['Default Local Script', ...this.preRequestScripts().map(s => s.name)]; }
+  get preRequestScriptOptions() { return this.preRequestScripts().map(s => s.name); }
   
   get activePostRequestScriptName() {
-    if (!this.activePostRequestScriptId()) return 'Default Local Script';
     const s = this.postRequestScripts().find(x => x.id === this.activePostRequestScriptId());
-    return s ? s.name : 'Default Local Script';
+    return s ? s.name : 'Select Script...';
   }
-  get postRequestScriptOptions() { return ['Default Local Script', ...this.postRequestScripts().map(s => s.name)]; }
+  get postRequestScriptOptions() { return this.postRequestScripts().map(s => s.name); }
 
   loadCurrentPhaseScript(name: string) {
-    if (name === 'Default Local Script') {
-        const defaultState = this.tabStateService.getDefaultState(this.tabId());
-        if (this.activeScriptTab() === 'preRequest') {
-            this.activePreRequestScriptId.set('');
-            this.updateScript('preRequest', defaultState.scripts?.preRequest ?? '');
-        } else if (this.activeScriptTab() === 'postResponse') {
-            this.activePostRequestScriptId.set('');
-            this.updateScript('postResponse', defaultState.scripts?.postResponse ?? '');
-        }
-        return;
-    }
-
     if (this.activeScriptTab() === 'preRequest') {
         const s = this.preRequestScripts().find(x => x.name === name);
         if (s) {

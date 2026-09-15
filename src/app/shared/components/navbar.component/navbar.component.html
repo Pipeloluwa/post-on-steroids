@@ -1,6 +1,5 @@
 <nav style="-webkit-app-region: drag;"
-    class="w-full h-12 shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-4"
-    [class.z-[99999]]="showHelpModal() || showAboutModal()">
+    class="w-full h-12 shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-4">
     <div class="w-full h-full flex items-center justify-between gap-4">
         
         <!-- Left Section: Logo, Sidebar Toggle & Menu Tabs -->
@@ -185,9 +184,9 @@
             }
         </div>
     </div>
-
-    <!-- Modals (Safely outside the inner flex layout) -->
-    <app-about-modal-component [show]="showAboutModal()" (onClose)="showAboutModal.set(false)" />
-    <app-help-updates-modal-component [show]="showHelpModal()" (onClose)="showHelpModal.set(false)" />
-    <app-create-capsule-modal #createCapsuleModal />
 </nav>
+
+<!-- Modals (Safely outside the drag region) -->
+<app-about-modal-component [show]="showAboutModal()" (onClose)="showAboutModal.set(false)" />
+<app-help-updates-modal-component [show]="showHelpModal()" (onClose)="showHelpModal.set(false)" />
+<app-create-capsule-modal #createCapsuleModal />
