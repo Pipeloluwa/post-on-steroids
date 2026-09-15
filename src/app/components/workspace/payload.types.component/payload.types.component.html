@@ -369,7 +369,7 @@
                     </div>
                 </div>
                 <app-monaco-editor [ngModel]="encryption().script"
-                    (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="true"
+                    (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="false"
                     [enableFloatingVar]="false"
                     class="flex-1 min-h-0 block w-full" [editorId]="'encryption-script'" [ownerTabId]="tabId()">
                 </app-monaco-editor>
