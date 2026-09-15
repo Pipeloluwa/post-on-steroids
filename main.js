@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
 
@@ -19,10 +19,19 @@ function createWindow() {
     },
     // icon: path.join(__dirname, 'dist/post-on-steroids/browser/icons/onsteroids-icon.png'),
     webPreferences: {
-      nodeIntegration: false,
+      nodeIntegration: true,
       contextIsolation: false,
       webSecurity: false,
     },
+  });
+
+  ipcMain.on('theme-changed', (event, theme) => {
+    if (mainWindow) {
+      mainWindow.setTitleBarOverlay({
+        color: theme === 'light' ? '#f5f5f5' : '#2d2d2d',
+        symbolColor: theme === 'light' ? '#000000' : '#ffffff'
+      });
+    }
   });
 
   mainWindow.setMenuBarVisibility(false);

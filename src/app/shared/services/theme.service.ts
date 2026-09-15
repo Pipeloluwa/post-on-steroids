@@ -31,6 +31,15 @@ export class ThemeService {
                 const effectiveTheme = this.isDarkMode() ? 'dark' : 'light';
                 document.documentElement.setAttribute('data-theme', effectiveTheme);
                 localStorage.setItem('theme', this.theme());
+                
+                try {
+                    if ((window as any).require) {
+                        const { ipcRenderer } = (window as any).require('electron');
+                        ipcRenderer.send('theme-changed', effectiveTheme);
+                    }
+                } catch (e) {
+                    console.error('Failed to communicate with Electron process for theme update', e);
+                }
             });
 
             // Listen for system theme changes
