@@ -85,7 +85,10 @@ export class PayloadTypesComponent {
     const s = this.encryptionScripts().find(x => x.name === name);
     if (s) {
         this.activeEncryptionScriptId.set(s.id);
-        this.setEncryptionField('script', s.content);
+        this.setEncryptionField('script', '');
+        setTimeout(() => {
+            this.setEncryptionField('script', s.content);
+        }, 10);
     }
   }
 

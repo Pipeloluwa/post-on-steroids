@@ -42,16 +42,7 @@ export class VariableService {
         if (this.authService.isLoggedIn()) {
             this.loadVariablesFromBackend();
         }
-        this.authService.onLogout.subscribe((user) => {
-            const u = user || this.authService.currentUser();
-            const json = JSON.stringify(this.variables());
-            this.localStorageService.setItem('onsteroids_last_vars', json);
-            if (u?.id) {
-                this.localStorageService.setItem(`onsteroids_user_vars_${u.id}`, json);
-            }
-            if (u?.email) {
-                this.localStorageService.setItem(`onsteroids_user_vars_${u.email}`, json);
-            }
+        this.authService.onLogout.subscribe(() => {
             this.resetVariables();
         });
         this.authService.onLogin.subscribe((user) => {

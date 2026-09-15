@@ -689,11 +689,7 @@ export class TabStateService {
     }
 
     clearWorkspace(userParam?: UserAuth | null) {
-        this.snapshotCurrentSession(userParam);
-        const vs = this.getVariableService();
-        if (vs && this.authService.isLoggedIn()) {
-            vs.syncVariablesToBackend();
-        }
+        clearTimeout(this.backendSyncTimeout);
 
         this.openTabIds.set([]);
         this.activeTabId.set(null);
@@ -719,15 +715,6 @@ export class TabStateService {
                         key.startsWith('autoAuth') ||
                         key === 'request_history'
                     )) {
-                        if (
-                            key.startsWith('onsteroids_user_session_') ||
-                            key.startsWith('onsteroids_user_vars_') ||
-                            key === 'onsteroids_last_session' ||
-                            key === 'onsteroids_last_vars' ||
-                            key === 'onsteroids_responses'
-                        ) {
-                            continue;
-                        }
                         keysToRemove.push(key);
                     }
                 }
