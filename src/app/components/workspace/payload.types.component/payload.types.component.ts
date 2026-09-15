@@ -5,13 +5,13 @@ import { MatIcon } from '@angular/material/icon';
 import { TabStateService, KeyValue, AuthState, EncryptionState, SettingsState } from '../../../shared/services/tab.state.service';
 import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { ScriptManagementService } from '../../../shared/services/script.management.service';
 import { ChangeDetectionStrategy, input } from '@angular/core';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { BodyTypesComponent } from "../body.types.component/body.types.component";
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/test.snippets.constants';
-
 
 @Component({
   selector: 'app-payload-types-component',
@@ -27,6 +27,7 @@ export class PayloadTypesComponent {
   tabStateService = inject(TabStateService);
   variableService = inject(VariableService);
   private notificationService = inject(NotificationService);
+  scriptManagementService = inject(ScriptManagementService);
 
   payloadTypes = ['params', 'auth', 'headers', 'body', 'scripts', 'encryption', 'settings'];
   authTypes: AuthState['type'][] = ['none', 'bearer'];
@@ -41,6 +42,129 @@ export class PayloadTypesComponent {
   // State for Scripts
   activeScriptTab = signal<'preRequest' | 'postResponse' | 'test'>('preRequest');
   scriptOptions = signal(['Pre-request Script', 'Post-response Script', 'Test Script']);
+
+  // Script Management
+  encryptionScripts = computed(() => this.scriptManagementService.scripts().filter(s => s.type === 'Encryption'));
+  preRequestScripts = computed(() => this.scriptManagementService.scripts().filter(s => s.type === 'PreRequest'));
+  postRequestScripts = computed(() => this.scriptManagementService.scripts().filter(s => s.type === 'PostRequest'));
+
+  activeEncryptionScriptId = signal<string>('');
+  activePreRequestScriptId = signal<string>('');
+  activePostRequestScriptId = signal<string>('');
+
+  get activeEncryptionScriptName() {
+    const s = this.encryptionScripts().find(x => x.id === this.activeEncryptionScriptId());
+    return s ? s.name : 'Select Script...';
+  }
+  
+  get encryptionScriptOptions() {
+    return this.encryptionScripts().map(s => s.name);
+  }
+
+  loadEncryptionScript(name: string) {
+    const s = this.encryptionScripts().find(x => x.name === name);
+    if (s) {
+        this.activeEncryptionScriptId.set(s.id);
+        this.setEncryptionField('script', s.content);
+    }
+  }
+
+  async saveActiveEncryptionScript() {
+    const s = this.encryptionScripts().find(x => x.id === this.activeEncryptionScriptId());
+    if (s) {
+      await this.scriptManagementService.updateScript(s.id, s.name, this.encryption().script);
+    }
+  }
+
+  async runActiveEncryptionScript() {
+    const code = this.encryption().script;
+    const state = this.tabState();
+    let requestBody = '';
+    
+    // Resolve the body correctly from top level state
+    if (state?.bodyType === 'raw') {
+        requestBody = state.rawBody || '';
+    } else if (state?.bodyType === 'form-data') {
+        const fd: Record<string, string> = {};
+        for (const row of state.formData || []) {
+           if (row.enabled && row.key) fd[row.key] = row.value;
+        }
+        requestBody = JSON.stringify(fd);
+    }
+    
+    try {
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        const fn = new AsyncFunction('requestBody', code);
+        const result = await fn(requestBody);
+        console.log("Encryption Result:", result);
+        this.notificationService.notify('Encryption ran successfully. Check console.');
+    } catch (err: any) {
+        console.error("Encryption run error:", err);
+        this.notificationService.notify('Encryption script error: ' + err.message);
+    }
+  }
+
+  // Pre-Request and Post-Request Logic
+  get activePreRequestScriptName() {
+    const s = this.preRequestScripts().find(x => x.id === this.activePreRequestScriptId());
+    return s ? s.name : 'Select Script...';
+  }
+  get preRequestScriptOptions() { return this.preRequestScripts().map(s => s.name); }
+  
+  get activePostRequestScriptName() {
+    const s = this.postRequestScripts().find(x => x.id === this.activePostRequestScriptId());
+    return s ? s.name : 'Select Script...';
+  }
+  get postRequestScriptOptions() { return this.postRequestScripts().map(s => s.name); }
+
+  loadCurrentPhaseScript(name: string) {
+    if (this.activeScriptTab() === 'preRequest') {
+        const s = this.preRequestScripts().find(x => x.name === name);
+        if (s) {
+            this.activePreRequestScriptId.set(s.id);
+            this.updateScript('preRequest', s.content);
+        }
+    } else if (this.activeScriptTab() === 'postResponse') {
+        const s = this.postRequestScripts().find(x => x.name === name);
+        if (s) {
+            this.activePostRequestScriptId.set(s.id);
+            this.updateScript('postResponse', s.content);
+        }
+    }
+  }
+  
+  async saveCurrentPhaseScript() {
+    if (this.activeScriptTab() === 'preRequest') {
+        const s = this.preRequestScripts().find(x => x.id === this.activePreRequestScriptId());
+        if (s) await this.scriptManagementService.updateScript(s.id, s.name, this.scripts().preRequest);
+    } else if (this.activeScriptTab() === 'postResponse') {
+        const s = this.postRequestScripts().find(x => x.id === this.activePostRequestScriptId());
+        if (s) await this.scriptManagementService.updateScript(s.id, s.name, this.scripts().postResponse);
+    }
+  }
+
+  async runCurrentPhaseScript() {
+      const code = this.getScriptContent();
+      try {
+          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+          // Simple sandbox stub for pre/post scripts
+          const mockPm = {
+              environment: { get: () => 'mock', set: () => {} },
+              variables: { get: () => 'mock', set: () => {} },
+              test: (name: string, fn: Function) => {
+                  try { fn(); console.log('Test passed:', name); }
+                  catch (e) { console.error('Test failed:', name, e); }
+              },
+              response: { to: { have: { status: () => {} } } }
+          };
+          const fn = new AsyncFunction('pm', 'console', code);
+          await fn(mockPm, console);
+          this.notificationService.notify('Script ran successfully. Check console.');
+      } catch (err: any) {
+          console.error("Script run error:", err);
+          this.notificationService.notify('Script error: ' + err.message);
+      }
+  }
 
   // Standard Test Snippets
   standardTestSnippets = signal<TestSnippet[]>(STANDARD_TEST_SNIPPETS);
@@ -208,12 +332,20 @@ export class PayloadTypesComponent {
     }
   }
 
-  resetScript() {
+  async resetScript() {
     const current = this.scripts();
     if (this.activeScriptTab() === 'test') {
       this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScript: '' } });
     } else {
-      this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [this.activeScriptTab()]: '' } });
+      let activeId = this.activeScriptTab() === 'preRequest' ? this.activePreRequestScriptId() : this.activePostRequestScriptId();
+      if (activeId) {
+          const resetDto = await this.scriptManagementService.resetScript(activeId);
+          if (resetDto) {
+              this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [this.activeScriptTab()]: resetDto.content } });
+          }
+      } else {
+          this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [this.activeScriptTab()]: '' } });
+      }
     }
   }
 
@@ -267,10 +399,18 @@ export class PayloadTypesComponent {
     return '';
   }
 
-  resetEncryptionScript() {
-    const defaultState = this.tabStateService.getDefaultState(this.tabId());
-    const defaultScript = defaultState.encryption?.script ?? '';
-    this.setEncryptionField('script', defaultScript);
+  async resetEncryptionScript() {
+    const id = this.activeEncryptionScriptId();
+    if (id) {
+        const resetDto = await this.scriptManagementService.resetScript(id);
+        if (resetDto) {
+            this.setEncryptionField('script', resetDto.content);
+        }
+    } else {
+        const defaultState = this.tabStateService.getDefaultState(this.tabId());
+        const defaultScript = defaultState.encryption?.script ?? '';
+        this.setEncryptionField('script', defaultScript);
+    }
   }
 
   // ── Encryption ───────────────────────────────────────────────────────
