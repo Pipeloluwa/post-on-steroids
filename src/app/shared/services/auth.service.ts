@@ -148,6 +148,13 @@ export class AuthService {
             this.http.post<ApiResponse<AuthLoginResponseData>>(`${API_BASE_URL}/auth/verify-otp`, { email, otp }).subscribe({
                 next: (res) => {
                     const data = res.data;
+                    const prevUser = this.currentUser();
+                    
+                    if (prevUser && prevUser.id !== data.user.id) {
+                        this.onLogout.next(prevUser);
+                        this.clearStorage();
+                    }
+
                     this.token.set(data.token);
                     this.currentUser.set(data.user);
                     this.isLoggedIn.set(true);
