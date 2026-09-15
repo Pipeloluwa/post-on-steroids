@@ -31,11 +31,11 @@ export class ThemeService {
                 const effectiveTheme = this.isDarkMode() ? 'dark' : 'light';
                 document.documentElement.setAttribute('data-theme', effectiveTheme);
                 localStorage.setItem('theme', this.theme());
-                
+
                 try {
-                    if ((window as any).require) {
-                        const { ipcRenderer } = (window as any).require('electron');
-                        ipcRenderer.send('theme-changed', effectiveTheme);
+                    let windowType = (window as any);
+                    if (windowType.electronAPI) {
+                        windowType.electronAPI.setTheme(effectiveTheme);
                     }
                 } catch (e) {
                     console.error('Failed to communicate with Electron process for theme update', e);

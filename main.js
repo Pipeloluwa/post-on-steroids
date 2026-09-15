@@ -19,9 +19,10 @@ function createWindow() {
     },
     // icon: path.join(__dirname, 'dist/post-on-steroids/browser/icons/onsteroids-icon.png'),
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       webSecurity: false,
+      preload: path.join(__dirname, 'preload.js')
     },
   });
 
