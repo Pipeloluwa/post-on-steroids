@@ -49,6 +49,7 @@ export class AuthService {
     otp = signal<string>('');
     isOtpSent = signal<boolean>(false);
     isAuthenticating = signal<boolean>(false);
+    isLoggingOut = signal<boolean>(false);
     showAuthModal = signal<boolean>(false);
     errorMessage = signal<string | null>(null);
     successMessage = signal<string | null>(null);
@@ -173,6 +174,7 @@ export class AuthService {
     }
 
     async logout() {
+        this.isLoggingOut.set(true);
         const user = this.currentUser();
         const userToken = this.token();
 
@@ -188,7 +190,7 @@ export class AuthService {
         }
 
         if (userToken) {
-            firstValueFrom(this.http.post(`${API_BASE_URL}/auth/logout`, {})).catch(() => {});
+            await firstValueFrom(this.http.post(`${API_BASE_URL}/auth/logout`, {})).catch(() => {});
         }
 
         // 2. Notify subscribers (TabStateService, VariableService) with user object
@@ -203,6 +205,7 @@ export class AuthService {
         this.otp.set('');
         this.isOtpSent.set(false);
         this.showAuthModal.set(true);
+        this.isLoggingOut.set(false);
         this.notificationService.notify('Successfully logged out.');
     }
 

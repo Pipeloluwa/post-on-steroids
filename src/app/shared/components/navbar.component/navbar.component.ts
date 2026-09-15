@@ -34,6 +34,7 @@ export class NavbarComponent {
     title = input.required<string>();
     isLoggedIn = input.required<boolean>();
     userEmail = input.required<string>();
+    isLoggingOut = input<boolean>(false);
 
     onToggleAuth = output<void>();
     onLogout = output<void>();

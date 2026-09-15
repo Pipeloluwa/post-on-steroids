@@ -1,5 +1,5 @@
 @if (show()) {
-<div class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-4" (click)="onClose.emit()">
+<div style="-webkit-app-region: no-drag;" class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-4" (click)="onClose.emit()">
     <div class="w-full max-w-lg my-auto max-h-[90vh] overflow-y-auto p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-5 relative" (click)="$event.stopPropagation()">
         <!-- Close Button -->
         <button (click)="onClose.emit()"
@@ -47,15 +47,6 @@
             <p>
                 Equipped with native variable interpolation, full Monaco code editors, pre/post request scripts, live payload encryption pipelines, instant URL capsule sharing, and bi-directional Postman / Swagger imports.
             </p>
-        </div>
-
-        <!-- Tech Stack Badges -->
-        <div class="flex flex-wrap gap-1.5 pt-1">
-            <span class="text-[11px] px-2.5 py-1 rounded-md bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) font-medium">Angular 20 Standalone</span>
-            <span class="text-[11px] px-2.5 py-1 rounded-md bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) font-medium">.NET 10 Web API</span>
-            <span class="text-[11px] px-2.5 py-1 rounded-md bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) font-medium">Signals Architecture</span>
-            <span class="text-[11px] px-2.5 py-1 rounded-md bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) font-medium">Monaco Editor</span>
-            <span class="text-[11px] px-2.5 py-1 rounded-md bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) font-medium">Tailwind CSS</span>
         </div>
 
         <!-- Footer -->
