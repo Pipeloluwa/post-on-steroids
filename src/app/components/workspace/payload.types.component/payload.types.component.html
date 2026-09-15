@@ -233,12 +233,6 @@
             </div>
 
             <div class="flex items-center gap-x-2">
-                @if (activeScriptTab() !== 'test') {
-                <button (click)="runCurrentPhaseScript()"
-                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-green-500/50 rounded px-3 py-1 transition-colors group cursor-pointer">
-                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-green-500 transition-colors">Run</span>
-                </button>
-                }
                 <button (click)="resetScript()"
                     class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-3 py-1 transition-colors group cursor-pointer">
                     <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
@@ -369,7 +363,7 @@
                     </div>
                 </div>
                 <app-monaco-editor [ngModel]="encryption().script"
-                    (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="false"
+                    (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="true"
                     [enableFloatingVar]="false"
                     class="flex-1 min-h-0 block w-full" [editorId]="'encryption-script'" [ownerTabId]="tabId()">
                 </app-monaco-editor>

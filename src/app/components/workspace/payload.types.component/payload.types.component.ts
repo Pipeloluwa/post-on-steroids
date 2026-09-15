@@ -95,32 +95,63 @@ export class PayloadTypesComponent {
 
 
   async runActiveEncryptionScript() {
-    const code = this.encryption().script;
-    const state = this.tabState();
-    let requestBody = '';
-    
-    // Resolve the body correctly from top level state
-    if (state?.bodyType === 'raw') {
-        requestBody = state.rawBody || '';
-    } else if (state?.bodyType === 'form-data') {
-        const fd: Record<string, string> = {};
-        for (const row of state.formData || []) {
-           if (row.enabled && row.key) fd[row.key] = row.value;
-        }
-        requestBody = JSON.stringify(fd);
+      const code = this.encryption().script;
+      const state = this.tabState();
+      let requestBody = '';
+      
+      if (state?.bodyType === 'raw') {
+          requestBody = state.rawBody || '';
+      } else if (state?.bodyType === 'form-data') {
+          const fd: Record<string, string> = {};
+          for (const row of state.formData || []) {
+             if (row.enabled && row.key) fd[row.key] = row.value;
+          }
+          requestBody = JSON.stringify(fd);
+      }
+      
+      try {
+          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+          const headers = state?.headers || [];
+          const body = requestBody;
+          const params = state?.params || [];
+          const encryptedHeaders = state?.encryption.encryptedHeaders || [];
+          const encryptedBodyPaths = state?.encryption.encryptedBodyPaths || [];
+          
+          const fnBody = `
+            ${code}
+            if (typeof encryptScript === 'function') {
+                return await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths);
+            } else if (typeof decryptScript === 'function') {
+                return await decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths);
+            }
+            return body;
+          `;
+          const fn = new AsyncFunction('headers', 'body', 'params', 'encryptedHeaders', 'encryptedBodyPaths', fnBody);
+          const result = await fn(headers, body, params, encryptedHeaders, encryptedBodyPaths);
+          
+          const resultString = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+          
+          const currentScripts = state?.scripts || {} as any;
+          this.tabStateService.updateState(this.tabId(), {
+              scripts: {
+                  ...currentScripts,
+                  encryptionConsole: `Result:\n${resultString}`
+              }
+          });
+          
+          this.notificationService.notify('Encryption ran successfully. Check console.');
+      } catch (err: any) {
+          console.error("Encryption run error:", err);
+          const currentScripts = state?.scripts || {} as any;
+          this.tabStateService.updateState(this.tabId(), {
+              scripts: {
+                  ...currentScripts,
+                  encryptionConsole: `Error:\n${err.message}`
+              }
+          });
+          this.notificationService.notify('Encryption script error: ' + err.message);
+      }
     }
-    
-    try {
-        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-        const fn = new AsyncFunction('requestBody', code);
-        const result = await fn(requestBody);
-        console.log("Encryption Result:", result);
-        this.notificationService.notify('Encryption ran successfully. Check console.');
-    } catch (err: any) {
-        console.error("Encryption run error:", err);
-        this.notificationService.notify('Encryption script error: ' + err.message);
-    }
-  }
 
   // Pre-Request and Post-Request Logic
   get activePreRequestScriptName() {
