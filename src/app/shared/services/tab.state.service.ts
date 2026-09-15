@@ -1946,8 +1946,8 @@ export class TabStateService {
             ],
             auth: { type: 'none', token: '' },
             scripts: {
-                preRequest: '',
-                postResponse: '',
+                preRequest: 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
+                postResponse: 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}',
                 preRequestConsole: '',
                 postResponseConsole: '',
                 encryptionConsole: '',

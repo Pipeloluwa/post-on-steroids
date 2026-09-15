@@ -12,6 +12,7 @@ import { BodyTypesComponent } from "../body.types.component/body.types.component
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/test.snippets.constants';
+import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet } from '../../../shared/constants/script.snippets.constants';
 
 @Component({
   selector: 'app-payload-types-component',
@@ -176,6 +177,54 @@ export class PayloadTypesComponent {
   standardTestSnippets = signal<TestSnippet[]>(STANDARD_TEST_SNIPPETS);
   testSnippetOptions = computed(() => ['Add Snippet...', ...this.standardTestSnippets().map(s => s.name)]);
   selectedTestSnippet = signal<string>('Add Snippet...');
+
+  // Phase Snippets
+  preRequestSnippets = signal<ScriptSnippet[]>(PRE_REQUEST_SNIPPETS);
+  preRequestSnippetOptions = computed(() => ['Add Snippet...', ...this.preRequestSnippets().map(s => s.name)]);
+  selectedPreRequestSnippet = signal<string>('Add Snippet...');
+
+  postResponseSnippets = signal<ScriptSnippet[]>(POST_RESPONSE_SNIPPETS);
+  postResponseSnippetOptions = computed(() => ['Add Snippet...', ...this.postResponseSnippets().map(s => s.name)]);
+  selectedPostResponseSnippet = signal<string>('Add Snippet...');
+
+  addPhaseSnippet(phase: 'preRequest' | 'postResponse', snippetName: string) {
+    if (!snippetName || snippetName === 'Add Snippet...') return;
+
+    const snippets = phase === 'preRequest' ? this.preRequestSnippets() : this.postResponseSnippets();
+    const snippet = snippets.find(s => s.name === snippetName);
+    if (!snippet) return;
+
+    const currentScript = phase === 'preRequest' ? this.scripts().preRequest : this.scripts().postResponse;
+    let updatedScript = '';
+    
+    const defPre = 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}';
+    const defPost = 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}';
+
+    if (!currentScript || !currentScript.trim() || currentScript === defPre || currentScript === defPost) {
+      if (phase === 'preRequest') {
+        updatedScript = `function preScript(headers, body, params){\n${snippet.code}\n}`;
+      } else {
+        updatedScript = `function postScript(responseHeader, responseBody){\n${snippet.code}\n}`;
+      }
+    } else if (currentScript.lastIndexOf('}') !== -1) {
+      const lastCloseBrace = currentScript.lastIndexOf('}');
+      updatedScript = currentScript.slice(0, lastCloseBrace) + `\n${snippet.code}\n` + currentScript.slice(lastCloseBrace);
+    } else {
+      updatedScript = currentScript + `\n\n${snippet.code}`;
+    }
+
+    const currentScripts = this.scripts();
+    this.tabStateService.updateState(this.tabId(), {
+      scripts: {
+        ...currentScripts,
+        [phase]: updatedScript
+      }
+    });
+
+    this.notificationService.notify(`Added snippet: ${snippet.name}`);
+    if (phase === 'preRequest') this.selectedPreRequestSnippet.set('Add Snippet...');
+    else this.selectedPostResponseSnippet.set('Add Snippet...');
+  }
 
   displayScriptTab = computed(() => {
     const tab = this.activeScriptTab();
@@ -350,7 +399,9 @@ export class PayloadTypesComponent {
               this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [this.activeScriptTab()]: resetDto.content } });
           }
       } else {
-          this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [this.activeScriptTab()]: '' } });
+          const defaultState = this.tabStateService.getDefaultState(this.tabId());
+          const defaultScript = this.activeScriptTab() === 'preRequest' ? defaultState.scripts?.preRequest : defaultState.scripts?.postResponse;
+          this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [this.activeScriptTab()]: defaultScript ?? '' } });
       }
     }
   }

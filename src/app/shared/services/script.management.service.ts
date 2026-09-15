@@ -39,6 +39,10 @@ export class ScriptManagementService {
     isLoading = signal<boolean>(false);
 
     constructor() {
+        if (this.authService.isLoggedIn()) {
+            this.fetchMyScripts();
+        }
+
         // Fetch scripts when user logs in
         this.authService.onLogin.subscribe(() => {
             this.fetchMyScripts();
