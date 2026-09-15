@@ -205,7 +205,7 @@ export class TabStateService {
             const keysToTry: string[] = [];
             if (u?.id) keysToTry.push(`onsteroids_user_session_${u.id}`);
             if (u?.email) keysToTry.push(`onsteroids_user_session_${u.email}`);
-            keysToTry.push('onsteroids_last_session');
+            if (!u) keysToTry.push('onsteroids_last_session');
 
             let sessionRaw: string | null = null;
             for (const k of keysToTry) {

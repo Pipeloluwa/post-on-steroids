@@ -63,9 +63,13 @@ export class VariableService {
     private loadVariables() {
         const user = this.authService.currentUser();
         const userKey = user ? `onsteroids_user_vars_${user.id || user.email}` : null;
-        const saved = (userKey && this.localStorageService.getItem(userKey)) ||
-            this.localStorageService.getItem('onsteroids_last_vars') ||
-            this.localStorageService.getItem(LocalStorageService.STORAGE_KEY);
+        let saved = userKey ? this.localStorageService.getItem(userKey) : null;
+        
+        if (!user && !saved) {
+            saved = this.localStorageService.getItem('onsteroids_last_vars') ||
+                this.localStorageService.getItem(LocalStorageService.STORAGE_KEY);
+        }
+
         if (saved) {
             try {
                 this.variables.set(JSON.parse(saved));
@@ -86,8 +90,10 @@ export class VariableService {
         const keysToTry: string[] = [];
         if (u?.id) keysToTry.push(`onsteroids_user_vars_${u.id}`);
         if (u?.email) keysToTry.push(`onsteroids_user_vars_${u.email}`);
-        keysToTry.push('onsteroids_last_vars');
-        keysToTry.push(LocalStorageService.STORAGE_KEY);
+        if (!u) {
+            keysToTry.push('onsteroids_last_vars');
+            keysToTry.push(LocalStorageService.STORAGE_KEY);
+        }
 
         for (const k of keysToTry) {
             const saved = this.localStorageService.getItem(k);
