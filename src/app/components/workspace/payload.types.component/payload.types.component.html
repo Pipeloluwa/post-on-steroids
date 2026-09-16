@@ -256,6 +256,19 @@
                             </button>
                         </div>
 
+                        <div class="flex items-center gap-x-2">
+                            <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
+                            <app-scrollable-select-component [activeValue]="activeTestScriptName"
+                                [optionValues]="testScriptOptions" [verticalPosition]="28" [modalWidth]="260" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                    <div class="flex items-center gap-x-1.5">
+                                        <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
+                                        <span>{{ activeTestScriptName }}</span>
+                                    </div>
+                                    <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                </div>
+                            </app-scrollable-select-component>
+                        </div>
                         <!-- Standard Test Snippets Dropdown -->
                         <div class="flex items-center gap-x-2">
                             <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
@@ -273,6 +286,19 @@
                     } @else if (activeScriptTab() === 'preRequest') {
                         <div class="flex items-center gap-x-3"></div>
                         <div class="flex items-center gap-x-2">
+                            <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
+                            <app-scrollable-select-component [activeValue]="activePreRequestScriptName"
+                                [optionValues]="preRequestScriptOptions" [verticalPosition]="28" [modalWidth]="260" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                    <div class="flex items-center gap-x-1.5">
+                                        <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
+                                        <span>{{ activePreRequestScriptName }}</span>
+                                    </div>
+                                    <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                </div>
+                            </app-scrollable-select-component>
+                        </div>
+                        <div class="flex items-center gap-x-2">
                             <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
                             <app-scrollable-select-component [activeValue]="selectedPreRequestSnippet()" [optionValues]="preRequestSnippetOptions()"
                                 [verticalPosition]="28" [modalWidth]="260" [absoluteStartLeft]="false" (outputSelectedValue)="addPhaseSnippet('preRequest', $event)">
@@ -287,6 +313,19 @@
                         </div>
                     } @else if (activeScriptTab() === 'postResponse') {
                         <div class="flex items-center gap-x-3"></div>
+                        <div class="flex items-center gap-x-2">
+                            <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
+                            <app-scrollable-select-component [activeValue]="activePostRequestScriptName"
+                                [optionValues]="postRequestScriptOptions" [verticalPosition]="28" [modalWidth]="260" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                    <div class="flex items-center gap-x-1.5">
+                                        <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
+                                        <span>{{ activePostRequestScriptName }}</span>
+                                    </div>
+                                    <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                </div>
+                            </app-scrollable-select-component>
+                        </div>
                         <div class="flex items-center gap-x-2">
                             <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
                             <app-scrollable-select-component [activeValue]="selectedPostResponseSnippet()" [optionValues]="postResponseSnippetOptions()"

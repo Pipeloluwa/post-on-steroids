@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subject, firstValueFrom } from 'rxjs';
-import { API_BASE_URL, AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../constants/api.constants';
+import { API_BASE_URL, AUTH_TOKEN_KEY, AUTH_USER_KEY, AUTH_REFRESH_TOKEN_KEY } from '../constants/api.constants';
 import { NotificationService } from './notification.service';
 
 export interface UserAuth {
@@ -17,6 +17,7 @@ export interface UserAuth {
 export interface AuthLoginResponseData {
     user: UserAuth;
     token: string;
+    refreshToken: string;
     expiresAt: string;
 }
 
@@ -42,6 +43,7 @@ export class AuthService {
     isLoggedIn = signal<boolean>(false);
     currentUser = signal<UserAuth | null>(null);
     token = signal<string | null>(null);
+    refreshToken = signal<string | null>(null);
     onLogout = new Subject<UserAuth | null>();
     onLogin = new Subject<UserAuth>();
 
@@ -63,11 +65,13 @@ export class AuthService {
 
         try {
             const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+            const savedRefreshToken = localStorage.getItem(AUTH_REFRESH_TOKEN_KEY);
             const savedUser = localStorage.getItem(AUTH_USER_KEY);
 
             if (savedToken && savedUser) {
                 const user = JSON.parse(savedUser) as UserAuth;
                 this.token.set(savedToken);
+                this.refreshToken.set(savedRefreshToken);
                 this.currentUser.set(user);
                 this.userEmail.set(user.email);
                 this.isLoggedIn.set(true);
@@ -156,6 +160,7 @@ export class AuthService {
                     }
 
                     this.token.set(data.token);
+                    this.refreshToken.set(data.refreshToken);
                     this.currentUser.set(data.user);
                     this.isLoggedIn.set(true);
                     this.showAuthModal.set(false);
@@ -164,6 +169,7 @@ export class AuthService {
 
                     if (this.isBrowser) {
                         localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+                        localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, data.refreshToken);
                         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
                     }
 
@@ -208,6 +214,7 @@ export class AuthService {
         this.isLoggedIn.set(false);
         this.currentUser.set(null);
         this.token.set(null);
+        this.refreshToken.set(null);
         this.userEmail.set('');
         this.otp.set('');
         this.isOtpSent.set(false);
@@ -220,5 +227,35 @@ export class AuthService {
         if (!this.isBrowser) return;
         localStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_USER_KEY);
+        localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY);
+    }
+    async refreshTokens(): Promise<boolean> {
+        const currentToken = this.token();
+        const currentRefresh = this.refreshToken();
+        if (!currentRefresh) {
+            return false;
+        }
+
+        try {
+            const res = await firstValueFrom(this.http.post<ApiResponse<AuthLoginResponseData>>(`${API_BASE_URL}/auth/refresh`, { 
+                accessToken: currentToken || '',
+                refreshToken: currentRefresh
+            }));
+            
+            if (res && res.data) {
+                this.token.set(res.data.token);
+                this.refreshToken.set(res.data.refreshToken);
+                if (this.isBrowser) {
+                    localStorage.setItem(AUTH_TOKEN_KEY, res.data.token);
+                    localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, res.data.refreshToken);
+                }
+                return true;
+            }
+        } catch (e) {
+            console.error('Failed to refresh token', e);
+        }
+        
+        return false;
     }
 }
+

@@ -67,10 +67,12 @@ export class PayloadTypesComponent {
   encryptionScripts = computed(() => this.scriptManagementService.scripts().filter(s => s.type === 'Encryption'));
   preRequestScripts = computed(() => this.scriptManagementService.scripts().filter(s => s.type === 'PreRequest'));
   postRequestScripts = computed(() => this.scriptManagementService.scripts().filter(s => s.type === 'PostRequest'));
+  testScripts = computed(() => this.scriptManagementService.scripts().filter(s => s.type === 'Test'));
 
   activeEncryptionScriptId = signal<string>('');
   activePreRequestScriptId = signal<string>('');
   activePostRequestScriptId = signal<string>('');
+  activeTestScriptId = signal<string>('');
 
   get activeEncryptionScriptName() {
     const s = this.encryptionScripts().find(x => x.id === this.activeEncryptionScriptId());
@@ -164,7 +166,13 @@ export class PayloadTypesComponent {
     const s = this.postRequestScripts().find(x => x.id === this.activePostRequestScriptId());
     return s ? s.name : 'Select Script...';
   }
-  get postRequestScriptOptions() { return this.postRequestScripts().map(s => s.name); }
+    get postRequestScriptOptions() { return this.postRequestScripts().map(s => s.name); }
+  
+  get activeTestScriptName() {
+    const s = this.testScripts().find(x => x.id === this.activeTestScriptId());
+    return s ? s.name : 'Select Script...';
+  }
+  get testScriptOptions() { return this.testScripts().map(s => s.name); }
 
   loadCurrentPhaseScript(name: string) {
     if (this.activeScriptTab() === 'preRequest') {
@@ -549,3 +557,4 @@ export class PayloadTypesComponent {
     this.tabStateService.updateState(this.tabId(), { settings: updated });
   }
 }
+
