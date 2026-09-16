@@ -79,11 +79,20 @@ export class PayloadTypesComponent {
     return s ? s.name : 'Select Script...';
   }
   
-  get encryptionScriptOptions() {
-    return this.encryptionScripts().map(s => s.name);
-  }
+  get encryptionScriptOptions() { return ['+ Add New Script', ...this.encryptionScripts().map(s => s.name)]; }
 
-  loadEncryptionScript(name: string) {
+    async loadEncryptionScript(name: string) {
+    if (name === '+ Add New Script') {
+        const scriptName = window.prompt('Enter new script name:');
+        if (scriptName) {
+            const newScript = await this.scriptManagementService.createScript('Encryption', scriptName, '// new script');
+            if (newScript) {
+                this.activeEncryptionScriptId.set(newScript.id);
+                this.setEncryptionField('script', newScript.content);
+            }
+        }
+        return;
+    }
     const s = this.encryptionScripts().find(x => x.name === name);
     if (s) {
         this.activeEncryptionScriptId.set(s.id);
@@ -160,21 +169,36 @@ export class PayloadTypesComponent {
     const s = this.preRequestScripts().find(x => x.id === this.activePreRequestScriptId());
     return s ? s.name : 'Select Script...';
   }
-  get preRequestScriptOptions() { return this.preRequestScripts().map(s => s.name); }
+  get preRequestScriptOptions() { return ['+ Add New Script', ...this.preRequestScripts().map(s => s.name)]; }
   
   get activePostRequestScriptName() {
     const s = this.postRequestScripts().find(x => x.id === this.activePostRequestScriptId());
     return s ? s.name : 'Select Script...';
   }
-    get postRequestScriptOptions() { return this.postRequestScripts().map(s => s.name); }
+    get postRequestScriptOptions() { return ['+ Add New Script', ...this.postRequestScripts().map(s => s.name)]; }
   
   get activeTestScriptName() {
     const s = this.testScripts().find(x => x.id === this.activeTestScriptId());
     return s ? s.name : 'Select Script...';
   }
-  get testScriptOptions() { return this.testScripts().map(s => s.name); }
+  get testScriptOptions() { return ['+ Add New Script', ...this.testScripts().map(s => s.name)]; }
 
-  loadCurrentPhaseScript(name: string) {
+    async loadCurrentPhaseScript(name: string) {
+    if (name === '+ Add New Script') {
+        const scriptName = window.prompt('Enter new script name:');
+        if (scriptName) {
+            const phase = this.activeScriptTab();
+            const type = phase === 'preRequest' ? 'PreRequest' : phase === 'postResponse' ? 'PostRequest' : 'Test';
+            const newScript = await this.scriptManagementService.createScript(type, scriptName, '// new script');
+            if (newScript) {
+                if (phase === 'preRequest') this.activePreRequestScriptId.set(newScript.id);
+                if (phase === 'postResponse') this.activePostRequestScriptId.set(newScript.id);
+                if (phase === 'test') this.activeTestScriptId.set(newScript.id);
+                this.updateScript(phase, newScript.content);
+            }
+        }
+        return;
+    }
     if (this.activeScriptTab() === 'preRequest') {
         const s = this.preRequestScripts().find(x => x.name === name);
         if (s) {
@@ -557,4 +581,6 @@ export class PayloadTypesComponent {
     this.tabStateService.updateState(this.tabId(), { settings: updated });
   }
 }
+
+
 
