@@ -1814,7 +1814,9 @@ export class TabStateService {
             scripts: {
                 ...base.scripts,
                 preRequest: dto.preRequestScript || '',
-                postResponse: dto.postResponseScript || ''
+                postResponse: dto.postResponseScript || '',
+                  testScript: dto.testScript || '',
+                  testScriptEnabled: dto.testScriptEnabled || false
             },
             encryption: {
                 ...base.encryption,
@@ -2162,3 +2164,4 @@ export class TabStateService {
         });
     }
 }
+
