@@ -260,7 +260,7 @@
                             <!-- Standard Test Snippets Dropdown -->
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
-                                <app-scrollable-select-component [activeValue]="selectedTestSnippet()" [optionValues]="testSnippetOptions()"
+                                <app-scrollable-select-component [activeValue]="selectedTestSnippet()" [optionValues]="testSnippetOptions()" [optionTooltips]="testSnippetTooltips()"
                                     [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="addTestSnippet($event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
@@ -275,7 +275,7 @@
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                                 <app-scrollable-select-component [activeValue]="activeTestScriptName"
-                                    [optionValues]="testScriptOptions" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                    [optionValues]="testScriptOptions" [optionTooltips]="testScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
                                             <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
@@ -291,7 +291,7 @@
                         <div class="flex items-center gap-x-4">
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
-                                <app-scrollable-select-component [activeValue]="selectedPreRequestSnippet()" [optionValues]="preRequestSnippetOptions()"
+                                <app-scrollable-select-component [activeValue]="selectedPreRequestSnippet()" [optionValues]="preRequestSnippetOptions()" [optionTooltips]="preRequestSnippetTooltips()"
                                     [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="addPhaseSnippet('preRequest', $event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
@@ -305,7 +305,7 @@
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                                 <app-scrollable-select-component [activeValue]="activePreRequestScriptName"
-                                    [optionValues]="preRequestScriptOptions" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                    [optionValues]="preRequestScriptOptions" [optionTooltips]="preRequestScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
                                             <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
@@ -321,7 +321,7 @@
                         <div class="flex items-center gap-x-4">
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
-                                <app-scrollable-select-component [activeValue]="selectedPostResponseSnippet()" [optionValues]="postResponseSnippetOptions()"
+                                <app-scrollable-select-component [activeValue]="selectedPostResponseSnippet()" [optionValues]="postResponseSnippetOptions()" [optionTooltips]="postResponseSnippetTooltips()"
                                     [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="addPhaseSnippet('postResponse', $event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
@@ -335,7 +335,7 @@
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                                 <app-scrollable-select-component [activeValue]="activePostRequestScriptName"
-                                    [optionValues]="postRequestScriptOptions" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                    [optionValues]="postRequestScriptOptions" [optionTooltips]="postRequestScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
                                             <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
@@ -397,7 +397,7 @@
                     <div class="flex items-center gap-x-2">
                         <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                         <app-scrollable-select-component [activeValue]="activeEncryptionScriptName"
-                            [optionValues]="encryptionScriptOptions" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadEncryptionScript($event)">
+                            [optionValues]="encryptionScriptOptions" [optionTooltips]="encryptionScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadEncryptionScript($event)">
                             <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                 <div class="flex items-center gap-x-1.5">
                                     <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">lock</mat-icon>
@@ -480,6 +480,7 @@
     }
 
 </div>
+
 
 
 

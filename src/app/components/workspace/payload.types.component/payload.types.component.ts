@@ -80,6 +80,13 @@ export class PayloadTypesComponent {
   }
   
   get encryptionScriptOptions() { return ['+ Add New Script', ...this.encryptionScripts().map(s => s.name)]; }
+  get encryptionScriptTooltips() {
+    const map: Record<string, string> = { '+ Add New Script': 'Create a new encryption script' };
+    for (const s of this.encryptionScripts()) {
+      map[s.name] = s.name;
+    }
+    return map;
+  }
 
     async loadEncryptionScript(name: string) {
     if (name === '+ Add New Script') {
@@ -170,18 +177,39 @@ export class PayloadTypesComponent {
     return s ? s.name : 'Select Script...';
   }
   get preRequestScriptOptions() { return ['+ Add New Script', ...this.preRequestScripts().map(s => s.name)]; }
+  get preRequestScriptTooltips() {
+    const map: Record<string, string> = { '+ Add New Script': 'Create a new pre-request script' };
+    for (const s of this.preRequestScripts()) {
+      map[s.name] = s.name;
+    }
+    return map;
+  }
   
   get activePostRequestScriptName() {
     const s = this.postRequestScripts().find(x => x.id === this.activePostRequestScriptId());
     return s ? s.name : 'Select Script...';
   }
     get postRequestScriptOptions() { return ['+ Add New Script', ...this.postRequestScripts().map(s => s.name)]; }
+  get postRequestScriptTooltips() {
+    const map: Record<string, string> = { '+ Add New Script': 'Create a new post-response script' };
+    for (const s of this.postRequestScripts()) {
+      map[s.name] = s.name;
+    }
+    return map;
+  }
   
   get activeTestScriptName() {
     const s = this.testScripts().find(x => x.id === this.activeTestScriptId());
     return s ? s.name : 'Select Script...';
   }
   get testScriptOptions() { return ['+ Add New Script', ...this.testScripts().map(s => s.name)]; }
+  get testScriptTooltips() {
+    const map: Record<string, string> = { '+ Add New Script': 'Create a new test script' };
+    for (const s of this.testScripts()) {
+      map[s.name] = s.name;
+    }
+    return map;
+  }
 
     async loadCurrentPhaseScript(name: string) {
     if (name === '+ Add New Script') {
@@ -243,15 +271,36 @@ export class PayloadTypesComponent {
   standardTestSnippets = signal<TestSnippet[]>(STANDARD_TEST_SNIPPETS);
   testSnippetOptions = computed(() => ['Add Snippet...', ...this.standardTestSnippets().map(s => s.name)]);
   selectedTestSnippet = signal<string>('Add Snippet...');
+  testSnippetTooltips = computed(() => {
+    const map: Record<string, string> = {};
+    for (const s of this.standardTestSnippets()) {
+      map[s.name] = s.description;
+    }
+    return map;
+  });
 
   // Phase Snippets
   preRequestSnippets = signal<ScriptSnippet[]>(PRE_REQUEST_SNIPPETS);
   preRequestSnippetOptions = computed(() => ['Add Snippet...', ...this.preRequestSnippets().map(s => s.name)]);
   selectedPreRequestSnippet = signal<string>('Add Snippet...');
+  preRequestSnippetTooltips = computed(() => {
+    const map: Record<string, string> = {};
+    for (const s of this.preRequestSnippets()) {
+      map[s.name] = s.description;
+    }
+    return map;
+  });
 
   postResponseSnippets = signal<ScriptSnippet[]>(POST_RESPONSE_SNIPPETS);
   postResponseSnippetOptions = computed(() => ['Add Snippet...', ...this.postResponseSnippets().map(s => s.name)]);
   selectedPostResponseSnippet = signal<string>('Add Snippet...');
+  postResponseSnippetTooltips = computed(() => {
+    const map: Record<string, string> = {};
+    for (const s of this.postResponseSnippets()) {
+      map[s.name] = s.description;
+    }
+    return map;
+  });
 
   addPhaseSnippet(phase: 'preRequest' | 'postResponse', snippetName: string) {
     if (!snippetName || snippetName === 'Add Snippet...') return;
@@ -581,6 +630,7 @@ export class PayloadTypesComponent {
     this.tabStateService.updateState(this.tabId(), { settings: updated });
   }
 }
+
 
 
 

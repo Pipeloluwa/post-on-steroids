@@ -24,6 +24,7 @@
     <ul class="overflow-auto space-y-1" [style.max-height.px]="modalHeight()">
       @for (item of filteredOptions(); track $index) {
       <li (click)="setActiveValue(item)" class="scrollable-select-item cursor-pointer px-2 py-1 rounded-[4px] transition-colors duration-200"
+        [title]="optionTooltips()[item] || item"
         [style.backgroundColor]="activeValue() === item ? activeItemColor()(item) : 'var(--postonsteroids-bg-tertiary)'"
         [style.color]="activeValue() === item ? '#fff' : itemColor()(item)">
         <span class="text-[11px] font-medium truncate block" [class.uppercase]="uppercase()">{{item}}</span>

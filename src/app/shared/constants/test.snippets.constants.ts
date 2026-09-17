@@ -8,7 +8,7 @@ export interface TestSnippet {
 export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     {
         id: 'status_200',
-        name: 'Status code: Code is 200',
+        name: 'Status: 200 OK',
         description: 'Assert that the HTTP response status code equals 200 (OK)',
         code: `    // Assert HTTP status code is 200 (OK)
     if (responseStatus === 200) {
@@ -20,7 +20,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'status_2xx',
-        name: 'Status code: Successful 2xx',
+        name: 'Status: 2xx Success',
         description: 'Assert that the HTTP status code is in the 2xx success range (200-299)',
         code: `    // Assert HTTP status code is in the 2xx success range
     if (responseStatus >= 200 && responseStatus < 300) {
@@ -32,7 +32,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'status_201',
-        name: 'Status code: Code is 201 Created',
+        name: 'Status: 201 Created',
         description: 'Assert that the HTTP response status code equals 201 (Created)',
         code: `    // Assert HTTP status code is 201 (Created)
     if (responseStatus === 201) {
@@ -56,7 +56,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'response_time_200',
-        name: 'Response time: Under 200ms',
+        name: 'Time: < 200ms',
         description: 'Assert that the total response time is less than 200 milliseconds',
         code: `    // Assert response time is under 200ms
     if (responseTime < 200) {
@@ -68,7 +68,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'response_time_500',
-        name: 'Response time: Under 500ms',
+        name: 'Time: < 500ms',
         description: 'Assert that the total response time is less than 500 milliseconds',
         code: `    // Assert response time is under 500ms
     if (responseTime < 500) {
@@ -80,7 +80,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'body_has_key',
-        name: 'Body: Contains expected property',
+        name: 'Body: Has Key',
         description: 'Assert that the JSON response body contains a specific property/key',
         code: `    // Assert response body has expected property
     if (responseBody && typeof responseBody === 'object' && ('data' in responseBody || 'id' in responseBody)) {
@@ -92,7 +92,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'body_property_value',
-        name: 'Body: Check field value',
+        name: 'Body: Match Value',
         description: 'Assert that a field in the response body matches the expected value',
         code: `    // Assert specific field value in response body
     if (responseBody && (responseBody.success === true || responseBody.status === 'success')) {
@@ -104,7 +104,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'body_is_array',
-        name: 'Body: Is non-empty Array',
+        name: 'Body: Has Array',
         description: 'Assert that the response body is an array containing at least one item',
         code: `    // Assert response body is a non-empty array
     const targetArray = Array.isArray(responseBody) ? responseBody : (responseBody?.data || responseBody?.items);
@@ -117,7 +117,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'body_contains_string',
-        name: 'Body: Contains string',
+        name: 'Body: Has String',
         description: 'Assert that the raw response body contains a specific substring',
         code: `    // Assert response body contains string
     const rawBodyText = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody || '');
@@ -130,7 +130,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'header_content_type',
-        name: 'Header: Content-Type is JSON',
+        name: 'Header: JSON Content',
         description: 'Assert that the Content-Type response header includes application/json',
         code: `    // Assert Content-Type header includes application/json
     const contentType = responseHeaders ? (responseHeaders['content-type'] || responseHeaders['Content-Type'] || '') : '';
@@ -143,7 +143,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'status_204',
-        name: 'Status code: Code is 204 No Content',
+        name: 'Status: 204 No Content',
         description: 'Assert that the HTTP response status code equals 204 (No Content)',
         code: `    // Assert HTTP status code is 204 (No Content)
     if (responseStatus === 204) {
@@ -155,7 +155,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'status_400',
-        name: 'Status code: Code is 400 Bad Request',
+        name: 'Status: 400 Bad Request',
         description: 'Assert that the HTTP response status code equals 400 (Bad Request)',
         code: `    // Assert HTTP status code is 400 (Bad Request)
     if (responseStatus === 400) {
@@ -167,7 +167,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'status_401',
-        name: 'Status code: Code is 401 Unauthorized',
+        name: 'Status: 401 Unauthorized',
         description: 'Assert that the HTTP response status code equals 401 (Unauthorized)',
         code: `    // Assert HTTP status code is 401 (Unauthorized)
     if (responseStatus === 401) {
@@ -179,7 +179,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'status_404',
-        name: 'Status code: Code is 404 Not Found',
+        name: 'Status: 404 Not Found',
         description: 'Assert that the HTTP response status code equals 404 (Not Found)',
         code: `    // Assert HTTP status code is 404 (Not Found)
     if (responseStatus === 404) {
@@ -191,7 +191,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'status_5xx',
-        name: 'Status code: Server error (5xx)',
+        name: 'Status: 5xx Error',
         description: 'Assert that the HTTP status code is in the 5xx server error range',
         code: `    // Assert HTTP status code is a server error (5xx)
     if (responseStatus >= 500 && responseStatus < 600) {
@@ -203,7 +203,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'response_time_1000',
-        name: 'Response time: Under 1000ms',
+        name: 'Time: < 1000ms',
         description: 'Assert that the total response time is less than 1 second (1000ms)',
         code: `    // Assert response time is under 1000ms
     if (responseTime < 1000) {
@@ -215,7 +215,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'body_nested_property',
-        name: 'Body: Check nested property (data.token)',
+        name: 'Body: Nested Key',
         description: 'Assert that a nested property exists in the JSON response (e.g. data.token or data.id)',
         code: `    // Assert nested property exists
     const token = responseBody?.data?.token || responseBody?.token || responseBody?.accessToken;
@@ -228,7 +228,7 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     },
     {
         id: 'header_presence',
-        name: 'Header: Header presence check',
+        name: 'Header: Has Header',
         description: 'Assert that a specific header exists in the response',
         code: `    // Assert specific header is present in response
     const hasHeader = responseHeaders && Object.keys(responseHeaders).some(h => h.toLowerCase() === 'content-type' || h.toLowerCase() === 'server');
@@ -240,3 +240,4 @@ export const STANDARD_TEST_SNIPPETS: TestSnippet[] = [
     }`
     }
 ];
+

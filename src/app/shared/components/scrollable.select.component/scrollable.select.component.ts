@@ -21,6 +21,7 @@ export class ScrollableSelectComponent {
 
   activeValue = input<string | null>(null);
   optionValues = input<string[]>([]);
+  optionTooltips = input<Record<string, string>>({});
   verticalPosition = input<number>(30);
   modalWidth = input<number | null>(null);
   modalHeight = input<number>(250);
