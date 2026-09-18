@@ -114,6 +114,8 @@ export class PayloadTypesComponent {
 
 
   async runActiveEncryptionScript() {
+        this.isRunningEncryptionScript.set(true);
+        try {
       const code = this.encryption().script;
       const state = this.tabState();
       let requestBody = '';
@@ -168,6 +170,9 @@ export class PayloadTypesComponent {
           });
           this.notificationService.notify('Encryption script error: ' + result.error);
       }
+        } finally {
+            this.isRunningEncryptionScript.set(false);
+        }
     }
 
   // Pre-Request and Post-Request Logic
@@ -358,6 +363,7 @@ export class PayloadTypesComponent {
 
   // State for Auth
   isTokenVisible = signal(false);
+  isRunningEncryptionScript = signal(false);
 
   tabId = input.required<string>();
   tabState = computed(() => this.tabStateService.getState(this.tabId()));

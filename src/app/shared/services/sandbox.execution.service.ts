@@ -54,12 +54,12 @@ window.addEventListener("message", async (event) => {
     // Declare all context keys as local variables
     const paramDeclarations = contextKeys.map(k => 
       "let " + k + " = context['" + k + "'];"
-    ).join("\\n");
+    ).join(String.fromCharCode(10));
 
     // Write back any mutations to pm
     const paramWriteBack = contextKeys.map(k => 
       "pm['" + k + "'] = " + k + ";"
-    ).join("\\n");
+    ).join(String.fromCharCode(10));
 
     let testResults = [];
     let testPassed = true;
