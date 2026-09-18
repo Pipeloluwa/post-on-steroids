@@ -78,15 +78,18 @@ window.addEventListener("message", async (event) => {
       }
     };
 
-    const fnBody = "return (async () => {\\n"
-      + paramDeclarations + "\\n"
-      + code + "\\n"
-      + "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params); if (_preReturn !== undefined) { body = _preReturn; } }\\n"
-      + "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params); }\\n"
-      + "if (typeof testScript === 'function') { const _testReturn = await testScript(responseStatus, responseTime, responseBody, responseHeaders || responseHeader); if (_testReturn !== undefined) { testPassed = !!_testReturn; } }\\n"
-      + "if (typeof encryptScript === 'function') { const _encReturn = await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); if (_encReturn !== undefined) { body = _encReturn; } }\\n"
-      + paramWriteBack + "\\n"
-      + "})();";
+    const fnBodyLines = [
+      "return (async () => {",
+      paramDeclarations,
+      code,
+      "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params); if (_preReturn !== undefined) { body = _preReturn; } }",
+      "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params); }",
+      "if (typeof testScript === 'function') { const _testReturn = await testScript(responseStatus, responseTime, responseBody, responseHeaders || responseHeader); if (_testReturn !== undefined) { testPassed = !!_testReturn; } }",
+      "if (typeof encryptScript === 'function') { const _encReturn = await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); if (_encReturn !== undefined) { body = _encReturn; } }",
+      paramWriteBack,
+      "})();"
+    ];
+    const fnBody = fnBodyLines.join(String.fromCharCode(10));
       
     const executeInSandbox = new Function("pm", "context", "test", fnBody);
     await executeInSandbox(pm, context, test);
