@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, KeyValue, AuthState, EncryptionState, SettingsState } from '../../../shared/services/tab.state.service';
+import { SandboxExecutionService } from '../../../shared/services/sandbox.execution.service';
 import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ScriptManagementService } from '../../../shared/services/script.management.service';
@@ -29,6 +30,7 @@ export class PayloadTypesComponent {
   variableService = inject(VariableService);
   private notificationService = inject(NotificationService);
   scriptManagementService = inject(ScriptManagementService);
+  sandboxService = inject(SandboxExecutionService);
 
   constructor() {
     effect(() => {
@@ -51,7 +53,6 @@ export class PayloadTypesComponent {
 
   payloadTypes = ['params', 'auth', 'headers', 'body', 'scripts', 'encryption', 'settings'];
   authTypes: AuthState['type'][] = ['none', 'bearer'];
-  channelNames = ['Default Channel', 'Secure Channel 1', 'Payment Gateway', 'Internal Legacy', 'Production Node', 'Staging Link', 'Encrypted Proxy', 'VPN Tunnel'];
 
   // State for Bulk Edit
   isRawParams = signal(false);
@@ -127,47 +128,45 @@ export class PayloadTypesComponent {
           requestBody = JSON.stringify(fd);
       }
       
-      try {
-          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-          const headers = state?.headers || [];
-          const body = requestBody;
-          const params = state?.params || [];
-          const encryptedHeaders = state?.encryption.encryptedHeaders || [];
-          const encryptedBodyPaths = state?.encryption.encryptedBodyPaths || [];
+      const context = {
+          headers: state?.headers || [],
+          body: requestBody,
+          params: state?.params || [],
+          encryptedHeaders: state?.encryption.encryptedHeaders || [],
+          encryptedBodyPaths: state?.encryption.encryptedBodyPaths || [],
+          autoEncryptBody: state?.encryption.autoEncryptBody || false,
+          autoEncryptHeaders: state?.encryption.autoEncryptHeaders || false,
           
-          const fnBody = `
-            ${code}
-            if (typeof encryptScript === 'function') {
-                return await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths);
-            } else if (typeof decryptScript === 'function') {
-                return await decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths);
-            }
-            return body;
-          `;
-          const fn = new AsyncFunction('headers', 'body', 'params', 'encryptedHeaders', 'encryptedBodyPaths', fnBody);
-          const result = await fn(headers, body, params, encryptedHeaders, encryptedBodyPaths);
+      };
+
+      const result = await this.sandboxService.executeScript(code, context);
+      const currentScripts = state?.scripts || {} as any;
+
+      if (result.success) {
+          const bodyOut = result.context?.body;
+          const resultString = typeof bodyOut === 'object' ? JSON.stringify(bodyOut, null, 2) : String(bodyOut);
           
-          const resultString = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result);
+          let outText = `Result:\n${resultString}`;
+          if (result.logs) {
+              outText = `Logs:\n${result.logs}\n\n${outText}`;
+          }
           
-          const currentScripts = state?.scripts || {} as any;
           this.tabStateService.updateState(this.tabId(), {
               scripts: {
                   ...currentScripts,
-                  encryptionConsole: `Result:\n${resultString}`
+                  encryptionConsole: outText
               }
           });
-          
           this.notificationService.notify('Encryption ran successfully. Check console.');
-      } catch (err: any) {
-          console.error("Encryption run error:", err);
-          const currentScripts = state?.scripts || {} as any;
+      } else {
+          console.error("Encryption run error:", result.error);
           this.tabStateService.updateState(this.tabId(), {
               scripts: {
                   ...currentScripts,
-                  encryptionConsole: `Error:\n${err.message}`
+                  encryptionConsole: `Error:\n${result.error}\n\nLogs:\n${result.logs || ''}`
               }
           });
-          this.notificationService.notify('Encryption script error: ' + err.message);
+          this.notificationService.notify('Encryption script error: ' + result.error);
       }
     }
 
@@ -368,7 +367,7 @@ export class PayloadTypesComponent {
   headers = computed(() => this.tabState()?.headers ?? []);
   auth = computed(() => this.tabState()?.auth ?? { type: 'none' as const, token: '' });
   scripts = computed(() => this.tabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '', encryptionConsole: '', testScript: '', testScriptEnabled: false });
-  encryption = computed(() => this.tabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
+  encryption = computed(() => this.tabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
   settings = computed(() => this.tabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true });
 
   setPayloadType(type: string) {
@@ -630,6 +629,7 @@ export class PayloadTypesComponent {
     this.tabStateService.updateState(this.tabId(), { settings: updated });
   }
 }
+
 
 
 

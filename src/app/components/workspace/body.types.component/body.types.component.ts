@@ -60,7 +60,7 @@ export class BodyTypesComponent {
   bodyType = computed(() => this.tabStateService.getState(this.tabId())?.bodyType ?? 'none');
   rawType = computed(() => this.tabStateService.getState(this.tabId())?.rawType ?? 'JSON');
   formData = computed(() => this.tabStateService.getState(this.tabId())?.formData ?? []);
-  encryption = computed(() => this.tabStateService.getState(this.tabId())?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, channelName: '', encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
+  encryption = computed(() => this.tabStateService.getState(this.tabId())?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
 
   setEncryptionField(field: keyof EncryptionState, value: any) {
     const current = this.encryption();

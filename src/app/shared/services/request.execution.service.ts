@@ -165,8 +165,7 @@ export class RequestExecutionService {
                     encryptedHeaders: freshState.encryption?.encryptedHeaders || [],
                     encryptedBodyPaths: freshState.encryption?.encryptedBodyPaths || [],
                     autoEncryptBody: freshState.encryption?.autoEncryptBody || false,
-                    autoEncryptHeaders: freshState.encryption?.autoEncryptHeaders || false,
-                    channelName: freshState.encryption?.channelName || ''
+                    autoEncryptHeaders: freshState.encryption?.autoEncryptHeaders || false
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
                 if (cancelToken.cancelled) return;
