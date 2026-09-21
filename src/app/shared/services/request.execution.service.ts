@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 import { TabStateService, FormDataRow } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
@@ -332,7 +333,7 @@ export class RequestExecutionService {
                         body: bodyPayload
                     };
 
-                    const proxyUrl = 'https://localhost:7131/api/v1/Proxy';
+                    const proxyUrl = environment.proxyUrl;
                     reqObservable = this.http.post<any>(proxyUrl, proxyPayload, {
                         headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
                         observe: 'response' as const

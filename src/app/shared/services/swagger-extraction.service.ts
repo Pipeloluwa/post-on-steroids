@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 /**
  * Service for extracting OpenAPI/Swagger specifications from various sources
@@ -11,8 +12,8 @@ import { firstValueFrom } from 'rxjs';
 })
 export class SwaggerExtractionService {
     private http = inject(HttpClient);
-    private proxyUrl = 'https://localhost:7131/api/v1/Proxy';
-    private proxyFallbackUrl = 'http://localhost:5131/api/v1/Proxy';
+    private proxyUrl = environment.proxyUrl;
+    private proxyFallbackUrl = environment.proxyFallbackUrl;
 
     /**
      * Extracts OpenAPI spec from a Swagger URL
