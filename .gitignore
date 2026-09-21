@@ -1,7 +1,7 @@
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
 # Compiled output / Build artifacts
-# /dist
+/dist
 /tmp
 /out-tsc
 /bazel-out
