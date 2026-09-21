@@ -130,9 +130,12 @@ export class PayloadTypesComponent {
           requestBody = JSON.stringify(fd);
       }
       
+      // Strip single-line and multi-line comments from JSON body before passing to sandbox
+      const cleanBody = requestBody.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').trim();
+      
       const context = {
           headers: state?.headers || [],
-          body: requestBody,
+          body: cleanBody || requestBody,
           params: state?.params || [],
           encryptedHeaders: state?.encryption.encryptedHeaders || [],
           encryptedBodyPaths: state?.encryption.encryptedBodyPaths || [],

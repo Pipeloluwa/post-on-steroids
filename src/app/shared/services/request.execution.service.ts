@@ -157,10 +157,12 @@ export class RequestExecutionService {
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
                 // Serialize body to JSON string for encryption script
                 const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
+                // Strip single-line and multi-line comments from JSON body
+                const cleanBodyStr = bodyStr.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').trim();
 
                 const encContext = {
                     headers,
-                    body: bodyStr,
+                    body: cleanBodyStr || bodyStr,
                     params,
                     encryptedHeaders: freshState.encryption?.encryptedHeaders || [],
                     encryptedBodyPaths: freshState.encryption?.encryptedBodyPaths || [],

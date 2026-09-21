@@ -11,7 +11,7 @@
   ],
   "win": {
     "target": ["nsis"],
-    "icon": "dist/post-on-steroids/browser/icons/onsteroids-icon.png"
+    "icon": "public/icons/onsteroids-icon.ico"
   },
   "nsis": {
     "oneClick": false,

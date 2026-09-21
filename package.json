@@ -53,6 +53,7 @@
     "electron-builder": "^26.15.3",
     "jsdom": "^25.0.0",
     "postcss": "^8.5.3",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4.1.12",
     "typescript": "~5.9.2"
   }
