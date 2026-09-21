@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, signal, inject, ChangeDetectionStrategy, HostListener } from '@angular/core';
+import { Component, signal, inject, ChangeDetectionStrategy, output, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { generateUUID } from '../../utils/uuid.util';
