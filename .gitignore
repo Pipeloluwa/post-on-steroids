@@ -44,6 +44,14 @@ lerna-debug.log*
 !.vscode/extensions.json
 !.vscode/mcp.json
 
+# AI Assistants
+.claude/
+.cursor/
+.gemini/
+.junie/
+.windsurf/
+
+
 # Environment variables
 .env
 .env.local
