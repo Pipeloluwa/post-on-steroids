@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script>
+    window.addEventListener('message', async (event) => {
+      const { id, code, context } = event.data;
+      if (!id) return;
+
+      let pm = { ...context }; // Mocked pm object
+      
+      try {
+        // Wrap execution in an async IIFE to support await
+        const executeInSandbox = new Function('pm', `
+          return (async () => {
+            ${code}
+            
+            const _fnMatch = ${JSON.stringify(code)}.match(/function\\s+([a-zA-Z0-9_]+)/);
+            if (_fnMatch) {
+                const _fnName = _fnMatch[1];
+                if (typeof eval(_fnName) === 'function') {
+                    await eval(_fnName).apply(null, pm.args || []);
+                }
+            }
+          })();
+        `);
+
+        await executeInSandbox(pm);
+
+        // Send back mutated context
+          event.source.postMessage({ id, success: true, context: pm }, event.origin);
+      } catch (err) {
+          event.source.postMessage({ id, success: false, error: err.toString() }, event.origin);
+      }
+    });
+  </script>
+</head>
+<body></body>
+</html>

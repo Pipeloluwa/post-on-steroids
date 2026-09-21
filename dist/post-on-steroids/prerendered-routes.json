@@ -1,0 +1,12 @@
+{
+  "routes": {
+    "/": {},
+    "/capsules": {},
+    "/export": {},
+    "/history": {},
+    "/import": {},
+    "/login": {},
+    "/steroid": {},
+    "/utilities": {}
+  }
+}
