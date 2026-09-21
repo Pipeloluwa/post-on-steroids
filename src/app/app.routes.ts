@@ -19,12 +19,8 @@ export const routes: Routes = [
         children: [
             {
                 path: '',
-                redirectTo: 'steroid',
+                component: WorkspaceComponent,
                 pathMatch: 'full'
-            },
-            {
-                path: 'steroid',
-                component: WorkspaceComponent
             },
             {
                 path: 'capsules',
