@@ -292,8 +292,7 @@ export class RequestExecutionService {
             const isElectron = /electron/i.test(navigator.userAgent);
 
             // Check if CORS bypass is enabled (We do not need proxy in Electron because webSecurity is disabled)
-            let isUsingProxy = (freshState.settings?.bypassCors && !isElectron)
-                && (finalUrl.includes('localhost') || finalUrl.includes('127.0.0.1'));
+            let isUsingProxy = (freshState.settings?.bypassCors && !isElectron);
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
             let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;
