@@ -50,7 +50,7 @@ lerna-debug.log*
 .gemini/
 .junie/
 .windsurf/
-.AGENTS.md
+AGENTS.md
 
 
 # Environment variables
