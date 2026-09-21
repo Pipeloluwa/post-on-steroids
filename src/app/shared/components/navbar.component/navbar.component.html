@@ -135,11 +135,16 @@
         <!-- Right Section: Utilities + Auth (Permanently pinned to far right) -->
         <div class="flex items-center justify-end gap-x-3 shrink-0" style="-webkit-app-region: no-drag;">
             @if (!isElectron) {
-                <a href="/OnSteroid Setup 1.0.0.exe" download="OnSteroid Setup 1.0.0.exe" title="Download Desktop App"
-                    class="inline-flex items-center gap-x-2 rounded-full bg-blue-500/10 px-3 py-1 text-[12px] font-bold text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-all duration-200 cursor-pointer no-underline">
-                    <mat-icon class="text-[16px]! size-4!">desktop_windows</mat-icon>
-                    <span>Desktop App</span>
-                </a>
+                <div class="flex items-center gap-x-2">
+                    <span class="text-[10px] text-(--postonsteroids-text-muted) hidden lg:block italic mt-0.5">
+                        * Some API calls may fail on Web. For full performance, download the Desktop App.
+                    </span>
+                    <a href="/OnSteroid Setup 1.0.0.exe" download="OnSteroid Setup 1.0.0.exe" title="Download Desktop App for full performance and unlimited access"
+                        class="inline-flex items-center gap-x-2 rounded-full bg-blue-500/10 px-3 py-1 text-[12px] font-bold text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-all duration-200 cursor-pointer no-underline shrink-0">
+                        <mat-icon class="text-[16px]! size-4!">desktop_windows</mat-icon>
+                        <span>Desktop App</span>
+                    </a>
+                </div>
             }
 
             <a routerLink="/utilities" title="Utilities"
