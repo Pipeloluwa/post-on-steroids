@@ -1,8 +1,8 @@
-# ⚡ PostOnSteroids
+# ⚡ PostOnSteroid
 
-**PostOnSteroids** is an open-source, powerful, and highly customizable API client built for developers who need more control over their API requests. Built with **Angular** and **Electron**, it works seamlessly as both a web application and a native desktop client.
+**PostOnSteroid** is an open-source, powerful, and highly customizable API client built for developers who need more control over their API requests. Built with **Angular** and **Electron**, it works seamlessly as both a web application and a native desktop client.
 
-Whether you're testing standard REST APIs, running complex pre/post-request scripts in a secure sandbox, or testing encrypted payloads, PostOnSteroids gives you the flexibility you need.
+Whether you're testing standard REST APIs, running complex pre/post-request scripts in a secure sandbox, or testing encrypted payloads, PostOnSteroid gives you the flexibility you need.
 
 ## ✨ Features
 
@@ -57,7 +57,7 @@ npm run electron:build
 
 ## 🤝 Contributing
 
-PostOnSteroids is an **open-source project**, and contributions are highly appreciated! Whether it's reporting a bug, proposing a new feature, or submitting a Pull Request, your help makes this tool better for everyone.
+PostOnSteroid is an **open-source project**, and contributions are highly appreciated! Whether it's reporting a bug, proposing a new feature, or submitting a Pull Request, your help makes this tool better for everyone.
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)

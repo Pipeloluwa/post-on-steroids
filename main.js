@@ -10,7 +10,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'OnSteroids',
+    title: 'OnSteroid',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       height: 48,

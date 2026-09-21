@@ -1,6 +1,6 @@
 {
-  "appId": "com.papicnation.onsteroids",
-  "productName": "OnSteroids",
+  "appId": "com.papicnation.onsteroid",
+  "productName": "OnSteroid",
   "directories": {
     "output": "release/"
   },
