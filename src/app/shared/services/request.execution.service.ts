@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
+import { generateUUID } from '../utils/uuid.util';
 import { environment } from '../../../environments/environment';
 import { TabStateService, FormDataRow } from './tab.state.service';
 import { VariableService } from './variable.service';
@@ -309,9 +310,7 @@ export class RequestExecutionService {
                         headersObj[h.key] = h.value;
                     });
                     if (!Object.keys(headersObj).some(k => k.toLowerCase() === 'x-request-id')) {
-                        headersObj['X-Request-ID'] = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-                            ? crypto.randomUUID()
-                            : (freshState.id || 'req-' + Date.now());
+                        headersObj['X-Request-ID'] = generateUUID();
                     }
 
                     // Construct full URL including query params
@@ -643,7 +642,7 @@ export class RequestExecutionService {
             const raw = localStorage.getItem('onsteroids_history');
             const list = raw ? JSON.parse(raw) : [];
             const historyItem = {
-                id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+                id: generateUUID(),
                 ...entry,
                 createdAt: new Date().toISOString()
             };

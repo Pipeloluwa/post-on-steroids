@@ -1,5 +1,6 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { generateUUID } from '../utils/uuid.util';
 
 export interface SandboxResult {
   success: boolean;
@@ -138,7 +139,7 @@ window.addEventListener("message", async (event) => {
         return;
       }
 
-      const executionId = crypto.randomUUID();
+      const executionId = generateUUID();
 
       // Setup one-time listener
       const listener = (event: MessageEvent) => {

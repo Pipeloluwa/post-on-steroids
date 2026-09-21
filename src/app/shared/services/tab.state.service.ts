@@ -1,5 +1,6 @@
 import { Injectable, signal, computed, effect, untracked, inject, PLATFORM_ID, Injector } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { generateUUID } from '../utils/uuid.util';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { firstValueFrom } from 'rxjs';
@@ -2151,15 +2152,7 @@ export class TabStateService {
     }
 
     createId(): string {
-        if (this.isBrowser && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-            return crypto.randomUUID();
-        }
-
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-        });
+        return generateUUID();
     }
 }
 

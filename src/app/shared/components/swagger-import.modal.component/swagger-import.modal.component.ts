@@ -1,6 +1,7 @@
-import { Component, signal, inject, ChangeDetectionStrategy, output, ViewChild, ElementRef } from '@angular/core';
+import { Component, EventEmitter, Output, signal, inject, ChangeDetectionStrategy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { generateUUID } from '../../utils/uuid.util';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../services/tab.state.service';
 import { SwaggerExtractionService } from '../../services/swagger-extraction.service';
@@ -474,9 +475,6 @@ export class SwaggerImportModalComponent {
     }
 
     private createId() {
-        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-            return crypto.randomUUID();
-        }
-        return `swagger-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        return generateUUID();
     }
 }

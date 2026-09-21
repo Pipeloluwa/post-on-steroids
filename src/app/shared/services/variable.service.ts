@@ -1,5 +1,6 @@
-import { Injectable, signal, inject } from '@angular/core';
+import { Injectable, signal, computed, effect, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { generateUUID } from '../utils/uuid.util';
 import { firstValueFrom } from 'rxjs';
 import { API_BASE_URL } from '../constants/api.constants';
 import { LocalStorageService } from './local.storage.service';
@@ -259,7 +260,7 @@ export class VariableService {
         const trimmedKey = (key || '').trim();
         if (!trimmedKey) {
             const newVar: IGlobalVariable = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 key: '',
                 value: value || '',
                 enabled: true,
@@ -289,7 +290,7 @@ export class VariableService {
             });
         } else {
             const newVar: IGlobalVariable = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 key: trimmedKey,
                 value,
                 enabled: true,

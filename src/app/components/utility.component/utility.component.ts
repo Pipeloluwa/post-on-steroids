@@ -1,6 +1,7 @@
-import { Component, signal, computed, inject, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { generateUUID } from '../../shared/utils/uuid.util';
 import { MatIcon } from '@angular/material/icon';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
@@ -431,9 +432,7 @@ export class UtilityComponent {
     epochToDate = computed(() => this.convertEpochToDate(this.epochValue()));
 
     generateUuid(): void {
-        const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : this.uuidFallback();
+        const uuid = generateUUID();
         this.uuidValue.set(uuid);
         this.setCopyStatus('UUID generated');
     }
