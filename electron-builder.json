@@ -1,6 +1,12 @@
 {
   "appId": "com.papicnation.onsteroid",
   "productName": "OnSteroid",
+  "publish": [
+    {
+      "provider": "generic",
+      "url": "https://user.onsteroid.com/"
+    }
+  ],
   "directories": {
     "output": "release/"
   },

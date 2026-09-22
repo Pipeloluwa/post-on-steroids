@@ -1,6 +1,11 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const url = require('url');
+const { autoUpdater } = require('electron-updater');
+
+// Auto Updater Configuration
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 
 let mainWindow;
 
@@ -50,7 +55,22 @@ function createWindow() {
   });
 }
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  createWindow();
+  
+  // Check for updates shortly after app starts
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      console.error('Failed to check for updates:', err);
+    });
+  }, 3000);
+});
+
+// AutoUpdater events for debugging/logging
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded', info);
+  // Optional: prompt user to restart and install now instead of waiting for quit
+});
 
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
