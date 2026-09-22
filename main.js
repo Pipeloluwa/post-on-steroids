@@ -4,7 +4,7 @@ const url = require('url');
 const { autoUpdater } = require('electron-updater');
 
 // Auto Updater Configuration
-autoUpdater.autoDownload = true;
+autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 
 let mainWindow;
@@ -66,10 +66,37 @@ app.on('ready', () => {
   }, 3000);
 });
 
-// AutoUpdater events for debugging/logging
+// AutoUpdater events for prompting the user
+autoUpdater.on('update-available', (info) => {
+  const dialogOpts = {
+    type: 'info',
+    buttons: ['Download Update', 'Later'],
+    title: 'Update Available',
+    message: `A new version of OnSteroid (${info.version}) is available.`,
+    detail: 'Would you like to download it now?'
+  };
+
+  dialog.showMessageBox(dialogOpts).then((returnValue) => {
+    if (returnValue.response === 0) {
+      autoUpdater.downloadUpdate();
+    }
+  });
+});
+
 autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded', info);
-  // Optional: prompt user to restart and install now instead of waiting for quit
+  const dialogOpts = {
+    type: 'info',
+    buttons: ['Restart Now', 'Later'],
+    title: 'Update Ready',
+    message: 'The update has been successfully downloaded.',
+    detail: 'Restart the application to apply the update.'
+  };
+
+  dialog.showMessageBox(dialogOpts).then((returnValue) => {
+    if (returnValue.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
 });
 
 app.on('window-all-closed', function () {
