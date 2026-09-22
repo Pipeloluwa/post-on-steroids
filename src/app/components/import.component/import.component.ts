@@ -76,7 +76,7 @@ export class ImportComponent implements OnInit {
                 this.showStatus(`Import successful! Imported ${count.capsules} capsule(s) and ${count.requests} request(s).`, false);
             } catch (err: any) {
                 console.error('Import failed:', err);
-                const msg = err?.message || 'Invalid file format. Please upload an OnSteroids export file or a Postman Collection JSON.';
+                const msg = err?.message || 'Invalid file format. Please upload an OnSteroid export file or a Postman Collection JSON.';
                 this.showStatus(msg, true);
             } finally {
                 this.isImporting.set(false);
@@ -125,7 +125,7 @@ export class ImportComponent implements OnInit {
                 requests: mapped
             });
         }
-        // 2. OnSteroids Multi-Capsule Format
+        // 2. OnSteroid Multi-Capsule Format
         else if (data.capsules && Array.isArray(data.capsules)) {
             for (const cap of data.capsules) {
                 const capName = cap.name || 'Imported Capsule';
@@ -136,7 +136,7 @@ export class ImportComponent implements OnInit {
                 });
             }
         }
-        // 3. OnSteroids Single Capsule Format
+        // 3. OnSteroid Single Capsule Format
         else if (data.collection && Array.isArray(data.requests)) {
             groups.push({
                 name: data.collection,
@@ -151,7 +151,7 @@ export class ImportComponent implements OnInit {
             });
         }
         else {
-            throw new Error('Unrecognized format. Please provide an OnSteroids export JSON or a Postman Collection (v2.0/v2.1).');
+            throw new Error('Unrecognized format. Please provide an OnSteroid export JSON or a Postman Collection (v2.0/v2.1).');
         }
 
         let totalRequests = 0;

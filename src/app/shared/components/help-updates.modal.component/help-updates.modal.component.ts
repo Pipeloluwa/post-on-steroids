@@ -33,13 +33,13 @@ export class HelpUpdatesModalComponent {
         this.http.get<{ latestVersion: string, message: string }>(`${API_BASE_URL}/updates/check`).subscribe({
             next: (res) => {
                 this.isCheckingUpdate.set(false);
-                this.updateCheckedMessage.set(res.message || 'You are running the latest version of PostOnSteroids.');
+                this.updateCheckedMessage.set(res.message || 'You are running the latest version of PostOnSteroid.');
             },
             error: () => {
                 // Fallback if the update endpoint is unavailable
                 setTimeout(() => {
                     this.isCheckingUpdate.set(false);
-                    this.updateCheckedMessage.set('You are running the latest version of PostOnSteroids. Progressive updates are active.');
+                    this.updateCheckedMessage.set('You are running the latest version of PostOnSteroid. Progressive updates are active.');
                 }, 800);
             }
         });

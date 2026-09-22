@@ -304,7 +304,7 @@ export class RequestExecutionService {
                 let reqObservable: any;
 
                 if (isUsingProxy) {
-                    // Build proxy payload for OnSteroidsApi
+                    // Build proxy payload for OnSteroidApi
                     const headersObj: Record<string, string> = {};
                     headers.forEach(h => {
                         headersObj[h.key] = h.value;
@@ -411,7 +411,7 @@ export class RequestExecutionService {
                         if (!this.networkService.isOnline()) {
                             rawResponseBody = 'Internet connection lost. Please check your network and try again.';
                         } else if (isUsingProxy) {
-                            rawResponseBody = 'Failed to connect to local proxy (OnSteroidsApi at https://localhost:7131). Please ensure OnSteroidsApi is running.';
+                            rawResponseBody = 'Failed to connect to local proxy (OnSteroidApi at https://localhost:7131). Please ensure OnSteroidApi is running.';
                         } else {
                             rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue. Ensure the endpoint is reachable.';
                         }

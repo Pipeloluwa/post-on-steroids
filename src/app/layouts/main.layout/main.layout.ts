@@ -34,7 +34,7 @@ export class MainLayout {
   tabStateService = inject(TabStateService);
   networkService = inject(NetworkService);
 
-  protected readonly title = signal('OnSteroids');
+  protected readonly title = signal('OnSteroid');
 
   handleLogout() {
     this.authService.logout();

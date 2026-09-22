@@ -40,7 +40,7 @@ export class SwaggerExtractionService {
     }
 
     /**
-     * Fetches a resource through the local OnSteroids proxy to bypass CORS restrictions.
+     * Fetches a resource through the local OnSteroid proxy to bypass CORS restrictions.
      * Falls back to direct HTTP get if proxy is unavailable.
      */
     private async fetchWithProxy(targetUrl: string, accept = 'application/json'): Promise<{ ok: boolean; status: number; text: string; json: any }> {

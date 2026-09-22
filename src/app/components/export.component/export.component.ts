@@ -57,7 +57,7 @@ export class ExportComponent {
     }
     exportAsJson() {
         const data = {
-            name: "OnSteroids-Export",
+            name: "OnSteroid-Export",
             exportedAt: new Date().toISOString(),
             capsules: []
         };
