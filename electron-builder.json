@@ -4,7 +4,7 @@
   "publish": [
     {
       "provider": "generic",
-      "url": "https://user.onsteroid.com/"
+      "url": "https://onsteroid.com/"
     }
   ],
   "directories": {
