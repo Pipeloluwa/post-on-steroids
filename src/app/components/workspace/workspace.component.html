@@ -1,8 +1,8 @@
-<div class="w-full h-full flex overflow-hidden workspace-container relative">
+<div class="w-full h-full flex overflow-x-auto overflow-y-hidden workspace-container relative scroll-smooth">
     
     <!-- Secondary Sidebar (Capsule Tree) -->
-    <div class="h-full border-r border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) flex flex-col transition-all duration-300"
-         [class.w-[250px]]="isSidebarOpen()" [class.w-[40px]]="!isSidebarOpen()">
+    <div class="h-full border-r border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) flex flex-col transition-all duration-300 overflow-y-auto overflow-x-hidden shrink-0"
+         [class.w-[220px]]="isSidebarOpen()" [class.md:w-[250px]]="isSidebarOpen()" [class.w-[40px]]="!isSidebarOpen()">
 
         <!-- Header row — capsule selector (when open) + toggle button on the right -->
         <div class="border-b border-(--postonsteroids-border) flex items-center h-[38px] shrink-0 px-1 gap-x-1"
@@ -153,7 +153,7 @@
     </div>
 
     <!-- Main Workspace Area -->
-    <div class="flex-1 h-full flex flex-col min-w-0 relative">
+    <div class="flex-1 h-full flex flex-col min-w-[700px] relative">
         @if (tabStateService.isCapsuleLoading()) {
         <div
             class="absolute inset-0 z-100 flex items-center justify-center bg-(--postonsteroids-bg-primary)/40 backdrop-blur-[1px]">
