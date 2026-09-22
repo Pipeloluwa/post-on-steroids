@@ -1,6 +1,9 @@
 <nav [class.md:w-16]="sidebarService.isCollapsed()" [class.md:w-42]="!sidebarService.isCollapsed()"
+    [class.h-0]="sidebarService.isCollapsed()" [class.h-16]="!sidebarService.isCollapsed()" [class.md:h-full]="true"
+    [class.opacity-0]="sidebarService.isCollapsed()" [class.md:opacity-100]="true"
+    [class.pointer-events-none]="sidebarService.isCollapsed()" [class.md:pointer-events-auto]="true"
     [class.transition-none]="!sidebarService.isHydrated()"
-    class="w-full h-16 md:h-full flex flex-row md:flex-col transition-all duration-300 overflow-x-auto overflow-y-hidden md:overflow-hidden shrink-0 z-20 bg-(--postonsteroids-bg-secondary) border-t md:border-t-0 md:border-r border-(--postonsteroids-border)">
+    class="w-full flex flex-row md:flex-col transition-all duration-300 overflow-x-auto overflow-y-hidden md:overflow-hidden shrink-0 z-20 bg-(--postonsteroids-bg-secondary) border-t md:border-t-0 md:border-r border-(--postonsteroids-border)">
     
     <ul class="flex flex-row md:flex-col gap-x-2 md:gap-y-2 p-2 md:mt-4 flex-1 items-center md:items-stretch justify-start md:justify-start">
         @for (item of menu(); track item.name) {
