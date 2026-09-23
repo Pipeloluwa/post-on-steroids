@@ -12,6 +12,7 @@ export interface IGlobalVariable {
     id: string;
     key: string;
     value: string;
+    type?: 'global' | 'path';
     enabled: boolean;
     source?: VariableSource;
 }

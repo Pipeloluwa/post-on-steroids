@@ -465,9 +465,7 @@ export class TabStateService {
 
     // Shared capsule list (drives both workspace sidebar and Capsules page)
     capsules = signal<Capsule[]>([
-        { id: '1', name: 'My Capsule', createdAt: Date.now() - 10000 },
-        { id: '2', name: 'API Project A', createdAt: Date.now() - 5000 },
-        { id: '3', name: 'Personal Sandbox', createdAt: Date.now() }
+        { id: '1', name: 'My Capsule', createdAt: Date.now() }
     ]);
 
     // In-memory "database" of saved requests
@@ -861,6 +859,119 @@ export class TabStateService {
 
         this.capsules.update(list => [...list, newCap]);
         await this.switchCapsule(newCap);
+        return newCap;
+    }
+
+    async updateCapsuleName(id: string, newName: string): Promise<void> {
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+
+        this.capsules.update(list => list.map(c => c.id === id ? { ...c, name: trimmed } : c));
+        
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                await firstValueFrom(
+                    this.http.put(`${API_BASE_URL}/capsule/${id}`, { name: trimmed })
+                );
+            } catch (err) {
+                console.error('Failed to update capsule name on backend', err);
+            }
+        }
+        
+        if (this.isBrowser) {
+            localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+        }
+    }
+
+    async duplicateCapsule(capsule: Capsule): Promise<Capsule> {
+        // Create new capsule WITHOUT switching to it immediately
+        const trimmed = `${capsule.name} (Copy)`.trim();
+        let newCap: Capsule = {
+            id: this.createId(),
+            name: trimmed,
+            createdAt: Date.now()
+        };
+
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            try {
+                const res = await firstValueFrom(
+                    this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { name: trimmed })
+                );
+                if (res?.data) {
+                    newCap = {
+                        id: res.data.id,
+                        name: res.data.name,
+                        createdAt: new Date(res.data.createdAt).getTime() || Date.now()
+                    };
+                }
+            } catch (err) {
+                console.error('Failed to create duplicated capsule on backend', err);
+            }
+        }
+
+        // Clone Variables locally before we switch
+        if (this.isBrowser) {
+            const u = this.authService.currentUser();
+            const oldId = capsule.id;
+            const newId = newCap.id;
+            const k1 = `onsteroids_last_vars_${oldId}`;
+            const k2 = `onsteroids_vars_${oldId}`;
+            const userK = u?.id ? `onsteroids_user_vars_${oldId}_${u.id}` : null;
+            
+            const saved = (userK ? localStorage.getItem(userK) : null) || localStorage.getItem(k1) || localStorage.getItem(k2);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach(v => delete v.id); // clear IDs so they create new variables on backend
+                        const str = JSON.stringify(parsed);
+                        localStorage.setItem(`onsteroids_vars_${newId}`, str);
+                        localStorage.setItem(`onsteroids_last_vars_${newId}`, str);
+                        if (userK) localStorage.setItem(`onsteroids_user_vars_${newId}_${u!.id}`, str);
+                    }
+                } catch(e){}
+            }
+        }
+        
+        // Clone Requests
+        const oldRequests = Array.from(this.states().values()).filter(r => r.capsuleId === capsule.id);
+        const newStates = new Map(this.states());
+        const idMap = new Map<string, string>();
+        
+        for (const req of oldRequests) {
+            const newReqId = this.createId();
+            idMap.set(req.id, newReqId);
+            
+            const clonedReq: RequestState = JSON.parse(JSON.stringify(req));
+            clonedReq.id = newReqId;
+            clonedReq.capsuleId = newCap.id;
+            
+            // Clean up request tracking info so it looks like a fresh clone
+            clonedReq.responseBody = undefined;
+            clonedReq.responseHeaders = [];
+            clonedReq.responseStatus = 0;
+            clonedReq.responseSize = 0;
+            clonedReq.responseTime = 0;
+            
+            newStates.set(newReqId, clonedReq);
+        }
+        
+        this.states.set(newStates);
+        
+        // Open the newly cloned tabs
+        const clonedTabIds = oldRequests.map(r => idMap.get(r.id)!).filter(Boolean);
+        if (clonedTabIds.length > 0) {
+            this.openTabIds.set(clonedTabIds);
+            this.activeTabId.set(clonedTabIds[0]);
+        }
+        
+        this.capsules.update(list => [...list, newCap]);
+        await this.switchCapsule(newCap);
+
+        if (this.isBrowser) {
+            localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+        }
+        
         return newCap;
     }
 
@@ -1951,7 +2062,7 @@ export class TabStateService {
                 autoEncryptHeaders: false,
                 encryptedHeaders: [],
                 encryptedBodyPaths: [],
-                script: ''
+                script: 'async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {\n    //only code written within this code block will be executed\n}'
             },
             settings: { followRedirects: true, verifySsl: false, enableCookies: true, bypassCors: true },
             bodyType: 'none',

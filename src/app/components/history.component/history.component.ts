@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
+import { DialogService } from '../../shared/services/dialog.service';
 import { API_BASE_URL } from '../../shared/constants/api.constants';
 
 export interface HistoryItem {
@@ -34,6 +35,7 @@ export class HistoryComponent implements OnInit {
     private tabStateService = inject(TabStateService);
     private authService = inject(AuthService);
     private notificationService = inject(NotificationService);
+    dialogService = inject(DialogService);
 
     history = signal<HistoryItem[]>([]);
     isLoading = signal<boolean>(false);
@@ -178,7 +180,8 @@ export class HistoryComponent implements OnInit {
 
     async deleteItem(item: HistoryItem, event: MouseEvent) {
         event.stopPropagation();
-        if (!window.confirm('Delete this history record?')) return;
+        const confirmed = await this.dialogService.confirm('Delete this history record?');
+        if (!confirmed) return;
 
         this.deletingId.set(item.id);
         try {
@@ -206,7 +209,8 @@ export class HistoryComponent implements OnInit {
 
     async clearHistory() {
         if (this.history().length === 0) return;
-        if (!window.confirm('Are you sure you want to clear all history records?')) return;
+        const confirmed = await this.dialogService.confirm('Are you sure you want to clear all history records?');
+        if (!confirmed) return;
 
         try {
             if (this.authService.isLoggedIn()) {

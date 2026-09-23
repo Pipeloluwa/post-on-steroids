@@ -13,6 +13,7 @@ import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { LocalStorageService } from '../../shared/services/local.storage.service';
 import { TabStateService } from '../../shared/services/tab.state.service';
+import { DialogService } from '../../shared/services/dialog.service';
 
 @Component({
     selector: 'app-workspace',
@@ -43,6 +44,7 @@ export class WorkspaceComponent {
     authService = inject(AuthService);
     notificationService = inject(NotificationService);
     tabStateService = inject(TabStateService);
+    dialogService = inject(DialogService);
 
     requestHeight = signal<number>(450); // Pixel height
     isResizing = signal<boolean>(false);
@@ -176,7 +178,8 @@ export class WorkspaceComponent {
         event.stopPropagation();
         const displayName = this.tabStateService.resolveRequestTitle(request.name, request.url);
         const confirmMsg = `Are you sure you want to delete request "${displayName}"?`;
-        if (!window.confirm(confirmMsg)) return;
+        const confirmed = await this.dialogService.confirm(confirmMsg);
+        if (!confirmed) return;
 
         try {
             await this.tabStateService.deleteRequest(request.id);
@@ -196,7 +199,8 @@ export class WorkspaceComponent {
         if (ids.length === 0) return;
 
         const confirmMsg = `Are you sure you want to delete ${ids.length} selected request(s)?`;
-        if (!window.confirm(confirmMsg)) return;
+        const confirmed = await this.dialogService.confirm(confirmMsg);
+        if (!confirmed) return;
 
         this.isDeletingRequests.set(true);
         try {
@@ -251,7 +255,8 @@ export class WorkspaceComponent {
 
     async deleteExample(requestId: string, exampleId: string, event: Event) {
         event.stopPropagation();
-        if (!window.confirm('Are you sure you want to delete this example?')) return;
+        const confirmed = await this.dialogService.confirm('Are you sure you want to delete this example?');
+        if (!confirmed) return;
         await this.tabStateService.deleteExample(requestId, exampleId);
         this.notificationService.notify('Example deleted.');
     }

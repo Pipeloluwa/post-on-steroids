@@ -24,11 +24,13 @@ export class VariableService {
     showAddModal = signal<boolean>(false);
     modalKey = signal<string>('');
     modalValue = signal<string>('');
+    modalType = signal<'global' | 'path'>('global');
     modalSource = signal<VariableSource | undefined>(undefined);
 
-    openAddModal(key: string = '', value: string = '', source?: VariableSource) {
+    openAddModal(key: string = '', value: string = '', source?: VariableSource, type: 'global' | 'path' = 'global') {
         this.modalKey.set(key);
         this.modalValue.set(value);
+        this.modalType.set(type);
         this.modalSource.set(source);
         this.showAddModal.set(true);
     }
@@ -39,7 +41,11 @@ export class VariableService {
     }
 
     constructor() {
-        this.loadVariables();
+        effect(() => {
+            const capId = this.tabStateService.activeCapsuleId();
+            this.loadVariables(capId);
+        }, { allowSignalWrites: true });
+
         if (this.authService.isLoggedIn()) {
             this.loadVariablesFromBackend();
         }
@@ -52,14 +58,16 @@ export class VariableService {
         });
     }
 
-    private loadVariables() {
+    private loadVariables(capsuleId?: string) {
         const user = this.authService.currentUser();
-        const userKey = user ? `onsteroids_user_vars_${user.id || user.email}` : null;
+        const capId = capsuleId || this.tabStateService.activeCapsuleId() || '1';
+        
+        const userKey = user ? `onsteroids_user_vars_${capId}_${user.id || user.email}` : null;
         let saved = userKey ? this.localStorageService.getItem(userKey) : null;
         
         if (!user && !saved) {
-            saved = this.localStorageService.getItem('onsteroids_last_vars') ||
-                this.localStorageService.getItem(LocalStorageService.STORAGE_KEY);
+            saved = this.localStorageService.getItem(`onsteroids_last_vars_${capId}`) ||
+                this.localStorageService.getItem(`onsteroids_vars_${capId}`);
         }
 
         if (saved) {
@@ -69,22 +77,20 @@ export class VariableService {
                 this.variables.set([]);
             }
         } else {
-            // Default example variable
-            this.variables.set([
-                { id: '1', key: 'baseUrl', value: 'http://acegeld.runasp.net/api/v1', enabled: true }
-            ]);
+            this.variables.set([]);
             this.saveVariables();
         }
     }
 
     restoreUserVariables(user?: any) {
         const u = user || this.authService.currentUser();
+        const capId = this.tabStateService.activeCapsuleId() || '1';
         const keysToTry: string[] = [];
-        if (u?.id) keysToTry.push(`onsteroids_user_vars_${u.id}`);
-        if (u?.email) keysToTry.push(`onsteroids_user_vars_${u.email}`);
+        if (u?.id) keysToTry.push(`onsteroids_user_vars_${capId}_${u.id}`);
+        if (u?.email) keysToTry.push(`onsteroids_user_vars_${capId}_${u.email}`);
         if (!u) {
-            keysToTry.push('onsteroids_last_vars');
-            keysToTry.push(LocalStorageService.STORAGE_KEY);
+            keysToTry.push(`onsteroids_last_vars_${capId}`);
+            keysToTry.push(`onsteroids_vars_${capId}`);
         }
 
         for (const k of keysToTry) {
@@ -114,8 +120,10 @@ export class VariableService {
     async loadVariablesFromBackend(): Promise<void> {
         if (!this.authService.isLoggedIn()) return;
         try {
+            const capId = this.tabStateService.activeCapsuleId();
+            const qs = capId !== '1' ? `?capsuleId=${capId}` : '';
             const res = await firstValueFrom(
-                this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable`)
+                this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
             );
             if (res?.data && Array.isArray(res.data)) {
                 let sessionSourcesMap = new Map<string, VariableSource>();
@@ -150,6 +158,7 @@ export class VariableService {
                             id: v.id,
                             key: v.variableKey,
                             value: v.variableValue ?? existing?.value ?? '',
+                            type: v.type ?? existing?.type ?? 'global',
                             enabled: v.isEnabled ?? true,
                             source
                         };
@@ -183,6 +192,7 @@ export class VariableService {
                 id: v.id && v.id.length > 8 ? v.id : null,
                 key: v.key.trim(),
                 value: (v.source ? this.getVariableValue(v) : v.value) ?? '',
+                type: v.type ?? 'global',
                 enabled: v.enabled ?? true
             }));
 
@@ -193,12 +203,19 @@ export class VariableService {
                     id: null,
                     key: '__workspace_session__',
                     value: JSON.stringify(sessionPayload),
+                    type: 'global',
                     enabled: true
                 });
             }
 
+            const capsuleId = this.tabStateService.activeCapsuleId();
+            const payload = { 
+                capsuleId: capsuleId !== '1' ? capsuleId : null,
+                variables: payloadVars 
+            };
+
             const res = await firstValueFrom(
-                this.http.post<{ data: any[] }>(`${API_BASE_URL}/Variable/sync`, { variables: payloadVars })
+                this.http.post<{ data: any[] }>(`${API_BASE_URL}/Variable/sync`, payload)
             );
 
             if (res?.data && Array.isArray(res.data)) {
@@ -232,14 +249,15 @@ export class VariableService {
 
     saveVariables(syncBackend = true) {
         const json = JSON.stringify(this.variables());
-        this.localStorageService.setItem(LocalStorageService.STORAGE_KEY, json);
-        this.localStorageService.setItem('onsteroids_last_vars', json);
+        const capId = this.tabStateService.activeCapsuleId() || '1';
+        this.localStorageService.setItem(`onsteroids_vars_${capId}`, json);
+        this.localStorageService.setItem(`onsteroids_last_vars_${capId}`, json);
         const user = this.authService.currentUser();
         if (user?.id) {
-            this.localStorageService.setItem(`onsteroids_user_vars_${user.id}`, json);
+            this.localStorageService.setItem(`onsteroids_user_vars_${capId}_${user.id}`, json);
         }
         if (user?.email) {
-            this.localStorageService.setItem(`onsteroids_user_vars_${user.email}`, json);
+            this.localStorageService.setItem(`onsteroids_user_vars_${capId}_${user.email}`, json);
         }
         try {
             this.tabStateService.snapshotCurrentSession();
@@ -256,13 +274,14 @@ export class VariableService {
         ]);
     }
 
-    addVariable(key: string = '', value: string = '', source?: VariableSource) {
+    addVariable(key: string = '', value: string = '', source?: VariableSource, type: 'global' | 'path' = 'global') {
         const trimmedKey = (key || '').trim();
         if (!trimmedKey) {
             const newVar: IGlobalVariable = {
                 id: generateUUID(),
                 key: '',
                 value: value || '',
+                type: type,
                 enabled: true,
                 source
             };
@@ -283,6 +302,7 @@ export class VariableService {
                     ...existing,
                     key: trimmedKey,
                     value: value,
+                    type: type,
                     enabled: true,
                     source: source !== undefined ? source : existing.source
                 };
@@ -293,6 +313,7 @@ export class VariableService {
                 id: generateUUID(),
                 key: trimmedKey,
                 value,
+                type: type,
                 enabled: true,
                 source
             };
@@ -750,8 +771,16 @@ export class VariableService {
             if (v.enabled && v.key) {
                 const dynamicVal = this.getVariableValue(v) ?? '';
                 const escapedKey = v.key.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const regex = new RegExp(`{{\\s*${escapedKey}\\s*}}`, 'g');
-                resolvedText = resolvedText.replace(regex, dynamicVal.trim());
+                
+                if (!v.type || v.type === 'global') {
+                    // Replace Postman syntax: {{varName}}
+                    const regex = new RegExp(`{{\\s*${escapedKey}\\s*}}`, 'g');
+                    resolvedText = resolvedText.replace(regex, dynamicVal.trim());
+                } else if (v.type === 'path') {
+                    // Replace path parameter syntax: :varName (when preceded by /, ?, &, or start of string)
+                    const pathRegex = new RegExp(`(?<=^|[/?&=]):${escapedKey}(?=[/?&#]|$)`, 'g');
+                    resolvedText = resolvedText.replace(pathRegex, dynamicVal.trim());
+                }
             }
         });
         return resolvedText;

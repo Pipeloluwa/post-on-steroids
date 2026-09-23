@@ -8,6 +8,7 @@ import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.
 
 import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { DialogService } from '../../../shared/services/dialog.service';
 
 import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle } from '../../../shared/utils/format.utils';
 
@@ -252,9 +253,11 @@ export class ResponseViewerComponent {
         return search(parsed, []);
     }
 
+    dialogService = inject(DialogService);
+
     async saveAsExample() {
         const defaultName = `Example - ${new Date().toLocaleTimeString()}`;
-        const name = window.prompt('Enter name for this request/response example:', defaultName);
+        const name = await this.dialogService.prompt('Enter name for this request/response example:', defaultName);
         if (!name || !name.trim()) return;
 
         const state = this.tabState();

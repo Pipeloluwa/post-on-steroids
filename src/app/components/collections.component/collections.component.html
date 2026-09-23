@@ -80,6 +80,14 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <button (click)="duplicateCapsule(item)" [disabled]="duplicatingCapsuleId() === item.id" title="Duplicate capsule"
+                        class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+                        @if (duplicatingCapsuleId() === item.id) {
+                            <mat-icon class="text-[18px]! size-[18px]! animate-spin">sync</mat-icon>
+                        } @else {
+                            <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                        }
+                    </button>
                     <button (click)="startEdit(item)" title="Rename capsule"
                         class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">
                         <mat-icon class="text-[18px]! size-[18px]!">edit</mat-icon>

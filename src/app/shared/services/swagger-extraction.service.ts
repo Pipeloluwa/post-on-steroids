@@ -53,7 +53,8 @@ export class SwaggerExtractionService {
                     const proxyPayload = {
                         url: targetUrl,
                         method: 'GET',
-                        headers: { 'Accept': accept }
+                        headers: { 'Accept': accept },
+                        verifySsl: false
                     };
 
                     const res = await firstValueFrom(

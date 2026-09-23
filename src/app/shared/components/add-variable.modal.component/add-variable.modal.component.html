@@ -9,7 +9,7 @@
                     <mat-icon class="text-[20px]! size-[20px]!">data_object</mat-icon>
                 </div>
                 <div>
-                    <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">Add to Global Variables</h3>
+                    <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">Add Variable</h3>
                     <p class="text-[11px] text-(--postonsteroids-text-muted)">Edit and confirm the key and value to save</p>
                 </div>
             </div>
@@ -19,7 +19,24 @@
         </div>
 
         <!-- Form fields -->
-        <div class="space-y-3 text-xs">
+        <div class="space-y-4 text-xs">
+            <!-- Variable Type Selection -->
+            <div>
+                <label class="block font-semibold text-(--postonsteroids-text-secondary) mb-1.5">
+                    Variable Type
+                </label>
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="radio" name="varType" value="global" [ngModel]="variableService.modalType()" (ngModelChange)="variableService.modalType.set($event)" class="accent-(--postonsteroids-accent)" />
+                        <span class="text-(--postonsteroids-text-primary)">Global <code class="text-green-500 font-mono ml-1">{{'{{...}}'}}</code></span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="radio" name="varType" value="path" [ngModel]="variableService.modalType()" (ngModelChange)="variableService.modalType.set($event)" class="accent-(--postonsteroids-accent)" />
+                        <span class="text-(--postonsteroids-text-primary)">Path <code class="text-yellow-500 font-mono ml-1">:...</code></span>
+                    </label>
+                </div>
+            </div>
+
             <!-- Variable Key -->
             <div>
                 <label for="varKeyInput" class="block font-semibold text-(--postonsteroids-text-secondary) mb-1">
@@ -43,7 +60,7 @@
                     [ngModel]="variableService.modalValue()"
                     (ngModelChange)="variableService.modalValue.set($event)"
                     (keydown.control.enter)="save()"
-                    placeholder="Value to store in global variables"
+                    placeholder="Value to store"
                     class="w-full px-3 py-2 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-xs outline-none focus:border-(--postonsteroids-accent) transition-all font-mono resize-none"></textarea>
             </div>
 
@@ -70,7 +87,7 @@
             <div class="p-2.5 rounded-xl bg-(--postonsteroids-bg-tertiary)/60 border border-(--postonsteroids-border)/40 flex items-center justify-between text-[11px]">
                 <span class="text-(--postonsteroids-text-muted)">Reference in requests as:</span>
                 <code class="px-2 py-0.5 rounded bg-(--postonsteroids-accent)/10 text-(--postonsteroids-accent) font-mono font-bold">
-                    {{ '{{' + (variableService.modalKey().trim() || 'variable') + '}}' }}
+                    {{ variableService.modalType() === 'global' ? '{{' + (variableService.modalKey().trim() || 'variable') + '}}' : ':' + (variableService.modalKey().trim() || 'variable') }}
                 </code>
             </div>
         </div>

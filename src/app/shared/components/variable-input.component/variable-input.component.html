@@ -1,20 +1,60 @@
 <div class="relative w-full h-full flex items-center">
+    <!-- Overlay for syntax highlighting -->
+    @if (type() !== 'password' && value()) {
+    <div #overlayDiv class="absolute inset-0 pointer-events-none whitespace-pre overflow-hidden" 
+         [class]="customClass()" style="border-color: transparent; background: transparent; display: flex; align-items: center; padding-top: 0; padding-bottom: 0;">
+        <div style="transform: translateY(0.5px);">
+        @for (seg of parsedSegments(); track $index) {
+            @if (seg.type === 'global') {
+                <span class="text-green-500 bg-green-500/10 rounded-sm">{{seg.text}}</span>
+            } @else if (seg.type === 'path') {
+                <span class="text-yellow-500 bg-yellow-500/10 rounded-sm">{{seg.text}}</span>
+            } @else {
+                <span>{{seg.text}}</span>
+            }
+        }
+        </div>
+    </div>
+    }
+
     <input #inputField [type]="type()" [value]="value()" (input)="onInput($event)"
         (keyup)="updateCursorPosition()" (click)="updateCursorPosition()" (keydown)="onKeyDown($event)"
-        (paste)="pasteEvent.emit($event)"
-        [placeholder]="placeholder()" [class]="customClass()" />
+        (paste)="pasteEvent.emit($event)" (scroll)="onScroll($event)"
+        (mousemove)="onMouseMove($event)" (mouseleave)="onMouseLeave()"
+        [placeholder]="placeholder()" [class]="customClass()"
+        [style.color]="type() !== 'password' && value() ? 'transparent' : 'inherit'"
+        [style.caret-color]="type() !== 'password' && value() ? 'var(--postonsteroids-text-primary)' : 'inherit'"
+        style="background: transparent; position: relative; z-index: 10;" />
 
-    @if(suggestions().length > 0) {
+    @if(suggestionState().list.length > 0) {
     <div class="absolute top-full mt-1 left-0 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-md shadow-lg z-50 max-h-[250px] overflow-y-auto"
         [style.left.px]="cursorOffset()" [style.width.px]="150">
         <ul class="flex flex-col py-1">
-            @for(suggestion of suggestions(); track suggestion) {
+            @for(suggestion of suggestionState().list; track suggestion; let i = $index) {
             <li (mousedown)="$event.preventDefault(); setSuggestion(suggestion)"
-                class="px-3 py-1.5 text-sm text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer font-mono truncate">
+                class="px-3 py-1.5 text-sm text-(--postonsteroids-text-primary) cursor-pointer font-mono truncate"
+                [class.bg-(--postonsteroids-bg-hover)]="i === selectedIndex()">
                 {{suggestion}}
             </li>
             }
         </ul>
     </div>
+    }
+
+    <!-- Hover Modal -->
+    @if (hoveredVariable(); as hover) {
+        <div class="fixed z-[100] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded shadow-lg p-3 flex flex-col gap-2 min-w-[220px]"
+             [style.left.px]="hover.x" [style.top.px]="hover.y - 85"
+             (mouseenter)="isMouseInPopup = true" (mouseleave)="isMouseInPopup = false; hoveredVariable.set(null)">
+             <div class="flex justify-between items-center text-[11px] font-bold">
+                 <span class="text-(--postonsteroids-text-muted)">{{ hover.type === 'global' ? 'Global Variable' : 'Path Variable' }}</span>
+             </div>
+             <div class="text-[12px] font-mono font-bold text-(--postonsteroids-text-primary) truncate">
+                 {{ hover.key }}
+             </div>
+             <input type="text" [ngModel]="hover.val" (ngModelChange)="updateVariableValue(hover.key, $event)"
+                    class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none w-full"
+                    placeholder="Enter value" />
+        </div>
     }
 </div>

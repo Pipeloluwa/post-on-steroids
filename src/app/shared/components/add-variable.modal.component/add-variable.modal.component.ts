@@ -35,11 +35,11 @@ export class AddVariableModalComponent {
         }
 
         const isUpdate = this.isDuplicateKey();
-        this.variableService.addVariable(key, value, this.variableService.modalSource());
+        this.variableService.addVariable(key, value, this.variableService.modalSource(), this.variableService.modalType());
         if (isUpdate) {
-            this.notificationService.notify(`Updated variable "{{${key}}}" with new value and dynamic source.`);
+            this.notificationService.notify(`Updated ${this.variableService.modalType()} variable "${key}" with new value.`);
         } else {
-            this.notificationService.notify(`Added variable "{{${key}}}" to Global Variables.`);
+            this.notificationService.notify(`Added variable "${key}" to ${this.variableService.modalType() === 'global' ? 'Global' : 'Path'} Variables.`);
         }
         this.close();
     }

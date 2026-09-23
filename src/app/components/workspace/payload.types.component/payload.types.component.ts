@@ -14,6 +14,7 @@ import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/test.snippets.constants';
 import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet } from '../../../shared/constants/script.snippets.constants';
+import { DialogService } from '../../../shared/services/dialog.service';
 
 @Component({
   selector: 'app-payload-types-component',
@@ -31,6 +32,7 @@ export class PayloadTypesComponent {
   private notificationService = inject(NotificationService);
   scriptManagementService = inject(ScriptManagementService);
   sandboxService = inject(SandboxExecutionService);
+  dialogService = inject(DialogService);
 
   constructor() {
     effect(() => {
@@ -91,7 +93,7 @@ export class PayloadTypesComponent {
 
     async loadEncryptionScript(name: string) {
     if (name === '+ Add New Script') {
-        const scriptName = window.prompt('Enter new script name:');
+        const scriptName = await this.dialogService.prompt('Enter new script name:');
         if (scriptName) {
             const newScript = await this.scriptManagementService.createScript('Encryption', scriptName, '// new script');
             if (newScript) {
@@ -220,7 +222,7 @@ export class PayloadTypesComponent {
 
     async loadCurrentPhaseScript(name: string) {
     if (name === '+ Add New Script') {
-        const scriptName = window.prompt('Enter new script name:');
+        const scriptName = await this.dialogService.prompt('Enter new script name:');
         if (scriptName) {
             const phase = this.activeScriptTab();
             const type = phase === 'preRequest' ? 'PreRequest' : phase === 'postResponse' ? 'PostRequest' : 'Test';

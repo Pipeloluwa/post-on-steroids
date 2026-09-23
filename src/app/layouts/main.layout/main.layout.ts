@@ -4,6 +4,7 @@ import { NavbarComponent } from '../../shared/components/navbar.component/navbar
 import { AuthModalComponent } from '../../shared/components/auth.modal.component/auth.modal.component';
 import { NotificationComponent } from '../../shared/components/notification.component/notification.component';
 import { AddVariableModalComponent } from '../../shared/components/add-variable.modal.component/add-variable.modal.component';
+import { DialogModalComponent } from '../../shared/components/dialog.modal.component';
 import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../shared/services/auth.service';
@@ -23,7 +24,8 @@ import { MatIcon } from '@angular/material/icon';
     NavbarComponent,
     AuthModalComponent,
     NotificationComponent,
-    AddVariableModalComponent
+    AddVariableModalComponent,
+    DialogModalComponent
   ],
   templateUrl: './main.layout.html'
 })

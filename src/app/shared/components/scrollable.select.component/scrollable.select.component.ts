@@ -50,7 +50,7 @@ export class ScrollableSelectComponent {
 
   shoutoptions = computed(() => {
     let ot = this.optionValues();
-    alert(JSON.stringify(ot));
+    // removed debug alert
   });
 
 

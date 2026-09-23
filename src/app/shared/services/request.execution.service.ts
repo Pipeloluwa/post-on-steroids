@@ -62,6 +62,19 @@ export class RequestExecutionService {
 
         if (cancelToken.cancelled) return;
 
+        if (!navigator.onLine) {
+            this.tabStateService.updateState(tabId, { isLoading: false });
+            this.notificationService.notify('You are offline. Request will automatically execute when the connection is restored.');
+            
+            const handleOnline = () => {
+                window.removeEventListener('online', handleOnline);
+                this.notificationService.notify('Connection restored. Executing request...');
+                this.executeRequest(tabId, isAutoAuthRetry, chainDepth);
+            };
+            window.addEventListener('online', handleOnline);
+            return;
+        }
+
         try {
             const startTime = performance.now();
 
@@ -329,7 +342,8 @@ export class RequestExecutionService {
                         url: targetUrl,
                         method: freshState.method,
                         headers: headersObj,
-                        body: bodyPayload
+                        body: bodyPayload,
+                        verifySsl: freshState.settings?.verifySsl ?? true
                     };
 
                     const proxyUrl = environment.proxyUrl;

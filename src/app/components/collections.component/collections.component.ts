@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 
 import { TabStateService, Capsule } from '../../shared/services/tab.state.service';
 import { NotificationService } from '../../shared/services/notification.service';
+import { DialogService } from '../../shared/services/dialog.service';
 import { inject } from '@angular/core';
 
 @Component({
@@ -26,6 +27,7 @@ export class CollectionsComponent {
     editingId = signal<string | null>(null);
     editNameValue = signal<string>('');
     deletingCapsuleId = signal<string | null>(null);
+    duplicatingCapsuleId = signal<string | null>(null);
 
     selectedCapsuleIds = signal<Set<string>>(new Set());
     isBatchDeleting = signal<boolean>(false);
@@ -53,13 +55,16 @@ export class CollectionsComponent {
         }
     }
 
+    dialogService = inject(DialogService);
+
     async deleteSelectedCapsules() {
         const ids = Array.from(this.selectedCapsuleIds());
         if (ids.length === 0 || this.isBatchDeleting()) return;
 
         const count = ids.length;
         const confirmMsg = `Are you sure you want to delete ${count} selected capsule${count > 1 ? 's' : ''}? This action cannot be undone.`;
-        if (!window.confirm(confirmMsg)) return;
+        const confirmed = await this.dialogService.confirm(confirmMsg);
+        if (!confirmed) return;
 
         this.isBatchDeleting.set(true);
         try {
@@ -81,6 +86,20 @@ export class CollectionsComponent {
         this.newCapsuleName.set('');
     }
 
+    async duplicateCapsule(item: Capsule) {
+        if (this.duplicatingCapsuleId()) return;
+        
+        this.duplicatingCapsuleId.set(item.id);
+        try {
+            await this.tabStateService.duplicateCapsule(item);
+            this.notificationService.notify(`Capsule "${item.name}" duplicated successfully.`);
+        } catch (e: any) {
+            this.notificationService.notify(`Failed to duplicate capsule: ${e?.message || 'Unknown error'}`);
+        } finally {
+            this.duplicatingCapsuleId.set(null);
+        }
+    }
+
     async deleteCapsule(item: Capsule) {
         if (this.deletingCapsuleId()) return;
 
@@ -96,7 +115,8 @@ export class CollectionsComponent {
             confirmMsg = `Are you sure you want to delete "${item.name}"? This is your last remaining capsule.`;
         }
 
-        if (!window.confirm(confirmMsg)) {
+        const confirmed = await this.dialogService.confirm(confirmMsg);
+        if (!confirmed) {
             return;
         }
 
