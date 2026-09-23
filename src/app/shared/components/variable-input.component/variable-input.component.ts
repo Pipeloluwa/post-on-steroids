@@ -5,9 +5,16 @@ import { VariableService } from '../../services/variable.service';
 
 interface TextSegment {
     text: string;
-    type: 'normal' | 'global' | 'path';
+    type: 'normal' | 'global' | 'path' | 'utility';
     key?: string;
 }
+
+const UTILITIES = [
+    '$guid', '$timestamp', '$randomInt', '$randomUUID', 
+    '$randomEmail', '$randomName', '$randomWord', '$randomColor', 
+    '$randomCity', '$randomStreetAddress', '$randomPhoneNumber',
+    '$randomBoolean', '$randomAlphaNumeric', '$randomIPv4'
+];
 
 @Component({
   selector: 'app-variable-input',
@@ -58,7 +65,7 @@ export class VariableInputComponent implements ControlValueAccessor {
             return [{ text: val, type: 'normal' as const }];
         }
         
-        const regex = /(\{\{.*?\}\}|:[a-zA-Z0-9_-]+)/g;
+        const regex = /(\{\{.*?\}\}|:[a-zA-Z0-9_-]+|\$[a-zA-Z0-9_]+)/g;
         const segments: TextSegment[] = [];
         let lastIndex = 0;
         let match;
@@ -78,6 +85,8 @@ export class VariableInputComponent implements ControlValueAccessor {
                 } else {
                     segments.push({ text: matchText, type: 'normal' });
                 }
+            } else if (matchText.startsWith('$')) {
+                segments.push({ text: matchText, type: 'utility', key: matchText });
             }
             lastIndex = regex.lastIndex;
         }
@@ -94,14 +103,16 @@ export class VariableInputComponent implements ControlValueAccessor {
         const val = this.value();
         const cursor = this.currentCursorIndex();
         const textBeforeCursor = val.substring(0, cursor);
+        const allVars = this.variableService.variables();
         
         const lastOpenBracket = textBeforeCursor.lastIndexOf('{{');
         const lastCloseBracket = textBeforeCursor.lastIndexOf('}}');
         if (lastOpenBracket !== -1 && lastOpenBracket >= lastCloseBracket) {
-            const searchToken = textBeforeCursor.substring(lastOpenBracket + 2);
+            const searchToken = textBeforeCursor.substring(lastOpenBracket + 2).toLowerCase();
+            const globalKeys = allVars.filter(v => v.type === 'global' || !v.type).map(v => v.key);
             return {
                 type: 'global',
-                list: this.variableKeys().filter(k => k.toLowerCase().includes(searchToken.toLowerCase()))
+                list: globalKeys.filter(k => k.toLowerCase().includes(searchToken))
             };
         }
         
@@ -111,14 +122,26 @@ export class VariableInputComponent implements ControlValueAccessor {
             if (/^[a-zA-Z0-9_-]*$/.test(textAfterColon)) {
                 const charBeforeColon = lastColon > 0 ? textBeforeCursor[lastColon - 1] : '/';
                 if (['/', '?', '&', '='].includes(charBeforeColon)) {
+                    const pathKeys = allVars.filter(v => v.type === 'path').map(v => v.key);
                     return {
                         type: 'path',
-                        list: this.variableKeys().filter(k => k.toLowerCase().includes(textAfterColon.toLowerCase()))
+                        list: pathKeys.filter(k => k.toLowerCase().includes(textAfterColon.toLowerCase()))
                     };
                 }
             }
         }
         
+        const lastDollar = textBeforeCursor.lastIndexOf('$');
+        if (lastDollar !== -1) {
+            const textAfterDollar = textBeforeCursor.substring(lastDollar); // Keep $ for matching
+            if (/^\$[a-zA-Z0-9_]*$/.test(textAfterDollar)) {
+                return {
+                    type: 'utility',
+                    list: UTILITIES.filter(k => k.toLowerCase().includes(textAfterDollar.toLowerCase()))
+                };
+            }
+        }
+
         return { type: 'none', list: [] as string[] };
     });
 
@@ -129,19 +152,43 @@ export class VariableInputComponent implements ControlValueAccessor {
         }, { allowSignalWrites: true });
     }
 
+    inputScrollLeft = signal<number>(0);
+
     cursorOffset = computed(() => {
-        const charWidth = 6.5; 
-        const paddingLeft = 12;
+        let charWidth = this.charWidth;
+        if (!charWidth) {
+            if (this.inputField?.nativeElement) {
+                const ctx = document.createElement('canvas').getContext('2d');
+                if (ctx) {
+                    const computedStyle = window.getComputedStyle(this.inputField.nativeElement);
+                    ctx.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+                    charWidth = ctx.measureText('a').width;
+                    this.charWidth = charWidth;
+                } else {
+                    charWidth = 7.2;
+                }
+            } else {
+                charWidth = 7.2;
+            }
+        }
+        
+        let paddingLeft = 12; // fallback
+        if (this.inputField?.nativeElement) {
+            const computedStyle = window.getComputedStyle(this.inputField.nativeElement);
+            paddingLeft = parseFloat(computedStyle.paddingLeft) || 12;
+        }
+
         const modalWidth = 150;
-        const offset = paddingLeft + (this.currentCursorIndex() * charWidth);
+        const totalTextWidth = this.currentCursorIndex() * charWidth;
+        const offset = paddingLeft + totalTextWidth - this.inputScrollLeft();
         
         if (this.inputField?.nativeElement) {
-            const containerWidth = this.inputField.nativeElement.offsetWidth;
+            const containerWidth = this.inputField.nativeElement.clientWidth;
             if (containerWidth > 0 && (offset + modalWidth) > containerWidth) {
                 return Math.max(0, containerWidth - modalWidth - 10);
             }
         }
-        return offset;
+        return Math.max(0, offset);
     });
 
     writeValue(val: string): void {
@@ -192,6 +239,7 @@ export class VariableInputComponent implements ControlValueAccessor {
         requestAnimationFrame(() => {
             if (this.inputField?.nativeElement) {
                 this.currentCursorIndex.set(this.inputField.nativeElement.selectionStart ?? 0);
+                this.inputScrollLeft.set(this.inputField.nativeElement.scrollLeft);
             }
         });
     }
@@ -244,6 +292,21 @@ export class VariableInputComponent implements ControlValueAccessor {
                 const newCursorPos = lastColon + 1 + suggestion.length;
                 this.restoreFocus(newCursorPos);
             }
+        } else if (state.type === 'utility') {
+            const lastDollar = textBeforeCursor.lastIndexOf('$');
+            if (lastDollar !== -1) {
+                const beforeVar = val.substring(0, lastDollar); // $ is included in suggestion
+                const matchRest = textAfterCursor.match(/^[a-zA-Z0-9_]*/);
+                const replaceLen = matchRest ? matchRest[0].length : 0;
+                const afterReplaced = textAfterCursor.substring(replaceLen);
+                
+                const newVal = beforeVar + suggestion + afterReplaced;
+                this.value.set(newVal);
+                this.onChange(newVal);
+                
+                const newCursorPos = lastDollar + suggestion.length;
+                this.restoreFocus(newCursorPos);
+            }
         }
         
         this.suppressSuggestions.set(true);
@@ -260,9 +323,11 @@ export class VariableInputComponent implements ControlValueAccessor {
     }
 
     onScroll(event: Event) {
+        const scrollLeft = (event.target as HTMLInputElement).scrollLeft;
         if (this.overlayDiv?.nativeElement) {
-            this.overlayDiv.nativeElement.scrollLeft = (event.target as HTMLInputElement).scrollLeft;
+            this.overlayDiv.nativeElement.scrollLeft = scrollLeft;
         }
+        this.inputScrollLeft.set(scrollLeft);
         this.hoveredVariable.set(null);
     }
 

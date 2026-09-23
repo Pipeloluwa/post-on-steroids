@@ -2,13 +2,15 @@
     <!-- Overlay for syntax highlighting -->
     @if (type() !== 'password' && value()) {
     <div #overlayDiv class="absolute inset-0 pointer-events-none whitespace-pre overflow-hidden" 
-         [class]="customClass()" style="border-color: transparent; background: transparent; display: flex; align-items: center; padding-top: 0; padding-bottom: 0;">
-        <div style="transform: translateY(0.5px);">
+         [class]="customClass()" style="border-color: transparent; background: transparent;">
+        <div style="transform: translateY(0.5px); display: inline-block; min-width: 100%;">
         @for (seg of parsedSegments(); track $index) {
             @if (seg.type === 'global') {
                 <span class="text-green-500 bg-green-500/10 rounded-sm">{{seg.text}}</span>
             } @else if (seg.type === 'path') {
                 <span class="text-yellow-500 bg-yellow-500/10 rounded-sm">{{seg.text}}</span>
+            } @else if (seg.type === 'utility') {
+                <span class="text-blue-500 bg-blue-500/10 rounded-sm">{{seg.text}}</span>
             } @else {
                 <span>{{seg.text}}</span>
             }
