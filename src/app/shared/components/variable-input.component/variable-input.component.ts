@@ -16,6 +16,26 @@ const UTILITIES = [
     '$randomBoolean', '$randomAlphaNumeric', '$randomIPv4'
 ];
 
+function generateUtilityValue(utility: string): string {
+    switch (utility.toLowerCase()) {
+        case '$guid':
+        case '$randomuuid': return crypto.randomUUID();
+        case '$timestamp': return Date.now().toString();
+        case '$randomint': return Math.floor(Math.random() * 1000).toString();
+        case '$randomemail': return `test_${Math.floor(Math.random() * 10000)}@example.com`;
+        case '$randomname': return 'John Doe';
+        case '$randomword': return 'lorem';
+        case '$randomcolor': return '#' + Math.floor(Math.random()*16777215).toString(16);
+        case '$randomcity': return 'New York';
+        case '$randomstreetaddress': return '123 Main St';
+        case '$randomphonenumber': return '555-0100';
+        case '$randomboolean': return Math.random() > 0.5 ? 'true' : 'false';
+        case '$randomalphanumeric': return Math.random().toString(36).substring(2, 10);
+        case '$randomipv4': return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+        default: return utility;
+    }
+}
+
 @Component({
   selector: 'app-variable-input',
   imports: [CommonModule, FormsModule],
@@ -217,11 +237,19 @@ export class VariableInputComponent implements ControlValueAccessor {
         if (state.list.length > 0) {
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                this.selectedIndex.update(i => Math.min(i + 1, state.list.length - 1));
+                this.selectedIndex.update(i => {
+                    const newIndex = Math.min(i + 1, state.list.length - 1);
+                    this.scrollToSuggestion(newIndex);
+                    return newIndex;
+                });
                 return;
             } else if (event.key === 'ArrowUp') {
                 event.preventDefault();
-                this.selectedIndex.update(i => Math.max(i - 1, 0));
+                this.selectedIndex.update(i => {
+                    const newIndex = Math.max(i - 1, 0);
+                    this.scrollToSuggestion(newIndex);
+                    return newIndex;
+                });
                 return;
             } else if (event.key === 'Enter') {
                 event.preventDefault();
@@ -233,6 +261,15 @@ export class VariableInputComponent implements ControlValueAccessor {
         if (event.key === 'Enter') {
             this.enter.emit();
         }
+    }
+    
+    private scrollToSuggestion(index: number) {
+        requestAnimationFrame(() => {
+            const el = document.getElementById(`suggestion-item-${index}`);
+            if (el) {
+                el.scrollIntoView({ block: 'nearest' });
+            }
+        });
     }
     
     updateCursorPosition(): void {
@@ -295,16 +332,17 @@ export class VariableInputComponent implements ControlValueAccessor {
         } else if (state.type === 'utility') {
             const lastDollar = textBeforeCursor.lastIndexOf('$');
             if (lastDollar !== -1) {
-                const beforeVar = val.substring(0, lastDollar); // $ is included in suggestion
+                const beforeVar = val.substring(0, lastDollar);
                 const matchRest = textAfterCursor.match(/^[a-zA-Z0-9_]*/);
                 const replaceLen = matchRest ? matchRest[0].length : 0;
                 const afterReplaced = textAfterCursor.substring(replaceLen);
                 
-                const newVal = beforeVar + suggestion + afterReplaced;
+                const generatedVal = generateUtilityValue(suggestion);
+                const newVal = beforeVar + generatedVal + afterReplaced;
                 this.value.set(newVal);
                 this.onChange(newVal);
                 
-                const newCursorPos = lastDollar + suggestion.length;
+                const newCursorPos = lastDollar + generatedVal.length;
                 this.restoreFocus(newCursorPos);
             }
         }

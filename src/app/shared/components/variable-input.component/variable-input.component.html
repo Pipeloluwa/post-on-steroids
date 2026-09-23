@@ -3,7 +3,7 @@
     @if (type() !== 'password' && value()) {
     <div #overlayDiv class="absolute inset-0 pointer-events-none whitespace-pre overflow-hidden" 
          [class]="customClass()" style="border-color: transparent; background: transparent;">
-        <div style="transform: translateY(0.5px); display: inline-block; min-width: 100%;">
+        <div style="transform: translateY(0.5px); display: inline-block; min-width: 100%; padding-right: 100px;">
         @for (seg of parsedSegments(); track $index) {
             @if (seg.type === 'global') {
                 <span class="text-green-500 bg-green-500/10 rounded-sm">{{seg.text}}</span>
@@ -29,11 +29,11 @@
         style="background: transparent; position: relative; z-index: 10;" />
 
     @if(suggestionState().list.length > 0) {
-    <div class="absolute top-full mt-1 left-0 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-md shadow-lg z-50 max-h-[250px] overflow-y-auto"
+    <div #suggestionContainer class="absolute top-full mt-1 left-0 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-md shadow-lg z-50 max-h-[250px] overflow-y-auto"
         [style.left.px]="cursorOffset()" [style.width.px]="150">
         <ul class="flex flex-col py-1">
             @for(suggestion of suggestionState().list; track suggestion; let i = $index) {
-            <li (mousedown)="$event.preventDefault(); setSuggestion(suggestion)"
+            <li [id]="'suggestion-item-' + i" (mousedown)="$event.preventDefault(); setSuggestion(suggestion)"
                 class="px-3 py-1.5 text-sm text-(--postonsteroids-text-primary) cursor-pointer font-mono truncate"
                 [class.bg-(--postonsteroids-bg-hover)]="i === selectedIndex()">
                 {{suggestion}}

@@ -783,6 +783,23 @@ export class VariableService {
                 }
             }
         });
+
+        // Utility replacements
+        resolvedText = resolvedText.replace(/\$guid/gi, () => crypto.randomUUID());
+        resolvedText = resolvedText.replace(/\$timestamp/gi, () => Date.now().toString());
+        resolvedText = resolvedText.replace(/\$randomInt/gi, () => Math.floor(Math.random() * 1000).toString());
+        resolvedText = resolvedText.replace(/\$randomUUID/gi, () => crypto.randomUUID());
+        resolvedText = resolvedText.replace(/\$randomEmail/gi, () => `test_${Math.floor(Math.random() * 10000)}@example.com`);
+        resolvedText = resolvedText.replace(/\$randomName/gi, () => 'John Doe');
+        resolvedText = resolvedText.replace(/\$randomWord/gi, () => 'lorem');
+        resolvedText = resolvedText.replace(/\$randomColor/gi, () => '#' + Math.floor(Math.random()*16777215).toString(16));
+        resolvedText = resolvedText.replace(/\$randomCity/gi, () => 'New York');
+        resolvedText = resolvedText.replace(/\$randomStreetAddress/gi, () => '123 Main St');
+        resolvedText = resolvedText.replace(/\$randomPhoneNumber/gi, () => '555-0100');
+        resolvedText = resolvedText.replace(/\$randomBoolean/gi, () => Math.random() > 0.5 ? 'true' : 'false');
+        resolvedText = resolvedText.replace(/\$randomAlphaNumeric/gi, () => Math.random().toString(36).substring(2, 10));
+        resolvedText = resolvedText.replace(/\$randomIPv4/gi, () => `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`);
+
         return resolvedText;
     }
 }
