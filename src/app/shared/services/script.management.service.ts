@@ -170,6 +170,17 @@ export class ScriptManagementService {
             );
             if (res && res.data) {
                 let userScripts = res.data;
+                
+                // Merge any currently loaded offline scripts that aren't on backend
+                const offlineScripts = this.scripts().filter(s => s.id && !s.id.startsWith('default_') && !s.isDefault);
+                const mergedScripts = [...userScripts];
+                offlineScripts.forEach(os => {
+                    if (!mergedScripts.find(ms => ms.id === os.id || ms.name === os.name)) {
+                        mergedScripts.push(os);
+                    }
+                });
+                userScripts = mergedScripts;
+
                 // If backend does not provide the default Encrypt script, inject a fallback
                 if (!userScripts.find(s => s.name === 'Encrypt' && s.type === 'Encryption')) {
                     userScripts.push({

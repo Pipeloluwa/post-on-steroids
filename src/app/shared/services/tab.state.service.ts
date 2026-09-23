@@ -563,7 +563,6 @@ export class TabStateService {
         });
 
         this.authService.onLogin.subscribe((user) => {
-            this.restoreUserSession(user);
             this.loadBackendData();
         });
 
@@ -1782,16 +1781,33 @@ export class TabStateService {
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/capsule`)
             );
             if (capRes?.data && capRes.data.length > 0) {
-                const caps: Capsule[] = capRes.data.map(c => ({
+                const backendCaps: Capsule[] = capRes.data.map(c => ({
                     id: c.id,
                     name: c.name,
                     createdAt: new Date(c.createdAt).getTime() || Date.now()
                 }));
-                this.capsules.set(caps);
+                const mergedCaps = [...this.capsules()];
+                backendCaps.forEach(bc => {
+                    if (!mergedCaps.find(lc => lc.id === bc.id)) {
+                        mergedCaps.push(bc);
+                    }
+                });
+                
+                // Sync any offline capsules to backend
+                const offlineCaps = this.capsules().filter(lc => !backendCaps.find(bc => bc.id === lc.id));
+                for (const oc of offlineCaps) {
+                    try {
+                        await firstValueFrom(this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { id: oc.id, name: oc.name }));
+                    } catch (e) {
+                        console.warn('Could not sync offline capsule to backend', e);
+                    }
+                }
+                
+                this.capsules.set(mergedCaps);
 
                 // 2. Fetch requests across ALL user capsules so the workspace tree has full data
                 const allLoadedRequests: RequestState[] = [];
-                for (const cap of caps) {
+                for (const cap of backendCaps) {
                     try {
                         const reqRes = await firstValueFrom(
                             this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${cap.id}`)

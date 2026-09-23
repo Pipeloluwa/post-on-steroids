@@ -53,7 +53,6 @@ export class VariableService {
             this.resetVariables();
         });
         this.authService.onLogin.subscribe((user) => {
-            this.restoreUserVariables(user);
             this.loadVariablesFromBackend();
         });
     }
