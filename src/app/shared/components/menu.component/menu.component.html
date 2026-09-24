@@ -8,6 +8,7 @@
     <ul class="flex flex-row md:flex-col gap-x-2 md:gap-y-2 p-2 md:mt-4 flex-1 items-center md:items-stretch justify-start md:justify-start">
         @for (item of menu(); track item.name) {
         <li [routerLink]="item.path"
+            [routerLinkActiveOptions]="item.exact ? { exact: true } : { exact: false }"
             routerLinkActive="bg-(--postonsteroids-accent) text-white shadow-lg shadow-(--postonsteroids-accent)/30"
             class="h-[45px] py-2 px-3 capitalize flex items-center gap-3 rounded-xl cursor-pointer transition-all duration-300 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">
             <mat-icon class="text-[20px]! size-[20px]! shrink-0">{{ item.icon }}</mat-icon>

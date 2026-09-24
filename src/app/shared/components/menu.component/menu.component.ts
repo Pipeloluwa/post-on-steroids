@@ -14,8 +14,8 @@ export class MenuComponent {
   protected themeService = inject(ThemeService);
   protected sidebarService = inject(SidebarService);
 
-  menu = signal<{ name: string; icon: string; path: string }[]>([
-    { name: 'Steroid', icon: 'dashboard', path: '/steroid' },
+  menu = signal<{ name: string; icon: string; path: string; exact?: boolean }[]>([
+    { name: 'Steroid', icon: 'dashboard', path: '/', exact: true },
     { name: 'Capsules', icon: 'collections', path: '/capsules' },
     { name: 'Export', icon: 'file_download', path: '/export' },
     { name: 'Import', icon: 'file_upload', path: '/import' },

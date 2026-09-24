@@ -441,9 +441,17 @@ export class VariableInputComponent implements ControlValueAccessor {
     }
 
     updateVariableValue(key: string, newValue: string) {
+        const hover = this.hoveredVariable();
+        if (hover && hover.key === key) {
+            this.hoveredVariable.set({ ...hover, val: newValue });
+        }
+        
         const v = this.variableService.variables().find(v => v.key === key);
         if (v) {
             this.variableService.updateVariable({ ...v, value: newValue });
+        } else {
+            const type = hover?.type === 'path' ? 'path' : 'global';
+            this.variableService.addVariable(key, newValue, undefined, type);
         }
     }
 }

@@ -278,7 +278,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         const lang = this.language();
         if (!MonacoEditorComponent.completionProvidersRegistered.has(lang)) {
           monacoGlobal.languages.registerCompletionItemProvider(lang, {
-            triggerCharacters: ['{'],
+            triggerCharacters: ['{', '$'],
             provideCompletionItems: (model: any, position: any) => {
               const word = model.getWordUntilPosition(position);
               const range = {
@@ -293,22 +293,43 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               
               const isDoubleOpen = textBeforeWord.endsWith('{{');
               const isSingleOpen = !isDoubleOpen && textBeforeWord.endsWith('{');
+              const isUtility = !isDoubleOpen && !isSingleOpen && textBeforeWord.endsWith('$');
 
-              if (isDoubleOpen || isSingleOpen) {
+              if (isDoubleOpen || isSingleOpen || isUtility) {
                 const textAfterWord = lineContent.substring(word.endColumn - 1);
                 let consumeClosing = 0;
-                if (textAfterWord.startsWith('}}')) {
-                  consumeClosing = 2;
-                } else if (textAfterWord.startsWith('}')) {
-                  consumeClosing = 1;
+                if (!isUtility) {
+                  if (textAfterWord.startsWith('}}')) {
+                    consumeClosing = 2;
+                  } else if (textAfterWord.startsWith('}')) {
+                    consumeClosing = 1;
+                  }
                 }
 
-                const range = {
+                const replaceRange = {
                   startLineNumber: position.lineNumber,
                   endLineNumber: position.lineNumber,
                   startColumn: word.startColumn,
                   endColumn: word.endColumn + consumeClosing
                 };
+
+                if (isUtility) {
+                  const UTILITIES = [
+                    'guid', 'timestamp', 'randomInt', 'randomUUID', 
+                    'randomEmail', 'randomName', 'randomWord', 'randomColor', 
+                    'randomCity', 'randomStreetAddress', 'randomPhoneNumber',
+                    'randomBoolean', 'randomAlphaNumeric', 'randomIPv4'
+                  ];
+                  const suggestions = UTILITIES.map(u => ({
+                    label: `$${u}`,
+                    kind: monacoGlobal.languages.CompletionItemKind.Function,
+                    insertText: u,
+                    range: replaceRange,
+                    detail: 'Utility Variable',
+                    documentation: `Generates a random ${u}`
+                  }));
+                  return { suggestions };
+                }
 
                 const prefix = isSingleOpen ? '{' : '';
                 const variables = this.variableService.variables();
@@ -316,7 +337,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
                   label: v.key,
                   kind: monacoGlobal.languages.CompletionItemKind.Variable,
                   insertText: `${prefix}${v.key}}}`,
-                  range: range,
+                  range: replaceRange,
                   detail: `Value: ${v.value || '(empty)'}`,
                   documentation: `Variable: {{${v.key}}}`
                 }));
