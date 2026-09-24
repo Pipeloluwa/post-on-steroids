@@ -9,8 +9,15 @@
         @for (item of menu(); track item.name) {
         <li [routerLink]="item.path"
             [routerLinkActiveOptions]="item.exact ? { exact: true } : { exact: false }"
-            routerLinkActive="bg-(--postonsteroids-accent) text-white shadow-lg shadow-(--postonsteroids-accent)/30"
-            class="h-[45px] py-2 px-3 capitalize flex items-center gap-3 rounded-xl cursor-pointer transition-all duration-300 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">
+            #rla="routerLinkActive"
+            class="h-[45px] py-2 px-3 capitalize flex items-center gap-3 rounded-xl cursor-pointer transition-all duration-300"
+            [class.bg-(--postonsteroids-accent)]="rla.isActive"
+            [class.text-white]="rla.isActive"
+            [class.shadow-lg]="rla.isActive"
+            [class.shadow-(--postonsteroids-accent)/30]="rla.isActive"
+            [class.text-(--postonsteroids-text-muted)]="!rla.isActive"
+            [class.hover:text-(--postonsteroids-text-primary)]="!rla.isActive"
+            [class.hover:bg-(--postonsteroids-bg-hover)]="!rla.isActive">
             <mat-icon class="text-[20px]! size-[20px]! shrink-0">{{ item.icon }}</mat-icon>
             @if (!sidebarService.isCollapsed()) {
             <span class="hidden md:inline text-[13px] font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ item.name }}</span>
