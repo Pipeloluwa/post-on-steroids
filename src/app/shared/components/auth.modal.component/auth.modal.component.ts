@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, output, model, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, output, model, signal, viewChild, ElementRef, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
@@ -10,6 +10,23 @@ import { FormsModule } from '@angular/forms';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AuthModalComponent {
+    emailInput = viewChild<ElementRef<HTMLInputElement>>('emailInput');
+    otpInput = viewChild<ElementRef<HTMLInputElement>>('otpInput');
+
+    constructor() {
+        effect(() => {
+            if (this.show()) {
+                if (this.isOtpSent()) {
+                    const el = this.otpInput();
+                    if (el) setTimeout(() => el.nativeElement.focus(), 100);
+                } else {
+                    const el = this.emailInput();
+                    if (el) setTimeout(() => el.nativeElement.focus(), 100);
+                }
+            }
+        });
+    }
+
     show = input.required<boolean>();
     isOtpSent = input.required<boolean>();
     isAuthenticating = input.required<boolean>();

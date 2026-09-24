@@ -41,7 +41,7 @@
             <div class="space-y-4">
                 <p class="text-[13px] text-(--postonsteroids-text-secondary)">Enter your email to receive a 6-digit login code to sync your capsules.</p>
                 <div class="relative">
-                    <input type="email" [(ngModel)]="userEmail" (keydown.enter)="onSendOtp.emit()" placeholder="name@company.com"
+                    <input #emailInput type="email" [(ngModel)]="userEmail" (keydown.enter)="onSendOtp.emit()" placeholder="name@company.com"
                         class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[14px] outline-none focus:border-(--postonsteroids-accent) transition-all" />
                 </div>
                 <button (click)="onSendOtp.emit()" [disabled]="isAuthenticating()"
@@ -60,7 +60,7 @@
                         class="text-(--postonsteroids-text-primary)">{{ userEmail() }}</span></p>
                 <div>
                     <div class="relative">
-                        <input [type]="isOtpMasked() ? 'password' : 'text'" [ngModel]="otp()" (input)="onOtpInput($event)" (keydown.enter)="onAuthenticate.emit()"
+                        <input #otpInput [type]="isOtpMasked() ? 'password' : 'text'" [ngModel]="otp()" (input)="onOtpInput($event)" (keydown.enter)="onAuthenticate.emit()"
                             placeholder="••••••" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
                             class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-12 text-[22px] font-mono text-center tracking-[0.5em] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) transition-all" />
                         <button type="button" (click)="toggleOtpMask()"
