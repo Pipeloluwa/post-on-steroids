@@ -1800,7 +1800,40 @@ export class TabStateService {
                 });
                 
                 // Sync any offline capsules to backend
-                const offlineCaps = this.capsules().filter(lc => !backendCaps.find(bc => bc.id === lc.id));
+                let offlineCaps = this.capsules().filter(lc => !backendCaps.find(bc => bc.id === lc.id));
+                
+                // If the offline capsule is the fake '1' and backend has capsules, migrate and remove it
+                const fakeOne = offlineCaps.find(c => c.id === '1');
+                if (fakeOne && backendCaps.length > 0) {
+                    const defaultCap = backendCaps.find(c => c.name === fakeOne.name) || backendCaps[0];
+                    if (defaultCap) {
+                        // Migrate requests tied to '1'
+                        this.states.update(map => {
+                            const next = new Map(map);
+                            next.forEach(s => {
+                                if (s.capsuleId === '1' || !s.capsuleId) s.capsuleId = defaultCap.id;
+                            });
+                            return next;
+                        });
+                        
+                        // Migrate active capsule if it was '1'
+                        if (this.activeCapsuleId() === '1') {
+                            this.activeCapsuleId.set(defaultCap.id);
+                            this.activeCapsuleName.set(defaultCap.name);
+                        }
+
+                        const vs = this.getVariableService();
+                        if (vs) {
+                            vs.updateTabIdInSources('1', defaultCap.id);
+                        }
+                    }
+                    // Remove '1' from offlineCaps so we don't POST it
+                    offlineCaps = offlineCaps.filter(c => c.id !== '1');
+                    // Remove '1' from mergedCaps so it doesn't show in UI
+                    const idx = mergedCaps.findIndex(c => c.id === '1');
+                    if (idx !== -1) mergedCaps.splice(idx, 1);
+                }
+
                 for (const oc of offlineCaps) {
                     try {
                         await firstValueFrom(this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { id: oc.id, name: oc.name }));
