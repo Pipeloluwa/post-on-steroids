@@ -29,21 +29,26 @@ export class ExportComponent {
         const selectedIds = this.selectedCapsules();
         const selectedData = this.capsules().filter(c => selectedIds.has(c.id));
         const activeId = this.tabStateService.activeCapsuleId();
-        const activeRequests = this.tabStateService.savedCapsules();
+        const allSavedRequests = this.tabStateService.savedCapsules();
         
-        const exportData = {
-            version: "1.0.0",
-            exportedAt: new Date().toISOString(),
-            capsules: selectedData.map(c => ({
-                id: c.id,
-                name: c.name,
-                requests: c.id === activeId
-                    ? activeRequests
-                    : activeRequests.filter(r => r.capsuleId === c.id)
-            }))
-        };
+        for (const capsule of selectedData) {
+            const requests = capsule.id === activeId
+                ? this.tabStateService.allCapsuleRequests()
+                : allSavedRequests.filter(r => r.capsuleId === capsule.id);
 
-        this.downloadJson(exportData, `capsules_export_${new Date().getTime()}.json`);
+            const exportData = {
+                version: "1.0.0",
+                exportedAt: new Date().toISOString(),
+                capsules: [{
+                    id: capsule.id,
+                    name: capsule.name,
+                    requests: requests
+                }]
+            };
+
+            const safeName = capsule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
+            this.downloadJson(exportData, `${safeName}_export_${new Date().getTime()}.json`);
+        }
     }
 
     private downloadJson(data: any, filename: string) {
@@ -56,18 +61,26 @@ export class ExportComponent {
         URL.revokeObjectURL(url);
     }
     exportAsJson() {
-        const data = {
-            name: "OnSteroid-Export",
-            exportedAt: new Date().toISOString(),
-            capsules: []
-        };
+        const activeId = this.tabStateService.activeCapsuleId();
+        const allSavedRequests = this.tabStateService.savedCapsules();
+        
+        for (const capsule of this.capsules()) {
+            const requests = capsule.id === activeId
+                ? this.tabStateService.allCapsuleRequests()
+                : allSavedRequests.filter(r => r.capsuleId === capsule.id);
 
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `onsteroids_export_${new Date().getTime()}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
+            const exportData = {
+                version: "1.0.0",
+                exportedAt: new Date().toISOString(),
+                capsules: [{
+                    id: capsule.id,
+                    name: capsule.name,
+                    requests: requests
+                }]
+            };
+
+            const safeName = capsule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
+            this.downloadJson(exportData, `${safeName}_export_${new Date().getTime()}.json`);
+        }
     }
 }
