@@ -807,12 +807,6 @@ export class TabStateService {
         if (targetOpenIds.length === 0) {
             if (requestsInCapsule.length > 0) {
                 targetOpenIds = requestsInCapsule.map(r => r.id);
-            } else {
-                const newId = this.createId();
-                const blankState = this.getDefaultState(newId);
-                blankState.capsuleId = capsule.id;
-                this.states.update(map => new Map(map).set(newId, blankState));
-                targetOpenIds = [newId];
             }
         }
 
@@ -1888,12 +1882,6 @@ export class TabStateService {
                     targetOpenIds = capRequests.map(r => r.id);
                 } else if (this.savedCapsules().length > 0) {
                     targetOpenIds = [this.savedCapsules()[0].id];
-                } else {
-                    const newId = this.createId();
-                    const blankState = this.getDefaultState(newId);
-                    blankState.capsuleId = this.activeCapsuleId();
-                    this.states.update(map => new Map(map).set(newId, blankState));
-                    targetOpenIds = [newId];
                 }
             }
 
