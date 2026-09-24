@@ -180,6 +180,7 @@ export class AuthService {
                     const msg = err.error?.message || err.error?.errors?.[0] || 'Invalid or expired OTP. Please try again.';
                     this.errorMessage.set(msg);
                     this.isAuthenticating.set(false);
+                    this.otp.set('');
                     resolve(false);
                 }
             });

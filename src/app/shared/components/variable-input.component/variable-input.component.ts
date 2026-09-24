@@ -409,7 +409,7 @@ export class VariableInputComponent implements ControlValueAccessor {
             if (charIndex >= currentIndex && charIndex < nextIndex) {
                 if (seg.type === 'global' || seg.type === 'path') {
                     const varX = event.clientX;
-                    const varY = rect.top;
+                    const varY = rect.bottom;
                     
                     const currentVar = this.variableService.variables().find(v => v.key === seg.key);
                     
