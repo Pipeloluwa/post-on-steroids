@@ -10,6 +10,7 @@
     "test": "ng test",
     "serve:ssr:post-on-steroids": "node dist/post-on-steroids/server/server.mjs",
     "electron": "electron .",
+    "electron:serve": "ng build --base-href ./ && electron .",
     "electron:build": "ng build --base-href ./ && electron-builder"
   },
   "prettier": {
@@ -36,12 +37,12 @@
     "@angular/platform-server": "^21.2.0",
     "@angular/router": "^21.2.0",
     "@angular/ssr": "^21.2.0",
+    "electron-updater": "^6.8.9",
     "express": "^5.1.0",
     "monaco-editor": "^0.55.1",
     "ngx-monaco-editor-v2": "^21.1.4",
     "rxjs": "~7.8.0",
-    "tslib": "^2.3.0",
-    "electron-updater": "^6.3.9"
+    "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@angular/build": "^21.2.0",
