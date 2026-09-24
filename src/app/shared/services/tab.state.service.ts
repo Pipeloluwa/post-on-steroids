@@ -874,6 +874,7 @@ export class TabStateService {
                 );
             } catch (err) {
                 console.error('Failed to update capsule name on backend', err);
+                throw err;
             }
         }
         
@@ -982,6 +983,7 @@ export class TabStateService {
                 );
             } catch (err) {
                 console.error('Failed to delete capsule on backend', err);
+                throw err;
             }
         }
 
@@ -1023,6 +1025,7 @@ export class TabStateService {
                 );
             } catch (err) {
                 console.error('Failed to batch delete capsules on backend', err);
+                throw err;
             }
         }
 
@@ -1060,6 +1063,7 @@ export class TabStateService {
                 );
             } catch (err) {
                 console.error(`Failed to delete request ${id} on backend`, err);
+                throw err;
             }
         }
 
@@ -1088,6 +1092,7 @@ export class TabStateService {
                 );
             } catch (err) {
                 console.error('Failed to batch delete requests on backend', err);
+                throw err;
             }
         }
 
@@ -1420,6 +1425,7 @@ export class TabStateService {
                 );
             } catch (err) {
                 console.error('Failed to rename capsule on backend', err);
+                throw err;
             }
         }
 
