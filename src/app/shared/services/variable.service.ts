@@ -192,18 +192,6 @@ export class VariableService {
                 enabled: v.enabled ?? true
             }));
 
-            // Include workspace session metadata so active capsule, open tabs, and responses persist in API database
-            const sessionPayload = this.tabStateService.getBackendSessionPayload();
-            if (sessionPayload) {
-                payloadVars.push({
-                    id: null,
-                    key: '__workspace_session__',
-                    value: JSON.stringify(sessionPayload),
-                    type: 'global',
-                    enabled: true
-                });
-            }
-
             const capsuleId = this.tabStateService.activeCapsuleId();
             const payload = { 
                 capsuleId: capsuleId !== '1' ? capsuleId : null,
@@ -231,6 +219,25 @@ export class VariableService {
                         return newId ? { ...v, id: newId } : v;
                     }));
                 }
+            }
+
+            // Sync the workspace session separately with a null capsuleId (global scope)
+            // so it's always accessible on login even when activeCapsuleId is '1'
+            const sessionPayload = this.tabStateService.getBackendSessionPayload();
+            if (sessionPayload) {
+                const globalPayload = {
+                    capsuleId: null,
+                    variables: [{
+                        id: null,
+                        key: '__workspace_session__',
+                        value: JSON.stringify(sessionPayload),
+                        type: 'global',
+                        enabled: true
+                    }]
+                };
+                await firstValueFrom(
+                    this.http.post<{ data: any[] }>(`${API_BASE_URL}/Variable/sync`, globalPayload)
+                ).catch(e => console.warn('Failed to sync global workspace session', e));
             }
         } catch (e) {
             console.error('Failed to sync variables to backend', e);
