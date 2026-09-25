@@ -2,7 +2,6 @@ import { Injectable, signal, computed, effect, untracked, inject, PLATFORM_ID, I
 import { isPlatformBrowser } from '@angular/common';
 import { generateUUID } from '../utils/uuid.util';
 import { HttpClient } from '@angular/common/http';
-import { environment } from '../../../environments/environment';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, UserAuth } from './auth.service';
 import { NotificationService } from './notification.service';
