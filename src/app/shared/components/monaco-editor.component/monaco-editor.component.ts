@@ -6,11 +6,9 @@ import { ThemeService } from '../../services/theme.service';
 import { TabStateService } from '../../services/tab.state.service';
 import { VariableService } from '../../services/variable.service';
 
-import { MatIcon } from '@angular/material/icon';
-
 @Component({
   selector: 'app-monaco-editor',
-  imports: [CommonModule, MonacoEditorModule, MatIcon],
+  imports: [CommonModule, MonacoEditorModule],
   templateUrl: './monaco-editor.component.html',
   styleUrl: './monaco-editor.component.css',
   host: {
