@@ -25,7 +25,7 @@
                 customClass="w-full bg-transparent border-none font-mono outline-none px-3 text-[13px] text-(--postonsteroids-text-primary)">
             </app-variable-input>
 
-            @if (url().includes('{{') || url().includes(':') || url().includes('$')) {
+            @if (showResolvedUrl()) {
             <input type="text" [value]="resolvedUrl()" readonly
                 class="px-3 text-[10px] text-(--postonsteroids-accent) opacity-70 truncate max-w-full">
             }

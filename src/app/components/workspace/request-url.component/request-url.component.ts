@@ -69,6 +69,11 @@ export class RequestUrlComponent {
     }
 
     resolvedUrl = computed(() => this.variableService.resolve(this.url()));
+    
+    showResolvedUrl = computed(() => {
+        const u = this.url();
+        return u.includes('{{') || u.includes('$') || /(?:^|[/?&=]):[a-zA-Z0-9_-]+/.test(u);
+    });
 
     onUrlChange(newUrl: string) {
         this.tabStateService.updateState(this.tabId(), { url: newUrl });
