@@ -2,10 +2,10 @@
     <div class="flex items-center justify-start gap-x-2">
         @for (type of bodyTypes; track type) {
         <li class="h-full px-2 flex items-center justify-center gap-x-1 text-xs">
-            <input type="radio" [id]="'body-' + type" [name]="'bodyType' + tabStateService.activeTabId()" [value]="type"
+            <input type="radio" [id]="'body-' + type + '-' + tabId()" [name]="'bodyType' + tabId()" [value]="type"
                 [checked]="bodyType() === type" (change)="setBodyType(type)"
                 class="accent-(--postonsteroids-accent) cursor-pointer" />
-            <label [for]="'body-' + type" class="cursor-pointer capitalize text-(--postonsteroids-text-primary)">{{ type
+            <label [for]="'body-' + type + '-' + tabId()" class="cursor-pointer capitalize text-(--postonsteroids-text-primary)">{{ type
                 }}</label>
         </li>
         }
