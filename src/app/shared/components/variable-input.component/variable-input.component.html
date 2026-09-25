@@ -45,7 +45,7 @@
 
     <!-- Hover Modal -->
     @if (hoveredVariable(); as hover) {
-        <div class="fixed z-[100] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded shadow-lg p-3 flex flex-col gap-2 min-w-[220px]"
+        <div class="fixed z-[100] -translate-x-1/2 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded shadow-lg p-3 flex flex-col gap-2 min-w-[220px]"
              [style.left.px]="hover.x" [style.top.px]="hover.y + 15"
              (mouseenter)="isMouseInPopup = true" (mouseleave)="isMouseInPopup = false; hoveredVariable.set(null)">
              <div class="flex justify-between items-center text-[11px] font-bold">

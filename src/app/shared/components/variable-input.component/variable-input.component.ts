@@ -394,7 +394,7 @@ export class VariableInputComponent implements ControlValueAccessor {
                             key: seg.key!,
                             val: currentVar ? (currentVar.value || '') : '',
                             type: seg.type,
-                            x: event.clientX,
+                            x: rect.left + (rect.width / 2),
                             y: rect.bottom
                         });
                         found = true;
@@ -414,7 +414,7 @@ export class VariableInputComponent implements ControlValueAccessor {
             if (!this.isMouseInPopup) {
                 this.hoveredVariable.set(null);
             }
-        }, 100);
+        }, 250);
     }
 
     updateVariableValue(key: string, newValue: string) {

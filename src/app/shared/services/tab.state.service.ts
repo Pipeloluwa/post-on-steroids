@@ -373,72 +373,17 @@ export class TabStateService {
 
     applyBackendSession(session: any) {
         if (!session) return;
-
-        if (session.activeCapsuleId) {
-            this.activeCapsuleId.set(session.activeCapsuleId);
-            if (this.isBrowser) {
-                localStorage.setItem('onsteroids_active_capsule', session.activeCapsuleId);
+        const user = this.authService.currentUser();
+        if (user && user.id && this.isBrowser) {
+            try {
+                // To guarantee exact identical behavior to local storage restoration,
+                // we write the backend session to local storage and then invoke the
+                // exact same battle-tested restore mechanism that the app uses locally.
+                localStorage.setItem(`onsteroids_session_${user.id}`, JSON.stringify(session));
+                this.restoreUserSession(user);
+            } catch (e) {
+                console.error('Failed to apply backend session via local storage mechanism', e);
             }
-        }
-        if (session.activeCapsuleName) {
-            this.activeCapsuleName.set(session.activeCapsuleName);
-        }
-
-        // Restore tab states (e.g. unsaved draft tabs, modified settings, etc.)
-        if (Array.isArray(session.states) && session.states.length > 0) {
-            this.states.update(map => {
-                const next = new Map(map);
-                for (const [id, state] of session.states) {
-                    if (!next.has(id)) {
-                        next.set(id, state);
-                    } else {
-                        next.set(id, { ...next.get(id), ...state });
-                    }
-                }
-                return next;
-            });
-        }
-
-        if (session.responses && typeof session.responses === 'object') {
-            this.states.update(map => {
-                const next = new Map(map);
-                for (const [id, state] of next.entries()) {
-                    const resp = session.responses[id];
-                    if (resp) {
-                        next.set(id, {
-                            ...state,
-                            responseBody: state.responseBody ?? resp.responseBody,
-                            responseStatus: state.responseStatus ?? resp.responseStatus,
-                            responseTime: state.responseTime ?? resp.responseTime,
-                            responseSize: state.responseSize ?? resp.responseSize,
-                            responseCookies: state.responseCookies ?? resp.responseCookies,
-                            responseHeaders: state.responseHeaders ?? resp.responseHeaders,
-                            testResults: state.testResults ?? resp.testResults
-                        });
-                    }
-                }
-                return next;
-            });
-
-            if (this.isBrowser) {
-                try {
-                    localStorage.setItem('onsteroids_responses', JSON.stringify(session.responses));
-                } catch {}
-            }
-        }
-
-        if (Array.isArray(session.openTabIds) && session.openTabIds.length > 0) {
-            this.openTabIds.set(session.openTabIds);
-        }
-        if (session.activeTabId) {
-            this.activeTabId.set(session.activeTabId);
-        }
-
-        if (session.autoAuthEnabled) {
-            this.autoAuthEnabled.set(session.autoAuthEnabled);
-        }
-        if (session.autoAuthEndpointId) {
-            this.autoAuthEndpointId.set(session.autoAuthEndpointId);
         }
     }
 
@@ -1861,11 +1806,15 @@ export class TabStateService {
             }
 
             // 3. Load variables and workspace session from backend API
-            // forceNoCapsuleFilter=true ensures __workspace_session__ is found even when
-            // activeCapsuleId is still the default '1' on a fresh browser/device
             const vs = this.getVariableService();
             if (vs) {
+                // First pass: fetch global variables (capsuleId=null) to get __workspace_session__
+                // This will internally call applyBackendSession and restore the correct activeCapsuleId
                 await vs.loadVariablesFromBackend(true);
+                
+                // Second pass: now that activeCapsuleId is correctly restored, fetch the 
+                // actual variables tied to this specific capsule.
+                await vs.loadVariablesFromBackend(false);
             }
 
             // 4. Ensure active capsule is valid
