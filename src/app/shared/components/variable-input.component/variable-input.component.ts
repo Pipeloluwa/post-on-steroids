@@ -374,61 +374,38 @@ export class VariableInputComponent implements ControlValueAccessor {
             this.hoveredVariable.set(null);
             return;
         }
-        
-        const inputEl = event.target as HTMLInputElement;
-        const rect = inputEl.getBoundingClientRect();
-        
-        if (!this.charWidth) {
-            const ctx = document.createElement('canvas').getContext('2d');
-            if (ctx) {
-                const computedStyle = window.getComputedStyle(inputEl);
-                ctx.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-                this.charWidth = ctx.measureText('a').width;
-            } else {
-                this.charWidth = 7.2;
-            }
-        }
-        
-        const computedStyle = window.getComputedStyle(inputEl);
-        const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
-        const scrollLeft = inputEl.scrollLeft;
-        const relativeX = event.clientX - rect.left - paddingLeft + scrollLeft;
-        
-        if (relativeX < 0) {
-            if (!this.isMouseInPopup) this.hoveredVariable.set(null);
-            return;
-        }
-        
-        const charIndex = Math.floor(relativeX / this.charWidth);
-        
-        let currentIndex = 0;
-        const segments = this.parsedSegments();
-        let found = false;
-        for (const seg of segments) {
-            const nextIndex = currentIndex + seg.text.length;
-            if (charIndex >= currentIndex && charIndex < nextIndex) {
-                if (seg.type === 'global' || seg.type === 'path') {
-                    const varX = event.clientX;
-                    const varY = rect.bottom;
-                    
-                    const currentVar = this.variableService.variables().find(v => v.key === seg.key);
-                    
-                    this.hoveredVariable.set({
-                        key: seg.key!,
-                        val: currentVar ? (currentVar.value || '') : '',
-                        type: seg.type,
-                        x: varX,
-                        y: varY
-                    });
-                    found = true;
+
+        if (this.overlayDiv?.nativeElement) {
+            const spans = this.overlayDiv.nativeElement.querySelectorAll('span');
+            const segments = this.parsedSegments();
+            
+            let found = false;
+            for (let i = 0; i < spans.length; i++) {
+                const span = spans[i];
+                const seg = segments[i];
+                
+                if (seg && (seg.type === 'global' || seg.type === 'path')) {
+                    const rect = span.getBoundingClientRect();
+                    // Check if mouse X is within this exact span's bounds
+                    if (event.clientX >= rect.left && event.clientX <= rect.right) {
+                        const currentVar = this.variableService.variables().find(v => v.key === seg.key);
+                        
+                        this.hoveredVariable.set({
+                            key: seg.key!,
+                            val: currentVar ? (currentVar.value || '') : '',
+                            type: seg.type,
+                            x: event.clientX,
+                            y: rect.bottom
+                        });
+                        found = true;
+                        break;
+                    }
                 }
-                break;
             }
-            currentIndex = nextIndex;
-        }
-        
-        if (!found && !this.isMouseInPopup) {
-            this.hoveredVariable.set(null);
+            
+            if (!found && !this.isMouseInPopup) {
+                this.hoveredVariable.set(null);
+            }
         }
     }
 
