@@ -362,19 +362,43 @@ export class RequestExecutionService {
                         bodyPayload = typeof body === 'string' ? body : JSON.stringify(body);
                     }
 
-                    const proxyPayload = {
-                        url: targetUrl,
-                        method: freshState.method,
-                        headers: headersObj,
-                        body: bodyPayload,
-                        verifySsl: freshState.settings?.verifySsl ?? true
-                    };
-
                     const proxyUrl = environment.proxyUrl;
-                    reqObservable = this.http.post<any>(proxyUrl, proxyPayload, {
-                        headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
-                        observe: 'response' as const
-                    });
+
+                    if (freshState.bodyType === 'form-data' && finalBody instanceof FormData) {
+                        const fd = new FormData();
+                        fd.append('url', targetUrl);
+                        fd.append('method', freshState.method);
+                        fd.append('headers', JSON.stringify(headersObj));
+                        fd.append('verifySsl', String(freshState.settings?.verifySsl ?? true));
+                        fd.append('bodyType', 'form-data');
+                        
+                        // Append original files and fields
+                        const rawFormData = freshState.formData;
+                        for (const row of body) {
+                            const originalRow = rawFormData.find((f: any) => f.key === row.key);
+                            if (originalRow && originalRow.type === 'file' && originalRow.file) {
+                                fd.append(row.key, originalRow.file, originalRow.file.name);
+                            } else {
+                                fd.append(row.key, row.value);
+                            }
+                        }
+
+                        reqObservable = this.http.post<any>(`${proxyUrl}/multipart`, fd, {
+                            observe: 'response' as const
+                        });
+                    } else {
+                        const proxyPayload = {
+                            url: targetUrl,
+                            method: freshState.method,
+                            headers: headersObj,
+                            body: bodyPayload,
+                            verifySsl: freshState.settings?.verifySsl ?? true
+                        };
+                        reqObservable = this.http.post<any>(proxyUrl, proxyPayload, {
+                            headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
+                            observe: 'response' as const
+                        });
+                    }
                 } else {
                     switch (freshState.method) {
                         case 'GET': reqObservable = this.http.get(finalUrl, reqOptions); break;
