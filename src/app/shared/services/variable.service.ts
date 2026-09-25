@@ -124,12 +124,15 @@ export class VariableService {
             if (res?.data && Array.isArray(res.data)) {
                 let sessionSourcesMap = new Map<string, VariableSource>();
 
+                let sessionVarsList: any[] = [];
+
                 // Check if any variable holds the backend workspace session payload
                 const sessionVar = res.data.find(v => v.variableKey === '__workspace_session__');
                 if (sessionVar && sessionVar.variableValue) {
                     try {
                         const parsedSession = JSON.parse(sessionVar.variableValue);
                         if (parsedSession?.variables && Array.isArray(parsedSession.variables)) {
+                            sessionVarsList = parsedSession.variables;
                             for (const sv of parsedSession.variables) {
                                 if (sv.source && sv.key) {
                                     sessionSourcesMap.set(sv.key.trim().toLowerCase(), sv.source);
@@ -164,7 +167,10 @@ export class VariableService {
                 const backendKeys = new Set(res.data.map(v => v.variableKey.trim().toLowerCase()));
                 const extraLocalVars = this.variables().filter(v => !v.key.startsWith('__') && !backendKeys.has(v.key.trim().toLowerCase()));
 
-                const finalVars = [...userVars, ...extraLocalVars];
+                // And keep any variables that were in the remote session but aren't in the DB or local memory
+                const sessionUnsyncedVars = sessionVarsList.filter(v => !v.key.startsWith('__') && !backendKeys.has(v.key.trim().toLowerCase()) && !extraLocalVars.some(ev => ev.key.trim().toLowerCase() === v.key.trim().toLowerCase()));
+
+                const finalVars = [...userVars, ...extraLocalVars, ...sessionUnsyncedVars];
                 if (finalVars.length > 0) {
                     this.variables.set(finalVars);
                     this.saveVariables(false);

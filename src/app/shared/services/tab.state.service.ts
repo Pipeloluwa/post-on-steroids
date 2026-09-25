@@ -372,9 +372,6 @@ export class TabStateService {
     }
 
     private hasOfflineWork(): boolean {
-        // If they already switched to a different capsule, they are not a fresh offline user
-        if (this.activeCapsuleId() !== '1') return true;
-        
         // If they opened multiple tabs
         if (this.openTabIds().length > 1) return true;
         
