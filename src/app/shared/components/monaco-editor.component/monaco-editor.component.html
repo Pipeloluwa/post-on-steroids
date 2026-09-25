@@ -1,10 +1,15 @@
 @if (isBrowser) {
 <div class="relative w-full h-full overflow-hidden">
     @if (!isEditorLoaded()) {
-        <div class="absolute inset-0 z-40 flex items-center justify-center bg-(--postonsteroids-bg-primary)">
-            <div class="flex items-center gap-x-2 text-(--postonsteroids-text-muted)">
-                <mat-icon class="animate-spin text-[16px]! size-[16px]!">sync</mat-icon>
-                <span class="text-[12px]">Loading editor...</span>
+        <div class="absolute inset-0 z-40 flex items-center justify-center bg-(--postonsteroids-bg-primary) bg-opacity-95 backdrop-blur-sm transition-all duration-300">
+            <div class="flex flex-col items-center justify-center gap-y-5 p-8 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-darker) shadow-2xl">
+                <div class="relative w-16 h-16">
+                    <!-- Outer rotating ring -->
+                    <div class="absolute inset-0 border-4 border-transparent border-t-(--postonsteroids-accent) border-r-(--postonsteroids-accent) rounded-full animate-spin"></div>
+                    <!-- Inner pulsating core -->
+                    <div class="absolute inset-4 bg-(--postonsteroids-accent) rounded-full animate-pulse opacity-50"></div>
+                </div>
+                <span class="text-[15px] font-bold tracking-[0.2em] text-(--postonsteroids-accent) animate-pulse uppercase">Initializing Editor</span>
             </div>
         </div>
     }
