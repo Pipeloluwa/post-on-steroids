@@ -1862,9 +1862,11 @@ export class TabStateService {
             }
 
             // 3. Load variables and workspace session from backend API
+            // forceNoCapsuleFilter=true ensures __workspace_session__ is found even when
+            // activeCapsuleId is still the default '1' on a fresh browser/device
             const vs = this.getVariableService();
             if (vs) {
-                await vs.loadVariablesFromBackend();
+                await vs.loadVariablesFromBackend(true);
             }
 
             // 4. Ensure active capsule is valid

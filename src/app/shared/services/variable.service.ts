@@ -46,14 +46,11 @@ export class VariableService {
             this.loadVariables(capId);
         }, { allowSignalWrites: true });
 
-        if (this.authService.isLoggedIn()) {
-            this.loadVariablesFromBackend();
-        }
+        // Note: loadVariablesFromBackend() is NOT called here independently.
+        // TabStateService.loadBackendData() orchestrates it at step 3 (after capsules
+        // and requests are loaded), ensuring the correct capsuleId context and ordering.
         this.authService.onLogout.subscribe(() => {
             this.resetVariables();
-        });
-        this.authService.onLogin.subscribe((user) => {
-            this.loadVariablesFromBackend();
         });
     }
 
@@ -116,11 +113,11 @@ export class VariableService {
 
     private hasPendingSync = false;
 
-    async loadVariablesFromBackend(): Promise<void> {
+    async loadVariablesFromBackend(forceNoCapsuleFilter = false): Promise<void> {
         if (!this.authService.isLoggedIn()) return;
         try {
             const capId = this.tabStateService.activeCapsuleId();
-            const qs = capId !== '1' ? `?capsuleId=${capId}` : '';
+            const qs = (!forceNoCapsuleFilter && capId !== '1') ? `?capsuleId=${capId}` : '';
             const res = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
             );
