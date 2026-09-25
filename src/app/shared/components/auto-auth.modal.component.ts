@@ -31,7 +31,11 @@ import { AutoAuthService } from '../services/auto-auth.service';
             <!-- Body -->
             <div class="p-5 flex flex-col gap-y-4">
                 <div class="text-[13px] text-(--postonsteroids-text-secondary) leading-relaxed">
-                    We've intelligently detected the login endpoint below. When any request returns a 401, we will automatically call this endpoint, extract the Bearer token, and retry the original request.
+                    @if (detectedEndpoint()) {
+                        Is this your auth endpoint? When any request returns a 401, we will automatically call this endpoint, extract the Bearer token, and retry the original request.
+                    } @else {
+                        Please select your auth endpoint from the dropdown below. When any request returns a 401, we will automatically call this endpoint, extract the Bearer token, and retry the original request.
+                    }
                 </div>
 
                 <div class="flex flex-col gap-y-1.5">

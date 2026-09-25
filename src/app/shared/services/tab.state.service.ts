@@ -352,6 +352,15 @@ export class TabStateService {
                 }
             }
 
+            const strippedStates = currentStates.map(([id, s]) => {
+                const stripped: any = { ...s };
+                delete stripped.responseBody;
+                delete stripped.responseHeaders;
+                delete stripped.responseCookies;
+                delete stripped.testResults;
+                return [id, stripped];
+            });
+
             const vs = this.getVariableService();
 
             return {
@@ -359,7 +368,7 @@ export class TabStateService {
                 activeCapsuleName: this.activeCapsuleName(),
                 openTabIds: this.openTabIds(),
                 activeTabId: this.activeTabId(),
-                states: currentStates,
+                states: strippedStates,
                 responses: storedResponses,
                 variables: vs ? vs.variables() : [],
                 autoAuthEnabled: this.autoAuthEnabled(),
@@ -1941,7 +1950,12 @@ export class TabStateService {
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${capsuleId}`)
             );
             if (reqRes?.data) {
-                const mapped = reqRes.data.map(dto => this.mapDtoToState(dto));
+                const sortedData = reqRes.data.sort((a, b) => {
+                    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    return timeA - timeB;
+                });
+                const mapped = sortedData.map(dto => this.mapDtoToState(dto));
                 this.savedCapsules.set(mapped);
             }
         } catch (e) {
