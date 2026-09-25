@@ -157,7 +157,7 @@ export class BodyTypesComponent {
     this.tabStateService.updateState(id, { formData: rows.length ? rows : [{ enabled: true, key: '', value: '', type: 'text' }] });
   }
 
-  updateFormDataRow(i: number, field: keyof FormDataRow, val: string | boolean) {
+  updateFormDataRow(i: number, field: keyof FormDataRow, val: any) {
     const id = this.tabId();
     if (!id) return;
     const rows = this.formData().map((r, idx) => idx === i ? { ...r, [field]: val } : r);
@@ -168,13 +168,16 @@ export class BodyTypesComponent {
     this.updateFormDataRow(i, 'type', type);
     if (type === 'file') {
       this.updateFormDataRow(i, 'value', ''); // Clear value if switching to file
+      this.updateFormDataRow(i, 'file', undefined);
     }
   }
 
   onFileSelected(i: number, event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
-      this.updateFormDataRow(i, 'value', input.files[0].name);
+      const file = input.files[0];
+      const rows = this.formData().map((r, idx) => idx === i ? { ...r, value: file.name, file: file } : r);
+      this.tabStateService.updateState(this.tabId(), { formData: rows });
     }
   }
 

@@ -19,6 +19,7 @@ export interface FormDataRow {
     key: string;
     value: string;
     type: 'text' | 'file';
+    file?: File;
 }
 
 export interface AuthState {

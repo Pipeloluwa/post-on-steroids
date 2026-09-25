@@ -281,10 +281,34 @@ export class RequestExecutionService {
                 httpHeaders = httpHeaders.set('Content-Type', 'application/xml');
             }
 
-            // Ensure Content-Type is application/json if body is an object or JSON string and not already set
-            if (body && !httpHeaders.has('Content-Type')) {
-                if (typeof body === 'object' || (typeof body === 'string' && body.trim().startsWith('{'))) {
-                    httpHeaders = httpHeaders.set('Content-Type', 'application/json');
+            let finalBody: any = body;
+            
+            // Build real FormData if needed
+            if (freshState.bodyType === 'form-data' && Array.isArray(body)) {
+                const fd = new FormData();
+                const rawFormData = freshState.formData;
+                
+                for (const row of body) {
+                    const originalRow = rawFormData.find((f: any) => f.key === row.key);
+                    if (originalRow && originalRow.type === 'file' && originalRow.file) {
+                        fd.append(row.key, originalRow.file, originalRow.file.name);
+                    } else {
+                        fd.append(row.key, row.value);
+                    }
+                }
+                finalBody = fd;
+                
+                // CRITICAL: We must remove any preset Content-Type so the browser sets multipart/form-data with the correct boundary
+                const contentTypeKey = httpHeaders.keys().find(k => k.toLowerCase() === 'content-type');
+                if (contentTypeKey) {
+                    httpHeaders = httpHeaders.delete(contentTypeKey);
+                }
+            } else {
+                // Ensure Content-Type is application/json if body is an object or JSON string and not already set
+                if (finalBody && !httpHeaders.has('Content-Type')) {
+                    if (typeof finalBody === 'object' || (typeof finalBody === 'string' && finalBody.trim().startsWith('{'))) {
+                        httpHeaders = httpHeaders.set('Content-Type', 'application/json');
+                    }
                 }
             }
 
@@ -355,14 +379,14 @@ export class RequestExecutionService {
                     switch (freshState.method) {
                         case 'GET': reqObservable = this.http.get(finalUrl, reqOptions); break;
                         case 'POST':
-                            reqObservable = this.http.post(finalUrl, body, reqOptions); break;
+                            reqObservable = this.http.post(finalUrl, finalBody, reqOptions); break;
                         case 'PUT':
-                            reqObservable = this.http.put(finalUrl, body, reqOptions); break;
+                            reqObservable = this.http.put(finalUrl, finalBody, reqOptions); break;
                         case 'DELETE': reqObservable = this.http.delete(finalUrl, reqOptions); break;
-                        case 'PATCH': reqObservable = this.http.patch(finalUrl, body, reqOptions); break;
+                        case 'PATCH': reqObservable = this.http.patch(finalUrl, finalBody, reqOptions); break;
                         case 'HEAD': reqObservable = this.http.head(finalUrl, reqOptions); break;
                         case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
-                        default: reqObservable = this.http.request(freshState.method, finalUrl, { ...reqOptions, body }); break;
+                        default: reqObservable = this.http.request(freshState.method, finalUrl, { ...reqOptions, body: finalBody }); break;
                     }
                 }
 
