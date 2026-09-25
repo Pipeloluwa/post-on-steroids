@@ -41,36 +41,20 @@ export class ResponseViewerComponent {
     // ── Derived from active tab state ──────────────────────────────────────
     responseBody = computed(() => this.tabState()?.responseBody ?? null);
 
-    private originalPrettyContent: string | null = null;
-    private lastResponseBody: any = null;
-
     formattedResponseBody = computed(() => {
         const body = this.responseBody();
-        if (body === null) {
-            this.originalPrettyContent = null;
-            this.lastResponseBody = null;
+        if (body === null || body === undefined) {
             return '';
         }
 
-        if (body !== this.lastResponseBody) {
-            this.originalPrettyContent = null;
-            this.lastResponseBody = body;
-        }
-
         const style = this.wrapStyle();
+        const type = this.responseType();
         
         if (style === 'pretty' || style === 'word-wrap') {
-            if (this.originalPrettyContent !== null) {
-                return this.originalPrettyContent;
-            }
-            const formatted = formatBodyByStyle(body, 'pretty', this.responseType());
-            this.originalPrettyContent = formatted;
-            return formatted;
+            return formatBodyByStyle(body, 'pretty', type);
         } else {
-            if (this.originalPrettyContent === null) {
-                this.originalPrettyContent = formatBodyByStyle(body, 'pretty', this.responseType());
-            }
-            return formatBodyByStyle(this.originalPrettyContent, style, this.responseType());
+            const pretty = formatBodyByStyle(body, 'pretty', type);
+            return formatBodyByStyle(pretty, style, type);
         }
     });
     responseStatus = computed(() => this.tabState()?.responseStatus ?? null);
