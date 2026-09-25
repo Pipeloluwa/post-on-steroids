@@ -159,12 +159,6 @@ window.addEventListener("message", async (event) => {
       // Send code to the sandbox
       // The origin is '*' because a sandboxed iframe without allow-same-origin has an opaque origin
       this.iframe.contentWindow.postMessage({ id: executionId, code, context }, '*');
-
-      // Add a timeout to prevent hanging
-      setTimeout(() => {
-        window.removeEventListener('message', listener);
-        resolve({ success: false, error: 'Execution timeout (5000ms)', context });
-      }, 5000);
     });
   }
 
