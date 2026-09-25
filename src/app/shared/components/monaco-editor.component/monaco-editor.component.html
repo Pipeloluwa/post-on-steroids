@@ -1,5 +1,14 @@
 @if (isBrowser) {
 <div class="relative w-full h-full overflow-hidden">
+    @if (!isEditorLoaded()) {
+        <div class="absolute inset-0 z-40 flex items-center justify-center bg-(--postonsteroids-bg-primary)">
+            <div class="flex items-center gap-x-2 text-(--postonsteroids-text-muted)">
+                <mat-icon class="animate-spin text-[16px]! size-[16px]!">sync</mat-icon>
+                <span class="text-[12px]">Loading editor...</span>
+            </div>
+        </div>
+    }
+
     <ngx-monaco-editor class="w-full h-full monaco-wrapper-custom block" [options]="monacoOptions()"
         [class.opacity-50]="disabled()" (onInit)="onEditorInit($event)">
     </ngx-monaco-editor>

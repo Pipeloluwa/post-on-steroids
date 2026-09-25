@@ -6,9 +6,11 @@ import { ThemeService } from '../../services/theme.service';
 import { TabStateService } from '../../services/tab.state.service';
 import { VariableService } from '../../services/variable.service';
 
+import { MatIcon } from '@angular/material/icon';
+
 @Component({
   selector: 'app-monaco-editor',
-  imports: [CommonModule, MonacoEditorModule],
+  imports: [CommonModule, MonacoEditorModule, MatIcon],
   templateUrl: './monaco-editor.component.html',
   styleUrl: './monaco-editor.component.css',
   host: {
@@ -28,6 +30,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private tabStateService = inject(TabStateService);
   private variableService = inject(VariableService);
   isBrowser = isPlatformBrowser(this.platformId);
+  isEditorLoaded = signal<boolean>(false);
 
   editorId = input<string>('');
   ownerTabId = input<string>('');
@@ -232,6 +235,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
   onEditorInit(editor: any) {
     this.editorInstance.set(editor);
+    this.isEditorLoaded.set(true);
 
     editor.onDidFocusEditorText?.(() => {
       MonacoEditorComponent.lastFocusedEditor = this;
