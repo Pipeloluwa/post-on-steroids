@@ -122,29 +122,6 @@ export class VariableService {
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
             );
             if (res?.data && Array.isArray(res.data)) {
-                let sessionSourcesMap = new Map<string, VariableSource>();
-
-                let sessionVarsList: any[] = [];
-
-                // Check if any variable holds the backend workspace session payload
-                const sessionVar = res.data.find(v => v.variableKey === '__workspace_session__');
-                if (sessionVar && sessionVar.variableValue) {
-                    try {
-                        const parsedSession = JSON.parse(sessionVar.variableValue);
-                        if (parsedSession?.variables && Array.isArray(parsedSession.variables)) {
-                            sessionVarsList = parsedSession.variables;
-                            for (const sv of parsedSession.variables) {
-                                if (sv.source && sv.key) {
-                                    sessionSourcesMap.set(sv.key.trim().toLowerCase(), sv.source);
-                                }
-                            }
-                        }
-                        this.tabStateService.applyBackendSession(parsedSession);
-                    } catch (e) {
-                        console.warn('Failed to parse backend session variable', e);
-                    }
-                }
-
                 // Filter out internal system variables from the user-facing variables list
                 const userVars: IGlobalVariable[] = res.data
                     .filter(v => !v.variableKey.startsWith('__'))
@@ -152,14 +129,13 @@ export class VariableService {
                         const existing = this.variables().find(
                             ev => ev.id === v.id || ev.key.trim().toLowerCase() === v.variableKey.trim().toLowerCase()
                         );
-                        const source = sessionSourcesMap.get(v.variableKey.trim().toLowerCase()) || existing?.source;
                         return {
                             id: v.id,
                             key: v.variableKey,
                             value: v.variableValue ?? existing?.value ?? '',
                             type: v.type ?? existing?.type ?? 'global',
                             enabled: v.isEnabled ?? true,
-                            source
+                            source: existing?.source
                         };
                     });
 
@@ -167,10 +143,7 @@ export class VariableService {
                 const backendKeys = new Set(res.data.map(v => v.variableKey.trim().toLowerCase()));
                 const extraLocalVars = this.variables().filter(v => !v.key.startsWith('__') && !backendKeys.has(v.key.trim().toLowerCase()));
 
-                // And keep any variables that were in the remote session but aren't in the DB or local memory
-                const sessionUnsyncedVars = sessionVarsList.filter(v => !v.key.startsWith('__') && !backendKeys.has(v.key.trim().toLowerCase()) && !extraLocalVars.some(ev => ev.key.trim().toLowerCase() === v.key.trim().toLowerCase()));
-
-                const finalVars = [...userVars, ...extraLocalVars, ...sessionUnsyncedVars];
+                const finalVars = [...userVars, ...extraLocalVars];
                 if (finalVars.length > 0) {
                     this.variables.set(finalVars);
                     this.saveVariables(false);
@@ -225,25 +198,6 @@ export class VariableService {
                         return newId ? { ...v, id: newId } : v;
                     }));
                 }
-            }
-
-            // Sync the workspace session separately with a null capsuleId (global scope)
-            // so it's always accessible on login even when activeCapsuleId is '1'
-            const sessionPayload = this.tabStateService.getBackendSessionPayload();
-            if (sessionPayload) {
-                const globalPayload = {
-                    capsuleId: null,
-                    variables: [{
-                        id: null,
-                        key: '__workspace_session__',
-                        value: JSON.stringify(sessionPayload),
-                        type: 'global',
-                        enabled: true
-                    }]
-                };
-                await firstValueFrom(
-                    this.http.post<{ data: any[] }>(`${API_BASE_URL}/Variable/sync`, globalPayload)
-                ).catch(e => console.warn('Failed to sync global workspace session', e));
             }
         } catch (e) {
             console.error('Failed to sync variables to backend', e);

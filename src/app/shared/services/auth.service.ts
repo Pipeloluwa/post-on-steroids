@@ -192,17 +192,6 @@ export class AuthService {
         const user = this.currentUser();
         const userToken = this.token();
 
-        // 1. Save workspace session and variables to backend API while token is still valid
-        try {
-            const { TabStateService } = await import('./tab.state.service');
-            const tabStateService = this.injector.get(TabStateService);
-            if (tabStateService) {
-                await tabStateService.saveFinalSessionBeforeLogout();
-            }
-        } catch (e) {
-            console.error('Error persisting state before logout', e);
-        }
-
         if (userToken) {
             await firstValueFrom(this.http.post(`${API_BASE_URL}/auth/logout`, {})).catch(() => {});
         }

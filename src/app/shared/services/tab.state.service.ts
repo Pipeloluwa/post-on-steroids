@@ -109,6 +109,8 @@ export interface Capsule {
     id: string;
     name: string;
     createdAt: number;
+    autoAuthEnabled?: 'off' | 'individual' | 'global' | string;
+    autoAuthEndpointId?: string | null;
 }
 
 @Injectable({
@@ -188,12 +190,9 @@ export class TabStateService {
             if (user?.id) localStorage.setItem(`onsteroids_user_session_${user.id}`, serialized);
             if (user?.email) localStorage.setItem(`onsteroids_user_session_${user.email}`, serialized);
 
-            if (this.authService.isLoggedIn() && vs) {
-                clearTimeout(this.backendSyncTimeout);
-                this.backendSyncTimeout = setTimeout(() => {
-                    vs.syncVariablesToBackend().catch(() => {});
-                }, 2000);
-            }
+            // Sync to backend for cross-device persistence (debounced)
+            this.syncWorkspaceStateToBackend();
+
         } catch (e) {
             console.error('Error snapshotting session', e);
         }
@@ -315,19 +314,7 @@ export class TabStateService {
         }
     }
 
-    async saveFinalSessionBeforeLogout(): Promise<void> {
-        if (!this.isBrowser || !this.authService.isLoggedIn()) return;
-        try {
-            this.snapshotCurrentSession();
-            const vs = this.getVariableService();
-            if (vs) {
-                vs.saveVariables(false);
-                await vs.syncVariablesToBackend();
-            }
-        } catch (e) {
-            console.error('Error saving session before logout', e);
-        }
-    }
+
 
     getBackendSessionPayload(): any {
         try {
@@ -339,7 +326,7 @@ export class TabStateService {
             } catch {}
 
             for (const [id, s] of currentStates) {
-                if (s.responseBody !== null && s.responseBody !== undefined) {
+                if (s.responseStatus !== null || (s.responseBody !== null && s.responseBody !== undefined)) {
                     storedResponses[id] = {
                         responseBody: s.responseBody,
                         responseStatus: s.responseStatus,
@@ -352,15 +339,6 @@ export class TabStateService {
                 }
             }
 
-            const strippedStates = currentStates.map(([id, s]) => {
-                const stripped: any = { ...s };
-                delete stripped.responseBody;
-                delete stripped.responseHeaders;
-                delete stripped.responseCookies;
-                delete stripped.testResults;
-                return [id, stripped];
-            });
-
             const vs = this.getVariableService();
 
             return {
@@ -368,9 +346,10 @@ export class TabStateService {
                 activeCapsuleName: this.activeCapsuleName(),
                 openTabIds: this.openTabIds(),
                 activeTabId: this.activeTabId(),
-                states: strippedStates,
+                states: currentStates,
                 responses: storedResponses,
                 variables: vs ? vs.variables() : [],
+                capsules: this.capsules(),
                 autoAuthEnabled: this.autoAuthEnabled(),
                 autoAuthEndpointId: this.autoAuthEndpointId(),
                 timestamp: Date.now()
@@ -476,10 +455,99 @@ export class TabStateService {
         }
     }
 
+    /** Debounced sync of workspace state to backend for cross-device persistence */
+    private syncWorkspaceStateToBackend() {
+        if (!this.isBrowser || !this.authService.isLoggedIn()) return;
+
+        clearTimeout(this.workspaceStateSyncTimeout);
+        this.workspaceStateSyncTimeout = setTimeout(async () => {
+            try {
+                const currentStates = Array.from(this.states().entries());
+                let storedResponses: Record<string, unknown> = {};
+                try {
+                    const rawResp = localStorage.getItem('onsteroids_responses');
+                    if (rawResp) storedResponses = JSON.parse(rawResp);
+                } catch {}
+
+                // Capture live responses from tab states
+                for (const [id, s] of currentStates) {
+                    if (s.responseBody !== null && s.responseBody !== undefined) {
+                        storedResponses[id] = {
+                            responseBody: s.responseBody,
+                            responseStatus: s.responseStatus,
+                            responseTime: s.responseTime,
+                            responseSize: s.responseSize,
+                            responseCookies: s.responseCookies,
+                            responseHeaders: s.responseHeaders,
+                            testResults: s.testResults
+                        };
+                    }
+                }
+
+                const payload = {
+                    activeCapsuleId: this.activeCapsuleId(),
+                    activeCapsuleName: this.activeCapsuleName(),
+                    activeTabId: this.activeTabId(),
+                    openTabIds: JSON.stringify(this.openTabIds()),
+                    tabStates: JSON.stringify(currentStates),
+                    responses: JSON.stringify(storedResponses),
+                    autoAuthEnabled: this.autoAuthEnabled(),
+                    autoAuthEndpointId: this.autoAuthEndpointId()
+                };
+
+                await firstValueFrom(
+                    this.http.put(`${API_BASE_URL}/WorkspaceState`, payload)
+                );
+            } catch (e) {
+                console.warn('Failed to sync workspace state to backend', e);
+            }
+        }, 2000);
+    }
+
+    /** Delete workspace state from backend (called on logout) */
+    private deleteWorkspaceStateFromBackend() {
+        if (!this.isBrowser) return;
+        firstValueFrom(
+            this.http.delete(`${API_BASE_URL}/WorkspaceState`)
+        ).catch(e => console.warn('Failed to delete workspace state from backend', e));
+    }
+
+    /** Load workspace state from backend and apply it (called on login/loadBackendData) */
+    private async loadWorkspaceStateFromBackend(): Promise<boolean> {
+        if (!this.isBrowser || !this.authService.isLoggedIn()) return false;
+        try {
+            const res = await firstValueFrom(
+                this.http.get<{ data: any }>(`${API_BASE_URL}/WorkspaceState`)
+            );
+            if (res?.data) {
+                const ws = res.data;
+                const session: any = {
+                    activeCapsuleId: ws.activeCapsuleId,
+                    activeCapsuleName: ws.activeCapsuleName,
+                    activeTabId: ws.activeTabId,
+                    autoAuthEnabled: ws.autoAuthEnabled,
+                    autoAuthEndpointId: ws.autoAuthEndpointId
+                };
+
+                // Parse JSON fields
+                try { session.openTabIds = ws.openTabIds ? JSON.parse(ws.openTabIds) : []; } catch { session.openTabIds = []; }
+                try { session.states = ws.tabStates ? JSON.parse(ws.tabStates) : []; } catch { session.states = []; }
+                try { session.responses = ws.responses ? JSON.parse(ws.responses) : {}; } catch { session.responses = {}; }
+
+                this.applyBackendSession(session);
+                return true;
+            }
+        } catch (e) {
+            console.warn('Failed to load workspace state from backend', e);
+        }
+        return false;
+    }
+
     getState(id: string): RequestState | undefined {
         return this.states().get(id);
     }
     private backendSyncTimeout: any;
+    private workspaceStateSyncTimeout: any;
     activeTabId = signal<string | null>(null);
     activeCapsuleName = signal<string>('My Capsule');
     activeCapsuleId = signal<string>('1');
@@ -719,6 +787,9 @@ export class TabStateService {
 
     clearWorkspace(userParam?: UserAuth | null) {
         clearTimeout(this.backendSyncTimeout);
+        clearTimeout(this.workspaceStateSyncTimeout);
+
+        this.deleteWorkspaceStateFromBackend();
 
         this.openTabIds.set([]);
         this.activeTabId.set(null);
@@ -742,6 +813,7 @@ export class TabStateService {
                     if (key && (
                         key.startsWith('onsteroids_') ||
                         key.startsWith('autoAuth') ||
+                        key.startsWith('auth_') ||
                         key === 'request_history'
                     )) {
                         keysToRemove.push(key);
@@ -752,6 +824,9 @@ export class TabStateService {
                 console.error('Error clearing workspace storage on logout', e);
             }
         }
+
+        // Open a single pristine default tab
+        this.createAndOpenNewTab();
     }
 
     setActiveCapsuleName(name: string) {
@@ -796,6 +871,15 @@ export class TabStateService {
         this.activeCapsuleName.set(capsule.name);
         if (this.isBrowser) {
             localStorage.setItem('onsteroids_active_capsule', capsule.id);
+        }
+
+        const foundCap = this.capsules().find(c => c.id === capsule.id);
+        if (foundCap) {
+            this.autoAuthEnabled.set((foundCap.autoAuthEnabled as any) || 'off');
+            this.autoAuthEndpointId.set(foundCap.autoAuthEndpointId || null);
+        } else {
+            this.autoAuthEnabled.set('off');
+            this.autoAuthEndpointId.set(null);
         }
 
         await this.loadRequestsForCapsule(capsule.id);
@@ -867,12 +951,18 @@ export class TabStateService {
         if (this.isBrowser && this.authService.isLoggedIn()) {
             try {
                 const res = await firstValueFrom(
-                    this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { name: trimmed })
+                    this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, {
+                        name: trimmed,
+                        autoAuthEnabled: 'off',
+                        autoAuthEndpointId: null
+                    })
                 );
                 if (res?.data) {
                     newCap = {
                         id: res.data.id,
                         name: res.data.name,
+                        autoAuthEnabled: res.data.autoAuthEnabled || 'off',
+                        autoAuthEndpointId: res.data.autoAuthEndpointId || null,
                         createdAt: new Date(res.data.createdAt).getTime() || Date.now()
                     };
                 }
@@ -884,6 +974,36 @@ export class TabStateService {
         this.capsules.update(list => [...list, newCap]);
         await this.switchCapsule(newCap);
         return newCap;
+    }
+
+    updateCurrentCapsuleAutoAuth(enabled?: 'off' | 'individual' | 'global', endpointId?: string | null) {
+        const capId = this.activeCapsuleId();
+        if (!capId) return;
+
+        const currentScope = enabled !== undefined ? enabled : this.autoAuthEnabled();
+        const currentEndpoint = endpointId !== undefined ? endpointId : this.autoAuthEndpointId();
+
+        this.capsules.update(list => list.map(c => {
+            if (c.id === capId) {
+                return {
+                    ...c,
+                    autoAuthEnabled: currentScope,
+                    autoAuthEndpointId: currentEndpoint
+                };
+            }
+            return c;
+        }));
+
+        if (this.isBrowser && this.authService.isLoggedIn() && capId !== '1' && capId.length >= 8) {
+            const currentCap = this.capsules().find(c => c.id === capId);
+            firstValueFrom(
+                this.http.put(`${API_BASE_URL}/capsule/${capId}`, {
+                    name: currentCap?.name || this.activeCapsuleName(),
+                    autoAuthEnabled: currentScope,
+                    autoAuthEndpointId: currentEndpoint
+                })
+            ).catch(err => console.warn('Failed to persist capsule auto-auth settings to backend', err));
+        }
     }
 
     async updateCapsuleName(id: string, newName: string): Promise<void> {
@@ -1642,20 +1762,34 @@ export class TabStateService {
                     const existing = this.capsules().find(c => c.id === currentCapId);
                     if (!existing || currentCapId === '1' || currentCapId.length < 8) {
                         const res = await firstValueFrom(
-                            this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { name: currentCapName })
+                            this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, {
+                                name: currentCapName,
+                                autoAuthEnabled: this.autoAuthEnabled(),
+                                autoAuthEndpointId: this.autoAuthEndpointId()
+                            })
                         );
                         if (res?.data?.id) {
                             const oldId = currentCapId;
                             effectiveCapId = res.data.id;
                             this.activeCapsuleId.set(effectiveCapId);
-                            this.capsules.update(list => list.map(c => c.id === oldId ? { ...c, id: effectiveCapId, name: currentCapName } : c));
+                            this.capsules.update(list => list.map(c => c.id === oldId ? {
+                                ...c,
+                                id: effectiveCapId,
+                                name: currentCapName,
+                                autoAuthEnabled: this.autoAuthEnabled(),
+                                autoAuthEndpointId: this.autoAuthEndpointId()
+                            } : c));
                             for (const tabState of tabsToSave) {
                                 tabState.capsuleId = effectiveCapId;
                             }
                         }
                     } else {
                         await firstValueFrom(
-                            this.http.put(`${API_BASE_URL}/capsule/${currentCapId}`, { name: currentCapName })
+                            this.http.put(`${API_BASE_URL}/capsule/${currentCapId}`, {
+                                name: currentCapName,
+                                autoAuthEnabled: this.autoAuthEnabled(),
+                                autoAuthEndpointId: this.autoAuthEndpointId()
+                            })
                         ).catch(() => {});
                     }
                 } catch (e) {
@@ -1694,6 +1828,8 @@ export class TabStateService {
                             },
                             encryption: tabState.encryption,
                             settings: tabState.settings,
+                            postTriggerTabId: tabState.postTriggerTabId || null,
+                            autoAuthEnabled: !!tabState.autoAuthEnabled,
                             params: tabState.params.map(p => ({ enabled: p.enabled, key: p.key, value: p.value })),
                             headers: tabState.headers.map(h => ({ enabled: h.enabled, key: h.key, value: h.value })),
                             formData: tabState.formData.map(f => ({ enabled: f.enabled, key: f.key, value: f.value, type: f.type }))
@@ -1797,12 +1933,17 @@ export class TabStateService {
                 const backendCaps: Capsule[] = capRes.data.map(c => ({
                     id: c.id,
                     name: c.name,
+                    autoAuthEnabled: c.autoAuthEnabled || 'off',
+                    autoAuthEndpointId: c.autoAuthEndpointId || null,
                     createdAt: new Date(c.createdAt).getTime() || Date.now()
                 }));
                 const mergedCaps = [...this.capsules()];
                 backendCaps.forEach(bc => {
-                    if (!mergedCaps.find(lc => lc.id === bc.id)) {
+                    const idx = mergedCaps.findIndex(lc => lc.id === bc.id);
+                    if (idx === -1) {
                         mergedCaps.push(bc);
+                    } else {
+                        mergedCaps[idx] = { ...mergedCaps[idx], ...bc };
                     }
                 });
                 
@@ -1827,6 +1968,8 @@ export class TabStateService {
                         if (this.activeCapsuleId() === '1') {
                             this.activeCapsuleId.set(defaultCap.id);
                             this.activeCapsuleName.set(defaultCap.name);
+                            this.autoAuthEnabled.set((defaultCap.autoAuthEnabled as any) || 'off');
+                            this.autoAuthEndpointId.set(defaultCap.autoAuthEndpointId || null);
                         }
 
                         const vs = this.getVariableService();
@@ -1843,7 +1986,12 @@ export class TabStateService {
 
                 for (const oc of offlineCaps) {
                     try {
-                        await firstValueFrom(this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, { id: oc.id, name: oc.name }));
+                        await firstValueFrom(this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, {
+                            id: oc.id,
+                            name: oc.name,
+                            autoAuthEnabled: oc.autoAuthEnabled || 'off',
+                            autoAuthEndpointId: oc.autoAuthEndpointId || null
+                        }));
                     } catch (e) {
                         console.warn('Could not sync offline capsule to backend', e);
                     }
@@ -1894,17 +2042,14 @@ export class TabStateService {
                 }
             }
 
-            // 3. Load variables and workspace session from backend API
+            // 3. Load variables from backend API
             const vs = this.getVariableService();
             if (vs) {
-                // First pass: fetch global variables (capsuleId=null) to get __workspace_session__
-                // This will internally call applyBackendSession and restore the correct activeCapsuleId
-                await vs.loadVariablesFromBackend(true);
-                
-                // Second pass: now that activeCapsuleId is correctly restored, fetch the 
-                // actual variables tied to this specific capsule.
                 await vs.loadVariablesFromBackend(false);
             }
+
+            // Attempt to restore exact cross-device workspace layout (open tabs, active tab, etc.)
+            await this.loadWorkspaceStateFromBackend();
 
             // 4. Ensure active capsule is valid
             const currentCapId = this.activeCapsuleId();
@@ -1912,6 +2057,8 @@ export class TabStateService {
             if (matchingCap) {
                 this.activeCapsuleId.set(matchingCap.id);
                 this.activeCapsuleName.set(matchingCap.name);
+                this.autoAuthEnabled.set((matchingCap.autoAuthEnabled as any) || 'off');
+                this.autoAuthEndpointId.set(matchingCap.autoAuthEndpointId || null);
             }
 
             // 5. Restore open tabs
@@ -2037,6 +2184,8 @@ export class TabStateService {
             responseCookies: cached?.responseCookies ?? base.responseCookies,
             responseHeaders: cached?.responseHeaders ?? base.responseHeaders,
             testResults: cached?.testResults ?? base.testResults,
+            postTriggerTabId: dto.postTriggerTabId || null,
+            autoAuthEnabled: !!dto.autoAuthEnabled,
             isDirty: false,
             isLoading: false
         };

@@ -44,10 +44,12 @@ export class AutoAuthService {
 
     setAutoAuthEnabled(enabled: 'off' | 'individual' | 'global') {
         this.tabStateService.autoAuthEnabled.set(enabled);
+        this.tabStateService.updateCurrentCapsuleAutoAuth(enabled, undefined);
     }
 
     setAutoAuthEndpointId(id: string | null) {
         this.tabStateService.autoAuthEndpointId.set(id);
+        this.tabStateService.updateCurrentCapsuleAutoAuth(undefined, id);
     }
 
     /**
