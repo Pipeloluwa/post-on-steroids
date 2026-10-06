@@ -314,7 +314,7 @@ export class WorkspaceComponent {
 
     onBeforeUnload(event: BeforeUnloadEvent) {
         if (!this.tabStateService.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            const hasDirty = Array.from(this.tabStateService.states().values()).some(s => s.isDirty);
+            const hasDirty = this.tabStateService.getAllStates().some(s => s.isDirty);
             if (hasDirty) {
                 event.preventDefault();
                 event.returnValue = '';
