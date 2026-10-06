@@ -785,6 +785,11 @@ export class TabStateService {
         }
 
         this.activeTabId.set(id);
+
+        this.syncWorkspaceStateToBackend();
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
     }
 
     getAllOpenTabs(): RequestState[] {
@@ -960,6 +965,11 @@ export class TabStateService {
         }
 
         this.preloadAllExamples();
+
+        this.syncWorkspaceStateToBackend();
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
     }
 
     async createCapsule(name: string): Promise<Capsule> {
