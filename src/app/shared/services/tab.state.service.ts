@@ -1597,10 +1597,13 @@ export class TabStateService {
     }
 
     updateState(id: string, partialState: Partial<RequestState>, recordHistory = true) {
+        const ignorableKeys = ['isLoading', 'responseBody', 'responseStatus', 'responseTime', 'responseSize', 'responseCookies', 'responseHeaders', 'testResults', 'editorScrollPositions', 'isDirty'];
+        const explicitDirty = Object.prototype.hasOwnProperty.call(partialState, 'isDirty');
+        let becameDirty = false;
+
         this.states.update(map => {
             const currentState = map.get(id) || this.getDefaultState(id);
 
-            const ignorableKeys = ['isLoading', 'responseBody', 'responseStatus', 'responseTime', 'responseSize', 'responseCookies', 'responseHeaders', 'testResults', 'editorScrollPositions', 'isDirty'];
             const isSignificantChange = Object.keys(partialState).some(k => !ignorableKeys.includes(k));
 
             if (recordHistory && isSignificantChange) {
@@ -1620,7 +1623,18 @@ export class TabStateService {
                 }
             }
 
-            map.set(id, { ...currentState, ...partialState });
+            let nextState: RequestState = { ...currentState, ...partialState };
+
+            // Automatic dirty tracking: only flag when a persisted field truly changed
+            // (ignores response data, console logs, scroll positions, loading flags, etc.)
+            if (!explicitDirty && isSignificantChange &&
+                this.persistableFingerprint(currentState) !== this.persistableFingerprint(nextState)) {
+                nextState = { ...nextState, isDirty: true };
+                this.editVersions.set(id, (this.editVersions.get(id) ?? 0) + 1);
+                becameDirty = true;
+            }
+
+            map.set(id, nextState);
             return new Map(map);
         });
 
@@ -1631,20 +1645,47 @@ export class TabStateService {
             }
         }
 
-        if (this.autoSaveEnabled() && partialState.isDirty && this.authService.isLoggedIn()) {
+        if (becameDirty && this.autoSaveEnabled() && this.authService.isLoggedIn()) {
             this.triggerAutoSave();
         }
+    }
+
+    /** Per-tab counter bumped on every real edit; used to detect edits made while a save is in flight */
+    private editVersions = new Map<string, number>();
+
+    /** Serialises only the fields that are persisted to the backend, used for dirty detection */
+    private persistableFingerprint(s: RequestState): string {
+        return JSON.stringify([
+            s.name, s.url, s.method, s.payloadType, s.bodyType, s.rawType,
+            s.rawBody, s.rawBodyJson, s.rawBodyXml,
+            s.auth?.type, s.auth?.token,
+            s.scripts?.preRequest, s.scripts?.postResponse, s.scripts?.testScript, s.scripts?.testScriptEnabled,
+            s.encryption, s.settings, s.postTriggerTabId ?? null, !!s.autoAuthEnabled,
+            s.params, s.headers, s.formData
+        ]);
     }
 
     triggerAutoSave() {
         if (this.autoSaveTimeout) {
             clearTimeout(this.autoSaveTimeout);
         }
-        this.autoSaveTimeout = setTimeout(() => {
-            if (this.authService.isLoggedIn()) {
-                this.saveToCapsule();
-            }
-        }, 1500); // 1.5 second debounce
+        this.autoSaveTimeout = setTimeout(() => this.runAutoSave(), 1500); // 1.5 second debounce
+    }
+
+    private async runAutoSave() {
+        if (!this.autoSaveEnabled() || !this.authService.isLoggedIn()) return;
+        // Never run two saves concurrently — retry shortly after the current one finishes
+        if (this.isSaving()) {
+            this.triggerAutoSave();
+            return;
+        }
+        const hasDirty = Array.from(this.states().values()).some(s => s.isDirty);
+        if (!hasDirty) return;
+        try {
+            await this.saveToCapsule(undefined, { onlyDirty: true });
+        } catch (e) {
+            console.warn('Auto-save failed', e);
+        }
     }
 
     toggleAutoSave() {
@@ -1653,9 +1694,13 @@ export class TabStateService {
         if (this.isBrowser) {
             localStorage.setItem('onsteroids_autosave', next ? 'true' : 'false');
         }
-        if (next && this.authService.isLoggedIn()) {
-            // Save all currently dirty tabs immediately when enabling auto-save
-            this.saveToCapsule();
+        if (this.authService.isLoggedIn()) {
+            // Persist the preference to the backend right away for cross-device sync
+            this.syncWorkspaceStateToBackend();
+            if (next) {
+                // Flush any pending unsaved edits immediately when enabling auto-save
+                this.runAutoSave();
+            }
         }
     }
 
@@ -1755,7 +1800,8 @@ export class TabStateService {
         }
     }
 
-    async saveToCapsule(id?: string): Promise<void> {
+    async saveToCapsule(id?: string, options?: { onlyDirty?: boolean }): Promise<void> {
+        const onlyDirty = !!options?.onlyDirty;
         this.isSaving.set(true);
         this.isSaveCancelled = false;
 
@@ -1783,17 +1829,28 @@ export class TabStateService {
             }
 
             for (const s of this.states().values()) {
+                if (onlyDirty && !s.isDirty) continue;
                 if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
                     tabsToSave.push(structuredClone(s));
                     seenIds.add(s.id);
                 }
             }
 
-            for (const s of this.savedCapsules()) {
-                if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
-                    tabsToSave.push(structuredClone(s));
-                    seenIds.add(s.id);
+            if (!onlyDirty) {
+                for (const s of this.savedCapsules()) {
+                    if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
+                        tabsToSave.push(structuredClone(s));
+                        seenIds.add(s.id);
+                    }
                 }
+            }
+
+            if (onlyDirty && tabsToSave.length === 0) return;
+
+            // Snapshot edit versions so we can detect edits made while the save is in flight
+            const versionAtSnapshot = new Map<string, number>();
+            for (const t of tabsToSave) {
+                versionAtSnapshot.set(t.id, this.editVersions.get(t.id) ?? 0);
             }
 
             if (this.isSaveCancelled) return;
@@ -1826,7 +1883,7 @@ export class TabStateService {
                                 tabState.capsuleId = effectiveCapId;
                             }
                         }
-                    } else {
+                    } else if (!onlyDirty) {
                         await firstValueFrom(
                             this.http.put(`${API_BASE_URL}/capsule/${currentCapId}`, {
                                 name: currentCapName,
@@ -1840,10 +1897,13 @@ export class TabStateService {
                 }
             }
 
+            let idsChanged = false;
             for (const tabState of tabsToSave) {
                 if (this.isSaveCancelled) break;
                 
                 let savedId = tabState.id;
+                let persisted = false;
+                let editedDuringSave = false;
                 if (this.authService.isLoggedIn()) {
                     try {
                         const payload = {
@@ -1907,26 +1967,49 @@ export class TabStateService {
                                 testResults: tabState.testResults ?? mappedSaved.testResults
                             };
 
+                            // Did the user keep editing this tab while the request was in flight?
+                            editedDuringSave = (this.editVersions.get(oldId) ?? 0) !== (versionAtSnapshot.get(oldId) ?? 0);
+
                             this.states.update(map => {
                                 const next = new Map(map);
+                                const live = next.get(oldId);
                                 if (savedId !== oldId) next.delete(oldId);
-                                next.set(savedId, updatedState);
+                                if (editedDuringSave && live) {
+                                    // Preserve newer local edits; they remain dirty for the next save
+                                    next.set(savedId, { ...live, id: savedId, capsuleId: effectiveCapId, isDirty: true });
+                                } else {
+                                    next.set(savedId, updatedState);
+                                }
                                 return next;
                             });
 
                             if (savedId !== oldId) {
+                                idsChanged = true;
+                                const ver = this.editVersions.get(oldId);
+                                if (ver !== undefined) {
+                                    this.editVersions.delete(oldId);
+                                    this.editVersions.set(savedId, ver);
+                                }
                                 this.openTabIds.update(ids => ids.map(tid => tid === oldId ? savedId : tid));
                                 if (this.activeTabId() === oldId) {
                                     this.activeTabId.set(savedId);
                                 }
                             }
+                            persisted = true;
                         }
                     } catch (err) {
                         console.error(`Failed to persist request ${tabState.id} to backend`, err);
                     }
+                } else {
+                    persisted = true; // local-only save for guests
                 }
 
-                const finalState = this.states().get(savedId) || tabState;
+                if (!persisted) {
+                    // Keep it flagged as unsaved so the user is still warned / it retries on next edit
+                    continue;
+                }
+
+                const finalState = editedDuringSave ? { ...tabState, id: savedId } : (this.states().get(savedId) || tabState);
                 this.savedCapsules.update(col => {
                     const idx = col.findIndex(r => r.id === savedId);
                     if (idx >= 0) {
@@ -1937,11 +2020,11 @@ export class TabStateService {
                         return [...col, { ...finalState, isDirty: false, capsuleId: effectiveCapId }];
                     }
                 });
-                this.updateState(savedId, { isDirty: false, capsuleId: effectiveCapId });
+                this.updateState(savedId, { isDirty: editedDuringSave, capsuleId: effectiveCapId }, false);
             }
 
             // 4. Update backend session in Variable table with newly saved IDs and state
-            if (vs && this.authService.isLoggedIn()) {
+            if (vs && this.authService.isLoggedIn() && (!onlyDirty || idsChanged)) {
                 await vs.syncVariablesToBackend();
             }
 
