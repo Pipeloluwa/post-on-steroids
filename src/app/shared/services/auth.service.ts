@@ -188,6 +188,7 @@ export class AuthService {
     }
 
     async logout() {
+        if (this.isLoggingOut()) return;
         this.isLoggingOut.set(true);
         const user = this.currentUser();
         const userToken = this.token();
