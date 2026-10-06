@@ -32,7 +32,7 @@
         <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)"
             (contextmenu)="onTabContextMenu($event, tab.id)" [title]="tab.name"
             (cdkDragMoved)="onDragMoved($event)"
-            class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group w-[200px] min-w-[200px] max-w-[200px] shrink-0"
+            class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group w-[140px] min-w-[140px] max-w-[140px] shrink-0"
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
 
             <!-- Method -->

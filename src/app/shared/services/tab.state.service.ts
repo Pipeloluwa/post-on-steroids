@@ -2378,6 +2378,15 @@ export class TabStateService {
             next.splice(currentIndex, 0, movedId);
             return next;
         });
+
+        if (this.isBrowser) {
+            localStorage.setItem(`onsteroids_open_tab_ids_${this.activeCapsuleId()}`, JSON.stringify(this.openTabIds()));
+            localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
+        }
+        
+        if (this.authService.isLoggedIn()) {
+            this.syncWorkspaceStateToBackend();
+        }
     }
 
     getDefaultState(id: string): RequestState {
