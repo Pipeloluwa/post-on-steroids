@@ -155,7 +155,7 @@ export class VariableService {
     }
 
     async syncVariablesToBackend(): Promise<void> {
-        if (!this.authService.isLoggedIn()) return;
+        if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         if (this.isSyncing()) {
             this.hasPendingSync = true;
             return;

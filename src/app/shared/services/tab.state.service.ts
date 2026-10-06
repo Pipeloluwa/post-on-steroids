@@ -463,7 +463,7 @@ export class TabStateService {
 
     /** Debounced sync of workspace state to backend for cross-device persistence */
     private syncWorkspaceStateToBackend() {
-        if (!this.isBrowser || !this.authService.isLoggedIn()) return;
+        if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
 
         clearTimeout(this.workspaceStateSyncTimeout);
         this.workspaceStateSyncTimeout = setTimeout(async () => {
@@ -1701,7 +1701,7 @@ export class TabStateService {
     }
 
     private async runAutoSave() {
-        if (!this.autoSaveEnabled() || !this.authService.isLoggedIn()) return;
+        if (!this.autoSaveEnabled() || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         // Never run two saves concurrently — retry shortly after the current one finishes
         if (this.isSaving() || this.isAutoSaving()) {
             this.triggerAutoSave();
@@ -1935,7 +1935,7 @@ export class TabStateService {
 
             let idsChanged = false;
             for (const tabState of tabsToSave) {
-                if (this.isSaveCancelled) break;
+                if (this.isSaveCancelled || this.authService.isLoggingOut()) break;
                 
                 let savedId = tabState.id;
                 let persisted = false;
@@ -2085,7 +2085,7 @@ export class TabStateService {
     }
 
     async loadBackendData(): Promise<void> {
-        if (!this.isBrowser || !this.authService.isLoggedIn()) return;
+        if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         if (this.isLoadingBackendData()) return;
         this.isLoadingBackendData.set(true);
 

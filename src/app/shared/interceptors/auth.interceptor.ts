@@ -26,7 +26,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         return next(req).pipe(
             catchError((error: HttpErrorResponse) => {
                 if (error.status === 401 && !req.url.includes('/auth/refresh') && !req.url.includes('/auth/logout')) {
-                    if (!isRefreshing && authService.isLoggedIn()) {
+                    if (!isRefreshing && authService.isLoggedIn() && !authService.isLoggingOut()) {
                         isRefreshing = true;
                         return from(authService.refreshTokens()).pipe(
                             switchMap((success) => {
