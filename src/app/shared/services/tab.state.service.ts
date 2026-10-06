@@ -610,7 +610,7 @@ export class TabStateService {
         return id ? this.states().get(id) || this.getDefaultState(id) : null;
     });
 
-    private isLoadingBackendData = false;
+    isLoadingBackendData = signal<boolean>(false);
     private hasInitialBackendLoaded = false;
     private statesSaveTimeout: any = null;
     private fetchedExamplesIds = new Set<string>();
@@ -2076,8 +2076,8 @@ export class TabStateService {
 
     async loadBackendData(): Promise<void> {
         if (!this.isBrowser || !this.authService.isLoggedIn()) return;
-        if (this.isLoadingBackendData) return;
-        this.isLoadingBackendData = true;
+        if (this.isLoadingBackendData()) return;
+        this.isLoadingBackendData.set(true);
 
         try {
             this.hasInitialBackendLoaded = true;
@@ -2241,7 +2241,7 @@ export class TabStateService {
         } catch (e) {
             console.error('Failed to load backend data', e);
         } finally {
-            this.isLoadingBackendData = false;
+            this.isLoadingBackendData.set(false);
         }
     }
 
