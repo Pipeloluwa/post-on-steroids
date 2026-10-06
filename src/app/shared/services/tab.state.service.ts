@@ -868,6 +868,11 @@ export class TabStateService {
             return [...ids, newId];
         });
         this.activeTabId.set(newId);
+        
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
+        
         return newId;
     }
 
@@ -1242,6 +1247,10 @@ export class TabStateService {
             const remaining = this.openTabIds();
             this.activeTabId.set(remaining.length > 0 ? remaining[0] : null);
         }
+        
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
     }
 
     async batchDeleteRequests(ids: string[]): Promise<void> {
@@ -1274,11 +1283,19 @@ export class TabStateService {
             const remaining = this.openTabIds();
             this.activeTabId.set(remaining.length > 0 ? remaining[0] : null);
         }
+        
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
     }
 
     closeOtherTabs(keepId: string) {
         this.openTabIds.set([keepId]);
         this.activeTabId.set(keepId);
+        
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
     }
 
     resolveRequestTitle(name?: string, url?: string): string {
@@ -1680,10 +1697,9 @@ export class TabStateService {
             this.triggerAutoSave();
             return;
         }
-        const hasDirty = Array.from(this.states().values()).some(s => s.isDirty);
-        if (!hasDirty) return;
+        
         try {
-            await this.saveToCapsule(undefined, { onlyDirty: true, isAutoSave: true });
+            await this.saveToCapsule(this.activeTabId() ?? undefined, { isAutoSave: true });
         } catch (e) {
             console.warn('Auto-save failed', e);
         }
@@ -1790,6 +1806,10 @@ export class TabStateService {
             });
         }
         this.historyStack.delete(id);
+        
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
     }
 
 
@@ -2358,6 +2378,11 @@ export class TabStateService {
         });
 
         this.activeTabId.set(newId);
+        
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
+        
         return newId;
     }
 
@@ -2386,6 +2411,10 @@ export class TabStateService {
         
         if (this.authService.isLoggedIn()) {
             this.syncWorkspaceStateToBackend();
+        }
+        
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
         }
     }
 
