@@ -176,7 +176,13 @@
                 </div>
                 <div class="max-w-xs">
                     <h4 class="text-sm font-semibold text-(--postonsteroids-text-primary)">No Open Requests</h4>
-                    <p class="text-[12px] text-(--postonsteroids-text-muted) mt-1">All tabs in "{{ tabStateService.activeCapsuleName() }}" are closed. Create a new request to get started.</p>
+                    <p class="text-[12px] text-(--postonsteroids-text-muted) mt-1">
+                        @if (tabStateService.activeCapsuleName()) {
+                            All tabs in "{{ tabStateService.activeCapsuleName() }}" are closed. Create a new request to get started.
+                        } @else {
+                            All tabs are closed. Create a new request to get started.
+                        }
+                    </p>
                 </div>
                 <button (click)="addNewRequest()" type="button"
                     class="inline-flex items-center gap-x-1.5 px-4 py-2 rounded-lg bg-(--postonsteroids-accent) text-white text-xs font-semibold shadow hover:bg-(--postonsteroids-accent-hover) transition-colors cursor-pointer">
