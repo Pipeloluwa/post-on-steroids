@@ -563,6 +563,7 @@ export class TabStateService {
     autoAuthEndpointId = signal<string | null>(null);
     isCapsuleLoading = signal<boolean>(false);
     isSaving = signal<boolean>(false);
+    isAutoSaving = signal<boolean>(false);
     isSaveCancelled = false;
     requestExamplesMap = signal<Map<string, any[]>>(new Map());
     examplesLoadingMap = signal<Set<string>>(new Set());
@@ -1675,14 +1676,14 @@ export class TabStateService {
     private async runAutoSave() {
         if (!this.autoSaveEnabled() || !this.authService.isLoggedIn()) return;
         // Never run two saves concurrently — retry shortly after the current one finishes
-        if (this.isSaving()) {
+        if (this.isSaving() || this.isAutoSaving()) {
             this.triggerAutoSave();
             return;
         }
         const hasDirty = Array.from(this.states().values()).some(s => s.isDirty);
         if (!hasDirty) return;
         try {
-            await this.saveToCapsule(undefined, { onlyDirty: true });
+            await this.saveToCapsule(undefined, { onlyDirty: true, isAutoSave: true });
         } catch (e) {
             console.warn('Auto-save failed', e);
         }
@@ -1800,9 +1801,14 @@ export class TabStateService {
         }
     }
 
-    async saveToCapsule(id?: string, options?: { onlyDirty?: boolean }): Promise<void> {
+    async saveToCapsule(id?: string, options?: { onlyDirty?: boolean; isAutoSave?: boolean }): Promise<void> {
         const onlyDirty = !!options?.onlyDirty;
-        this.isSaving.set(true);
+        const isAuto = !!options?.isAutoSave;
+        if (isAuto) {
+            this.isAutoSaving.set(true);
+        } else {
+            this.isSaving.set(true);
+        }
         this.isSaveCancelled = false;
 
         try {
@@ -2040,7 +2046,11 @@ export class TabStateService {
                 this.snapshotCurrentSession();
             }
         } finally {
-            this.isSaving.set(false);
+            if (isAuto) {
+                this.isAutoSaving.set(false);
+            } else {
+                this.isSaving.set(false);
+            }
         }
     }
 
