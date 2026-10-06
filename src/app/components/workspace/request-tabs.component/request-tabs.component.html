@@ -113,7 +113,7 @@
         <!-- Auto-Save Toggle -->
         @if (authService.isLoggedIn()) {
             <button (click)="tabStateService.toggleAutoSave()"
-                class="h-full px-3 flex items-center gap-x-2 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors group cursor-pointer"
+                class="h-full px-3 flex items-center gap-x-1.5 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors group cursor-pointer shrink-0"
                 [title]="tabStateService.autoSaveEnabled() ? 'Auto-Save is ON (Click to disable)' : 'Auto-Save is OFF (Click to enable)'">
                 <mat-icon
                     class="text-[18px]! size-[18px]! transition-colors"
@@ -121,7 +121,7 @@
                     [class.text-(--postonsteroids-accent)]="tabStateService.autoSaveEnabled()">
                     {{ tabStateService.autoSaveEnabled() ? 'cloud_done' : 'cloud_off' }}
                 </mat-icon>
-                <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium">
+                <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium whitespace-nowrap">
                     Auto-Save {{ tabStateService.autoSaveEnabled() ? 'On' : 'Off' }}
                 </span>
             </button>
