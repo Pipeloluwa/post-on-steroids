@@ -33,7 +33,8 @@ import { DialogService } from '../../shared/services/dialog.service';
     host: {
         '(document:mousemove)': 'onMouseMove($event)',
         '(document:mouseup)': 'onMouseUp()',
-        '(document:keydown)': 'handleKeyboardShortcuts($event)'
+        '(document:keydown)': 'handleKeyboardShortcuts($event)',
+        '(window:beforeunload)': 'onBeforeUnload($event)'
     }
 })
 export class WorkspaceComponent {
@@ -307,6 +308,16 @@ export class WorkspaceComponent {
             } else if (event.key.toLowerCase() === 'y' && !isMac) {
                 this.tabStateService.redo();
                 event.preventDefault();
+            }
+        }
+    }
+
+    onBeforeUnload(event: BeforeUnloadEvent) {
+        if (!this.tabStateService.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            const hasDirty = Array.from(this.tabStateService.states().values()).some(s => s.isDirty);
+            if (hasDirty) {
+                event.preventDefault();
+                event.returnValue = '';
             }
         }
     }

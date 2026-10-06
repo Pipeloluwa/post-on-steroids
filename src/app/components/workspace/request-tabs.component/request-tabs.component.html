@@ -32,16 +32,16 @@
         <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)"
             (contextmenu)="onTabContextMenu($event, tab.id)" [title]="tab.name"
             (cdkDragMoved)="onDragMoved($event)"
-            class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group min-w-fit"
+            class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group w-[200px] min-w-[200px] max-w-[200px] shrink-0"
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
 
             <!-- Method -->
-            <span class="text-[9px] font-bold uppercase" [style.color]="getMethodColor(getTabMethod(tab.id))">
+            <span class="text-[9px] font-bold uppercase min-w-[36px]" [style.color]="getMethodColor(getTabMethod(tab.id))">
                 {{ getTabMethod(tab.id) }}
             </span>
 
             <!-- Name/URL -->
-            <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate max-w-[120px]">
+            <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 text-left">
                 {{ tab.name }}
             </span>
 
@@ -109,6 +109,23 @@
 
     <!-- Right Section: Auto Auth & Variables -->
     <div class="flex items-center h-full border-l border-(--postonsteroids-border)">
+
+        <!-- Auto-Save Toggle -->
+        @if (authService.isLoggedIn()) {
+            <button (click)="tabStateService.toggleAutoSave()"
+                class="h-full px-3 flex items-center gap-x-2 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors group cursor-pointer"
+                [title]="tabStateService.autoSaveEnabled() ? 'Auto-Save is ON (Click to disable)' : 'Auto-Save is OFF (Click to enable)'">
+                <mat-icon
+                    class="text-[18px]! size-[18px]! transition-colors"
+                    [class.text-(--postonsteroids-text-muted)]="!tabStateService.autoSaveEnabled()"
+                    [class.text-(--postonsteroids-accent)]="tabStateService.autoSaveEnabled()">
+                    {{ tabStateService.autoSaveEnabled() ? 'cloud_done' : 'cloud_off' }}
+                </mat-icon>
+                <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium">
+                    Auto-Save {{ tabStateService.autoSaveEnabled() ? 'On' : 'Off' }}
+                </span>
+            </button>
+        }
 
         <!-- Global Variables Button -->
         <button (click)="openVariableModal()"

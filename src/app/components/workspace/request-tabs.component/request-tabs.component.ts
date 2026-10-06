@@ -7,6 +7,7 @@ import { VariableModalComponent } from '../../../shared/components/variable.moda
 import { SwaggerImportModalComponent } from '../../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
 import { VariableService } from '../../../shared/services/variable.service';
 import { TabStateService } from '../../../shared/services/tab.state.service';
+import { AuthService } from '../../../shared/services/auth.service';
 import { effect } from '@angular/core';
 
 interface RequestTab {
@@ -25,6 +26,7 @@ interface RequestTab {
 export class RequestTabsComponent {
     variableService = inject(VariableService);
     tabStateService = inject(TabStateService);
+    authService = inject(AuthService);
     @ViewChild('variableModal') variableModal!: VariableModalComponent;
     @ViewChild('swaggerModal') swaggerModal!: SwaggerImportModalComponent;
 

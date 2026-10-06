@@ -453,6 +453,12 @@ export class TabStateService {
         if (session.autoAuthEndpointId) {
             this.autoAuthEndpointId.set(session.autoAuthEndpointId);
         }
+        if (session.autoSaveEnabled !== undefined) {
+            this.autoSaveEnabled.set(session.autoSaveEnabled);
+            if (this.isBrowser) {
+                localStorage.setItem('onsteroids_autosave', session.autoSaveEnabled ? 'true' : 'false');
+            }
+        }
     }
 
     /** Debounced sync of workspace state to backend for cross-device persistence */
@@ -492,7 +498,8 @@ export class TabStateService {
                     tabStates: JSON.stringify(currentStates),
                     responses: JSON.stringify(storedResponses),
                     autoAuthEnabled: this.autoAuthEnabled(),
-                    autoAuthEndpointId: this.autoAuthEndpointId()
+                    autoAuthEndpointId: this.autoAuthEndpointId(),
+                    autoSaveEnabled: this.autoSaveEnabled()
                 };
 
                 await firstValueFrom(
@@ -526,7 +533,8 @@ export class TabStateService {
                     activeCapsuleName: ws.activeCapsuleName,
                     activeTabId: ws.activeTabId,
                     autoAuthEnabled: ws.autoAuthEnabled,
-                    autoAuthEndpointId: ws.autoAuthEndpointId
+                    autoAuthEndpointId: ws.autoAuthEndpointId,
+                    autoSaveEnabled: ws.autoSaveEnabled
                 };
 
                 // Parse JSON fields
@@ -606,6 +614,9 @@ export class TabStateService {
     private statesSaveTimeout: any = null;
     private fetchedExamplesIds = new Set<string>();
     private inFlightExampleRequests = new Map<string, Promise<any[]>>();
+    
+    autoSaveEnabled = signal<boolean>(false);
+    private autoSaveTimeout: any = null;
 
     constructor() {
         if (this.isBrowser) {
@@ -672,6 +683,11 @@ export class TabStateService {
 
     private loadFromStorage() {
         if (!this.isBrowser) return;
+
+        const autoSavePref = localStorage.getItem('onsteroids_autosave');
+        if (autoSavePref === 'true') {
+            this.autoSaveEnabled.set(true);
+        }
 
         if (this.authService.isLoggedIn()) {
             const restored = this.restoreUserSession(this.authService.currentUser());
@@ -1613,6 +1629,33 @@ export class TabStateService {
             if (updated) {
                 this.getVariableService()?.syncVariablesFromInputs(id, updated);
             }
+        }
+
+        if (this.autoSaveEnabled() && partialState.isDirty && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
+    }
+
+    triggerAutoSave() {
+        if (this.autoSaveTimeout) {
+            clearTimeout(this.autoSaveTimeout);
+        }
+        this.autoSaveTimeout = setTimeout(() => {
+            if (this.authService.isLoggedIn()) {
+                this.saveToCapsule();
+            }
+        }, 1500); // 1.5 second debounce
+    }
+
+    toggleAutoSave() {
+        const next = !this.autoSaveEnabled();
+        this.autoSaveEnabled.set(next);
+        if (this.isBrowser) {
+            localStorage.setItem('onsteroids_autosave', next ? 'true' : 'false');
+        }
+        if (next && this.authService.isLoggedIn()) {
+            // Save all currently dirty tabs immediately when enabling auto-save
+            this.saveToCapsule();
         }
     }
 
