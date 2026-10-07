@@ -90,13 +90,6 @@
         <span class="text-[10px] text-(--postonsteroids-text-secondary) leading-none whitespace-nowrap">Import Swagger</span>
     </div>
 
-    <!-- Add Tab Button -->
-    <div (click)="addTab()"
-        class="h-full flex items-center px-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)"
-        title="Create new request">
-        <mat-icon class="flex text-[18px]! size-[18px]! text-(--postonsteroids-text-secondary)">add</mat-icon>
-    </div>
-
     <!-- More Options (Endpoints Modal) -->
     <div
         class="h-full flex items-center px-1 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)">
@@ -107,26 +100,8 @@
         </app-scrollable-select-component>
     </div>
 
-    <!-- Right Section: Auto Auth & Variables -->
+    <!-- Right Section: Variables -->
     <div class="flex items-center h-full border-l border-(--postonsteroids-border)">
-
-        <!-- Auto-Save Toggle -->
-        @if (authService.isLoggedIn()) {
-            <button (click)="tabStateService.toggleAutoSave()"
-                class="h-full px-3 flex items-center gap-x-1.5 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors group cursor-pointer shrink-0"
-                [title]="tabStateService.autoSaveEnabled() ? 'Auto-Save is ON (Click to disable)' : 'Auto-Save is OFF (Click to enable)'">
-                <mat-icon
-                    class="text-[18px]! size-[18px]! transition-colors"
-                    [class.text-(--postonsteroids-text-muted)]="!tabStateService.autoSaveEnabled()"
-                    [class.text-(--postonsteroids-accent)]="tabStateService.autoSaveEnabled()"
-                    [class.animate-pulse]="tabStateService.isAutoSaving()">
-                    {{ !tabStateService.autoSaveEnabled() ? 'cloud_off' : (tabStateService.isAutoSaving() ? 'cloud_sync' : 'cloud_done') }}
-                </mat-icon>
-                <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium whitespace-nowrap">
-                    Auto-Save {{ tabStateService.autoSaveEnabled() ? 'On' : 'Off' }}
-                </span>
-            </button>
-        }
 
         <!-- Global Variables Button -->
         <button (click)="openVariableModal()"

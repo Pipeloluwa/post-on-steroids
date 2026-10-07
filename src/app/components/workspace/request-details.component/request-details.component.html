@@ -45,8 +45,25 @@
         </div>
     </div>
 
-    <!-- Right Section: Save Button Group -->
+    <!-- Right Section: Auto-Save Toggle + Save Button Group -->
     <div class="flex items-center gap-x-2">
+        @if (isLoggedIn()) {
+        <button type="button" (click)="tabStateService.toggleAutoSave()"
+            class="h-[30px] px-2.5 flex items-center gap-x-1.5 rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer shrink-0"
+            [attr.aria-pressed]="tabStateService.autoSaveEnabled()"
+            [title]="tabStateService.autoSaveEnabled() ? 'Auto-Save is ON (Click to disable)' : 'Auto-Save is OFF (Click to enable)'">
+            <mat-icon class="text-[16px]! size-[16px]! transition-colors" aria-hidden="true"
+                [class.text-(--postonsteroids-text-muted)]="!tabStateService.autoSaveEnabled()"
+                [class.text-(--postonsteroids-accent)]="tabStateService.autoSaveEnabled()"
+                [class.animate-pulse]="tabStateService.isAutoSaving()">
+                {{ !tabStateService.autoSaveEnabled() ? 'cloud_off' : (tabStateService.isAutoSaving() ? 'cloud_sync' : 'cloud_done') }}
+            </mat-icon>
+            <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium whitespace-nowrap">
+                Auto-Save {{ tabStateService.autoSaveEnabled() ? 'On' : 'Off' }}
+            </span>
+        </button>
+        }
+
         <div
             class="flex items-center h-[30px] rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)">
             <button (click)="saveRequest()" [disabled]="isSaving()"

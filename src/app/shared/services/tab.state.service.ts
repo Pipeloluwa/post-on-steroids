@@ -511,14 +511,6 @@ export class TabStateService {
         }, 2000);
     }
 
-    /** Delete workspace state from backend (called on logout) */
-    private deleteWorkspaceStateFromBackend() {
-        if (!this.isBrowser) return;
-        firstValueFrom(
-            this.http.delete(`${API_BASE_URL}/WorkspaceState`)
-        ).catch(e => console.warn('Failed to delete workspace state from backend', e));
-    }
-
     /** Load workspace state from backend and apply it (called on login/loadBackendData) */
     private async loadWorkspaceStateFromBackend(): Promise<boolean> {
         if (!this.isBrowser || !this.authService.isLoggedIn()) return false;
@@ -810,8 +802,6 @@ export class TabStateService {
     clearWorkspace(userParam?: UserAuth | null) {
         clearTimeout(this.backendSyncTimeout);
         clearTimeout(this.workspaceStateSyncTimeout);
-
-        this.deleteWorkspaceStateFromBackend();
 
         this.openTabIds.set([]);
         this.activeTabId.set(null);
@@ -1347,6 +1337,12 @@ export class TabStateService {
             localStorage.setItem('onsteroids_responses', JSON.stringify(map));
         } catch (e) {
             console.warn('Could not cache response to storage', e);
+        }
+
+        // Auto-save: persist the new response to the backend workspace state
+        // (the same sync manual save performs via snapshotCurrentSession)
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.syncWorkspaceStateToBackend();
         }
     }
 
