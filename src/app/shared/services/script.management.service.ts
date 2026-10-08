@@ -291,32 +291,43 @@ export class ScriptManagementService {
     }
 
     async resetScript(id: string): Promise<ScriptDto | null> {
-        if (id === 'default_encrypt_fallback') {
-            return null;
-        }
+        let isVirtual = id === 'default_encrypt_fallback' || id === 'default_decrypt_fallback';
+        const targetScript = this.scripts().find(s => s.id === id);
+        if (!targetScript) return null;
 
-        if (!this.authService.isLoggedIn()) {
+        let defaultContent = DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
+        if (targetScript.type === 'Encryption') {
+            defaultContent = targetScript.name === 'Decrypt' ? DEFAULT_DECRYPTION_SCRIPT_SKELETON : DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
+        }
+        else if (targetScript.type === 'PreRequest') defaultContent = DEFAULT_PRE_REQUEST_SCRIPT_SKELETON;
+        else if (targetScript.type === 'PostRequest') defaultContent = DEFAULT_POST_RESPONSE_SCRIPT_SKELETON;
+        else if (targetScript.type === 'Test') defaultContent = DEFAULT_TEST_SCRIPT_SKELETON;
+
+        if (!this.authService.isLoggedIn() || isVirtual) {
             let updatedScript: ScriptDto | null = null;
             this.scripts.update(s => s.map(x => {
                 if (x.id === id) {
-                    let defaultContent = DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
-                    if (x.type === 'Encryption') defaultContent = DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
-                    else if (x.type === 'PreRequest') defaultContent = DEFAULT_PRE_REQUEST_SCRIPT_SKELETON;
-                    else if (x.type === 'PostRequest') defaultContent = DEFAULT_POST_RESPONSE_SCRIPT_SKELETON;
-                    else if (x.type === 'Test') defaultContent = DEFAULT_TEST_SCRIPT_SKELETON;
                     updatedScript = { ...x, content: defaultContent, updatedAt: new Date().toISOString() };
                     return updatedScript;
                 }
                 return x;
             }));
-            this.saveOfflineScripts();
-            this.notificationService.notify('Script reset locally (offline)');
+            
+            if (!this.authService.isLoggedIn()) {
+                this.saveOfflineScripts();
+                this.notificationService.notify('Script reset locally (offline)');
+            } else if (isVirtual) {
+                this.notificationService.notify('Script reset successfully');
+            }
             return updatedScript;
         }
 
+        // For real backend scripts, force the correct default content via an update
+        // instead of relying on the backend /reset endpoint which might have outdated skeletons.
         try {
+            const script = { name: targetScript.name, content: defaultContent } as ScriptDto;
             const res = await firstValueFrom(
-                this.http.post<ApiResponse<ScriptDto>>(`${API_BASE_URL}/scripts/${id}/reset`, {})
+                this.http.put<ApiResponse<ScriptDto>>(`${API_BASE_URL}/scripts/${id}`, script)
             );
             if (res && res.data) {
                 this.scripts.update(s => s.map(x => x.id === id ? res.data : x));
