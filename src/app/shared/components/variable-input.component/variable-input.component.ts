@@ -388,7 +388,10 @@ export class VariableInputComponent implements ControlValueAccessor {
                     const rect = span.getBoundingClientRect();
                     // Check if mouse X is within this exact span's bounds
                     if (event.clientX >= rect.left && event.clientX <= rect.right) {
-                        const currentVar = this.variableService.variables().find(v => v.key === seg.key);
+                        const segKey = (seg.key || '').trim().toLowerCase();
+                        const currentVar = this.variableService.variables().find(
+                            v => (v.key || '').trim().toLowerCase() === segKey
+                        );
                         
                         this.hoveredVariable.set({
                             key: seg.key!,
@@ -427,7 +430,10 @@ export class VariableInputComponent implements ControlValueAccessor {
             this.hoveredVariable.set({ ...hover, val: newValue });
         }
         
-        const v = this.variableService.variables().find(v => v.key === key);
+        const targetKey = (key || '').trim().toLowerCase();
+        const v = this.variableService.variables().find(
+            v => (v.key || '').trim().toLowerCase() === targetKey
+        );
         if (v) {
             this.variableService.updateVariable({ ...v, value: newValue });
         } else {

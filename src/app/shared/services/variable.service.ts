@@ -54,7 +54,7 @@ export class VariableService {
         });
     }
 
-    private loadVariables(capsuleId?: string) {
+    private async loadVariables(capsuleId?: string) {
         const user = this.authService.currentUser();
         const capId = capsuleId || this.tabStateService.activeCapsuleId() || '1';
         
@@ -68,13 +68,23 @@ export class VariableService {
 
         if (saved) {
             try {
-                this.variables.set(JSON.parse(saved));
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.variables.set(parsed);
+                }
             } catch (e) {
-                this.variables.set([]);
+                // Ignore parse errors, do not wipe
             }
-        } else {
-            this.variables.set([]);
-            this.saveVariables();
+        }
+
+        // When user is logged in, ALWAYS fetch latest from backend for this capsule.
+        // NEVER wipe or call saveVariables() when local cache is empty (e.g. on another browser)!
+        if (this.authService.isLoggedIn() && !this.authService.isLoggingOut()) {
+            await this.loadVariablesFromBackend(false);
+        } else if (!saved) {
+            this.variables.set([
+                { id: '1', key: 'baseUrl', value: 'http://acegeld.runasp.net/api/v1', enabled: true }
+            ]);
         }
     }
 
@@ -96,7 +106,7 @@ export class VariableService {
                     const parsed = JSON.parse(saved);
                     if (Array.isArray(parsed) && parsed.length > 0) {
                         this.variables.set(parsed);
-                        this.saveVariables();
+                        this.saveVariables(false);
                         return;
                     }
                 } catch (e) {}
@@ -114,38 +124,58 @@ export class VariableService {
     private hasPendingSync = false;
 
     async loadVariablesFromBackend(forceNoCapsuleFilter = false): Promise<void> {
-        if (!this.authService.isLoggedIn()) return;
+        if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         try {
             const capId = this.tabStateService.activeCapsuleId();
-            const qs = (!forceNoCapsuleFilter && capId !== '1') ? `?capsuleId=${capId}` : '';
+            const qs = (!forceNoCapsuleFilter && capId && capId !== '1') ? `?capsuleId=${capId}` : '';
             const res = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
             );
             if (res?.data && Array.isArray(res.data)) {
                 // Filter out internal system variables from the user-facing variables list
                 const userVars: IGlobalVariable[] = res.data
-                    .filter(v => !v.variableKey.startsWith('__'))
+                    .filter(v => {
+                        const k = v.variableKey || v.key || '';
+                        return !k.startsWith('__');
+                    })
                     .map(v => {
+                        const key = (v.variableKey || v.key || '').trim();
+                        const val = v.variableValue !== undefined ? v.variableValue : (v.value !== undefined ? v.value : '');
                         const existing = this.variables().find(
-                            ev => ev.id === v.id || (ev.key || '').trim().toLowerCase() === (v.variableKey || '').trim().toLowerCase()
+                            ev => ev.id === v.id || (ev.key || '').trim().toLowerCase() === key.toLowerCase()
                         );
                         return {
                             id: v.id,
-                            key: v.variableKey,
-                            value: v.variableValue ?? existing?.value ?? '',
+                            key: key,
+                            value: (val ?? existing?.value ?? ''),
                             type: v.type ?? existing?.type ?? 'global',
-                            enabled: v.isEnabled ?? true,
+                            enabled: (v.isEnabled !== undefined ? v.isEnabled : (v.enabled !== undefined ? v.enabled : true)),
                             source: existing?.source
                         };
                     });
 
                 // Also keep any active local variables that weren't in res.data yet
-                const backendKeys = new Set(res.data.map(v => (v.variableKey || '').trim().toLowerCase()));
-                const extraLocalVars = this.variables().filter(v => !(v.key || '').startsWith('__') && !backendKeys.has((v.key || '').trim().toLowerCase()));
+                const backendKeys = new Set(res.data.map(v => (v.variableKey || v.key || '').trim().toLowerCase()));
+                const extraLocalVars = this.variables()
+                    .filter(v => {
+                        const k = (v.key || '').trim().toLowerCase();
+                        return !(v.key || '').startsWith('__') && !backendKeys.has(k);
+                    })
+                    .map(v => ({
+                        ...v,
+                        // Force local-only variables to have a short ID so they sync as new records
+                        id: v.id && v.id.length > 8 ? v.id.substring(0, 7) : v.id
+                    }));
 
                 const finalVars = [...userVars, ...extraLocalVars];
                 if (finalVars.length > 0) {
                     this.variables.set(finalVars);
+                    this.saveVariables(false);
+                    if (extraLocalVars.length > 0 && this.authService.isLoggedIn()) {
+                        this.syncVariablesToBackend();
+                    }
+                } else if (userVars.length === 0 && extraLocalVars.length === 0) {
+                    this.variables.set([]);
                     this.saveVariables(false);
                 }
             }
@@ -186,9 +216,10 @@ export class VariableService {
             if (res?.data && Array.isArray(res.data)) {
                 const idMap = new Map<string, string>();
                 for (const dbVar of res.data) {
-                    if ((dbVar.variableKey || '').startsWith('__')) continue;
+                    const dbKey = (dbVar.variableKey || dbVar.key || '').trim();
+                    if (dbKey.startsWith('__')) continue;
                     const matched = this.variables().find(
-                        v => (v.key || '').trim().toLowerCase() === (dbVar.variableKey || '').trim().toLowerCase()
+                        v => (v.key || '').trim().toLowerCase() === dbKey.toLowerCase()
                     );
                     if (matched && matched.id !== dbVar.id) {
                         idMap.set(matched.id, dbVar.id);
