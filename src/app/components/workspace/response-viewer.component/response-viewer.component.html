@@ -158,11 +158,11 @@
                     get a response</span>
             </div>
             } @else if (activeMode() === 'Pretty') {
-            <div class="w-full h-full">
+            <div class="flex-1 min-h-0 w-full relative">
                 <app-monaco-editor [ngModel]="formattedResponseBody()"
                     [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="isWordWrap()" [editorId]="'response-body'" [ownerTabId]="tabId()"
                     (addVariableClick)="addResponseToVariable()"
-                    class="flex-1 w-full h-full block">
+                    class="absolute inset-0 w-full h-full block">
                 </app-monaco-editor>
             </div>
 

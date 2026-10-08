@@ -288,6 +288,23 @@ export class VariableService {
     updateVariable(updatedVar: IGlobalVariable) {
         this.variables.update(vars => vars.map(v => v.id === updatedVar.id ? updatedVar : v));
         this.saveVariables();
+
+        // If the variable is bound to a request input, sync the change back to the request state
+        if (updatedVar.source && updatedVar.source.tabId) {
+            const state = this.tabStateService.getState(updatedVar.source.tabId);
+            if (state) {
+                const prop = updatedVar.source.propertyKey?.trim();
+                if (prop) {
+                    if (updatedVar.source.type === 'header' && state.headers) {
+                        const headers = state.headers.map((h: any) => h.key.trim().toLowerCase() === prop.toLowerCase() ? { ...h, value: updatedVar.value } : h);
+                        this.tabStateService.updateState(updatedVar.source.tabId, { headers }, false);
+                    } else if (updatedVar.source.type === 'param' && state.params) {
+                        const params = state.params.map((p: any) => p.key.trim().toLowerCase() === prop.toLowerCase() ? { ...p, value: updatedVar.value } : p);
+                        this.tabStateService.updateState(updatedVar.source.tabId, { params }, false);
+                    }
+                }
+            }
+        }
     }
 
     removeVariable(id: string) {
