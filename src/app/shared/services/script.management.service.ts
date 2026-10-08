@@ -7,6 +7,7 @@ import { catchError, map } from 'rxjs/operators';
 import { of, firstValueFrom } from 'rxjs';
 import { LocalStorageService } from './local.storage.service';
 import { generateUUID } from '../utils/uuid.util';
+import { DEFAULT_ENCRYPTION_SCRIPT_SKELETON, DEFAULT_DECRYPTION_SCRIPT_SKELETON, DEFAULT_PRE_REQUEST_SCRIPT_SKELETON, DEFAULT_POST_RESPONSE_SCRIPT_SKELETON, DEFAULT_TEST_SCRIPT_SKELETON } from '../constants/script.snippets.constants';
 
 export interface ScriptDto {
     id: string;
@@ -28,107 +29,7 @@ export interface ApiResponse<T> {
     errors?: string[];
 }
 
-const DEFAULT_ENCRYPT_SCRIPT = String.raw`async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {
-    //only code written within this code block will be executed
-    function getNestedValue(obj, path) {
-        return path.split('.').reduce((acc, part) => acc && acc[part], obj);
-    }
-    function setNestedValue(obj, path, value) {
-        const parts = path.split('.');
-        const last = parts.pop();
-        const target = parts.reduce((acc, part) => {
-            if (!acc[part]) acc[part] = {};
-            return acc[part];
-        }, obj);
-        if (target) target[last] = value;
-    }
-    function getPrimitivePaths(obj, currentPath = '') {
-        let paths = [];
-        for (let key in obj) {
-            if (obj.hasOwnProperty(key)) {
-                const path = currentPath ? \`\${currentPath}.\${key}\` : key;
-                if (obj[key] !== null && typeof obj[key] === 'object') {
-                    paths = paths.concat(getPrimitivePaths(obj[key], path));
-                } else {
-                    paths.push(path);
-                }
-            }
-        }
-        return paths;
-    }
-    const parameters = {};
-    const shouldEncryptAllHeaders = typeof autoEncryptHeaders !== 'undefined' ? autoEncryptHeaders : false;
-    const encHeadersList = encryptedHeaders || [];
-    for (let h of headers) {
-        if (h.enabled && h.key) {
-            if (shouldEncryptAllHeaders || encHeadersList.includes(h.key)) {
-                parameters[h.key] = h.value;
-            }
-        }
-    }
-    let bodyObj = null;
-    if (body) {
-        try {
-            const cleanedBody = body.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').trim();
-            bodyObj = JSON.parse(cleanedBody);
-        } catch (e) {}
-    }
-    if (bodyObj) {
-        const shouldEncryptAllBody = typeof autoEncryptBody !== 'undefined' ? autoEncryptBody : false;
-        const encBodyPathsList = encryptedBodyPaths || [];
-        if (shouldEncryptAllBody) {
-            const allPaths = getPrimitivePaths(bodyObj);
-            for (let path of allPaths) {
-                const val = getNestedValue(bodyObj, path);
-                if (val !== undefined && val !== null) {
-                    parameters[path] = val;
-                }
-            }
-        } else {
-            for (let path of encBodyPathsList) {
-                const val = getNestedValue(bodyObj, path);
-                if (val !== undefined && val !== null) {
-                    parameters[path] = val;
-                }
-            }
-        }
-    }
-    if (Object.keys(parameters).length > 0) {
-        try {
-            const response = await fetch('https://localhost:7131/api/v1/auth/encrypt', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    parameters: parameters
-                })
-            });
-            if (response.ok) {
-                const result = await response.json();
-                const encryptedParams = result.parameters || result;
-                for (let h of headers) {
-                    if (h.key && encryptedParams[h.key] !== undefined) {
-                        h.value = String(encryptedParams[h.key]);
-                    }
-                }
-                if (bodyObj) {
-                    for (let key in encryptedParams) {
-                        if (encryptedParams.hasOwnProperty(key)) {
-                            if (key.includes('.') || getNestedValue(bodyObj, key) !== undefined) {
-                                setNestedValue(bodyObj, key, encryptedParams[key]);
-                            }
-                        }
-                    }
-                    body = JSON.stringify(bodyObj, null, 2);
-                }
-            }
-        } catch (error) {
-            console.error('Error during payload encryption:', error);
-        }
-    }
-    return body;
-}`;
+
 
 @Injectable({
     providedIn: 'root'
@@ -188,7 +89,21 @@ export class ScriptManagementService {
                         userId: 'virtual',
                         type: 'Encryption',
                         name: 'Encrypt',
-                        content: DEFAULT_ENCRYPT_SCRIPT,
+                        content: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
+                        isDefault: true,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    });
+                }
+                
+                // If backend does not provide the default Decrypt script, inject a fallback
+                if (!userScripts.find(s => s.name === 'Decrypt' && s.type === 'Encryption')) {
+                    userScripts.push({
+                        id: 'default_decrypt_fallback',
+                        userId: 'virtual',
+                        type: 'Encryption',
+                        name: 'Decrypt',
+                        content: DEFAULT_DECRYPTION_SCRIPT_SKELETON,
                         isDefault: true,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
@@ -215,12 +130,25 @@ export class ScriptManagementService {
                         userId: 'virtual',
                         type: 'Encryption',
                         name: 'Encrypt',
-                        content: DEFAULT_ENCRYPT_SCRIPT,
+                        content: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
                         isDefault: true,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
                     });
-                    }
+                }
+                
+                if (!userScripts.find(s => s.name === 'Decrypt' && s.type === 'Encryption')) {
+                    userScripts.push({
+                        id: 'default_decrypt_fallback',
+                        userId: 'virtual',
+                        type: 'Encryption',
+                        name: 'Decrypt',
+                        content: DEFAULT_DECRYPTION_SCRIPT_SKELETON,
+                        isDefault: true,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    });
+                }
                     this.scripts.set(userScripts);
                     return;
                 }
@@ -230,11 +158,21 @@ export class ScriptManagementService {
         // Load default fallback
         const defaultScripts: ScriptDto[] = [
             {
-                id: generateUUID(),
+                id: 'default_encrypt_fallback',
                 userId: 'offline',
                 type: 'Encryption',
                 name: 'Encrypt',
-                content: DEFAULT_ENCRYPT_SCRIPT,
+                content: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
+                isDefault: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'default_decrypt_fallback',
+                userId: 'offline',
+                type: 'Encryption',
+                name: 'Decrypt',
+                content: DEFAULT_DECRYPTION_SCRIPT_SKELETON,
                 isDefault: true,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -286,10 +224,7 @@ export class ScriptManagementService {
     }
 
     async updateScript(id: string, name: string, content: string): Promise<ScriptDto | null> {
-        if (id === 'default_encrypt_fallback') {
-            this.notificationService.notify('Cannot edit the virtual fallback script directly.');
-            return null;
-        }
+        let isVirtual = id === 'default_encrypt_fallback' || id === 'default_decrypt_fallback';
 
         if (!this.authService.isLoggedIn()) {
             let updatedScript: ScriptDto | null = null;
@@ -303,6 +238,12 @@ export class ScriptManagementService {
             this.saveOfflineScripts();
             this.notificationService.notify('Script updated locally (offline)');
             return updatedScript;
+        }
+        
+        if (isVirtual && this.authService.isLoggedIn()) {
+            // It's a virtual fallback, but user is logged in and modified it.
+            // We should create it on the backend.
+            return this.createScript('Encryption', name, content);
         }
 
         try {
@@ -323,8 +264,8 @@ export class ScriptManagementService {
     }
 
     async deleteScript(id: string): Promise<boolean> {
-        if (id === 'default_encrypt_fallback') {
-            this.notificationService.notify('Cannot delete the virtual fallback script.');
+        if (id === 'default_encrypt_fallback' || id === 'default_decrypt_fallback') {
+            this.notificationService.notify('Cannot delete built-in default scripts.');
             return false;
         }
 
@@ -358,7 +299,12 @@ export class ScriptManagementService {
             let updatedScript: ScriptDto | null = null;
             this.scripts.update(s => s.map(x => {
                 if (x.id === id) {
-                    updatedScript = { ...x, content: DEFAULT_ENCRYPT_SCRIPT, updatedAt: new Date().toISOString() };
+                    let defaultContent = DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
+                    if (x.type === 'Encryption') defaultContent = DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
+                    else if (x.type === 'PreRequest') defaultContent = DEFAULT_PRE_REQUEST_SCRIPT_SKELETON;
+                    else if (x.type === 'PostRequest') defaultContent = DEFAULT_POST_RESPONSE_SCRIPT_SKELETON;
+                    else if (x.type === 'Test') defaultContent = DEFAULT_TEST_SCRIPT_SKELETON;
+                    updatedScript = { ...x, content: defaultContent, updatedAt: new Date().toISOString() };
                     return updatedScript;
                 }
                 return x;

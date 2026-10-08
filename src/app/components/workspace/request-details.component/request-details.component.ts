@@ -4,14 +4,13 @@ import { ScrollableSelectComponent } from '../../../shared/components/scrollable
 import { MatIcon } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
-import { CreateCapsuleModalComponent } from '../../../shared/components/create-capsule.modal.component/create-capsule.modal.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { inject } from '@angular/core';
 
 @Component({
     selector: 'app-request-details-component',
-    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CreateCapsuleModalComponent],
+    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -32,16 +31,6 @@ export class RequestDetailsComponent {
     tabId = input.required<string>();
     
     requestName = computed(() => this.tabStateService.getState(this.tabId())?.name || '');
-    capsules = computed(() => {
-        const names = this.tabStateService.capsules().map(c => c.name);
-        return [...names, '+ New Capsule...'];
-    });
-    
-    selectedCapsule = computed(() => {
-        const id = this.tabStateService.activeCapsuleId();
-        const capsule = this.tabStateService.capsules().find(c => c.id === id);
-        return capsule ? capsule.name : 'My Capsule';
-    });
 
     constructor() {
         effect(() => {
@@ -65,19 +54,6 @@ export class RequestDetailsComponent {
 
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
-
-    @ViewChild('createCapsuleModal') createCapsuleModal?: CreateCapsuleModalComponent;
-
-    async setCapsule(collectionName: string) {
-        if (collectionName === '+ New Capsule...') {
-            this.createCapsuleModal?.open();
-            return;
-        }
-        const capsule = this.tabStateService.capsules().find(c => c.name === collectionName);
-        if (capsule) {
-            await this.tabStateService.switchCapsule(capsule);
-        }
-    }
 
     async shareCapsule() {
         if (!this.isLoggedIn()) {
@@ -122,7 +98,9 @@ export class RequestDetailsComponent {
                 this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
                 this.onNotify.emit('Endpoint exported successfully.');
             } else if (option === 'Export Capsule') {
-                const collectionName = this.selectedCapsule();
+                const capsuleId = this.tabStateService.activeCapsuleId();
+                const capsule = this.tabStateService.capsules().find(c => c.id === capsuleId);
+                const collectionName = capsule ? capsule.name : 'My Capsule';
                 const collectionRequests = this.tabStateService.savedCapsules();
                 const exportData = {
                     collection: collectionName,

@@ -1,4 +1,6 @@
 import { Component, inject, computed, signal, ViewChild, ElementRef, effect } from '@angular/core';
+import { Subject } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
@@ -13,7 +15,7 @@ import { BodyTypesComponent } from "../body.types.component/body.types.component
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/test.snippets.constants';
-import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet } from '../../../shared/constants/script.snippets.constants';
+import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet, DEFAULT_ENCRYPTION_SCRIPT_SKELETON, DEFAULT_PRE_REQUEST_SCRIPT_SKELETON, DEFAULT_POST_RESPONSE_SCRIPT_SKELETON, DEFAULT_TEST_SCRIPT_SKELETON } from '../../../shared/constants/script.snippets.constants';
 import { DialogService } from '../../../shared/services/dialog.service';
 
 @Component({
@@ -34,7 +36,15 @@ export class PayloadTypesComponent {
   sandboxService = inject(SandboxExecutionService);
   dialogService = inject(DialogService);
 
+  private saveScriptSubject = new Subject<{ id: string, name: string, content: string }>();
+
   constructor() {
+    this.saveScriptSubject.pipe(debounceTime(1000)).subscribe(({ id, name, content }) => {
+      if (id && id !== 'default_encrypt_fallback') {
+        this.scriptManagementService.updateScript(id, name, content);
+      }
+    });
+
     effect(() => {
         // Run this effect when encryptionScripts updates
         const scripts = this.encryptionScripts();
@@ -95,7 +105,7 @@ export class PayloadTypesComponent {
     if (name === '+ Add New Script') {
         const scriptName = await this.dialogService.prompt('Enter new script name:');
         if (scriptName) {
-            const newScript = await this.scriptManagementService.createScript('Encryption', scriptName, '// new script');
+            const newScript = await this.scriptManagementService.createScript('Encryption', scriptName, DEFAULT_ENCRYPTION_SCRIPT_SKELETON);
             if (newScript) {
                 this.activeEncryptionScriptId.set(newScript.id);
                 this.setEncryptionField('script', newScript.content);
@@ -226,7 +236,8 @@ export class PayloadTypesComponent {
         if (scriptName) {
             const phase = this.activeScriptTab();
             const type = phase === 'preRequest' ? 'PreRequest' : phase === 'postResponse' ? 'PostRequest' : 'Test';
-            const newScript = await this.scriptManagementService.createScript(type, scriptName, '// new script');
+            const defaultContent = phase === 'preRequest' ? DEFAULT_PRE_REQUEST_SCRIPT_SKELETON : phase === 'postResponse' ? DEFAULT_POST_RESPONSE_SCRIPT_SKELETON : DEFAULT_TEST_SCRIPT_SKELETON;
+            const newScript = await this.scriptManagementService.createScript(type, scriptName, defaultContent);
             if (newScript) {
                 if (phase === 'preRequest') this.activePreRequestScriptId.set(newScript.id);
                 if (phase === 'postResponse') this.activePostRequestScriptId.set(newScript.id);
@@ -507,8 +518,17 @@ export class PayloadTypesComponent {
     const current = this.scripts();
     if (phase === 'test') {
       this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScript: code } });
+      const activeId = this.activeTestScriptId();
+      if (activeId && this.activeTestScriptName !== 'Select Script...' && this.activeTestScriptName !== '+ Add New Script') {
+          this.saveScriptSubject.next({ id: activeId, name: this.activeTestScriptName, content: code });
+      }
     } else {
       this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [phase]: code } });
+      const activeId = phase === 'preRequest' ? this.activePreRequestScriptId() : this.activePostRequestScriptId();
+      const activeName = phase === 'preRequest' ? this.activePreRequestScriptName : this.activePostRequestScriptName;
+      if (activeId && activeName !== 'Select Script...' && activeName !== '+ Add New Script') {
+          this.saveScriptSubject.next({ id: activeId, name: activeName, content: code });
+      }
     }
   }
 
@@ -595,12 +615,67 @@ export class PayloadTypesComponent {
     }
   }
 
+  async deleteEncryptionScript() {
+    const activeId = this.activeEncryptionScriptId();
+    if (activeId && activeId !== 'default_encrypt_fallback' && activeId !== 'default_decrypt_fallback') {
+        const confirmed = await this.dialogService.confirm('Are you sure you want to delete this encryption script?');
+        if (confirmed) {
+            const success = await this.scriptManagementService.deleteScript(activeId);
+            if (success) {
+                const fallback = this.encryptionScripts().find(s => s.id === 'default_encrypt_fallback') || this.encryptionScripts()[0];
+                if (fallback) {
+                    this.activeEncryptionScriptId.set(fallback.id);
+                    this.setEncryptionField('script', fallback.content);
+                } else {
+                    this.activeEncryptionScriptId.set('');
+                    this.setEncryptionField('script', '');
+                }
+            }
+        }
+    }
+  }
+
+  async deletePhaseScript() {
+      const phase = this.activeScriptTab();
+      const activeId = phase === 'preRequest' ? this.activePreRequestScriptId() : phase === 'postResponse' ? this.activePostRequestScriptId() : this.activeTestScriptId();
+      if (activeId) {
+          const confirmed = await this.dialogService.confirm('Are you sure you want to delete this script?');
+          if (confirmed) {
+              const success = await this.scriptManagementService.deleteScript(activeId);
+              if (success) {
+                  if (phase === 'preRequest' && this.preRequestScripts().length > 0) {
+                      this.activePreRequestScriptId.set(this.preRequestScripts()[0].id);
+                      this.updateScript(phase, this.preRequestScripts()[0].content);
+                  } else if (phase === 'postResponse' && this.postRequestScripts().length > 0) {
+                      this.activePostRequestScriptId.set(this.postRequestScripts()[0].id);
+                      this.updateScript(phase, this.postRequestScripts()[0].content);
+                  } else if (phase === 'test' && this.testScripts().length > 0) {
+                      this.activeTestScriptId.set(this.testScripts()[0].id);
+                      this.updateScript(phase, this.testScripts()[0].content);
+                  } else {
+                      if (phase === 'preRequest') this.activePreRequestScriptId.set('');
+                      if (phase === 'postResponse') this.activePostRequestScriptId.set('');
+                      if (phase === 'test') this.activeTestScriptId.set('');
+                      this.updateScript(phase, '');
+                  }
+              }
+          }
+      }
+  }
+
   // ── Encryption ───────────────────────────────────────────────────────
   setEncryptionField(field: keyof EncryptionState, value: any) {
     const current = this.encryption();
     this.tabStateService.updateState(this.tabId(), {
       encryption: { ...current, [field]: value }
     });
+    if (field === 'script') {
+        const activeId = this.activeEncryptionScriptId();
+        const activeName = this.activeEncryptionScriptName;
+        if (activeId && activeName !== 'Select Script...' && activeName !== '+ Add New Script') {
+            this.saveScriptSubject.next({ id: activeId, name: activeName, content: value });
+        }
+    }
   }
 
   toggleAutoEncryptHeaders() {

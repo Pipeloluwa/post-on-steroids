@@ -848,7 +848,42 @@ export class TabStateService {
     createAndOpenNewTab(insertIndex?: number): string {
         const newId = this.createId();
         const newState = this.getDefaultState(newId);
-        newState.capsuleId = this.activeCapsuleId();
+        
+        let capId = this.activeCapsuleId();
+        if (!capId) {
+            capId = this.createId();
+            const newCap = { id: capId, name: 'My Capsule', createdAt: Date.now() };
+            this.capsules.update(list => [...list, newCap]);
+            this.activeCapsuleId.set(capId);
+            this.activeCapsuleName.set(newCap.name);
+            
+            if (this.isBrowser && this.authService.isLoggedIn()) {
+                firstValueFrom(
+                    this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, {
+                        name: 'My Capsule',
+                        autoAuthEnabled: 'off',
+                        autoAuthEndpointId: null
+                    })
+                ).then(res => {
+                    if (res?.data) {
+                        const realId = res.data.id;
+                        this.capsules.update(list => list.map(c => c.id === capId ? { ...c, id: realId } : c));
+                        if (this.activeCapsuleId() === capId) this.activeCapsuleId.set(realId);
+                        this.states.update(map => {
+                            const next = new Map(map);
+                            for (const [k, v] of next.entries()) {
+                                if (v.capsuleId === capId) next.set(k, { ...v, capsuleId: realId });
+                            }
+                            return next;
+                        });
+                        this.savedCapsules.update(col => col.map(r => r.capsuleId === capId ? { ...r, capsuleId: realId } : r));
+                    }
+                }).catch(err => console.error('Failed to auto-create capsule', err));
+            }
+        }
+        
+        newState.capsuleId = capId;
+        
         this.states.update(map => {
             const next = new Map(map);
             next.set(newId, newState);
@@ -1156,6 +1191,18 @@ export class TabStateService {
 
         this.capsules.update(list => list.filter(c => c.id !== id));
 
+        this.savedCapsules.update(col => col.filter(r => r.capsuleId !== id));
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const [key, state] of next.entries()) {
+                if (state.capsuleId === id) {
+                    next.delete(key);
+                    this.historyStack.delete(key);
+                }
+            }
+            return next;
+        });
+
         if (this.isBrowser) {
             localStorage.removeItem(`onsteroids_open_tab_ids_${id}`);
             localStorage.removeItem(`onsteroids_active_tab_${id}`);
@@ -1198,6 +1245,18 @@ export class TabStateService {
 
         const idSet = new Set(ids);
         this.capsules.update(list => list.filter(c => !idSet.has(c.id)));
+
+        this.savedCapsules.update(col => col.filter(r => !r.capsuleId || !idSet.has(r.capsuleId)));
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const [key, state] of next.entries()) {
+                if (state.capsuleId && idSet.has(state.capsuleId)) {
+                    next.delete(key);
+                    this.historyStack.delete(key);
+                }
+            }
+            return next;
+        });
 
         if (this.isBrowser) {
             for (const id of ids) {
@@ -1242,6 +1301,19 @@ export class TabStateService {
             return next;
         });
         this.historyStack.delete(id);
+        
+        if (this.isBrowser) {
+            try {
+                const stored = localStorage.getItem('onsteroids_responses');
+                if (stored) {
+                    const map = JSON.parse(stored);
+                    if (map[id]) {
+                        delete map[id];
+                        localStorage.setItem('onsteroids_responses', JSON.stringify(map));
+                    }
+                }
+            } catch (e) {}
+        }
 
         if (this.activeTabId() === id) {
             const remaining = this.openTabIds();
@@ -1278,6 +1350,25 @@ export class TabStateService {
             }
             return next;
         });
+
+        if (this.isBrowser) {
+            try {
+                const stored = localStorage.getItem('onsteroids_responses');
+                if (stored) {
+                    const map = JSON.parse(stored);
+                    let changed = false;
+                    for (const id of ids) {
+                        if (map[id]) {
+                            delete map[id];
+                            changed = true;
+                        }
+                    }
+                    if (changed) {
+                        localStorage.setItem('onsteroids_responses', JSON.stringify(map));
+                    }
+                }
+            } catch (e) {}
+        }
 
         if (this.activeTabId() && idSet.has(this.activeTabId()!)) {
             const remaining = this.openTabIds();
@@ -1331,9 +1422,6 @@ export class TabStateService {
             const stored = localStorage.getItem('onsteroids_responses');
             const map = stored ? JSON.parse(stored) : {};
             map[id] = responseData;
-            if (url) {
-                map[`url_${url}`] = responseData;
-            }
             localStorage.setItem('onsteroids_responses', JSON.stringify(map));
         } catch (e) {
             console.warn('Could not cache response to storage', e);
@@ -1353,7 +1441,6 @@ export class TabStateService {
             if (!stored) return null;
             const map = JSON.parse(stored);
             if (map[id]) return map[id];
-            if (url && map[`url_${url}`]) return map[`url_${url}`];
         } catch (e) { }
         return null;
     }

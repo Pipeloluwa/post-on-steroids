@@ -238,6 +238,12 @@
                     <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">Reset</span>
                 </button>
+                <button type="button" (click)="deletePhaseScript()"
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-red-500/50 rounded px-3 py-1 transition-colors group cursor-pointer"
+                    aria-label="Delete script">
+                    <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">delete</mat-icon>
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">Delete</span>
+                </button>
             </div>
         </div>
 
@@ -394,6 +400,13 @@
                     aria-label="Reset encryption script to default">
                     <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">Reset</span>
+                </button>
+                <button type="button" (click)="deleteEncryptionScript()"
+                    [disabled]="activeEncryptionScriptId() === 'default_encrypt_fallback' || activeEncryptionScriptId() === 'default_decrypt_fallback' || !activeEncryptionScriptId()"
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-red-500/50 rounded px-3 py-1 transition-colors group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Delete encryption script">
+                    <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">delete</mat-icon>
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">Delete</span>
                 </button>
             </div>
         </div>

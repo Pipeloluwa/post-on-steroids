@@ -1,5 +1,27 @@
 export interface ScriptSnippet { id: string; name: string; description: string; code: string; }
 
+export const DEFAULT_ENCRYPTION_SCRIPT_SKELETON = `async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {
+    //only code written within this code block will be executed
+}`;
+
+export const DEFAULT_DECRYPTION_SCRIPT_SKELETON = `async function decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {
+    //only code written within this code block will be executed
+}`;
+
+export const DEFAULT_PRE_REQUEST_SCRIPT_SKELETON = `async function preScript(headers, body, params) {
+    //only code written within this code block will be executed
+}`;
+
+export const DEFAULT_POST_RESPONSE_SCRIPT_SKELETON = `async function postScript(responseHeaders, responseBody, headers, body, params) {
+    //only code written within this code block will be executed
+}`;
+
+export const DEFAULT_TEST_SCRIPT_SKELETON = `async function testScript(responseStatus, responseTime, responseBody, responseHeaders) {
+    //only code written within this code block will be executed
+    let passed = true;
+    return passed;
+}`;
+
 export const PRE_REQUEST_SNIPPETS: ScriptSnippet[] = [
     {
         id: 'log_timestamp',
