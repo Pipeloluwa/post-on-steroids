@@ -287,9 +287,8 @@ export class VariableService {
 
     updateVariable(updatedVar: IGlobalVariable) {
         this.variables.update(vars => vars.map(v => v.id === updatedVar.id ? updatedVar : v));
-        this.saveVariables();
 
-        // If the variable is bound to a request input, sync the change back to the request state
+        // If the variable is bound to a request input, sync the change back to the request state FIRST
         if (updatedVar.source && updatedVar.source.tabId) {
             const state = this.tabStateService.getState(updatedVar.source.tabId);
             if (state) {
@@ -305,6 +304,8 @@ export class VariableService {
                 }
             }
         }
+
+        this.saveVariables();
     }
 
     removeVariable(id: string) {

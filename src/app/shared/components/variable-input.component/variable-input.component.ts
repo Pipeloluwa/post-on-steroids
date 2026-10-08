@@ -404,7 +404,11 @@ export class VariableInputComponent implements ControlValueAccessor {
             }
             
             if (!found && !this.isMouseInPopup) {
-                this.hoveredVariable.set(null);
+                setTimeout(() => {
+                    if (!this.isMouseInPopup) {
+                        this.hoveredVariable.set(null);
+                    }
+                }, 250);
             }
         }
     }
