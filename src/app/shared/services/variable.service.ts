@@ -127,7 +127,7 @@ export class VariableService {
                     .filter(v => !v.variableKey.startsWith('__'))
                     .map(v => {
                         const existing = this.variables().find(
-                            ev => ev.id === v.id || ev.key.trim().toLowerCase() === v.variableKey.trim().toLowerCase()
+                            ev => ev.id === v.id || (ev.key || '').trim().toLowerCase() === (v.variableKey || '').trim().toLowerCase()
                         );
                         return {
                             id: v.id,
@@ -140,8 +140,8 @@ export class VariableService {
                     });
 
                 // Also keep any active local variables that weren't in res.data yet
-                const backendKeys = new Set(res.data.map(v => v.variableKey.trim().toLowerCase()));
-                const extraLocalVars = this.variables().filter(v => !v.key.startsWith('__') && !backendKeys.has(v.key.trim().toLowerCase()));
+                const backendKeys = new Set(res.data.map(v => (v.variableKey || '').trim().toLowerCase()));
+                const extraLocalVars = this.variables().filter(v => !(v.key || '').startsWith('__') && !backendKeys.has((v.key || '').trim().toLowerCase()));
 
                 const finalVars = [...userVars, ...extraLocalVars];
                 if (finalVars.length > 0) {
@@ -162,11 +162,11 @@ export class VariableService {
         }
         this.isSyncing.set(true);
         try {
-            const userVars = this.variables().filter(v => !v.key.startsWith('__'));
+            const userVars = this.variables().filter(v => !(v.key || '').startsWith('__'));
             const payloadVars: any[] = userVars.map(v => ({
                 id: v.id && v.id.length > 8 ? v.id : null,
-                key: v.key.trim(),
-                variableKey: v.key.trim(),
+                key: (v.key || '').trim(),
+                variableKey: (v.key || '').trim(),
                 value: (v.source ? this.getVariableValue(v) : v.value) ?? '',
                 variableValue: (v.source ? this.getVariableValue(v) : v.value) ?? '',
                 type: v.type ?? 'global',
@@ -186,9 +186,9 @@ export class VariableService {
             if (res?.data && Array.isArray(res.data)) {
                 const idMap = new Map<string, string>();
                 for (const dbVar of res.data) {
-                    if (dbVar.variableKey.startsWith('__')) continue;
+                    if ((dbVar.variableKey || '').startsWith('__')) continue;
                     const matched = this.variables().find(
-                        v => v.key.trim().toLowerCase() === dbVar.variableKey.trim().toLowerCase()
+                        v => (v.key || '').trim().toLowerCase() === (dbVar.variableKey || '').trim().toLowerCase()
                     );
                     if (matched && matched.id !== dbVar.id) {
                         idMap.set(matched.id, dbVar.id);
@@ -256,7 +256,7 @@ export class VariableService {
         }
 
         const existingIndex = this.variables().findIndex(
-            v => v.key.trim().toLowerCase() === trimmedKey.toLowerCase()
+            v => (v.key || '').trim().toLowerCase() === trimmedKey.toLowerCase()
         );
 
         if (existingIndex >= 0) {
