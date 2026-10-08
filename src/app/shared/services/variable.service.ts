@@ -287,24 +287,6 @@ export class VariableService {
 
     updateVariable(updatedVar: IGlobalVariable) {
         this.variables.update(vars => vars.map(v => v.id === updatedVar.id ? updatedVar : v));
-
-        // If the variable is bound to a request input, sync the change back to the request state FIRST
-        if (updatedVar.source && updatedVar.source.tabId) {
-            const state = this.tabStateService.getState(updatedVar.source.tabId);
-            if (state) {
-                const prop = updatedVar.source.propertyKey?.trim();
-                if (prop) {
-                    if (updatedVar.source.type === 'header' && state.headers) {
-                        const headers = state.headers.map((h: any) => h.key.trim().toLowerCase() === prop.toLowerCase() ? { ...h, value: updatedVar.value } : h);
-                        this.tabStateService.updateState(updatedVar.source.tabId, { headers }, false);
-                    } else if (updatedVar.source.type === 'param' && state.params) {
-                        const params = state.params.map((p: any) => p.key.trim().toLowerCase() === prop.toLowerCase() ? { ...p, value: updatedVar.value } : p);
-                        this.tabStateService.updateState(updatedVar.source.tabId, { params }, false);
-                    }
-                }
-            }
-        }
-
         this.saveVariables();
     }
 
@@ -548,59 +530,6 @@ export class VariableService {
     }
 
     getVariableValue(v: IGlobalVariable): string {
-        if (!v.source) {
-            return v.value;
-        }
-
-        const state = this.findStateForVariable(v);
-
-        if (!state) {
-            return v.value;
-        }
-
-        const prop = v.source.propertyKey?.trim();
-
-        if (v.source.type === 'header') {
-            if (!prop) return v.value;
-            const match = state.headers?.find((h: any) => h.key.trim().toLowerCase() === prop.toLowerCase());
-            const newVal = match && match.value !== undefined ? match.value : v.value;
-            if (newVal !== v.value) v.value = newVal;
-            return newVal;
-        }
-
-        if (v.source.type === 'param') {
-            if (!prop) return v.value;
-            const match = state.params?.find((p: any) => p.key.trim().toLowerCase() === prop.toLowerCase());
-            const newVal = match && match.value !== undefined ? match.value : v.value;
-            if (newVal !== v.value) v.value = newVal;
-            return newVal;
-        }
-
-        if (v.source.type === 'body') {
-            const raw = state.rawBodyJson || state.rawBody;
-            if (prop && raw) {
-                const extracted = this.extractValue(raw, prop);
-                if (extracted !== undefined && extracted !== null) {
-                    const strVal = typeof extracted === 'object' ? JSON.stringify(extracted) : String(extracted);
-                    if (strVal !== v.value) v.value = strVal;
-                    return strVal;
-                }
-            }
-            return v.value;
-        }
-
-        if (v.source.type === 'response') {
-            if (prop && state.responseBody !== undefined && state.responseBody !== null) {
-                const extracted = this.extractValue(state.responseBody, prop);
-                if (extracted !== undefined && extracted !== null) {
-                    const strVal = typeof extracted === 'object' ? JSON.stringify(extracted) : String(extracted);
-                    if (strVal !== v.value) v.value = strVal;
-                    return strVal;
-                }
-            }
-            return v.value;
-        }
-
         return v.value;
     }
 
