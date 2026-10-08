@@ -166,7 +166,9 @@ export class VariableService {
             const payloadVars: any[] = userVars.map(v => ({
                 id: v.id && v.id.length > 8 ? v.id : null,
                 key: v.key.trim(),
+                variableKey: v.key.trim(),
                 value: (v.source ? this.getVariableValue(v) : v.value) ?? '',
+                variableValue: (v.source ? this.getVariableValue(v) : v.value) ?? '',
                 type: v.type ?? 'global',
                 enabled: v.enabled ?? true
             }));
@@ -241,7 +243,7 @@ export class VariableService {
         const trimmedKey = (key || '').trim();
         if (!trimmedKey) {
             const newVar: IGlobalVariable = {
-                id: generateUUID(),
+                id: generateUUID().substring(0, 7),
                 key: '',
                 value: value || '',
                 type: type,
@@ -273,7 +275,7 @@ export class VariableService {
             });
         } else {
             const newVar: IGlobalVariable = {
-                id: generateUUID(),
+                id: generateUUID().substring(0, 7),
                 key: trimmedKey,
                 value,
                 type: type,
