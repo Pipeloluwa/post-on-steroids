@@ -35,66 +35,24 @@
     <!-- Send Button Group -->
     <!-- Send Button Group -->
     <div class="flex items-center gap-x-2.5 h-[40px] md:h-full relative shrink-0">
-        <!-- Auto-Auth Split Group -->
-        <div class="flex h-full relative shrink-0 rounded-[4px] overflow-hidden border border-white/10 shadow-xs">
-            <!-- Main Auto-Auth Button -->
-            <button (click)="onMainAutoAuthClick()" title="Auto Auth on 401"
-                class="px-3 h-full border-r border-white/20 transition-colors duration-200 cursor-pointer flex items-center gap-x-1.5"
-                [class.bg-(--postonsteroids-bg-secondary)]="!isAutoAuthEnabled()"
-                [class.bg-(--postonsteroids-bg-hover)]="!isAutoAuthEnabled()"
-                [class.hover:bg-(--postonsteroids-bg-tertiary)]="!isAutoAuthEnabled()"
-                [class.text-(--postonsteroids-text-muted)]="!isAutoAuthEnabled()"
-                [class.bg-(--postonsteroids-accent)]="isAutoAuthEnabled()"
-                [class.hover:bg-(--postonsteroids-accent)/90]="isAutoAuthEnabled()"
-                [class.text-white]="isAutoAuthEnabled()">
-                <mat-icon class="text-[18px]! size-[18px]!">bolt</mat-icon>
-                <span class="text-[12px] font-bold">Auto-Auth</span>
-                @if (isAutoAuthEnabled()) {
-                    @if (autoAuthScope() === 'global') {
-                        <span class="text-[9px] bg-white/20 px-1 py-0.5 rounded font-mono uppercase tracking-wider font-bold">Global</span>
-                    } @else if (autoAuthScope() === 'individual') {
-                        <span class="text-[9px] bg-white/20 px-1 py-0.5 rounded font-mono uppercase tracking-wider font-bold">Tab</span>
-                    }
-                }
-            </button>
-
-            <!-- Dropdown Arrow Button -->
-            <button (click)="toggleDropdown($event)" title="Choose Auto Auth Scope"
-                class="px-2 h-full transition-colors duration-200 cursor-pointer flex items-center justify-center"
-                [class.bg-(--postonsteroids-bg-secondary)]="!isAutoAuthEnabled()"
-                [class.bg-(--postonsteroids-bg-hover)]="!isAutoAuthEnabled()"
-                [class.hover:bg-(--postonsteroids-bg-tertiary)]="!isAutoAuthEnabled()"
-                [class.text-(--postonsteroids-text-muted)]="!isAutoAuthEnabled()"
-                [class.bg-(--postonsteroids-accent)]="isAutoAuthEnabled()"
-                [class.hover:bg-(--postonsteroids-accent)/90]="isAutoAuthEnabled()"
-                [class.text-white]="isAutoAuthEnabled()">
-                <mat-icon class="text-[16px]! size-[16px]!">expand_more</mat-icon>
-            </button>
-
-            <!-- Dropdown Menu Overlay -->
-            @if (isDropdownOpen()) {
-            <div class="absolute left-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded shadow-xl z-50 py-1 min-w-[210px] flex flex-col">
-                <button (click)="selectScope('off')" class="w-full text-left px-4 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
-                    <span class="font-medium">Disabled</span>
-                    @if (autoAuthScope() === 'off') {
-                        <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-accent)">check</mat-icon>
-                    }
-                </button>
-                <button (click)="selectScope('individual')" class="w-full text-left px-4 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
-                    <span class="font-medium">Enable for current endpoint</span>
-                    @if (autoAuthScope() === 'individual') {
-                        <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-accent)">check</mat-icon>
-                    }
-                </button>
-                <button (click)="selectScope('global')" class="w-full text-left px-4 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
-                    <span class="font-medium">Enable for all endpoints</span>
-                    @if (autoAuthScope() === 'global') {
-                        <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-accent)">check</mat-icon>
-                    }
-                </button>
-            </div>
+        <!-- Auto-Auth Button -->
+        <button (click)="onMainAutoAuthClick()" [title]="isAutoAuthEnabled() ? 'Auto-Auth enabled on 401 (Click to disable)' : 'Auto-Auth disabled (Click to enable)'"
+            class="px-3 h-full border border-white/10 rounded-[4px] shadow-xs transition-colors duration-200 cursor-pointer flex items-center gap-x-1.5 shrink-0"
+            [class.bg-(--postonsteroids-bg-secondary)]="!isAutoAuthEnabled()"
+            [class.bg-(--postonsteroids-bg-hover)]="!isAutoAuthEnabled()"
+            [class.hover:bg-(--postonsteroids-bg-tertiary)]="!isAutoAuthEnabled()"
+            [class.text-(--postonsteroids-text-muted)]="!isAutoAuthEnabled()"
+            [class.bg-(--postonsteroids-accent)]="isAutoAuthEnabled()"
+            [class.hover:bg-(--postonsteroids-accent)/90]="isAutoAuthEnabled()"
+            [class.text-white]="isAutoAuthEnabled()">
+            <mat-icon class="text-[18px]! size-[18px]!">bolt</mat-icon>
+            <span class="text-[12px] font-bold">Auto-Auth</span>
+            @if (isAutoAuthEnabled()) {
+                <span class="text-[9px] bg-white/20 px-1 py-0.5 rounded font-mono uppercase tracking-wider font-bold">
+                    {{ autoAuthScope() === 'global' ? 'Global' : 'On' }}
+                </span>
             }
-        </div>
+        </button>
 
         <!-- Trigger Next Request Unified Button & Dropdown -->
         <div class="flex h-full relative shrink-0">

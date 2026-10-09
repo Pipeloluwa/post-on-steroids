@@ -43,7 +43,6 @@ export class RequestUrlComponent {
         const authEndpointId = this.autoAuthService.getAutoAuthEndpointId();
         return !!(authEndpointId && authEndpointId === this.tabId());
     });
-    isDropdownOpen = signal(false);
     pendingScope: 'off' | 'individual' | 'global' | null = null;
     lastEnabledScope: 'individual' | 'global' = 'individual';
 
@@ -137,16 +136,9 @@ export class RequestUrlComponent {
         this.executionService.cancelRequest(this.tabId());
     }
 
-    toggleDropdown(event: MouseEvent) {
-        event.stopPropagation();
-        this.isDropdownOpen.update(v => !v);
-        this.isTriggerDropdownOpen.set(false);
-    }
-
     toggleTriggerDropdown(event: MouseEvent) {
         event.stopPropagation();
         this.isTriggerDropdownOpen.update(v => !v);
-        this.isDropdownOpen.set(false);
     }
 
     onMainTriggerClick() {
@@ -154,7 +146,6 @@ export class RequestUrlComponent {
             this.selectTriggerTarget(null);
         } else {
             this.isTriggerDropdownOpen.set(true);
-            this.isDropdownOpen.set(false);
         }
     }
 
@@ -182,27 +173,20 @@ export class RequestUrlComponent {
     }
 
     onDocumentClick() {
-        if (this.isDropdownOpen()) {
-            this.isDropdownOpen.set(false);
-        }
         if (this.isTriggerDropdownOpen()) {
             this.isTriggerDropdownOpen.set(false);
         }
     }
 
     onMainAutoAuthClick() {
-        const currentScope = this.autoAuthScope();
-        if (currentScope === 'off') {
-            const last = this.lastEnabledScope || 'individual';
-            this.selectScope(last);
-        } else {
-            this.lastEnabledScope = currentScope;
+        if (this.isAutoAuthEnabled()) {
             this.selectScope('off');
+        } else {
+            this.selectScope('individual');
         }
     }
 
     selectScope(scope: 'off' | 'individual' | 'global') {
-        this.isDropdownOpen.set(false);
         if (scope === 'off') {
             this.autoAuthService.setAutoAuthEnabled('off');
             this.autoAuthService.setAutoAuthEndpointId(null);
