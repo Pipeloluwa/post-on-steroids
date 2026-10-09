@@ -145,24 +145,8 @@ export class RequestUrlComponent {
 
     toggleTriggerDropdown(event: MouseEvent) {
         event.stopPropagation();
-        const willOpen = !this.isTriggerDropdownOpen();
-        this.isTriggerDropdownOpen.set(willOpen);
+        this.isTriggerDropdownOpen.update(v => !v);
         this.isDropdownOpen.set(false);
-
-        if (willOpen && this.isCurrentAuthTab()) {
-            const hasExcludedAutoAuthTabs = this.tabStateService.allCapsuleRequests().some(r => {
-                if (r.id === this.tabId()) return false;
-                const targetState = this.tabStateService.getState(r.id);
-                return this.autoAuthService.isAutoAuthEnabled(r.id) || !!(targetState?.autoAuthEnabled ?? r.autoAuthEnabled);
-            });
-            if (hasExcludedAutoAuthTabs) {
-                this.notificationService.notify(
-                    '⚠️ Loop Prevention: Requests with Auto-Auth enabled linked to this Auth tab are excluded from the trigger list.',
-                    'warning',
-                    7000
-                );
-            }
-        }
     }
 
     onMainTriggerClick() {
@@ -180,11 +164,6 @@ export class RequestUrlComponent {
             const targetReq = this.tabStateService.allCapsuleRequests().find(r => r.id === targetId);
             const hasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
             if (hasAutoAuth) {
-                this.notificationService.notify(
-                    `⚠️ Cannot trigger "${targetState?.name || 'Request'}": it has Auto-Auth enabled linked to this Auth endpoint, which would cause an infinite loop!`,
-                    'warning',
-                    7000
-                );
                 return;
             }
         }

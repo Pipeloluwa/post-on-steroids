@@ -671,11 +671,6 @@ export class RequestExecutionService {
                 const targetHasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetTabId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
 
                 if (isCurrentAuthTab && targetHasAutoAuth) {
-                    this.notificationService.notify(
-                        `⚠️ Trigger Loop Prevented: Skipped triggering "${targetState?.name || 'Request'}" from the Auth endpoint because it has Auto-Auth enabled.`,
-                        'warning',
-                        8000
-                    );
                     console.warn(`[Trigger] Skipped chained trigger to "${targetState?.name || targetTabId}" because it has Auto Auth enabled linked to this auth endpoint (prevents infinite loop).`);
                 } else if (chainDepth >= 5) {
                     this.notificationService.notify('Chained request depth limit reached (max 5) to prevent infinite loops.');
