@@ -11,4 +11,5 @@ import { MatIcon } from '@angular/material/icon';
 export class NotificationComponent {
     message = input.required<string>();
     show = input.required<boolean>();
+    type = input<'success' | 'warning' | 'error' | 'info'>('success');
 }

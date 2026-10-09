@@ -6,10 +6,14 @@ import { Injectable, signal } from '@angular/core';
 export class NotificationService {
     show = signal<boolean>(false);
     message = signal<string>('');
+    type = signal<'success' | 'warning' | 'error' | 'info'>('success');
+    private hideTimeout: any = null;
 
-    notify(message: string) {
+    notify(message: string, type: 'success' | 'warning' | 'error' | 'info' = 'success', durationMs: number = 6000) {
+        clearTimeout(this.hideTimeout);
         this.message.set(message);
+        this.type.set(type);
         this.show.set(true);
-        setTimeout(() => this.show.set(false), 6000);
+        this.hideTimeout = setTimeout(() => this.show.set(false), durationMs);
     }
 }

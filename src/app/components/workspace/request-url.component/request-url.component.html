@@ -137,6 +137,13 @@
                     Select Request to Call
                 </div>
 
+                @if (isCurrentAuthTab()) {
+                    <div class="mx-2 my-1 px-2.5 py-1.5 rounded bg-amber-500/10 border border-amber-500/30 flex items-start gap-1.5 text-amber-300 text-[11px] leading-tight shrink-0">
+                        <mat-icon class="text-[15px]! size-[15px]! text-amber-400 shrink-0 mt-0.5">warning</mat-icon>
+                        <span>Requests with Auto-Auth enabled are excluded to prevent loops.</span>
+                    </div>
+                }
+
                 <!-- Scrollable list of available requests -->
                 <div class="max-h-[240px] overflow-y-auto flex flex-col flex-1 divide-y divide-(--postonsteroids-border)/10">
                     @for (req of availableTriggerRequests(); track req.id) {
@@ -156,7 +163,7 @@
                         </button>
                     } @empty {
                         <div class="px-3 py-3 text-[11px] text-(--postonsteroids-text-muted) italic text-center">
-                            No other requests in capsule
+                            {{ isCurrentAuthTab() ? 'No eligible requests (requests with Auto Auth enabled are excluded to prevent loops)' : 'No other requests in capsule' }}
                         </div>
                     }
                 </div>

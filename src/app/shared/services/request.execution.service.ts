@@ -664,10 +664,22 @@ export class RequestExecutionService {
             // Post-Response Request Chaining (Trigger Next Request)
             if (freshState.postTriggerTabId) {
                 const targetTabId = freshState.postTriggerTabId;
-                if (chainDepth >= 5) {
+                const authEndpointId = this.autoAuthService.getAutoAuthEndpointId();
+                const isCurrentAuthTab = !!(authEndpointId && authEndpointId === tabId);
+                const targetState = this.tabStateService.getState(targetTabId);
+                const targetReq = this.tabStateService.allCapsuleRequests().find(r => r.id === targetTabId);
+                const targetHasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetTabId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
+
+                if (isCurrentAuthTab && targetHasAutoAuth) {
+                    this.notificationService.notify(
+                        `⚠️ Trigger Loop Prevented: Skipped triggering "${targetState?.name || 'Request'}" from the Auth endpoint because it has Auto-Auth enabled.`,
+                        'warning',
+                        8000
+                    );
+                    console.warn(`[Trigger] Skipped chained trigger to "${targetState?.name || targetTabId}" because it has Auto Auth enabled linked to this auth endpoint (prevents infinite loop).`);
+                } else if (chainDepth >= 5) {
                     this.notificationService.notify('Chained request depth limit reached (max 5) to prevent infinite loops.');
                 } else {
-                    const targetState = this.tabStateService.getState(targetTabId);
                     if (targetState) {
                         this.notificationService.notify(`Triggering chained request: "${targetState.name || 'Request'}"...`);
                         this.tabStateService.setActiveTab(targetTabId);

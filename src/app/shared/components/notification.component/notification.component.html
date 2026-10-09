@@ -1,10 +1,33 @@
 @if (show()) {
 <div
-    class="fixed top-6 left-1/2 -translate-x-1/2 z-200 flex items-center gap-x-3 px-4 py-3 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300">
-    <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500/20">
-        <mat-icon class="text-[16px]! size-[16px]! text-green-500">check_circle</mat-icon>
-    </div>
-    <span class="text-[13px] font-medium text-(--postonsteroids-text-primary)">
+    class="fixed top-6 left-1/2 -translate-x-1/2 z-200 flex items-center gap-x-3 px-4 py-3 rounded-lg border shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300 max-w-[92vw] md:max-w-[550px]"
+    [class.bg-(--postonsteroids-bg-tertiary)]="type() === 'success' || type() === 'info'"
+    [class.border-(--postonsteroids-border)]="type() === 'success' || type() === 'info'"
+    [class.bg-amber-950/95]="type() === 'warning'"
+    [class.border-amber-500]="type() === 'warning'"
+    [class.shadow-amber-500/25]="type() === 'warning'"
+    [class.bg-red-950/95]="type() === 'error'"
+    [class.border-red-500]="type() === 'error'"
+    [class.shadow-red-500/25]="type() === 'error'">
+
+    @if (type() === 'warning') {
+        <div class="flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/25 shrink-0 animate-pulse">
+            <mat-icon class="text-[19px]! size-[19px]! text-amber-400">warning</mat-icon>
+        </div>
+    } @else if (type() === 'error') {
+        <div class="flex items-center justify-center w-7 h-7 rounded-full bg-red-500/25 shrink-0 animate-pulse">
+            <mat-icon class="text-[19px]! size-[19px]! text-red-400">error</mat-icon>
+        </div>
+    } @else {
+        <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500/20 shrink-0">
+            <mat-icon class="text-[16px]! size-[16px]! text-green-500">check_circle</mat-icon>
+        </div>
+    }
+
+    <span class="text-[13px] font-medium leading-snug"
+          [class.text-(--postonsteroids-text-primary)]="type() === 'success' || type() === 'info'"
+          [class.text-amber-200]="type() === 'warning'"
+          [class.text-red-200]="type() === 'error'">
         {{ message() }}
     </span>
 </div>

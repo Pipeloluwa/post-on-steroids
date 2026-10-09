@@ -37,20 +37,53 @@ export class RequestUrlComponent {
 
     selectedMethod = computed(() => this.tabState()?.method || 'GET');
     isLoading = computed(() => this.tabState()?.isLoading || false);
-    isAutoAuthEnabled = computed(() => this.autoAuthService.isAutoAuthEnabled());
-    autoAuthScope = computed(() => this.tabState()?.autoAuthEnabled ? 'individual' : (this.autoAuthService.isAutoAuthEnabled() ? 'global' : 'off'));
+    isAutoAuthEnabled = computed(() => this.autoAuthService.isAutoAuthEnabled(this.tabId()));
+    autoAuthScope = computed(() => this.tabState()?.autoAuthEnabled ? 'individual' : (this.autoAuthService.isAutoAuthEnabled(this.tabId()) ? 'global' : 'off'));
+    isCurrentAuthTab = computed(() => {
+        const authEndpointId = this.autoAuthService.getAutoAuthEndpointId();
+        return !!(authEndpointId && authEndpointId === this.tabId());
+    });
     isDropdownOpen = signal(false);
     pendingScope: 'off' | 'individual' | 'global' | null = null;
     lastEnabledScope: 'individual' | 'global' = 'individual';
 
     // Post Trigger Request Chaining State
     isTriggerDropdownOpen = signal(false);
-    postTriggerTabId = computed(() => this.tabState()?.postTriggerTabId || null);
+    postTriggerTabId = computed(() => {
+        const targetId = this.tabState()?.postTriggerTabId || null;
+        if (!targetId) return null;
+
+        if (this.isCurrentAuthTab()) {
+            const targetState = this.tabStateService.getState(targetId);
+            const targetReq = this.tabStateService.allCapsuleRequests().find(r => r.id === targetId);
+            const hasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
+            if (hasAutoAuth) {
+                return null;
+            }
+        }
+
+        return targetId;
+    });
 
     availableTriggerRequests = computed(() => {
         const currentId = this.tabId();
         const all = this.tabStateService.allCapsuleRequests();
-        return all.filter(r => r.id !== currentId);
+        const isAuthTab = this.isCurrentAuthTab();
+
+        return all.filter(r => {
+            if (r.id === currentId) return false;
+
+            // When on the auth tab request, exclude any request that has auto auth enabled linked to it
+            if (isAuthTab) {
+                const targetState = this.tabStateService.getState(r.id);
+                const hasAutoAuth = this.autoAuthService.isAutoAuthEnabled(r.id) || !!(targetState?.autoAuthEnabled ?? r.autoAuthEnabled);
+                if (hasAutoAuth) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
     });
 
     targetTriggerRequest = computed(() => {
@@ -112,8 +145,24 @@ export class RequestUrlComponent {
 
     toggleTriggerDropdown(event: MouseEvent) {
         event.stopPropagation();
-        this.isTriggerDropdownOpen.update(v => !v);
+        const willOpen = !this.isTriggerDropdownOpen();
+        this.isTriggerDropdownOpen.set(willOpen);
         this.isDropdownOpen.set(false);
+
+        if (willOpen && this.isCurrentAuthTab()) {
+            const hasExcludedAutoAuthTabs = this.tabStateService.allCapsuleRequests().some(r => {
+                if (r.id === this.tabId()) return false;
+                const targetState = this.tabStateService.getState(r.id);
+                return this.autoAuthService.isAutoAuthEnabled(r.id) || !!(targetState?.autoAuthEnabled ?? r.autoAuthEnabled);
+            });
+            if (hasExcludedAutoAuthTabs) {
+                this.notificationService.notify(
+                    '⚠️ Loop Prevention: Requests with Auto-Auth enabled linked to this Auth tab are excluded from the trigger list.',
+                    'warning',
+                    7000
+                );
+            }
+        }
     }
 
     onMainTriggerClick() {
@@ -126,8 +175,31 @@ export class RequestUrlComponent {
     }
 
     selectTriggerTarget(targetId: string | null) {
+        if (targetId && this.isCurrentAuthTab()) {
+            const targetState = this.tabStateService.getState(targetId);
+            const targetReq = this.tabStateService.allCapsuleRequests().find(r => r.id === targetId);
+            const hasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
+            if (hasAutoAuth) {
+                this.notificationService.notify(
+                    `⚠️ Cannot trigger "${targetState?.name || 'Request'}": it has Auto-Auth enabled linked to this Auth endpoint, which would cause an infinite loop!`,
+                    'warning',
+                    7000
+                );
+                return;
+            }
+        }
         this.tabStateService.updateState(this.tabId(), { postTriggerTabId: targetId });
         this.isTriggerDropdownOpen.set(false);
+    }
+
+    private cleanupAuthEndpointTriggerIfPointingToThisTab() {
+        const authEndpointId = this.autoAuthService.getAutoAuthEndpointId();
+        if (authEndpointId && authEndpointId !== this.tabId()) {
+            const authState = this.tabStateService.getState(authEndpointId);
+            if (authState?.postTriggerTabId === this.tabId()) {
+                this.tabStateService.updateState(authEndpointId, { postTriggerTabId: null });
+            }
+        }
     }
 
     onDocumentClick() {
@@ -166,6 +238,9 @@ export class RequestUrlComponent {
                 this.autoAuthService.setAutoAuthEnabled(scope);
                 if (scope === 'individual') {
                     this.tabStateService.updateState(this.tabId(), { autoAuthEnabled: true });
+                    this.cleanupAuthEndpointTriggerIfPointingToThisTab();
+                } else if (scope === 'global') {
+                    this.cleanupAuthEndpointTriggerIfPointingToThisTab();
                 }
             }
         }
@@ -182,6 +257,9 @@ export class RequestUrlComponent {
         this.autoAuthService.setAutoAuthEnabled(scope);
         if (scope === 'individual') {
             this.tabStateService.updateState(this.tabId(), { autoAuthEnabled: true });
+            this.cleanupAuthEndpointTriggerIfPointingToThisTab();
+        } else if (scope === 'global') {
+            this.cleanupAuthEndpointTriggerIfPointingToThisTab();
         }
         this.showAutoAuthModal.set(false);
         this.pendingScope = null;
