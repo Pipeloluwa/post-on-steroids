@@ -710,20 +710,31 @@ export class VariableService {
     resolve(text: string): string {
         if (!text) return text;
         let resolvedText = text;
-        this.variables().forEach(v => {
+
+        // Sort variables by key length descending to prevent partial replacements (e.g. 'calendarId' before 'calendar')
+        const sortedVars = [...this.variables()].sort((a, b) => (b.key?.length || 0) - (a.key?.length || 0));
+
+        sortedVars.forEach(v => {
             if (v.enabled && v.key) {
-                const dynamicVal = this.getVariableValue(v) ?? '';
-                const escapedKey = v.key.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const dynamicVal = (this.getVariableValue(v) ?? '').trim();
+                const rawK = v.key.trim();
+                if (!rawK) return;
+                // Strip any accidental brackets or colon from key
+                const cleanK = rawK.replace(/^[:{]+/, '').replace(/[}]+$/, '').trim();
+                if (!cleanK) return;
+                const escapedKey = cleanK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 
-                if (!v.type || v.type === 'global') {
-                    // Replace Postman syntax: {{varName}}
-                    const regex = new RegExp(`{{\\s*${escapedKey}\\s*}}`, 'g');
-                    resolvedText = resolvedText.replace(regex, dynamicVal.trim());
-                } else if (v.type === 'path') {
-                    // Replace path parameter syntax: :varName (when preceded by /, ?, &, or start of string)
-                    const pathRegex = new RegExp(`(?<=^|[/?&=]):${escapedKey}(?=[/?&#]|$)`, 'g');
-                    resolvedText = resolvedText.replace(pathRegex, dynamicVal.trim());
-                }
+                // 1. Postman {{key}} syntax
+                const globalRegex = new RegExp(`{{\\s*${escapedKey}\\s*}}`, 'g');
+                resolvedText = resolvedText.replace(globalRegex, dynamicVal);
+
+                // 2. Path parameter :key syntax (preceded by start, /, ?, &, or =)
+                const pathRegex = new RegExp(`(?<=^|[/?&=]):${escapedKey}(?=[/?&#]|$)`, 'g');
+                resolvedText = resolvedText.replace(pathRegex, dynamicVal);
+
+                // 3. OpenAPI / Swagger {key} syntax (preceded by start, /, ?, &, or =)
+                const swaggerRegex = new RegExp(`(?<=^|[/?&=]){${escapedKey}}(?=[/?&#]|$)`, 'g');
+                resolvedText = resolvedText.replace(swaggerRegex, dynamicVal);
             }
         });
 

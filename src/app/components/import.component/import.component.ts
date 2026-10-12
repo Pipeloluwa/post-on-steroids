@@ -5,10 +5,13 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
 import { SwaggerImportModalComponent } from '../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
+import { IGlobalVariable } from '../../interfaces/services/IVariableService';
+import { extractPostmanVariables, extractRequestsVariables } from '../../shared/utils/import-variable.util';
 
 interface ParsedCapsuleGroup {
     name: string;
     requests: Partial<RequestState>[];
+    variables?: IGlobalVariable[];
 }
 
 @Component({
@@ -120,9 +123,11 @@ export class ImportComponent implements OnInit {
             const collectionName = data.info.name || 'Imported Postman Collection';
             const postmanReqs = this.flattenPostmanItems(data.item);
             const mapped = postmanReqs.map(it => this.mapPostmanRequest(it));
+            const extractedVars = extractPostmanVariables(data);
             groups.push({
                 name: collectionName,
-                requests: mapped
+                requests: mapped,
+                variables: extractedVars
             });
         }
         // 2. OnSteroid Multi-Capsule Format
@@ -130,29 +135,39 @@ export class ImportComponent implements OnInit {
             for (const cap of data.capsules) {
                 const capName = cap.name || 'Imported Capsule';
                 const reqs = Array.isArray(cap.requests) ? cap.requests : [];
+                const explicitVars = cap.variables || cap.variable || data.variables || data.variable;
+                const extractedVars = extractRequestsVariables(reqs, explicitVars);
                 groups.push({
                     name: capName,
-                    requests: reqs
+                    requests: reqs,
+                    variables: extractedVars
                 });
             }
         }
         // 3. OnSteroid Single Capsule Format
         else if (data.collection && Array.isArray(data.requests)) {
+            const explicitVars = data.variables || data.variable;
+            const extractedVars = extractRequestsVariables(data.requests, explicitVars);
             groups.push({
                 name: data.collection,
-                requests: data.requests
+                requests: data.requests,
+                variables: extractedVars
             });
         }
         // 4. Raw Array of Requests
         else if (Array.isArray(data)) {
+            const extractedVars = extractRequestsVariables(data);
             groups.push({
                 name: 'Imported Requests',
-                requests: data
+                requests: data,
+                variables: extractedVars
             });
         }
         else {
             throw new Error('Unrecognized format. Please provide an OnSteroid export JSON or a Postman Collection (v2.0/v2.1).');
         }
+
+        const allExtractedVars = groups.flatMap(g => g.variables || []);
 
         const importPayload = {
             capsules: groups.map(group => {
@@ -160,6 +175,7 @@ export class ImportComponent implements OnInit {
                 return {
                     id: capId,
                     name: group.name,
+                    variables: group.variables || [],
                     requests: group.requests.map(rawReq => {
                         const reqId = this.tabStateService.createId();
                         const baseState = this.tabStateService.getDefaultState(reqId);
@@ -175,7 +191,8 @@ export class ImportComponent implements OnInit {
                         } as RequestState;
                     })
                 };
-            })
+            }),
+            variables: allExtractedVars
         };
 
         const result = await this.tabStateService.importData(importPayload);

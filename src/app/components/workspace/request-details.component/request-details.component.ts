@@ -6,6 +6,7 @@ import { CommonModule } from '@angular/common';
 import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { VariableService } from '../../../shared/services/variable.service';
 import { inject } from '@angular/core';
 
 @Component({
@@ -24,6 +25,7 @@ export class RequestDetailsComponent {
     pendingAction = signal<'share' | 'save' | null>(null);
     tabStateService = inject(TabStateService);
     notificationService = inject(NotificationService);
+    variableService = inject(VariableService);
     isSaving = computed(() => this.tabStateService.isSaving());
     isSharing = signal<boolean>(false);
     isExporting = signal<boolean>(false);
@@ -105,7 +107,8 @@ export class RequestDetailsComponent {
                 const exportData = {
                     collection: collectionName,
                     exportedAt: new Date().toISOString(),
-                    requests: collectionRequests
+                    requests: collectionRequests,
+                    variables: this.variableService.variables()
                 };
                 this.downloadJson(exportData, `capsule_${collectionName}.json`);
                 this.onNotify.emit(`Capsule "${collectionName}" exported successfully.`);

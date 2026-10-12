@@ -7,6 +7,8 @@ import { AuthService, UserAuth } from './auth.service';
 import { NotificationService } from './notification.service';
 import { API_BASE_URL } from '../constants/api.constants';
 import { VariableService } from './variable.service';
+import { IGlobalVariable } from '../../interfaces/services/IVariableService';
+import { extractRequestsVariables } from '../utils/import-variable.util';
 
 export interface KeyValue {
     enabled: boolean;
@@ -1519,7 +1521,9 @@ export class TabStateService {
             autoAuthEnabled?: string;
             autoAuthEndpointId?: string | null;
             requests: RequestState[];
+            variables?: IGlobalVariable[];
         }[];
+        variables?: IGlobalVariable[];
     }): Promise<{ capsulesCount: number; requestsCount: number }> {
         if (!data || !data.capsules || data.capsules.length === 0) {
             return { capsulesCount: 0, requestsCount: 0 };
@@ -1528,6 +1532,7 @@ export class TabStateService {
         let totalRequests = 0;
         let lastCreatedCap: Capsule | null = null;
         let lastCreatedRequests: RequestState[] = [];
+        let lastCreatedCapVars: IGlobalVariable[] = [];
 
         if (this.isBrowser && this.authService.isLoggedIn()) {
             const payload = {
@@ -1536,21 +1541,37 @@ export class TabStateService {
                     name: c.name.trim() || 'Imported Capsule',
                     autoAuthEnabled: c.autoAuthEnabled || 'off',
                     autoAuthEndpointId: c.autoAuthEndpointId || null,
+                    variables: (c.variables || data.variables || []).map(v => ({
+                        id: v.id && v.id.length > 8 ? v.id : null,
+                        key: (v.key || '').trim(),
+                        value: v.value ?? '',
+                        type: v.type ?? 'global',
+                        enabled: v.enabled ?? true
+                    })),
                     requests: c.requests.map(r => this.mapStateToSaveRequest(r, c.id, c.name))
+                })),
+                variables: (data.variables || []).map(v => ({
+                    id: v.id && v.id.length > 8 ? v.id : null,
+                    key: (v.key || '').trim(),
+                    value: v.value ?? '',
+                    type: v.type ?? 'global',
+                    enabled: v.enabled ?? true
                 }))
             };
 
             const response = await firstValueFrom(
-                this.http.post<{ data: { capsulesCount: number; requestsCount: number; capsules: { capsule: any; requests: any[] }[] } }>(
+                this.http.post<{ data: { capsulesCount: number; requestsCount: number; capsules: { capsule: any; requests: any[]; variables?: any[] }[] } }>(
                     `${API_BASE_URL}/import`,
                     payload
                 )
             );
 
             if (response?.data && Array.isArray(response.data.capsules)) {
-                for (const importedCap of response.data.capsules) {
+                for (let i = 0; i < response.data.capsules.length; i++) {
+                    const importedCap = response.data.capsules[i];
                     const capData = importedCap.capsule;
                     const reqsData = importedCap.requests || [];
+                    const capInput = data.capsules[i];
 
                     const newCap: Capsule = {
                         id: capData.id,
@@ -1586,9 +1607,30 @@ export class TabStateService {
                         return [...remaining, ...mappedRequests];
                     });
 
+                    // Store variables for this capsule
+                    const capVars: IGlobalVariable[] = (importedCap.variables && importedCap.variables.length > 0)
+                        ? importedCap.variables.map(v => ({
+                            id: v.id ? String(v.id) : this.createId(),
+                            key: v.variableKey || v.key || '',
+                            value: v.variableValue !== undefined ? v.variableValue : (v.value !== undefined ? v.value : ''),
+                            type: v.type || 'global',
+                            enabled: v.isEnabled !== undefined ? v.isEnabled : (v.enabled !== undefined ? v.enabled : true)
+                        }))
+                        : (capInput?.variables || data.variables || []);
+
+                    if (this.isBrowser && capVars.length > 0) {
+                        const varsJson = JSON.stringify(capVars);
+                        localStorage.setItem(`onsteroids_vars_${newCap.id}`, varsJson);
+                        localStorage.setItem(`onsteroids_last_vars_${newCap.id}`, varsJson);
+                        const u = this.authService.currentUser();
+                        if (u?.id) localStorage.setItem(`onsteroids_user_vars_${newCap.id}_${u.id}`, varsJson);
+                        if (u?.email) localStorage.setItem(`onsteroids_user_vars_${newCap.id}_${u.email}`, varsJson);
+                    }
+
                     totalRequests += mappedRequests.length;
                     lastCreatedCap = newCap;
                     lastCreatedRequests = mappedRequests;
+                    lastCreatedCapVars = capVars;
                 }
             }
         } else {
@@ -1621,14 +1663,27 @@ export class TabStateService {
 
                 this.savedCapsules.update(list => [...list, ...reqs]);
 
+                const capVars = c.variables || data.variables || [];
+                if (this.isBrowser && capVars.length > 0) {
+                    const varsJson = JSON.stringify(capVars);
+                    localStorage.setItem(`onsteroids_vars_${capId}`, varsJson);
+                    localStorage.setItem(`onsteroids_last_vars_${capId}`, varsJson);
+                }
+
                 totalRequests += reqs.length;
                 lastCreatedCap = newCap;
                 lastCreatedRequests = reqs;
+                lastCreatedCapVars = capVars;
             }
         }
 
-        // Activate the imported capsule and its tabs
+        // Activate the imported capsule, its tabs, and its variables
         if (lastCreatedCap) {
+            const vs = this.getVariableService();
+            if (vs && lastCreatedCapVars.length > 0) {
+                vs.setVariables(lastCreatedCapVars);
+            }
+
             this.activeCapsuleId.set(lastCreatedCap.id);
             this.activeCapsuleName.set(lastCreatedCap.name);
             this.autoAuthEnabled.set((lastCreatedCap.autoAuthEnabled as any) || 'off');
@@ -1692,12 +1747,16 @@ export class TabStateService {
             }
         }
 
+        const extractedVars = extractRequestsVariables(requestsToSave, shared.variables);
+
         const importRes = await this.importData({
             capsules: [{
                 id: capId,
                 name: capName,
-                requests: requestsToSave
-            }]
+                requests: requestsToSave,
+                variables: extractedVars
+            }],
+            variables: extractedVars
         });
 
         return { capsuleName: capName, requestsCount: importRes.requestsCount };

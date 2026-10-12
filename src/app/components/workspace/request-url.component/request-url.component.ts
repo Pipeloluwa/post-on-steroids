@@ -104,7 +104,7 @@ export class RequestUrlComponent {
     
     showResolvedUrl = computed(() => {
         const u = this.url();
-        return u.includes('{{') || u.includes('$') || /(?:^|[/?&=]):[a-zA-Z0-9_-]+/.test(u);
+        return u.includes('{{') || u.includes('$') || /(?:^|[/?&=]):[a-zA-Z0-9_-]+/.test(u) || /(?:^|[/?&=])\{[a-zA-Z0-9_-]+\}/.test(u);
     });
 
     onUrlChange(newUrl: string) {

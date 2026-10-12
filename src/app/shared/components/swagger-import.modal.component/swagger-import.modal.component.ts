@@ -5,6 +5,8 @@ import { generateUUID } from '../../utils/uuid.util';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../services/tab.state.service';
 import { SwaggerExtractionService } from '../../services/swagger-extraction.service';
+import { IGlobalVariable } from '../../../interfaces/services/IVariableService';
+import { extractRequestsVariables } from '../../utils/import-variable.util';
 
 @Component({
     selector: 'app-swagger-import-modal',
@@ -69,8 +71,10 @@ export class SwaggerImportModalComponent {
                 capsules: [{
                     id: capId,
                     name: result.collectionName,
-                    requests: result.requests
-                }]
+                    requests: result.requests,
+                    variables: result.variables
+                }],
+                variables: result.variables
             });
 
             const successMessage = `Imported ${result.requests.length} requests from ${result.collectionName}.`;
@@ -92,7 +96,7 @@ export class SwaggerImportModalComponent {
         this.hasError.set(isError);
     }
 
-    private buildRequestStates(openApi: Record<string, any>, indexUrl: string): { collectionName: string; requests: RequestState[] } {
+    private buildRequestStates(openApi: Record<string, any>, indexUrl: string): { collectionName: string; requests: RequestState[]; variables: IGlobalVariable[] } {
         const collectionName = typeof openApi['info']?.title === 'string' && openApi['info'].title.trim()
             ? openApi['info'].title.trim()
             : 'Swagger Import';
@@ -100,6 +104,10 @@ export class SwaggerImportModalComponent {
         const baseServiceUrl = this.resolveServerBaseUrl(openApi, indexUrl);
         const paths = openApi['paths'] || {};
         const requests: RequestState[] = [];
+        const explicitVars: any[] = [];
+        if (baseServiceUrl) {
+            explicitVars.push({ key: 'baseUrl', value: baseServiceUrl, type: 'global', enabled: true });
+        }
         let operationCounter = 0;
 
         for (const pathKey of Object.keys(paths)) {
@@ -126,6 +134,11 @@ export class SwaggerImportModalComponent {
                 const params = [...allParams.queryParams, { enabled: true, key: '', value: '' }];
                 const headers = allParams.headerParams;
                 const pathParams = allParams.pathParams;
+                for (const pp of pathParams) {
+                    if (pp.key) {
+                        explicitVars.push({ key: pp.key, value: pp.value || '', type: 'path', enabled: true });
+                    }
+                }
                 const body = this.extractRequestBody(bodySource, openApi);
                 const resolvedUrl = this.applyPathParameters(url, pathParams);
 
@@ -151,7 +164,8 @@ export class SwaggerImportModalComponent {
             }
         }
 
-        return { collectionName, requests };
+        const variables = extractRequestsVariables(requests, explicitVars);
+        return { collectionName, requests, variables };
     }
 
     private resolveServerBaseUrl(openApi: Record<string, any>, indexUrl: string): string {

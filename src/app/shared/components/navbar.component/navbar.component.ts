@@ -5,6 +5,7 @@ import { MatIcon } from '@angular/material/icon';
 import { SidebarService } from '../../services/sidebar.service';
 import { TabStateService } from '../../services/tab.state.service';
 import { NotificationService } from '../../services/notification.service';
+import { VariableService } from '../../services/variable.service';
 import { AboutModalComponent } from '../about.modal.component/about.modal.component';
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
@@ -41,6 +42,7 @@ export class NavbarComponent {
 
     sidebarService = inject(SidebarService);
     tabStateService = inject(TabStateService);
+    private variableService = inject(VariableService);
     private router = inject(Router);
     private notificationService = inject(NotificationService);
 
@@ -130,7 +132,8 @@ export class NavbarComponent {
         this.downloadJson({
             collection: colName,
             exportedAt: new Date().toISOString(),
-            requests
+            requests,
+            variables: this.variableService.variables()
         }, `capsule_${colName}.json`);
         this.notificationService.notify(`Capsule "${colName}" exported successfully.`);
     }

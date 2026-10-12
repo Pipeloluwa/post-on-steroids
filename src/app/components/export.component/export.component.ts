@@ -2,6 +2,7 @@ import { Component, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService } from '../../shared/services/tab.state.service';
+import { VariableService } from '../../shared/services/variable.service';
 
 @Component({
     selector: 'app-export-component',
@@ -11,6 +12,7 @@ import { TabStateService } from '../../shared/services/tab.state.service';
 })
 export class ExportComponent {
     tabStateService = inject(TabStateService);
+    private variableService = inject(VariableService);
     
     capsules = this.tabStateService.capsules;
 
@@ -30,6 +32,7 @@ export class ExportComponent {
         const selectedData = this.capsules().filter(c => selectedIds.has(c.id));
         const activeId = this.tabStateService.activeCapsuleId();
         const allSavedRequests = this.tabStateService.savedCapsules();
+        const allVars = this.variableService.variables();
         
         for (const capsule of selectedData) {
             const requests = capsule.id === activeId
@@ -42,8 +45,10 @@ export class ExportComponent {
                 capsules: [{
                     id: capsule.id,
                     name: capsule.name,
-                    requests: requests
-                }]
+                    requests: requests,
+                    variables: allVars
+                }],
+                variables: allVars
             };
 
             const safeName = capsule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
@@ -63,6 +68,7 @@ export class ExportComponent {
     exportAsJson() {
         const activeId = this.tabStateService.activeCapsuleId();
         const allSavedRequests = this.tabStateService.savedCapsules();
+        const allVars = this.variableService.variables();
         
         for (const capsule of this.capsules()) {
             const requests = capsule.id === activeId
@@ -75,8 +81,10 @@ export class ExportComponent {
                 capsules: [{
                     id: capsule.id,
                     name: capsule.name,
-                    requests: requests
-                }]
+                    requests: requests,
+                    variables: allVars
+                }],
+                variables: allVars
             };
 
             const safeName = capsule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';

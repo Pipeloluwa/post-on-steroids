@@ -85,7 +85,7 @@ export class VariableInputComponent implements ControlValueAccessor {
             return [{ text: val, type: 'normal' as const }];
         }
         
-        const regex = /(\{\{.*?\}\}|:[a-zA-Z0-9_-]+|\$[a-zA-Z0-9_]+)/g;
+        const regex = /(\{\{.*?\}\}|:[a-zA-Z0-9_-]+|\{[a-zA-Z0-9_-]+\}|\$[a-zA-Z0-9_]+)/g;
         const segments: TextSegment[] = [];
         let lastIndex = 0;
         let match;
@@ -97,6 +97,14 @@ export class VariableInputComponent implements ControlValueAccessor {
             if (matchText.startsWith('{{')) {
                 const key = matchText.substring(2, matchText.length - 2).trim();
                 segments.push({ text: matchText, type: 'global', key });
+            } else if (matchText.startsWith('{') && matchText.endsWith('}')) {
+                const key = matchText.substring(1, matchText.length - 1).trim();
+                const charBefore = match.index > 0 ? val[match.index - 1] : '/';
+                if (['/', '?', '&', '='].includes(charBefore)) {
+                    segments.push({ text: matchText, type: 'path', key });
+                } else {
+                    segments.push({ text: matchText, type: 'normal' });
+                }
             } else if (matchText.startsWith(':')) {
                 const key = matchText.substring(1);
                 const charBefore = match.index > 0 ? val[match.index - 1] : '/';
@@ -388,13 +396,14 @@ export class VariableInputComponent implements ControlValueAccessor {
                     const rect = span.getBoundingClientRect();
                     // Check if mouse X is within this exact span's bounds
                     if (event.clientX >= rect.left && event.clientX <= rect.right) {
-                        const segKey = (seg.key || '').trim().toLowerCase();
+                        const rawSegKey = (seg.key || '').trim();
+                        const cleanSegKey = rawSegKey.replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase();
                         const currentVar = this.variableService.variables().find(
-                            v => (v.key || '').trim().toLowerCase() === segKey
+                            v => (v.key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase() === cleanSegKey
                         );
                         
                         this.hoveredVariable.set({
-                            key: seg.key!,
+                            key: rawSegKey.replace(/^[:{]+/, '').replace(/[}]+$/, '').trim(),
                             val: currentVar ? (currentVar.value || '') : '',
                             type: seg.type,
                             x: rect.left + (rect.width / 2),
@@ -430,15 +439,16 @@ export class VariableInputComponent implements ControlValueAccessor {
             this.hoveredVariable.set({ ...hover, val: newValue });
         }
         
-        const targetKey = (key || '').trim().toLowerCase();
+        const cleanTargetKey = (key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim();
+        const lowerTargetKey = cleanTargetKey.toLowerCase();
         const v = this.variableService.variables().find(
-            v => (v.key || '').trim().toLowerCase() === targetKey
+            v => (v.key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase() === lowerTargetKey
         );
         if (v) {
             this.variableService.updateVariable({ ...v, value: newValue });
         } else {
             const type = hover?.type === 'path' ? 'path' : 'global';
-            this.variableService.addVariable(key, newValue, undefined, type);
+            this.variableService.addVariable(cleanTargetKey, newValue, undefined, type);
         }
     }
 }
