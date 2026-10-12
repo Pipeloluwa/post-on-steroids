@@ -914,11 +914,15 @@ export class TabStateService {
             return;
         }
 
-        // Save current capsule's tab layout before switching
+        // Save current capsule's tab layout and variables before switching
         const prevCapId = this.activeCapsuleId();
         if (this.isBrowser && prevCapId) {
             localStorage.setItem(`onsteroids_open_tab_ids_${prevCapId}`, JSON.stringify(this.openTabIds()));
             localStorage.setItem(`onsteroids_active_tab_${prevCapId}`, this.activeTabId() || '');
+            const vs = this.getVariableService();
+            if (vs) {
+                vs.saveVariables(false, prevCapId);
+            }
         }
 
         this.activeCapsuleId.set(capsule.id);
@@ -934,6 +938,12 @@ export class TabStateService {
         } else {
             this.autoAuthEnabled.set('off');
             this.autoAuthEndpointId.set(null);
+        }
+
+        // Explicitly load variables for the new capsule before loading requests or triggering any saves
+        const vs = this.getVariableService();
+        if (vs) {
+            await vs.loadVariables(capsule.id);
         }
 
         await this.loadRequestsForCapsule(capsule.id);
@@ -1222,6 +1232,10 @@ export class TabStateService {
                 this.states.set(new Map());
                 this.openTabIds.set([]);
                 this.activeTabId.set(null);
+                const vs = this.getVariableService();
+                if (vs) {
+                    vs.setVariables([]);
+                }
                 if (this.isBrowser) {
                     localStorage.removeItem('onsteroids_active_capsule');
                     localStorage.removeItem('onsteroids_active_tab');
@@ -1279,6 +1293,10 @@ export class TabStateService {
                 this.states.set(new Map());
                 this.openTabIds.set([]);
                 this.activeTabId.set(null);
+                const vs = this.getVariableService();
+                if (vs) {
+                    vs.setVariables([]);
+                }
             }
         }
     }
@@ -1679,11 +1697,6 @@ export class TabStateService {
 
         // Activate the imported capsule, its tabs, and its variables
         if (lastCreatedCap) {
-            const vs = this.getVariableService();
-            if (vs && lastCreatedCapVars.length > 0) {
-                vs.setVariables(lastCreatedCapVars);
-            }
-
             this.activeCapsuleId.set(lastCreatedCap.id);
             this.activeCapsuleName.set(lastCreatedCap.name);
             this.autoAuthEnabled.set((lastCreatedCap.autoAuthEnabled as any) || 'off');
@@ -1692,6 +1705,11 @@ export class TabStateService {
             if (this.isBrowser) {
                 localStorage.setItem('onsteroids_active_capsule', lastCreatedCap.id);
                 localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+            }
+
+            const vs = this.getVariableService();
+            if (vs) {
+                vs.setVariables(lastCreatedCapVars || [], lastCreatedCap.id);
             }
 
             if (lastCreatedRequests.length > 0) {
@@ -2539,13 +2557,7 @@ export class TabStateService {
                 }
             }
 
-            // 3. Load variables from backend API
-            const vs = this.getVariableService();
-            if (vs) {
-                await vs.loadVariablesFromBackend(false);
-            }
-
-            // Attempt to restore exact cross-device workspace layout (open tabs, active tab, etc.)
+            // 3. Attempt to restore exact cross-device workspace layout (open tabs, active tab, etc.)
             await this.loadWorkspaceStateFromBackend();
 
             // 4. Ensure active capsule is valid
@@ -2556,6 +2568,12 @@ export class TabStateService {
                 this.activeCapsuleName.set(matchingCap.name);
                 this.autoAuthEnabled.set((matchingCap.autoAuthEnabled as any) || 'off');
                 this.autoAuthEndpointId.set(matchingCap.autoAuthEndpointId || null);
+            }
+
+            // 5. Load variables for the resolved active capsule
+            const vs = this.getVariableService();
+            if (vs && matchingCap) {
+                await vs.loadVariables(matchingCap.id);
             }
 
             // 5. Restore open tabs

@@ -40,94 +40,137 @@ export class VariableService {
         this.modalSource.set(undefined);
     }
 
+    private inFlightLoads = new Map<string, Promise<void>>();
+
     constructor() {
         effect(() => {
             const capId = this.tabStateService.activeCapsuleId();
-            this.loadVariables(capId);
+            if (capId) {
+                this.loadVariables(capId);
+            }
         }, { allowSignalWrites: true });
 
-        // Note: loadVariablesFromBackend() is NOT called here independently.
-        // TabStateService.loadBackendData() orchestrates it at step 3 (after capsules
-        // and requests are loaded), ensuring the correct capsuleId context and ordering.
+        // Note: TabStateService.loadBackendData() orchestrates variable loading after
+        // capsules, requests, and active capsule are fully restored.
         this.authService.onLogout.subscribe(() => {
             this.resetVariables();
         });
     }
 
-    private async loadVariables(capsuleId?: string) {
+    private cacheVariablesForCapsule(capId: string, vars: IGlobalVariable[]) {
+        const json = JSON.stringify(vars);
+        this.localStorageService.setItem(`onsteroids_vars_${capId}`, json);
+        this.localStorageService.setItem(`onsteroids_last_vars_${capId}`, json);
         const user = this.authService.currentUser();
-        const capId = capsuleId || this.tabStateService.activeCapsuleId() || '1';
-        
-        const userKey = user ? `onsteroids_user_vars_${capId}_${user.id || user.email}` : null;
-        let saved = userKey ? this.localStorageService.getItem(userKey) : null;
-        
-        if (!user && !saved) {
-            saved = this.localStorageService.getItem(`onsteroids_last_vars_${capId}`) ||
-                this.localStorageService.getItem(`onsteroids_vars_${capId}`);
+        if (user?.id) {
+            this.localStorageService.setItem(`onsteroids_user_vars_${capId}_${user.id}`, json);
         }
-
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.variables.set(parsed);
-                }
-            } catch (e) {
-                // Ignore parse errors, do not wipe
-            }
-        }
-
-        // When user is logged in, ALWAYS fetch latest from backend for this capsule.
-        // NEVER wipe or call saveVariables() when local cache is empty (e.g. on another browser)!
-        if (this.authService.isLoggedIn() && !this.authService.isLoggingOut()) {
-            await this.loadVariablesFromBackend(false);
-        } else if (!saved) {
-            this.variables.set([
-                { id: '1', key: 'baseUrl', value: 'http://acegeld.runasp.net/api/v1', enabled: true }
-            ]);
+        if (user?.email) {
+            this.localStorageService.setItem(`onsteroids_user_vars_${capId}_${user.email}`, json);
         }
     }
 
-    restoreUserVariables(user?: any) {
+    public async loadVariables(capsuleId?: string): Promise<void> {
+        const user = this.authService.currentUser();
+        const capId = capsuleId || this.tabStateService.activeCapsuleId() || '1';
+        
+        // 1. Check local cache for this specific capsule
+        const userKey = user?.id ? `onsteroids_user_vars_${capId}_${user.id}` : (user?.email ? `onsteroids_user_vars_${capId}_${user.email}` : null);
+        let saved = userKey ? this.localStorageService.getItem(userKey) : null;
+        
+        if (!saved) {
+            saved = this.localStorageService.getItem(`onsteroids_vars_${capId}`) ||
+                this.localStorageService.getItem(`onsteroids_last_vars_${capId}`);
+        }
+
+        let localVars: IGlobalVariable[] | null = null;
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    localVars = parsed;
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+
+        // 2. Immediately isolate in-memory state for this capsule.
+        // If this capsule has local variables cached, show them.
+        // If not cached, reset to empty (or default baseUrl only for offline guest capsule '1').
+        // This ensures variables from previously opened capsules NEVER leak!
+        if (localVars !== null) {
+            this.variables.set(localVars);
+        } else if (!this.authService.isLoggedIn() && capId === '1') {
+            this.variables.set([
+                { id: '1', key: 'baseUrl', value: 'http://acegeld.runasp.net/api/v1', enabled: true }
+            ]);
+        } else {
+            this.variables.set([]);
+        }
+
+        // 3. When logged in, fetch latest from backend for this specific capsule (deduplicated)
+        if (this.authService.isLoggedIn() && !this.authService.isLoggingOut()) {
+            if (this.inFlightLoads.has(capId)) {
+                await this.inFlightLoads.get(capId);
+                return;
+            }
+            const loadPromise = this.loadVariablesFromBackend(false, capId);
+            this.inFlightLoads.set(capId, loadPromise);
+            try {
+                await loadPromise;
+            } finally {
+                this.inFlightLoads.delete(capId);
+            }
+        }
+    }
+
+    restoreUserVariables(user?: any, targetCapId?: string) {
         const u = user || this.authService.currentUser();
-        const capId = this.tabStateService.activeCapsuleId() || '1';
+        const capId = targetCapId || this.tabStateService.activeCapsuleId() || '1';
         const keysToTry: string[] = [];
         if (u?.id) keysToTry.push(`onsteroids_user_vars_${capId}_${u.id}`);
         if (u?.email) keysToTry.push(`onsteroids_user_vars_${capId}_${u.email}`);
-        if (!u) {
-            keysToTry.push(`onsteroids_last_vars_${capId}`);
-            keysToTry.push(`onsteroids_vars_${capId}`);
-        }
+        keysToTry.push(`onsteroids_vars_${capId}`);
+        keysToTry.push(`onsteroids_last_vars_${capId}`);
 
         for (const k of keysToTry) {
             const saved = this.localStorageService.getItem(k);
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
+                    if (Array.isArray(parsed)) {
                         this.variables.set(parsed);
-                        this.saveVariables(false);
+                        this.saveVariables(false, capId);
                         return;
                     }
                 } catch (e) {}
             }
         }
+        this.variables.set([]);
     }
 
-    setVariables(vars: IGlobalVariable[]) {
+    setVariables(vars: IGlobalVariable[], targetCapId?: string) {
         if (Array.isArray(vars)) {
             this.variables.set(vars);
-            this.saveVariables();
+            this.saveVariables(true, targetCapId);
         }
     }
 
     private hasPendingSync = false;
 
-    async loadVariablesFromBackend(forceNoCapsuleFilter = false): Promise<void> {
+    async loadVariablesFromBackend(forceNoCapsuleFilter = false, targetCapId?: string): Promise<void> {
         if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
+        const capId = targetCapId || this.tabStateService.activeCapsuleId() || '1';
+        const isGuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capId);
+
+        // If not forced and not a valid GUID (e.g. offline '1'), don't query backend without a filter!
+        if (!forceNoCapsuleFilter && !isGuid) {
+            return;
+        }
+
         try {
-            const capId = this.tabStateService.activeCapsuleId();
-            const qs = (!forceNoCapsuleFilter && capId && capId !== '1') ? `?capsuleId=${capId}` : '';
+            const qs = (!forceNoCapsuleFilter && isGuid) ? `?capsuleId=${capId}` : '';
             const res = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
             );
@@ -154,29 +197,32 @@ export class VariableService {
                         };
                     });
 
-                // Also keep any active local variables that weren't in res.data yet
+                // Concurrency check: If active capsule changed while this request was in flight, do not overwrite in-memory variables!
+                const currentCap = this.tabStateService.activeCapsuleId();
+                if (currentCap && currentCap !== capId) {
+                    this.cacheVariablesForCapsule(capId, userVars);
+                    return;
+                }
+
+                // Keep only active local variables for THIS capsule that weren't in res.data yet.
+                // Genuinely local/unsaved variables have short IDs (length <= 8), not 36-char backend GUIDs.
                 const backendKeys = new Set(res.data.map(v => (v.variableKey || v.key || '').trim().toLowerCase()));
                 const extraLocalVars = this.variables()
                     .filter(v => {
                         const k = (v.key || '').trim().toLowerCase();
-                        return !(v.key || '').startsWith('__') && !backendKeys.has(k);
+                        const isLocalOnly = !v.id || v.id.length <= 8;
+                        return isLocalOnly && !(v.key || '').startsWith('__') && !backendKeys.has(k);
                     })
                     .map(v => ({
                         ...v,
-                        // Force local-only variables to have a short ID so they sync as new records
                         id: v.id && v.id.length > 8 ? v.id.substring(0, 7) : v.id
                     }));
 
                 const finalVars = [...userVars, ...extraLocalVars];
-                if (finalVars.length > 0) {
-                    this.variables.set(finalVars);
-                    this.saveVariables(false);
-                    if (extraLocalVars.length > 0 && this.authService.isLoggedIn()) {
-                        this.syncVariablesToBackend();
-                    }
-                } else if (userVars.length === 0 && extraLocalVars.length === 0) {
-                    this.variables.set([]);
-                    this.saveVariables(false);
+                this.variables.set(finalVars);
+                this.saveVariables(false, capId);
+                if (extraLocalVars.length > 0 && this.authService.isLoggedIn() && isGuid) {
+                    this.syncVariablesToBackend(capId);
                 }
             }
         } catch (e) {
@@ -184,7 +230,7 @@ export class VariableService {
         }
     }
 
-    async syncVariablesToBackend(): Promise<void> {
+    async syncVariablesToBackend(targetCapId?: string): Promise<void> {
         if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         if (this.isSyncing()) {
             this.hasPendingSync = true;
@@ -203,9 +249,14 @@ export class VariableService {
                 enabled: v.enabled ?? true
             }));
 
-            const capsuleId = this.tabStateService.activeCapsuleId();
+            const capsuleId = targetCapId || this.tabStateService.activeCapsuleId();
+            const isGuid = capsuleId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capsuleId);
+            if (!isGuid) {
+                return;
+            }
+
             const payload = { 
-                capsuleId: capsuleId !== '1' ? capsuleId : null,
+                capsuleId: capsuleId,
                 variables: payloadVars 
             };
 
@@ -238,29 +289,20 @@ export class VariableService {
             this.isSyncing.set(false);
             if (this.hasPendingSync) {
                 this.hasPendingSync = false;
-                this.syncVariablesToBackend();
+                this.syncVariablesToBackend(targetCapId);
             }
         }
     }
 
-    saveVariables(syncBackend = true) {
-        const json = JSON.stringify(this.variables());
-        const capId = this.tabStateService.activeCapsuleId() || '1';
-        this.localStorageService.setItem(`onsteroids_vars_${capId}`, json);
-        this.localStorageService.setItem(`onsteroids_last_vars_${capId}`, json);
-        const user = this.authService.currentUser();
-        if (user?.id) {
-            this.localStorageService.setItem(`onsteroids_user_vars_${capId}_${user.id}`, json);
-        }
-        if (user?.email) {
-            this.localStorageService.setItem(`onsteroids_user_vars_${capId}_${user.email}`, json);
-        }
+    saveVariables(syncBackend = true, targetCapId?: string) {
+        const capId = targetCapId || this.tabStateService.activeCapsuleId() || '1';
+        this.cacheVariablesForCapsule(capId, this.variables());
         try {
             this.tabStateService.snapshotCurrentSession();
         } catch {}
 
         if (syncBackend && this.authService.isLoggedIn()) {
-            this.syncVariablesToBackend();
+            this.syncVariablesToBackend(capId);
         }
     }
 
