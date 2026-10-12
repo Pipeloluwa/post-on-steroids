@@ -154,43 +154,32 @@ export class ImportComponent implements OnInit {
             throw new Error('Unrecognized format. Please provide an OnSteroid export JSON or a Postman Collection (v2.0/v2.1).');
         }
 
-        let totalRequests = 0;
-
-        for (const group of groups) {
-            // Create or switch to the capsule
-            const createdCap = await this.tabStateService.createCapsule(group.name);
-            const createdRequests: RequestState[] = [];
-
-            for (const rawReq of group.requests) {
-                const reqId = this.tabStateService.createId();
-                const baseState = this.tabStateService.getDefaultState(reqId);
-                
-                const finalState: RequestState = {
-                    ...baseState,
-                    ...rawReq,
-                    id: reqId,
-                    capsuleId: createdCap.id,
-                    name: rawReq.name || 'Imported Request',
-                    url: rawReq.url || '',
-                    method: (rawReq.method || 'GET').toUpperCase(),
-                    isDirty: false
+        const importPayload = {
+            capsules: groups.map(group => {
+                const capId = this.tabStateService.createId();
+                return {
+                    id: capId,
+                    name: group.name,
+                    requests: group.requests.map(rawReq => {
+                        const reqId = this.tabStateService.createId();
+                        const baseState = this.tabStateService.getDefaultState(reqId);
+                        return {
+                            ...baseState,
+                            ...rawReq,
+                            id: reqId,
+                            capsuleId: capId,
+                            name: rawReq.name || 'Imported Request',
+                            url: rawReq.url || '',
+                            method: (rawReq.method || 'GET').toUpperCase(),
+                            isDirty: false
+                        } as RequestState;
+                    })
                 };
+            })
+        };
 
-                this.tabStateService.addOpenTab(finalState);
-                createdRequests.push(finalState);
-                totalRequests++;
-
-                // Persist to backend if logged in
-                await this.tabStateService.saveToCapsule(reqId);
-            }
-
-            if (createdRequests.length > 0) {
-                this.tabStateService.savedCapsules.set(createdRequests);
-                this.tabStateService.setActiveTab(createdRequests[0].id);
-            }
-        }
-
-        return { capsules: groups.length, requests: totalRequests };
+        const result = await this.tabStateService.importData(importPayload);
+        return { capsules: result.capsulesCount, requests: result.requestsCount };
     }
 
     private flattenPostmanItems(items: any[]): { name: string; request: any }[] {

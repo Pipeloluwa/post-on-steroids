@@ -1465,6 +1465,203 @@ export class TabStateService {
         throw new Error('Failed to generate share link');
     }
 
+    mapStateToSaveRequest(state: RequestState, capsuleId?: string, capsuleName?: string): any {
+        return {
+            id: state.id,
+            capsuleId: capsuleId || state.capsuleId,
+            capsuleName: capsuleName || this.activeCapsuleName(),
+            name: state.name || 'Imported Request',
+            url: state.url || '',
+            method: (state.method || 'GET').toUpperCase(),
+            payloadType: state.payloadType || 'params',
+            bodyType: state.bodyType || 'none',
+            rawType: state.rawType || 'JSON',
+            rawBody: state.rawBody || '',
+            rawBodyJson: state.rawBodyJson || '',
+            rawBodyXml: state.rawBodyXml || '',
+            auth: {
+                type: state.auth?.type || 'none',
+                token: state.auth?.token || ''
+            },
+            scripts: {
+                preRequest: state.scripts?.preRequest || '',
+                postResponse: state.scripts?.postResponse || '',
+                testScript: state.scripts?.testScript || '',
+                testScriptEnabled: state.scripts?.testScriptEnabled ?? false
+            },
+            encryption: state.encryption || {
+                algorithm: 'none',
+                key: '',
+                autoEncryptBody: false,
+                autoEncryptHeaders: false,
+                encryptedHeaders: [],
+                encryptedBodyPaths: [],
+                script: ''
+            },
+            settings: state.settings || {
+                followRedirects: true,
+                verifySsl: true,
+                enableCookies: true,
+                bypassCors: true
+            },
+            postTriggerTabId: state.postTriggerTabId || null,
+            autoAuthEnabled: !!state.autoAuthEnabled,
+            params: (state.params || []).map(p => ({ enabled: p.enabled ?? true, key: p.key || '', value: p.value || '' })),
+            headers: (state.headers || []).map(h => ({ enabled: h.enabled ?? true, key: h.key || '', value: h.value || '' })),
+            formData: (state.formData || []).map(f => ({ enabled: f.enabled ?? true, key: f.key || '', value: f.value || '', type: f.type || 'text' }))
+        };
+    }
+
+    async importData(data: {
+        capsules: {
+            id?: string;
+            name: string;
+            autoAuthEnabled?: string;
+            autoAuthEndpointId?: string | null;
+            requests: RequestState[];
+        }[];
+    }): Promise<{ capsulesCount: number; requestsCount: number }> {
+        if (!data || !data.capsules || data.capsules.length === 0) {
+            return { capsulesCount: 0, requestsCount: 0 };
+        }
+
+        let totalRequests = 0;
+        let lastCreatedCap: Capsule | null = null;
+        let lastCreatedRequests: RequestState[] = [];
+
+        if (this.isBrowser && this.authService.isLoggedIn()) {
+            const payload = {
+                capsules: data.capsules.map(c => ({
+                    id: c.id,
+                    name: c.name.trim() || 'Imported Capsule',
+                    autoAuthEnabled: c.autoAuthEnabled || 'off',
+                    autoAuthEndpointId: c.autoAuthEndpointId || null,
+                    requests: c.requests.map(r => this.mapStateToSaveRequest(r, c.id, c.name))
+                }))
+            };
+
+            const response = await firstValueFrom(
+                this.http.post<{ data: { capsulesCount: number; requestsCount: number; capsules: { capsule: any; requests: any[] }[] } }>(
+                    `${API_BASE_URL}/import`,
+                    payload
+                )
+            );
+
+            if (response?.data && Array.isArray(response.data.capsules)) {
+                for (const importedCap of response.data.capsules) {
+                    const capData = importedCap.capsule;
+                    const reqsData = importedCap.requests || [];
+
+                    const newCap: Capsule = {
+                        id: capData.id,
+                        name: capData.name,
+                        autoAuthEnabled: capData.autoAuthEnabled || 'off',
+                        autoAuthEndpointId: capData.autoAuthEndpointId || null,
+                        createdAt: new Date(capData.createdAt).getTime() || Date.now()
+                    };
+
+                    this.capsules.update(list => {
+                        const exists = list.some(c => c.id === newCap.id);
+                        return exists ? list.map(c => c.id === newCap.id ? newCap : c) : [...list, newCap];
+                    });
+
+                    const mappedRequests: RequestState[] = reqsData.map(r => {
+                        const st = this.mapDtoToState(r);
+                        st.capsuleId = newCap.id;
+                        st.isDirty = false;
+                        return st;
+                    });
+
+                    this.states.update(map => {
+                        const next = new Map(map);
+                        for (const mr of mappedRequests) {
+                            next.set(mr.id, mr);
+                        }
+                        return next;
+                    });
+
+                    this.savedCapsules.update(list => {
+                        const ids = new Set(mappedRequests.map(m => m.id));
+                        const remaining = list.filter(l => !ids.has(l.id));
+                        return [...remaining, ...mappedRequests];
+                    });
+
+                    totalRequests += mappedRequests.length;
+                    lastCreatedCap = newCap;
+                    lastCreatedRequests = mappedRequests;
+                }
+            }
+        } else {
+            // Local-only import for guest / offline users
+            for (const c of data.capsules) {
+                const capId = c.id || this.createId();
+                const newCap: Capsule = {
+                    id: capId,
+                    name: c.name.trim() || 'Imported Capsule',
+                    autoAuthEnabled: c.autoAuthEnabled || 'off',
+                    autoAuthEndpointId: c.autoAuthEndpointId || null,
+                    createdAt: Date.now()
+                };
+
+                this.capsules.update(list => [...list, newCap]);
+
+                const reqs: RequestState[] = c.requests.map(r => ({
+                    ...r,
+                    capsuleId: capId,
+                    isDirty: false
+                }));
+
+                this.states.update(map => {
+                    const next = new Map(map);
+                    for (const req of reqs) {
+                        next.set(req.id, req);
+                    }
+                    return next;
+                });
+
+                this.savedCapsules.update(list => [...list, ...reqs]);
+
+                totalRequests += reqs.length;
+                lastCreatedCap = newCap;
+                lastCreatedRequests = reqs;
+            }
+        }
+
+        // Activate the imported capsule and its tabs
+        if (lastCreatedCap) {
+            this.activeCapsuleId.set(lastCreatedCap.id);
+            this.activeCapsuleName.set(lastCreatedCap.name);
+            this.autoAuthEnabled.set((lastCreatedCap.autoAuthEnabled as any) || 'off');
+            this.autoAuthEndpointId.set(lastCreatedCap.autoAuthEndpointId || null);
+
+            if (this.isBrowser) {
+                localStorage.setItem('onsteroids_active_capsule', lastCreatedCap.id);
+                localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+            }
+
+            if (lastCreatedRequests.length > 0) {
+                const openIds = lastCreatedRequests.map(r => r.id);
+                this.openTabIds.set(openIds);
+                this.activeTabId.set(openIds[0]);
+
+                if (this.isBrowser) {
+                    localStorage.setItem(`onsteroids_open_tab_ids_${lastCreatedCap.id}`, JSON.stringify(openIds));
+                    localStorage.setItem(`onsteroids_active_tab_${lastCreatedCap.id}`, openIds[0]);
+                    localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(openIds));
+                    localStorage.setItem('onsteroids_active_tab', openIds[0]);
+                }
+            }
+
+            this.preloadAllExamples();
+            this.syncWorkspaceStateToBackend();
+        }
+
+        return {
+            capsulesCount: data.capsules.length,
+            requestsCount: totalRequests
+        };
+    }
+
     async importCapsuleFromUrl(urlOrToken: string): Promise<{ capsuleName: string; requestsCount: number }> {
         let token = urlOrToken.trim();
         if (token.includes('share=')) {
@@ -1484,34 +1681,26 @@ export class TabStateService {
         }
 
         const shared = res.data;
-        const newCap = await this.createCapsule(shared.capsuleName || 'Imported Capsule');
-        
+        const capId = this.createId();
+        const capName = shared.capsuleName || 'Imported Capsule';
+
         const requestsToSave: RequestState[] = [];
         if (shared.requests && Array.isArray(shared.requests)) {
             for (const r of shared.requests) {
-                const reqState = this.mapDtoToState({ ...r, capsuleId: newCap.id });
+                const reqState = this.mapDtoToState({ ...r, id: this.createId(), capsuleId: capId });
                 requestsToSave.push(reqState);
             }
         }
 
-        if (requestsToSave.length > 0) {
-            this.states.update(map => {
-                const next = new Map(map);
-                for (const req of requestsToSave) {
-                    next.set(req.id, req);
-                }
-                return next;
-            });
-            this.savedCapsules.set(requestsToSave);
-            this.openTabIds.set(requestsToSave.map(r => r.id));
-            this.activeTabId.set(requestsToSave[0].id);
+        const importRes = await this.importData({
+            capsules: [{
+                id: capId,
+                name: capName,
+                requests: requestsToSave
+            }]
+        });
 
-            for (const r of requestsToSave) {
-                await this.saveToCapsule(r.id);
-            }
-        }
-
-        return { capsuleName: newCap.name, requestsCount: requestsToSave.length };
+        return { capsuleName: capName, requestsCount: importRes.requestsCount };
     }
 
     async createExample(requestId: string, name: string, exampleData: any): Promise<any> {

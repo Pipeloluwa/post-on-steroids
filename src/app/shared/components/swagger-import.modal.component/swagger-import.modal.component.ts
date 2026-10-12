@@ -62,17 +62,16 @@ export class SwaggerImportModalComponent {
                 return;
             }
 
-            const newCapsule = await this.tabStateService.createCapsule(result.collectionName);
-            
-            // Close the default blank tab that switchCapsule generates for new capsules
-            this.tabStateService.closeAllTabs();
-            
-            result.requests.forEach(req => req.capsuleId = newCapsule.id);
-            this.tabStateService.savedCapsules.set(result.requests);
-            result.requests.forEach(request => this.tabStateService.addOpenTab(request));
-            this.tabStateService.setActiveTab(result.requests[0].id);
-            
-            await this.tabStateService.saveToCapsule();
+            const capId = this.tabStateService.createId();
+            result.requests.forEach(req => req.capsuleId = capId);
+
+            await this.tabStateService.importData({
+                capsules: [{
+                    id: capId,
+                    name: result.collectionName,
+                    requests: result.requests
+                }]
+            });
 
             const successMessage = `Imported ${result.requests.length} requests from ${result.collectionName}.`;
             this.onImportStatus.emit({ message: successMessage, isError: false });
