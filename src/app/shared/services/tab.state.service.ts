@@ -513,6 +513,34 @@ export class TabStateService {
         }, 2000);
     }
 
+    private activeTabSyncTimeout: any = null;
+
+    /** Lightweight sync of active tab and open tabs to backend for resume/login persistence */
+    syncActiveTabToBackend() {
+        if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
+
+        clearTimeout(this.activeTabSyncTimeout);
+        this.activeTabSyncTimeout = setTimeout(async () => {
+            try {
+                const activeId = this.activeTabId();
+                if (!activeId) return;
+
+                const payload = {
+                    activeCapsuleId: this.activeCapsuleId(),
+                    activeCapsuleName: this.activeCapsuleName(),
+                    activeTabId: activeId,
+                    openTabIds: JSON.stringify(this.openTabIds())
+                };
+
+                await firstValueFrom(
+                    this.http.patch(`${API_BASE_URL}/WorkspaceState/active-tab`, payload)
+                );
+            } catch (e) {
+                console.warn('Failed to sync active tab to backend', e);
+            }
+        }, 500);
+    }
+
     /** Load workspace state from backend and apply it (called on login/loadBackendData) */
     private async loadWorkspaceStateFromBackend(): Promise<boolean> {
         if (!this.isBrowser || !this.authService.isLoggedIn()) return false;
@@ -782,10 +810,7 @@ export class TabStateService {
 
         this.activeTabId.set(id);
 
-        this.syncWorkspaceStateToBackend();
-        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            this.triggerAutoSave();
-        }
+        this.syncActiveTabToBackend();
     }
 
     getAllOpenTabs(): RequestState[] {
@@ -902,11 +927,7 @@ export class TabStateService {
             return [...ids, newId];
         });
         this.activeTabId.set(newId);
-        
-        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            this.triggerAutoSave();
-        }
-        
+        this.syncActiveTabToBackend();
         return newId;
     }
 
@@ -1434,10 +1455,7 @@ export class TabStateService {
     closeOtherTabs(keepId: string) {
         this.openTabIds.set([keepId]);
         this.activeTabId.set(keepId);
-        
-        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            this.triggerAutoSave();
-        }
+        this.syncActiveTabToBackend();
     }
 
     resolveRequestTitle(name?: string, url?: string): string {
@@ -2028,13 +2046,24 @@ export class TabStateService {
 
             let nextState: RequestState = { ...currentState, ...partialState };
 
-            // Automatic dirty tracking: only flag when a persisted field truly changed
-            // (ignores response data, console logs, scroll positions, loading flags, etc.)
-            if (!explicitDirty && isSignificantChange &&
-                this.persistableFingerprint(currentState) !== this.persistableFingerprint(nextState)) {
-                nextState = { ...nextState, isDirty: true };
-                this.editVersions.set(id, (this.editVersions.get(id) ?? 0) + 1);
-                becameDirty = true;
+            // Accurate baseline dirty tracking: compare against saved state (or default state if unsaved)
+            if (!explicitDirty && isSignificantChange) {
+                const saved = this.savedCapsules().find(r => r.id === id);
+                const baseline = saved || this.getDefaultState(id);
+                const isNowDirty = this.persistableFingerprint(nextState) !== this.persistableFingerprint(baseline);
+                const fingerprintChanged = this.persistableFingerprint(currentState) !== this.persistableFingerprint(nextState);
+
+                if (fingerprintChanged) {
+                    this.editVersions.set(id, (this.editVersions.get(id) ?? 0) + 1);
+                }
+
+                if (nextState.isDirty !== isNowDirty) {
+                    nextState = { ...nextState, isDirty: isNowDirty };
+                }
+
+                if (isNowDirty && fingerprintChanged) {
+                    becameDirty = true;
+                }
             }
 
             map.set(id, nextState);
@@ -2058,13 +2087,50 @@ export class TabStateService {
 
     /** Serialises only the fields that are persisted to the backend, used for dirty detection */
     private persistableFingerprint(s: RequestState): string {
+        const normParams = (s.params || [])
+            .filter(p => (p.key && p.key.trim() !== '') || (p.value && p.value.trim() !== ''))
+            .map(p => ({ enabled: !!p.enabled, key: (p.key || '').trim(), value: (p.value || '').trim() }));
+
+        const normHeaders = (s.headers || [])
+            .filter(h => (h.key && h.key.trim() !== '') || (h.value && h.value.trim() !== ''))
+            .map(h => ({ enabled: !!h.enabled, key: (h.key || '').trim(), value: (h.value || '').trim() }));
+
+        const normFormData = (s.formData || [])
+            .filter(f => (f.key && f.key.trim() !== '') || (f.value && f.value.trim() !== ''))
+            .map(f => ({ enabled: !!f.enabled, key: (f.key || '').trim(), value: (f.value || '').trim(), type: f.type || 'text' }));
+
         return JSON.stringify([
-            s.name, s.url, s.method, s.payloadType, s.bodyType, s.rawType,
-            s.rawBody, s.rawBodyJson, s.rawBodyXml,
-            s.auth?.type, s.auth?.token,
-            s.scripts?.preRequest, s.scripts?.postResponse, s.scripts?.testScript, s.scripts?.testScriptEnabled,
-            s.encryption, s.settings, s.postTriggerTabId ?? null, !!s.autoAuthEnabled,
-            s.params, s.headers, s.formData
+            (s.name || '').trim(),
+            (s.url || '').trim(),
+            (s.method || 'GET').toUpperCase(),
+            s.payloadType || 'params',
+            s.bodyType || 'none',
+            s.rawType || 'JSON',
+            s.rawBody || '',
+            s.rawBodyJson || '',
+            s.rawBodyXml || '',
+            s.auth?.type || 'none',
+            s.auth?.token || '',
+            s.scripts?.preRequest || '',
+            s.scripts?.postResponse || '',
+            s.scripts?.testScript || '',
+            !!s.scripts?.testScriptEnabled,
+            s.encryption?.algorithm || 'none',
+            s.encryption?.key || '',
+            !!s.encryption?.autoEncryptBody,
+            !!s.encryption?.autoEncryptHeaders,
+            s.encryption?.encryptedHeaders || [],
+            s.encryption?.encryptedBodyPaths || [],
+            s.encryption?.script || '',
+            !!s.settings?.followRedirects,
+            !!s.settings?.verifySsl,
+            !!s.settings?.enableCookies,
+            !!s.settings?.bypassCors,
+            s.postTriggerTabId ?? null,
+            !!s.autoAuthEnabled,
+            normParams,
+            normHeaders,
+            normFormData
         ]);
     }
 
@@ -2084,7 +2150,7 @@ export class TabStateService {
         }
         
         try {
-            await this.saveToCapsule(this.activeTabId() ?? undefined, { isAutoSave: true });
+            await this.saveToCapsule(undefined, { isAutoSave: true, onlyDirty: true });
         } catch (e) {
             console.warn('Auto-save failed', e);
         }
@@ -2191,10 +2257,7 @@ export class TabStateService {
             });
         }
         this.historyStack.delete(id);
-        
-        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            this.triggerAutoSave();
-        }
+        this.syncActiveTabToBackend();
     }
 
 
