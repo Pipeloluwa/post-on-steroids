@@ -27,12 +27,14 @@ export class SwaggerImportModalComponent {
     statusMessage = signal('');
     hasError = signal(false);
     isImporting = signal(false);
+    saveToBackend = signal(true);
 
     open() {
         this.isOpen.set(true);
         this.swaggerUrl.set('');
         this.statusMessage.set('');
         this.hasError.set(false);
+        this.saveToBackend.set(true);
         setTimeout(() => this.inputRef?.nativeElement?.focus(), 150);
     }
 
@@ -75,7 +77,7 @@ export class SwaggerImportModalComponent {
                     variables: result.variables
                 }],
                 variables: result.variables
-            });
+            }, { saveToBackend: this.saveToBackend() });
 
             const successMessage = `Imported ${result.requests.length} requests from ${result.collectionName}.`;
             this.onImportStatus.emit({ message: successMessage, isError: false });

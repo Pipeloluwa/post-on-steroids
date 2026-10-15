@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
+import { AuthService } from '../../shared/services/auth.service';
 import { SwaggerImportModalComponent } from '../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractPostmanVariables, extractRequestsVariables } from '../../shared/utils/import-variable.util';
@@ -12,6 +13,23 @@ interface ParsedCapsuleGroup {
     name: string;
     requests: Partial<RequestState>[];
     variables?: IGlobalVariable[];
+}
+
+export interface PendingImport {
+    fileName: string;
+    capsulesCount: number;
+    requestsCount: number;
+    variablesCount: number;
+    capsuleNames: string[];
+    payload: {
+        capsules: {
+            id: string;
+            name: string;
+            variables: IGlobalVariable[];
+            requests: RequestState[];
+        }[];
+        variables: IGlobalVariable[];
+    };
 }
 
 @Component({
@@ -23,6 +41,7 @@ interface ParsedCapsuleGroup {
 })
 export class ImportComponent implements OnInit {
     tabStateService = inject(TabStateService);
+    authService = inject(AuthService);
     private route = inject(ActivatedRoute);
     private router = inject(Router);
     
@@ -33,6 +52,9 @@ export class ImportComponent implements OnInit {
 
     showShareUrlModal = signal<boolean>(false);
     shareUrlInput = signal<string>('');
+
+    showSavePrompt = signal<boolean>(false);
+    pendingImport = signal<PendingImport | null>(null);
 
     ngOnInit() {
         this.route.queryParams.subscribe(params => {
@@ -68,30 +90,55 @@ export class ImportComponent implements OnInit {
         const file = input.files[0];
         const reader = new FileReader();
 
-        reader.onload = async (e) => {
+        reader.onload = (e) => {
             try {
-                this.isImporting.set(true);
                 const content = e.target?.result as string;
                 const data = JSON.parse(content);
+                const pending = this.prepareImportData(data, file.name);
                 
-                const count = await this.processImportData(data);
-                
-                this.showStatus(`Import successful! Imported ${count.capsules} capsule(s) and ${count.requests} request(s).`, false);
+                this.pendingImport.set(pending);
+                this.showSavePrompt.set(true);
             } catch (err: any) {
-                console.error('Import failed:', err);
+                console.error('Import validation failed:', err);
                 const msg = err?.message || 'Invalid file format. Please upload an OnSteroid export file or a Postman Collection JSON.';
                 this.showStatus(msg, true);
             } finally {
-                this.isImporting.set(false);
                 input.value = '';
             }
         };
 
         reader.onerror = () => {
             this.showStatus('Failed to read the file.', true);
+            input.value = '';
         };
 
         reader.readAsText(file);
+    }
+
+    async confirmImport(saveToBackend: boolean) {
+        const pending = this.pendingImport();
+        if (!pending || this.isImporting()) return;
+
+        this.showSavePrompt.set(false);
+        this.isImporting.set(true);
+
+        try {
+            const count = await this.tabStateService.importData(pending.payload, { saveToBackend });
+            const destination = saveToBackend ? 'and saved to cloud database' : 'into local workspace (not saved to cloud)';
+            this.showStatus(`Import successful! Imported ${count.capsulesCount} capsule(s) and ${count.requestsCount} request(s) ${destination}.`, false);
+        } catch (err: any) {
+            console.error('Import failed:', err);
+            const msg = err?.message || 'Failed to complete import.';
+            this.showStatus(msg, true);
+        } finally {
+            this.isImporting.set(false);
+            this.pendingImport.set(null);
+        }
+    }
+
+    cancelImport() {
+        this.showSavePrompt.set(false);
+        this.pendingImport.set(null);
     }
 
     onSwaggerImportStatus(event: { message: string; isError: boolean }) {
@@ -111,7 +158,7 @@ export class ImportComponent implements OnInit {
         }, 10000);
     }
 
-    private async processImportData(data: any): Promise<{ capsules: number; requests: number }> {
+    private prepareImportData(data: any, fileName: string): PendingImport {
         if (!data || typeof data !== 'object') {
             throw new Error('Invalid JSON structure');
         }
@@ -195,8 +242,16 @@ export class ImportComponent implements OnInit {
             variables: allExtractedVars
         };
 
-        const result = await this.tabStateService.importData(importPayload);
-        return { capsules: result.capsulesCount, requests: result.requestsCount };
+        const totalRequests = importPayload.capsules.reduce((sum, c) => sum + c.requests.length, 0);
+
+        return {
+            fileName,
+            capsulesCount: importPayload.capsules.length,
+            requestsCount: totalRequests,
+            variablesCount: allExtractedVars.length,
+            capsuleNames: importPayload.capsules.map(c => c.name),
+            payload: importPayload
+        };
     }
 
     private flattenPostmanItems(items: any[]): { name: string; request: any }[] {

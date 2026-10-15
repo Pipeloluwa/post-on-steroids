@@ -1591,17 +1591,21 @@ export class TabStateService {
             variables?: IGlobalVariable[];
         }[];
         variables?: IGlobalVariable[];
-    }): Promise<{ capsulesCount: number; requestsCount: number }> {
+    }, options?: { saveToBackend?: boolean }): Promise<{ capsulesCount: number; requestsCount: number }> {
         if (!data || !data.capsules || data.capsules.length === 0) {
             return { capsulesCount: 0, requestsCount: 0 };
         }
+
+        const shouldSaveToBackend = options?.saveToBackend !== undefined
+            ? options.saveToBackend
+            : (this.isBrowser && this.authService.isLoggedIn());
 
         let totalRequests = 0;
         let lastCreatedCap: Capsule | null = null;
         let lastCreatedRequests: RequestState[] = [];
         let lastCreatedCapVars: IGlobalVariable[] = [];
 
-        if (this.isBrowser && this.authService.isLoggedIn()) {
+        if (this.isBrowser && this.authService.isLoggedIn() && shouldSaveToBackend) {
             const payload = {
                 capsules: data.capsules.map(c => ({
                     id: c.id,
@@ -1770,7 +1774,9 @@ export class TabStateService {
             }
 
             this.preloadAllExamples();
-            this.syncWorkspaceStateToBackend();
+            if (shouldSaveToBackend) {
+                this.syncWorkspaceStateToBackend();
+            }
         }
 
         return {
@@ -1945,19 +1951,22 @@ export class TabStateService {
 
     preloadAllExamples(): void {
         if (!this.isBrowser) return;
+        // Populate local storage cached examples into memory for instant access without network requests
         const requests = this.allCapsuleRequests();
         for (const req of requests) {
             const local = this.getLocalExamples(req.id);
             if (local.length > 0) {
                 this.requestExamplesMap.update(map => {
-                    const next = new Map(map);
-                    if (!next.has(req.id)) next.set(req.id, local);
-                    return next;
+                    if (map.has(req.id)) return map;
+                    return new Map(map).set(req.id, local);
                 });
             }
-            if (this.authService.isLoggedIn() && !this.fetchedExamplesIds.has(req.id) && !this.inFlightExampleRequests.has(req.id)) {
-                this.getExamples(req.id).catch(() => {});
-            }
+        }
+
+        // Only fetch from backend if the user explicitly left a request expanded in the sidebar
+        const savedExpanded = localStorage.getItem('onsteroids_expanded_example_req');
+        if (savedExpanded && this.authService.isLoggedIn() && !this.fetchedExamplesIds.has(savedExpanded) && !this.inFlightExampleRequests.has(savedExpanded)) {
+            this.getExamples(savedExpanded).catch(() => {});
         }
     }
 
@@ -2573,18 +2582,30 @@ export class TabStateService {
 
         try {
             this.hasInitialBackendLoaded = true;
-            // 1. Fetch capsules from backend
-            const capRes = await firstValueFrom(
-                this.http.get<{ data: any[] }>(`${API_BASE_URL}/capsule`)
-            );
-            if (capRes?.data && capRes.data.length > 0) {
-                const backendCaps: Capsule[] = capRes.data.map(c => ({
+
+            // 1. Fetch WorkspaceState and Capsules in parallel
+            const [wsRes, capRes] = await Promise.all([
+                firstValueFrom(this.http.get<{ data: any }>(`${API_BASE_URL}/WorkspaceState`)).catch(err => {
+                    console.warn('Could not load WorkspaceState', err);
+                    return null;
+                }),
+                firstValueFrom(this.http.get<{ data: any[] }>(`${API_BASE_URL}/capsule`)).catch(err => {
+                    console.warn('Could not load Capsules', err);
+                    return null;
+                })
+            ]);
+
+            // 2. Process capsules
+            let backendCaps: Capsule[] = [];
+            if (capRes?.data && Array.isArray(capRes.data) && capRes.data.length > 0) {
+                backendCaps = capRes.data.map(c => ({
                     id: c.id,
                     name: c.name,
                     autoAuthEnabled: c.autoAuthEnabled || 'off',
                     autoAuthEndpointId: c.autoAuthEndpointId || null,
                     createdAt: new Date(c.createdAt).getTime() || Date.now()
                 }));
+
                 const mergedCaps = [...this.capsules()];
                 backendCaps.forEach(bc => {
                     const idx = mergedCaps.findIndex(lc => lc.id === bc.id);
@@ -2594,122 +2615,61 @@ export class TabStateService {
                         mergedCaps[idx] = { ...mergedCaps[idx], ...bc };
                     }
                 });
-                
-                // Sync any offline capsules to backend
-                let offlineCaps = this.capsules().filter(lc => !backendCaps.find(bc => bc.id === lc.id));
-                
-                // If the offline capsule is the fake '1' and backend has capsules, migrate and remove it
-                const fakeOne = offlineCaps.find(c => c.id === '1');
-                if (fakeOne && backendCaps.length > 0) {
-                    const defaultCap = backendCaps.find(c => c.name === fakeOne.name) || backendCaps[0];
-                    if (defaultCap) {
-                        // Migrate requests tied to '1'
-                        this.states.update(map => {
-                            const next = new Map(map);
-                            next.forEach(s => {
-                                if (s.capsuleId === '1' || !s.capsuleId) s.capsuleId = defaultCap.id;
-                            });
-                            return next;
-                        });
-                        
-                        // Migrate active capsule if it was '1'
-                        if (this.activeCapsuleId() === '1') {
-                            this.activeCapsuleId.set(defaultCap.id);
-                            this.activeCapsuleName.set(defaultCap.name);
-                            this.autoAuthEnabled.set((defaultCap.autoAuthEnabled as any) || 'off');
-                            this.autoAuthEndpointId.set(defaultCap.autoAuthEndpointId || null);
-                        }
 
-                        const vs = this.getVariableService();
-                        if (vs) {
-                            vs.updateTabIdInSources('1', defaultCap.id);
-                        }
-                    }
-                    // Remove '1' from offlineCaps so we don't POST it
-                    offlineCaps = offlineCaps.filter(c => c.id !== '1');
-                    // Remove '1' from mergedCaps so it doesn't show in UI
+                // Remove fake '1' if backend has real capsules
+                const fakeOne = mergedCaps.find(c => c.id === '1');
+                if (fakeOne && backendCaps.length > 0) {
                     const idx = mergedCaps.findIndex(c => c.id === '1');
                     if (idx !== -1) mergedCaps.splice(idx, 1);
                 }
 
-                for (const oc of offlineCaps) {
-                    try {
-                        await firstValueFrom(this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, {
-                            id: oc.id,
-                            name: oc.name,
-                            autoAuthEnabled: oc.autoAuthEnabled || 'off',
-                            autoAuthEndpointId: oc.autoAuthEndpointId || null
-                        }));
-                    } catch (e) {
-                        console.warn('Could not sync offline capsule to backend', e);
-                    }
-                }
-                
                 this.capsules.set(mergedCaps);
-
-                // 2. Fetch requests across ALL user capsules so the workspace tree has full data
-                const allLoadedRequests: RequestState[] = [];
-                for (const cap of backendCaps) {
-                    try {
-                        const reqRes = await firstValueFrom(
-                            this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${cap.id}`)
-                        );
-                        if (reqRes?.data && Array.isArray(reqRes.data)) {
-                            const mapped = reqRes.data.map(dto => this.mapDtoToState(dto));
-                            allLoadedRequests.push(...mapped);
-                        }
-                    } catch (err) {
-                        console.warn(`Could not load requests for capsule ${cap.id}`, err);
-                    }
-                }
-
-                this.savedCapsules.set(allLoadedRequests);
-
-                if (allLoadedRequests.length > 0) {
-                    this.states.update(map => {
-                        const next = new Map(map);
-                        for (const req of allLoadedRequests) {
-                            const existing = next.get(req.id);
-                            if (existing) {
-                                next.set(req.id, {
-                                    ...req,
-                                    responseBody: existing.responseBody ?? req.responseBody,
-                                    responseStatus: existing.responseStatus ?? req.responseStatus,
-                                    responseTime: existing.responseTime ?? req.responseTime,
-                                    responseSize: existing.responseSize ?? req.responseSize,
-                                    responseCookies: existing.responseCookies ?? req.responseCookies,
-                                    responseHeaders: existing.responseHeaders ?? req.responseHeaders,
-                                    testResults: existing.testResults ?? req.testResults
-                                });
-                            } else {
-                                next.set(req.id, req);
-                            }
-                        }
-                        return next;
-                    });
-                }
             }
 
-            // 3. Attempt to restore exact cross-device workspace layout (open tabs, active tab, etc.)
-            await this.loadWorkspaceStateFromBackend();
+            // 3. Immediately apply workspace state (restores active capsule, open tabs, active tab, draft states, responses)
+            let targetCapId: string | null = null;
+            if (wsRes?.data) {
+                const ws = wsRes.data;
+                const session: any = {
+                    activeCapsuleId: ws.activeCapsuleId,
+                    activeCapsuleName: ws.activeCapsuleName,
+                    activeTabId: ws.activeTabId,
+                    autoAuthEnabled: ws.autoAuthEnabled,
+                    autoAuthEndpointId: ws.autoAuthEndpointId,
+                    autoSaveEnabled: ws.autoSaveEnabled
+                };
+
+                try { session.openTabIds = ws.openTabIds ? JSON.parse(ws.openTabIds) : []; } catch { session.openTabIds = []; }
+                try { session.states = ws.tabStates ? JSON.parse(ws.tabStates) : []; } catch { session.states = []; }
+                try { session.responses = ws.responses ? JSON.parse(ws.responses) : {}; } catch { session.responses = {}; }
+
+                this.applyBackendSession(session);
+                targetCapId = session.activeCapsuleId || null;
+            }
 
             // 4. Ensure active capsule is valid
-            const currentCapId = this.activeCapsuleId();
-            const matchingCap = this.capsules().find(c => c.id === currentCapId) || this.capsules()[0];
+            if (!targetCapId) {
+                targetCapId = this.activeCapsuleId();
+            }
+            const matchingCap = this.capsules().find(c => c.id === targetCapId) || this.capsules()[0];
             if (matchingCap) {
+                targetCapId = matchingCap.id;
                 this.activeCapsuleId.set(matchingCap.id);
                 this.activeCapsuleName.set(matchingCap.name);
                 this.autoAuthEnabled.set((matchingCap.autoAuthEnabled as any) || 'off');
                 this.autoAuthEndpointId.set(matchingCap.autoAuthEndpointId || null);
             }
 
-            // 5. Load variables for the resolved active capsule
+            // 5. Fetch ONLY the active capsule's requests and variables in parallel
             const vs = this.getVariableService();
-            if (vs && matchingCap) {
-                await vs.loadVariables(matchingCap.id);
+            if (targetCapId && targetCapId !== '1') {
+                await Promise.all([
+                    this.loadRequestsForCapsule(targetCapId),
+                    matchingCap && vs ? vs.loadVariables(targetCapId) : Promise.resolve()
+                ]);
             }
 
-            // 5. Restore open tabs
+            // 6. Restore open tabs and active tab selection
             let targetOpenIds = this.openTabIds().filter(id => this.states().has(id));
             if (targetOpenIds.length === 0) {
                 const capRequests = this.savedCapsules().filter(r => r.capsuleId === this.activeCapsuleId());
@@ -2720,16 +2680,43 @@ export class TabStateService {
                 }
             }
 
-            this.openTabIds.set(targetOpenIds);
-
-            const currentActive = this.activeTabId();
-            if (currentActive && targetOpenIds.includes(currentActive)) {
-                // Retain current active tab
-            } else {
-                this.activeTabId.set(targetOpenIds[0] || null);
+            if (targetOpenIds.length > 0) {
+                this.openTabIds.set(targetOpenIds);
+                const currentActive = this.activeTabId();
+                if (!currentActive || !targetOpenIds.includes(currentActive)) {
+                    this.activeTabId.set(targetOpenIds[0] || null);
+                }
             }
 
+            // Seed local examples and fetch only if a single request was expanded
             this.preloadAllExamples();
+
+            // 7. Non-blocking background prefetch for other capsules (does not delay workspace display)
+            setTimeout(() => {
+                if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
+                const otherCaps = this.capsules().filter(c => c.id !== targetCapId && c.id !== '1' && c.id.length >= 8);
+                if (otherCaps.length > 0) {
+                    Promise.allSettled(
+                        otherCaps.map(c =>
+                            firstValueFrom(this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${c.id}`))
+                                .then(res => {
+                                    if (res?.data && Array.isArray(res.data)) {
+                                        const mapped = res.data.map(dto => this.mapDtoToState({ ...dto, capsuleId: c.id }));
+                                        this.states.update(map => {
+                                            const next = new Map(map);
+                                            for (const req of mapped) {
+                                                if (!next.has(req.id)) next.set(req.id, req);
+                                            }
+                                            return next;
+                                        });
+                                    }
+                                })
+                                .catch(() => {})
+                        )
+                    );
+                }
+            }, 1500);
+
         } catch (e) {
             console.error('Failed to load backend data', e);
         } finally {
@@ -2756,6 +2743,27 @@ export class TabStateService {
                 });
                 const mapped = sortedData.map(dto => this.mapDtoToState({ ...dto, capsuleId }));
                 this.savedCapsules.set(mapped);
+                this.states.update(map => {
+                    const next = new Map(map);
+                    for (const req of mapped) {
+                        const existing = next.get(req.id);
+                        if (existing) {
+                            next.set(req.id, {
+                                ...req,
+                                responseBody: existing.responseBody ?? req.responseBody,
+                                responseStatus: existing.responseStatus ?? req.responseStatus,
+                                responseTime: existing.responseTime ?? req.responseTime,
+                                responseSize: existing.responseSize ?? req.responseSize,
+                                responseCookies: existing.responseCookies ?? req.responseCookies,
+                                responseHeaders: existing.responseHeaders ?? req.responseHeaders,
+                                testResults: existing.testResults ?? req.testResults
+                            });
+                        } else {
+                            next.set(req.id, req);
+                        }
+                    }
+                    return next;
+                });
             }
         } catch (e) {
             console.error('Failed to load requests for capsule', e);
