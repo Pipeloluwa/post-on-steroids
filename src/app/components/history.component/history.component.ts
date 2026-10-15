@@ -137,11 +137,13 @@ export class HistoryComponent implements OnInit {
 
             const newId = this.tabStateService.createId();
             const baseState = this.tabStateService.getDefaultState(newId);
+            const currentCapId = this.tabStateService.activeCapsuleId();
 
             const restoredState: RequestState = {
                 ...baseState,
                 ...parsedSnapshot,
                 id: newId,
+                capsuleId: currentCapId || undefined,
                 name: parsedSnapshot.name || this.tabStateService.resolveRequestTitle(undefined, item.url),
                 url: item.url || parsedSnapshot.url || '',
                 method: (item.method || parsedSnapshot.method || 'GET').toUpperCase(),
@@ -152,7 +154,7 @@ export class HistoryComponent implements OnInit {
                 responseHeaders: parsedSnapshot.responseHeaders ?? [],
                 responseCookies: parsedSnapshot.responseCookies ?? [],
                 testResults: parsedSnapshot.testResults ?? [],
-                isDirty: false
+                isDirty: true
             };
 
             // Cache response if available

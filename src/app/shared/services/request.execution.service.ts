@@ -99,15 +99,17 @@ export class RequestExecutionService {
             let headers = freshState.headers
                 .filter(h => h.enabled && h.key)
                 .map(h => ({
-                    key: this.variableService.resolve(h.key),
-                    value: this.variableService.resolve(h.value)
-                }));
+                    key: this.variableService.resolve(h.key).trim().replace(/[\r\n]+/g, ''),
+                    value: this.variableService.resolve(h.value).trim().replace(/[\r\n]+/g, '')
+                }))
+                .filter(h => !!h.key);
 
             // Inject Auth Header if applicable
             if (freshState.auth.type === 'bearer' && freshState.auth.token) {
-                headers.push({ key: 'Authorization', value: `Bearer ${this.variableService.resolve(freshState.auth.token)}` });
+                const token = this.variableService.resolve(freshState.auth.token).trim().replace(/[\r\n]+/g, '');
+                headers.push({ key: 'Authorization', value: `Bearer ${token}` });
             } else if (freshState.auth.type === 'basic' && freshState.auth.token) {
-                const tokenStr = this.variableService.resolve(freshState.auth.token);
+                const tokenStr = this.variableService.resolve(freshState.auth.token).trim().replace(/[\r\n]+/g, '');
                 headers.push({ key: 'Authorization', value: `Basic ${tokenStr}` });
             }
 
@@ -118,7 +120,8 @@ export class RequestExecutionService {
                 if (cachedToken) {
                     const alreadyHasAuth = headers.some(h => h.key.toLowerCase() === 'authorization');
                     if (!alreadyHasAuth) {
-                        headers.push({ key: 'Authorization', value: `Bearer ${cachedToken}` });
+                        const token = cachedToken.trim().replace(/[\r\n]+/g, '');
+                        headers.push({ key: 'Authorization', value: `Bearer ${token}` });
                     }
                 }
             }
@@ -259,7 +262,11 @@ export class RequestExecutionService {
             // 6. Build Http headers and params
             let httpHeaders = new HttpHeaders();
             headers.forEach(h => {
-                httpHeaders = httpHeaders.set(h.key, h.value);
+                const cleanKey = (h.key || '').trim().replace(/[\r\n]+/g, '');
+                const cleanVal = (typeof h.value === 'string' ? h.value : String(h.value ?? '')).trim().replace(/[\r\n]+/g, '');
+                if (cleanKey) {
+                    httpHeaders = httpHeaders.set(cleanKey, cleanVal);
+                }
             });
 
             // Anti-caching headers to prevent Edge Incognito from caching identical requests
@@ -343,9 +350,25 @@ export class RequestExecutionService {
                 if (isUsingProxy) {
                     // Build proxy payload for OnSteroidApi
                     const headersObj: Record<string, string> = {};
-                    headers.forEach(h => {
-                        headersObj[h.key] = h.value;
+                    httpHeaders.keys().forEach(k => {
+                        const cleanKey = k.trim().replace(/[\r\n]+/g, '');
+                        const cleanVal = (httpHeaders.get(k) ?? '').trim().replace(/[\r\n]+/g, '');
+                        if (cleanKey) {
+                            headersObj[cleanKey] = cleanVal;
+                        }
                     });
+
+                    // Ensure Content-Type is present for raw JSON/XML if not already set
+                    if (!Object.keys(headersObj).some(k => k.toLowerCase() === 'content-type')) {
+                        if (freshState.bodyType === 'raw' && freshState.rawType === 'XML') {
+                            headersObj['Content-Type'] = 'application/xml';
+                        } else if (freshState.bodyType === 'raw' && freshState.rawType === 'JSON') {
+                            headersObj['Content-Type'] = 'application/json';
+                        } else if (finalBody && (typeof finalBody === 'object' || (typeof finalBody === 'string' && finalBody.trim().startsWith('{')))) {
+                            headersObj['Content-Type'] = 'application/json';
+                        }
+                    }
+
                     if (!Object.keys(headersObj).some(k => k.toLowerCase() === 'x-request-id')) {
                         headersObj['X-Request-ID'] = generateUUID();
                     }

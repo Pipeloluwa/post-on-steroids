@@ -579,8 +579,9 @@ export class TabStateService {
     // All requests belonging to the active capsule (both saved in backend and local/open tabs)
     allCapsuleRequests = computed<RequestState[]>(() => {
         const capId = this.activeCapsuleId();
-        const saved = this.savedCapsules().filter(r => !r.capsuleId || r.capsuleId === capId);
-        const inMemory = Array.from(this.states().values()).filter(s => !s.capsuleId || s.capsuleId === capId);
+        const filterFn = (r: RequestState) => r.capsuleId === capId || (!r.capsuleId && (!capId || capId === '1'));
+        const saved = this.savedCapsules().filter(filterFn);
+        const inMemory = Array.from(this.states().values()).filter(filterFn);
 
         const map = new Map<string, RequestState>();
         for (const req of saved) {
@@ -612,6 +613,7 @@ export class TabStateService {
     
     autoSaveEnabled = signal<boolean>(false);
     private autoSaveTimeout: any = null;
+    private capsuleSwitchVersion = 0;
 
     constructor() {
         if (this.isBrowser) {
@@ -914,9 +916,17 @@ export class TabStateService {
             return;
         }
 
+        const switchVersion = ++this.capsuleSwitchVersion;
+
+        // Cancel any pending autoSave timer immediately so it doesn't fire for the previous capsule
+        if (this.autoSaveTimeout) {
+            clearTimeout(this.autoSaveTimeout);
+            this.autoSaveTimeout = null;
+        }
+
         // Save current capsule's tab layout and variables before switching
         const prevCapId = this.activeCapsuleId();
-        if (this.isBrowser && prevCapId) {
+        if (this.isBrowser && prevCapId && prevCapId !== capsule.id) {
             localStorage.setItem(`onsteroids_open_tab_ids_${prevCapId}`, JSON.stringify(this.openTabIds()));
             localStorage.setItem(`onsteroids_active_tab_${prevCapId}`, this.activeTabId() || '');
             const vs = this.getVariableService();
@@ -927,6 +937,29 @@ export class TabStateService {
 
         this.activeCapsuleId.set(capsule.id);
         this.activeCapsuleName.set(capsule.name);
+        // Clear savedCapsules immediately to avoid showing stale requests from previous capsule
+        this.savedCapsules.set([]);
+
+        // Restore open tabs from local storage for this target capsule
+        let targetOpenIds: string[] = [];
+        const savedCapOpen = this.isBrowser ? localStorage.getItem(`onsteroids_open_tab_ids_${capsule.id}`) : null;
+        if (savedCapOpen) {
+            try {
+                const parsed = JSON.parse(savedCapOpen);
+                if (Array.isArray(parsed)) {
+                    targetOpenIds = parsed;
+                }
+            } catch (e) { }
+        }
+        this.openTabIds.set(targetOpenIds);
+
+        const savedActive = this.isBrowser ? localStorage.getItem(`onsteroids_active_tab_${capsule.id}`) : null;
+        if (savedActive && targetOpenIds.includes(savedActive)) {
+            this.activeTabId.set(savedActive);
+        } else {
+            this.activeTabId.set(targetOpenIds[0] || null);
+        }
+
         if (this.isBrowser) {
             localStorage.setItem('onsteroids_active_capsule', capsule.id);
         }
@@ -940,13 +973,15 @@ export class TabStateService {
             this.autoAuthEndpointId.set(null);
         }
 
-        // Explicitly load variables for the new capsule before loading requests or triggering any saves
+        // Explicitly load variables for the new capsule before loading requests
         const vs = this.getVariableService();
         if (vs) {
             await vs.loadVariables(capsule.id);
         }
+        if (switchVersion !== this.capsuleSwitchVersion) return;
 
         await this.loadRequestsForCapsule(capsule.id);
+        if (switchVersion !== this.capsuleSwitchVersion) return;
 
         const requestsInCapsule = this.savedCapsules();
         // Merge saved requests into states, preserving any active response data already in memory
@@ -958,6 +993,7 @@ export class TabStateService {
                     if (existing) {
                         next.set(req.id, {
                             ...req,
+                            capsuleId: capsule.id,
                             responseBody: existing.responseBody ?? req.responseBody,
                             responseStatus: existing.responseStatus ?? req.responseStatus,
                             responseTime: existing.responseTime ?? req.responseTime,
@@ -967,45 +1003,26 @@ export class TabStateService {
                             testResults: existing.testResults ?? req.testResults
                         });
                     } else {
-                        next.set(req.id, req);
+                        next.set(req.id, { ...req, capsuleId: capsule.id });
                     }
                 }
                 return next;
             });
         }
 
-        // Restore open tabs for this target capsule
-        let targetOpenIds: string[] = [];
-        const savedCapOpen = this.isBrowser ? localStorage.getItem(`onsteroids_open_tab_ids_${capsule.id}`) : null;
-        if (savedCapOpen) {
-            try {
-                const parsed = JSON.parse(savedCapOpen);
-                if (Array.isArray(parsed)) {
-                    targetOpenIds = parsed.filter(id => this.states().has(id));
-                }
-            } catch (e) { }
-        }
-
-        if (targetOpenIds.length === 0) {
-            if (requestsInCapsule.length > 0) {
-                targetOpenIds = requestsInCapsule.map(r => r.id);
+        // Re-validate open tabs after requests are loaded
+        if (targetOpenIds.length === 0 && requestsInCapsule.length > 0) {
+            targetOpenIds = requestsInCapsule.map(r => r.id);
+            this.openTabIds.set(targetOpenIds);
+            if (!this.activeTabId()) {
+                this.activeTabId.set(targetOpenIds[0] || null);
             }
-        }
-
-        this.openTabIds.set(targetOpenIds);
-
-        const savedActive = this.isBrowser ? localStorage.getItem(`onsteroids_active_tab_${capsule.id}`) : null;
-        if (savedActive && targetOpenIds.includes(savedActive)) {
-            this.activeTabId.set(savedActive);
-        } else {
-            this.activeTabId.set(targetOpenIds[0] || null);
         }
 
         this.preloadAllExamples();
 
-        this.syncWorkspaceStateToBackend();
-        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            this.triggerAutoSave();
+        if (switchVersion === this.capsuleSwitchVersion) {
+            this.syncWorkspaceStateToBackend();
         }
     }
 
@@ -1302,14 +1319,17 @@ export class TabStateService {
     }
 
     async deleteRequest(id: string): Promise<void> {
+        let backendError: any = null;
         if (this.isBrowser && this.authService.isLoggedIn()) {
             try {
                 await firstValueFrom(
                     this.http.delete(`${API_BASE_URL}/request/${id}`)
                 );
-            } catch (err) {
-                console.error(`Failed to delete request ${id} on backend`, err);
-                throw err;
+            } catch (err: any) {
+                console.warn(`Backend delete for request ${id} notice:`, err);
+                if (err?.status !== 404) {
+                    backendError = err;
+                }
             }
         }
 
@@ -1343,19 +1363,26 @@ export class TabStateService {
         if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
             this.triggerAutoSave();
         }
+
+        if (backendError) {
+            throw backendError;
+        }
     }
 
     async batchDeleteRequests(ids: string[]): Promise<void> {
         if (!ids || ids.length === 0) return;
 
+        let backendError: any = null;
         if (this.isBrowser && this.authService.isLoggedIn()) {
             try {
                 await firstValueFrom(
                     this.http.post(`${API_BASE_URL}/request/batch-delete`, { ids })
                 );
-            } catch (err) {
-                console.error('Failed to batch delete requests on backend', err);
-                throw err;
+            } catch (err: any) {
+                console.warn('Backend batch delete requests notice:', err);
+                if (err?.status !== 404) {
+                    backendError = err;
+                }
             }
         }
 
@@ -1397,6 +1424,10 @@ export class TabStateService {
         
         if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
             this.triggerAutoSave();
+        }
+
+        if (backendError) {
+            throw backendError;
         }
     }
 
@@ -1619,11 +1650,7 @@ export class TabStateService {
                         return next;
                     });
 
-                    this.savedCapsules.update(list => {
-                        const ids = new Set(mappedRequests.map(m => m.id));
-                        const remaining = list.filter(l => !ids.has(l.id));
-                        return [...remaining, ...mappedRequests];
-                    });
+
 
                     // Store variables for this capsule
                     const capVars: IGlobalVariable[] = (importedCap.variables && importedCap.variables.length > 0)
@@ -1679,8 +1706,6 @@ export class TabStateService {
                     return next;
                 });
 
-                this.savedCapsules.update(list => [...list, ...reqs]);
-
                 const capVars = c.variables || data.variables || [];
                 if (this.isBrowser && capVars.length > 0) {
                     const varsJson = JSON.stringify(capVars);
@@ -1713,6 +1738,7 @@ export class TabStateService {
             }
 
             if (lastCreatedRequests.length > 0) {
+                this.savedCapsules.set(lastCreatedRequests);
                 const openIds = lastCreatedRequests.map(r => r.id);
                 this.openTabIds.set(openIds);
                 this.activeTabId.set(openIds[0]);
@@ -2215,7 +2241,7 @@ export class TabStateService {
 
             for (const s of this.states().values()) {
                 if (onlyDirty && !s.isDirty) continue;
-                if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
+                if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || (!s.capsuleId && currentCapId === '1'))) {
                     tabsToSave.push(structuredClone(s));
                     seenIds.add(s.id);
                 }
@@ -2223,7 +2249,7 @@ export class TabStateService {
 
             if (!onlyDirty) {
                 for (const s of this.savedCapsules()) {
-                    if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || !s.capsuleId)) {
+                    if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || (!s.capsuleId && currentCapId === '1'))) {
                         tabsToSave.push(structuredClone(s));
                         seenIds.add(s.id);
                     }
@@ -2240,7 +2266,7 @@ export class TabStateService {
 
             if (this.isSaveCancelled) return;
 
-            // 3. If logged in, sync capsule and requests to backend
+            // 3. If logged in, sync capsule and variables in parallel if capsule exists
             let effectiveCapId = currentCapId;
             if (this.authService.isLoggedIn() && currentCapId) {
                 try {
@@ -2268,27 +2294,50 @@ export class TabStateService {
                                 tabState.capsuleId = effectiveCapId;
                             }
                         }
-                    } else if (!onlyDirty) {
-                        await firstValueFrom(
-                            this.http.put(`${API_BASE_URL}/capsule/${currentCapId}`, {
-                                name: currentCapName,
-                                autoAuthEnabled: this.autoAuthEnabled(),
-                                autoAuthEndpointId: this.autoAuthEndpointId()
-                            })
-                        ).catch(() => {});
+                        if (vs) {
+                            await vs.syncVariablesToBackend(effectiveCapId);
+                        }
+                    } else {
+                        // Capsule already exists on backend: parallelize variable sync and capsule PUT
+                        const prepTasks: Promise<any>[] = [];
+                        if (vs) {
+                            prepTasks.push(vs.syncVariablesToBackend(effectiveCapId));
+                        }
+                        if (!onlyDirty) {
+                            prepTasks.push(
+                                firstValueFrom(
+                                    this.http.put(`${API_BASE_URL}/capsule/${currentCapId}`, {
+                                        name: currentCapName,
+                                        autoAuthEnabled: this.autoAuthEnabled(),
+                                        autoAuthEndpointId: this.autoAuthEndpointId()
+                                    })
+                                ).catch(() => {})
+                            );
+                        }
+                        if (prepTasks.length > 0) {
+                            await Promise.allSettled(prepTasks);
+                        }
                     }
                 } catch (e) {
                     console.warn('Capsule sync note:', e);
                 }
             }
 
-            let idsChanged = false;
-            for (const tabState of tabsToSave) {
-                if (this.isSaveCancelled || this.authService.isLoggingOut()) break;
-                
-                let savedId = tabState.id;
+            if (this.isSaveCancelled) return;
+
+            // 4. Save independent request tabs in parallel
+            const savePromises = tabsToSave.map(async (tabState) => {
+                if (this.isSaveCancelled || this.authService.isLoggingOut()) {
+                    return { oldId: tabState.id, savedId: tabState.id, persisted: false, editedDuringSave: false, tabState };
+                }
+
+                const oldId = tabState.id;
+                let savedId = oldId;
                 let persisted = false;
                 let editedDuringSave = false;
+                let updatedState: RequestState | undefined;
+                let finalState: RequestState | undefined;
+
                 if (this.authService.isLoggedIn()) {
                     try {
                         const payload = {
@@ -2329,14 +2378,13 @@ export class TabStateService {
 
                         if (response?.data) {
                             const savedData = response.data;
-                            const oldId = tabState.id;
                             savedId = savedData.id || oldId;
                             if (savedId !== oldId) {
                                 this.getVariableService()?.updateTabIdInSources(oldId, savedId);
                             }
 
                             const mappedSaved = this.mapDtoToState(savedData);
-                            const updatedState: RequestState = {
+                            updatedState = {
                                 ...mappedSaved,
                                 id: savedId,
                                 capsuleId: effectiveCapId,
@@ -2352,65 +2400,87 @@ export class TabStateService {
                                 testResults: tabState.testResults ?? mappedSaved.testResults
                             };
 
-                            // Did the user keep editing this tab while the request was in flight?
                             editedDuringSave = (this.editVersions.get(oldId) ?? 0) !== (versionAtSnapshot.get(oldId) ?? 0);
-
-                            this.states.update(map => {
-                                const next = new Map(map);
-                                const live = next.get(oldId);
-                                if (savedId !== oldId) next.delete(oldId);
-                                if (editedDuringSave && live) {
-                                    // Preserve newer local edits; they remain dirty for the next save
-                                    next.set(savedId, { ...live, id: savedId, capsuleId: effectiveCapId, isDirty: true });
-                                } else {
-                                    next.set(savedId, updatedState);
-                                }
-                                return next;
-                            });
-
-                            if (savedId !== oldId) {
-                                idsChanged = true;
-                                const ver = this.editVersions.get(oldId);
-                                if (ver !== undefined) {
-                                    this.editVersions.delete(oldId);
-                                    this.editVersions.set(savedId, ver);
-                                }
-                                this.openTabIds.update(ids => ids.map(tid => tid === oldId ? savedId : tid));
-                                if (this.activeTabId() === oldId) {
-                                    this.activeTabId.set(savedId);
-                                }
-                            }
+                            finalState = editedDuringSave ? { ...tabState, id: savedId } : updatedState;
                             persisted = true;
                         }
                     } catch (err) {
                         console.error(`Failed to persist request ${tabState.id} to backend`, err);
                     }
                 } else {
-                    persisted = true; // local-only save for guests
+                    persisted = true;
+                    finalState = tabState;
                 }
 
-                if (!persisted) {
-                    // Keep it flagged as unsaved so the user is still warned / it retries on next edit
-                    continue;
-                }
+                return { oldId, savedId, persisted, editedDuringSave, updatedState, finalState, tabState };
+            });
 
-                const finalState = editedDuringSave ? { ...tabState, id: savedId } : (this.states().get(savedId) || tabState);
-                this.savedCapsules.update(col => {
-                    const idx = col.findIndex(r => r.id === savedId);
-                    if (idx >= 0) {
-                        const updated = [...col];
-                        updated[idx] = { ...finalState, isDirty: false, capsuleId: effectiveCapId };
-                        return updated;
-                    } else {
-                        return [...col, { ...finalState, isDirty: false, capsuleId: effectiveCapId }];
+            const saveResults = await Promise.all(savePromises);
+
+            if (this.isSaveCancelled) return;
+
+            // Batch update state in memory
+            let idsChanged = false;
+            const oldToNewIdMap = new Map<string, string>();
+
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const res of saveResults) {
+                    if (!res.persisted) continue;
+                    const live = next.get(res.oldId);
+                    if (res.savedId !== res.oldId) {
+                        next.delete(res.oldId);
+                        oldToNewIdMap.set(res.oldId, res.savedId);
                     }
-                });
-                this.updateState(savedId, { isDirty: editedDuringSave, capsuleId: effectiveCapId }, false);
+                    if (res.editedDuringSave && live) {
+                        next.set(res.savedId, { ...live, id: res.savedId, capsuleId: effectiveCapId, isDirty: true });
+                    } else if (res.updatedState) {
+                        next.set(res.savedId, res.updatedState);
+                    }
+                }
+                return next;
+            });
+
+            this.savedCapsules.update(col => {
+                const nextCol = [...col];
+                for (const res of saveResults) {
+                    if (!res.persisted) continue;
+                    const finalState = res.finalState || res.tabState;
+                    const itemToSave = { ...finalState, isDirty: false, capsuleId: effectiveCapId };
+                    const idx = nextCol.findIndex(r => r.id === res.savedId || r.id === res.oldId);
+                    if (idx >= 0) {
+                        nextCol[idx] = itemToSave;
+                    } else {
+                        nextCol.push(itemToSave);
+                    }
+                }
+                return nextCol;
+            });
+
+            for (const res of saveResults) {
+                if (!res.persisted) continue;
+                if (res.savedId !== res.oldId) {
+                    idsChanged = true;
+                    const ver = this.editVersions.get(res.oldId);
+                    if (ver !== undefined) {
+                        this.editVersions.delete(res.oldId);
+                        this.editVersions.set(res.savedId, ver);
+                    }
+                }
+                this.updateState(res.savedId, { isDirty: res.editedDuringSave, capsuleId: effectiveCapId }, false);
             }
 
-            // 4. Update backend session in Variable table with newly saved IDs and state
+            if (idsChanged) {
+                this.openTabIds.update(ids => ids.map(tid => oldToNewIdMap.get(tid) || tid));
+                const active = this.activeTabId();
+                if (active && oldToNewIdMap.has(active)) {
+                    this.activeTabId.set(oldToNewIdMap.get(active)!);
+                }
+            }
+
+            // 5. Update backend session in Variable table with newly saved IDs and state
             if (vs && this.authService.isLoggedIn() && (!onlyDirty || idsChanged)) {
-                await vs.syncVariablesToBackend();
+                await vs.syncVariablesToBackend(effectiveCapId);
             }
 
             if (this.isBrowser && effectiveCapId) {
@@ -2611,13 +2681,17 @@ export class TabStateService {
             const reqRes = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${capsuleId}`)
             );
+            // If active capsule changed while request was in-flight, discard stale response
+            if (this.activeCapsuleId() !== capsuleId) {
+                return;
+            }
             if (reqRes?.data) {
                 const sortedData = reqRes.data.sort((a, b) => {
                     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                     return timeA - timeB;
                 });
-                const mapped = sortedData.map(dto => this.mapDtoToState(dto));
+                const mapped = sortedData.map(dto => this.mapDtoToState({ ...dto, capsuleId }));
                 this.savedCapsules.set(mapped);
             }
         } catch (e) {
