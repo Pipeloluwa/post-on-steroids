@@ -82,10 +82,6 @@ export class LoginComponent implements OnInit {
         await this.authService.startPasswordReset();
     }
 
-    async onSignInWithOtpInstead() {
-        await this.authService.signInWithOtpInstead();
-    }
-
     onBackToEmail() {
         this.isOtpMasked.set(true);
         this.isPasswordMasked.set(true);

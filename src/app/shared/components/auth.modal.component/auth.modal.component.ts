@@ -114,10 +114,6 @@ export class AuthModalComponent {
         await this.authService.startPasswordReset();
     }
 
-    async onSignInWithOtpInstead() {
-        await this.authService.signInWithOtpInstead();
-    }
-
     async onResendOtp() {
         if (this.authService.isPasswordResetFlow()) {
             await this.authService.startPasswordReset();

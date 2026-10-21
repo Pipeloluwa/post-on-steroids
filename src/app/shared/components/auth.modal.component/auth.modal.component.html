@@ -514,16 +514,11 @@
                         }
                     </button>
 
-                    <div class="flex items-center justify-between text-[12px]">
+                    <div class="flex items-center justify-end text-[12px]">
                         <button type="button" (click)="onForgotPassword()"
                             [disabled]="isAuthenticating() || authService.isOtpRateLimited()"
                             class="text-(--postonsteroids-accent) hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
                             Forgot password?
-                        </button>
-                        <button type="button" (click)="onSignInWithOtpInstead()"
-                            [disabled]="isAuthenticating() || authService.isOtpRateLimited()"
-                            class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
-                            Sign in with OTP code
                         </button>
                     </div>
 

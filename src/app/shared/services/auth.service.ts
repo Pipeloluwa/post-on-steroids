@@ -480,12 +480,6 @@ export class AuthService {
         });
     }
 
-    async signInWithOtpInstead(): Promise<boolean> {
-        this.isPasswordResetFlow.set(false);
-        this.password.set('');
-        return this.sendOtp(true);
-    }
-
     async authenticate(): Promise<boolean> {
         const email = this.userEmail().trim();
         const otp = this.otp().trim();
@@ -506,26 +500,21 @@ export class AuthService {
                 isPasswordReset: this.isPasswordResetFlow()
             }).subscribe({
                 next: (res) => {
-                    const data = res.data;
                     this.isAuthenticating.set(false);
                     this.otp.set('');
 
-                    if (data?.requiresPasswordSetup) {
-                        this.authStep.set('create-password');
-                        this.password.set('');
-                        this.confirmPassword.set('');
-                        this.successMessage.set(
-                            res.message ||
-                            (this.isPasswordResetFlow()
-                                ? 'Code verified! Enter your new password below.'
-                                : 'Email verified! Create a strong password to complete your account.')
-                        );
-                        resolve(false);
-                        return;
-                    }
-
-                    this.finalizeLogin(data);
-                    resolve(true);
+                    // OTP verification strictly unlocks password creation (for new users) or password reset.
+                    // The only way to sign in is with a password.
+                    this.authStep.set('create-password');
+                    this.password.set('');
+                    this.confirmPassword.set('');
+                    this.successMessage.set(
+                        res.message ||
+                        (this.isPasswordResetFlow()
+                            ? 'Code verified! Enter your new password below.'
+                            : 'Email verified! Create a strong password to complete your account.')
+                    );
+                    resolve(false);
                 },
                 error: (err) => {
                     const msg = err.error?.message || err.error?.errors?.[0] || 'Invalid or expired OTP. Please try again.';
