@@ -4,19 +4,19 @@
 
     <!-- History Navigation -->
     <div class="flex items-center h-full border-r border-(--postonsteroids-border)">
-        <button (click)="goBack()" [disabled]="historyIndex() === 0"
+        <button (click)="goBack()" [disabled]="historyIndex() === 0 || isTabsLoading()"
             class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors">
             <mat-icon
                 class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_back</mat-icon>
         </button>
-        <button (click)="goForward()" [disabled]="historyIndex() === historyStack().length - 1"
+        <button (click)="goForward()" [disabled]="historyIndex() === historyStack().length - 1 || isTabsLoading()"
             class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors">
             <mat-icon
                 class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_forward</mat-icon>
         </button>
     </div>
 
-    <button (click)="scrollLeft()" [disabled]="!canScrollLeft()"
+    <button (click)="scrollLeft()" [disabled]="!canScrollLeft() || isTabsLoading()"
         class="h-full flex items-center px-1 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
         <mat-icon class="text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">chevron_left</mat-icon>
     </button>
@@ -28,6 +28,30 @@
         [cdkDropListAutoScrollStep]="150"
         (cdkDropListDropped)="dropTab($event)"
         class="w-full h-full flex items-center overflow-hidden overflow-x-auto no-scrollbar scroll-smooth">
+        @if (isTabsLoading()) {
+        <div class="flex items-center h-full" role="status" aria-label="Loading request tabs">
+            @for (skeleton of skeletonTabs; track skeleton.id; let first = $first) {
+            <div class="request-tab-skeleton relative flex items-center h-full pl-3 pr-2.5 gap-x-2 border-r border-(--postonsteroids-border) w-[140px] min-w-[140px] max-w-[140px] shrink-0 overflow-hidden"
+                [class.bg-(--postonsteroids-bg-secondary)]="first"
+                [style.animation-delay]="skeleton.delay">
+                <!-- Method Skeleton Pill -->
+                <span class="h-[10px] w-[28px] rounded-[3px] bg-(--postonsteroids-accent)/25 animate-pulse shrink-0"></span>
+                <!-- Name/URL Skeleton Bar -->
+                <span class="h-[10px] rounded-[3px] bg-(--postonsteroids-text-muted)/20 animate-pulse"
+                    [style.width]="skeleton.width"></span>
+                <!-- Active Tab Bottom Indicator on First Skeleton -->
+                @if (first) {
+                <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-(--postonsteroids-accent)/60 animate-pulse"></div>
+                }
+                <div class="tab-skeleton-shimmer" [style.animation-delay]="skeleton.delay"></div>
+            </div>
+            }
+            <div class="h-[80%] flex items-center justify-center aspect-square ml-1.5 rounded-lg border border-(--postonsteroids-border) border-dashed text-(--postonsteroids-text-muted)/40 bg-(--postonsteroids-bg-secondary)/50 shrink-0 opacity-50 cursor-not-allowed"
+                aria-hidden="true">
+                <mat-icon class="text-[16px]! size-[16px]!">add</mat-icon>
+            </div>
+        </div>
+        } @else {
         @for (tab of tabs(); track tab.id) {
         <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)"
             (contextmenu)="onTabContextMenu($event, tab.id)" [title]="tab.name"
@@ -73,10 +97,11 @@
             title="Create new request">
             <mat-icon class="text-[16px]! size-[16px]!">add</mat-icon>
         </button>
+        }
     </div>
 
     <!-- Scroll Right Arrow -->
-    <button (click)="scrollRight()" [disabled]="!canScrollRight()"
+    <button (click)="scrollRight()" [disabled]="!canScrollRight() || isTabsLoading()"
         class="h-full flex items-center px-1 border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
         <mat-icon class="text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">chevron_right</mat-icon>
     </button>

@@ -719,13 +719,18 @@ export class TabStateService {
         effect(() => {
             if (this.isBrowser) {
                 const capId = this.activeCapsuleId();
+                const isLoadingCap = this.isCapsuleLoading() || this.isLoadingBackendData();
                 if (capId) {
                     localStorage.setItem('onsteroids_active_capsule', capId);
-                    localStorage.setItem(`onsteroids_active_tab_${capId}`, this.activeTabId() || '');
-                    localStorage.setItem(`onsteroids_open_tab_ids_${capId}`, JSON.stringify(this.openTabIds()));
+                    if (!isLoadingCap) {
+                        localStorage.setItem(`onsteroids_active_tab_${capId}`, this.activeTabId() || '');
+                        localStorage.setItem(`onsteroids_open_tab_ids_${capId}`, JSON.stringify(this.openTabIds()));
+                    }
                 }
-                localStorage.setItem('onsteroids_active_tab', this.activeTabId() || '');
-                localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
+                if (!isLoadingCap) {
+                    localStorage.setItem('onsteroids_active_tab', this.activeTabId() || '');
+                    localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
+                }
                 localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
                 localStorage.setItem('autoAuthEnabled', String(this.autoAuthEnabled()));
                 localStorage.setItem('autoAuthEndpointId', this.autoAuthEndpointId() || '');
@@ -1022,6 +1027,11 @@ export class TabStateService {
             return;
         }
 
+        const prevCapId = this.activeCapsuleId();
+        if (prevCapId === capsule.id && !this.isCapsuleLoading()) {
+            return;
+        }
+
         const switchVersion = ++this.capsuleSwitchVersion;
 
         // Cancel any pending autoSave timer immediately so it doesn't fire for the previous capsule
@@ -1031,8 +1041,7 @@ export class TabStateService {
         }
 
         // Save current capsule's tab layout and variables before switching
-        const prevCapId = this.activeCapsuleId();
-        if (this.isBrowser && prevCapId && prevCapId !== capsule.id) {
+        if (this.isBrowser && prevCapId && prevCapId !== capsule.id && !this.isCapsuleLoading()) {
             localStorage.setItem(`onsteroids_open_tab_ids_${prevCapId}`, JSON.stringify(this.openTabIds()));
             localStorage.setItem(`onsteroids_active_tab_${prevCapId}`, this.activeTabId() || '');
             const vs = this.getVariableService();
@@ -1041,97 +1050,124 @@ export class TabStateService {
             }
         }
 
-        this.activeCapsuleId.set(capsule.id);
-        this.activeCapsuleName.set(capsule.name);
-        // Clear savedCapsules immediately to avoid showing stale requests from previous capsule
-        this.savedCapsules.set([]);
+        this.isCapsuleLoading.set(true);
 
-        // Restore open tabs from local storage for this target capsule
-        let targetOpenIds: string[] = [];
-        const savedCapOpen = this.isBrowser ? localStorage.getItem(`onsteroids_open_tab_ids_${capsule.id}`) : null;
-        if (savedCapOpen) {
-            try {
-                const parsed = JSON.parse(savedCapOpen);
-                if (Array.isArray(parsed)) {
-                    targetOpenIds = parsed;
-                }
-            } catch (e) { }
-        }
-        this.openTabIds.set(targetOpenIds);
+        try {
+            this.activeCapsuleId.set(capsule.id);
+            this.activeCapsuleName.set(capsule.name);
+            // Clear savedCapsules immediately to avoid showing stale requests from previous capsule
+            this.savedCapsules.set([]);
 
-        const savedActive = this.isBrowser ? localStorage.getItem(`onsteroids_active_tab_${capsule.id}`) : null;
-        if (savedActive && targetOpenIds.includes(savedActive)) {
-            this.activeTabId.set(savedActive);
-        } else {
-            this.activeTabId.set(targetOpenIds[0] || null);
-        }
-
-        if (this.isBrowser) {
-            localStorage.setItem('onsteroids_active_capsule', capsule.id);
-        }
-
-        const foundCap = this.capsules().find(c => c.id === capsule.id);
-        if (foundCap) {
-            this.autoAuthEnabled.set((foundCap.autoAuthEnabled as any) || 'off');
-            this.autoAuthEndpointId.set(foundCap.autoAuthEndpointId || null);
-        } else {
-            this.autoAuthEnabled.set('off');
-            this.autoAuthEndpointId.set(null);
-        }
-
-        // Explicitly load variables for the new capsule before loading requests
-        const vs = this.getVariableService();
-        if (vs) {
-            await vs.loadVariables(capsule.id);
-        }
-        if (switchVersion !== this.capsuleSwitchVersion) return;
-
-        await this.loadRequestsForCapsule(capsule.id);
-        if (switchVersion !== this.capsuleSwitchVersion) return;
-        if (vs) {
-            vs.reanchorVariableSources(capsule.id);
-        }
-
-        const requestsInCapsule = this.savedCapsules();
-        // Merge saved requests into states, preserving any active response data already in memory
-        if (requestsInCapsule.length > 0) {
-            this.states.update(map => {
-                const next = new Map(map);
-                for (const req of requestsInCapsule) {
-                    const existing = next.get(req.id);
-                    if (existing) {
-                        next.set(req.id, {
-                            ...req,
-                            capsuleId: capsule.id,
-                            responseBody: existing.responseBody ?? req.responseBody,
-                            responseStatus: existing.responseStatus ?? req.responseStatus,
-                            responseTime: existing.responseTime ?? req.responseTime,
-                            responseSize: existing.responseSize ?? req.responseSize,
-                            responseCookies: existing.responseCookies ?? req.responseCookies,
-                            responseHeaders: existing.responseHeaders ?? req.responseHeaders,
-                            testResults: existing.testResults ?? req.testResults
-                        });
-                    } else {
-                        next.set(req.id, { ...req, capsuleId: capsule.id });
+            // Read saved open tabs from local storage for this target capsule before clearing visible tabs
+            let savedTargetOpenIds: string[] = [];
+            const savedCapOpen = this.isBrowser ? localStorage.getItem(`onsteroids_open_tab_ids_${capsule.id}`) : null;
+            if (savedCapOpen) {
+                try {
+                    const parsed = JSON.parse(savedCapOpen);
+                    if (Array.isArray(parsed)) {
+                        savedTargetOpenIds = parsed.filter((item): item is string => typeof item === 'string');
                     }
-                }
-                return next;
-            });
-        }
-
-        // Re-validate open tabs after requests are loaded
-        if (targetOpenIds.length === 0 && requestsInCapsule.length > 0) {
-            targetOpenIds = requestsInCapsule.map(r => r.id);
-            this.openTabIds.set(targetOpenIds);
-            if (!this.activeTabId()) {
-                this.activeTabId.set(targetOpenIds[0] || null);
+                } catch (e) { }
             }
-        }
+            const savedActive = this.isBrowser ? localStorage.getItem(`onsteroids_active_tab_${capsule.id}`) : null;
 
-        this.preloadAllExamples();
+            // Clear visible tabs while capsule is loading so the horizontal request tabs skeleton is shown cleanly
+            this.openTabIds.set([]);
+            this.activeTabId.set(null);
 
-        if (switchVersion === this.capsuleSwitchVersion) {
-            this.syncWorkspaceStateToBackend();
+            if (this.isBrowser) {
+                localStorage.setItem('onsteroids_active_capsule', capsule.id);
+            }
+
+            const foundCap = this.capsules().find(c => c.id === capsule.id);
+            if (foundCap) {
+                this.autoAuthEnabled.set((foundCap.autoAuthEnabled as any) || 'off');
+                this.autoAuthEndpointId.set(foundCap.autoAuthEndpointId || null);
+            } else {
+                this.autoAuthEnabled.set('off');
+                this.autoAuthEndpointId.set(null);
+            }
+
+            // Load variables and requests for the target capsule in parallel
+            const vs = this.getVariableService();
+            await Promise.all([
+                vs ? vs.loadVariables(capsule.id) : Promise.resolve(),
+                this.loadRequestsForCapsule(capsule.id)
+            ]);
+            if (switchVersion !== this.capsuleSwitchVersion) return;
+
+            if (vs) {
+                vs.reanchorVariableSources(capsule.id);
+            }
+
+            const requestsInCapsule = this.savedCapsules();
+            // Merge saved requests into states, preserving any active response data already in memory
+            if (requestsInCapsule.length > 0) {
+                this.states.update(map => {
+                    const next = new Map(map);
+                    for (const req of requestsInCapsule) {
+                        const existing = next.get(req.id);
+                        if (existing) {
+                            next.set(req.id, {
+                                ...req,
+                                capsuleId: capsule.id,
+                                responseBody: existing.responseBody ?? req.responseBody,
+                                responseStatus: existing.responseStatus ?? req.responseStatus,
+                                responseTime: existing.responseTime ?? req.responseTime,
+                                responseSize: existing.responseSize ?? req.responseSize,
+                                responseCookies: existing.responseCookies ?? req.responseCookies,
+                                responseHeaders: existing.responseHeaders ?? req.responseHeaders,
+                                testResults: existing.testResults ?? req.testResults
+                            });
+                        } else {
+                            next.set(req.id, { ...req, capsuleId: capsule.id });
+                        }
+                    }
+                    return next;
+                });
+            }
+
+            // If the user manually opened a tab while the capsule was loading, respect their selection
+            const tabsOpenedDuringLoad = this.openTabIds();
+            if (tabsOpenedDuringLoad.length > 0) {
+                if (!this.activeTabId() || !tabsOpenedDuringLoad.includes(this.activeTabId()!)) {
+                    this.activeTabId.set(tabsOpenedDuringLoad[0] || null);
+                }
+            } else {
+                const validSavedOpenIds = savedTargetOpenIds.filter(id => {
+                    const st = this.states().get(id);
+                    return Boolean(st) && (!st!.capsuleId || st!.capsuleId === capsule.id);
+                });
+
+                let finalOpenIds: string[] = [];
+                if (validSavedOpenIds.length > 0) {
+                    finalOpenIds = validSavedOpenIds;
+                } else if (requestsInCapsule.length > 0) {
+                    finalOpenIds = requestsInCapsule.map(r => r.id);
+                }
+
+                this.openTabIds.set(finalOpenIds);
+                if (savedActive && finalOpenIds.includes(savedActive)) {
+                    this.activeTabId.set(savedActive);
+                } else {
+                    this.activeTabId.set(finalOpenIds[0] || null);
+                }
+            }
+
+            if (this.isBrowser) {
+                localStorage.setItem(`onsteroids_open_tab_ids_${capsule.id}`, JSON.stringify(this.openTabIds()));
+                localStorage.setItem(`onsteroids_active_tab_${capsule.id}`, this.activeTabId() || '');
+            }
+
+            this.preloadAllExamples();
+
+            if (switchVersion === this.capsuleSwitchVersion) {
+                this.syncWorkspaceStateToBackend();
+            }
+        } finally {
+            if (switchVersion === this.capsuleSwitchVersion) {
+                this.isCapsuleLoading.set(false);
+            }
         }
     }
 
@@ -1326,11 +1362,11 @@ export class TabStateService {
             }
         }
         
-        // Open the newly cloned tabs
+        // Persist the newly cloned tab IDs for the target capsule before switching
         const clonedTabIds = oldRequests.map(r => idMap.get(r.id)!).filter(Boolean);
-        if (clonedTabIds.length > 0) {
-            this.openTabIds.set(clonedTabIds);
-            this.activeTabId.set(clonedTabIds[0]);
+        if (this.isBrowser && clonedTabIds.length > 0) {
+            localStorage.setItem(`onsteroids_open_tab_ids_${newCap.id}`, JSON.stringify(clonedTabIds));
+            localStorage.setItem(`onsteroids_active_tab_${newCap.id}`, clonedTabIds[0]);
         }
         
         this.capsules.update(list => [...list, newCap]);
@@ -2784,7 +2820,13 @@ export class TabStateService {
     async loadBackendData(): Promise<void> {
         if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         if (this.isLoadingBackendData()) return;
+
+        const hadOfflineWorkAtStart = this.hasOfflineWork();
+        const loadSwitchVersion = this.capsuleSwitchVersion;
         this.isLoadingBackendData.set(true);
+        if (!hadOfflineWorkAtStart) {
+            this.isCapsuleLoading.set(true);
+        }
 
         try {
             this.hasInitialBackendLoaded = true;
@@ -2800,6 +2842,8 @@ export class TabStateService {
                     return null;
                 })
             ]);
+
+            if (this.capsuleSwitchVersion !== loadSwitchVersion) return;
 
             // 2. Process capsules
             let backendCaps: Capsule[] = [];
@@ -2874,26 +2918,33 @@ export class TabStateService {
                     matchingCap && vs ? vs.loadVariables(targetCapId) : Promise.resolve()
                 ]);
             }
+            if (this.capsuleSwitchVersion !== loadSwitchVersion) return;
+
             if (vs) {
                 vs.reanchorVariableSources(targetCapId || '1');
             }
 
-            // 6. Restore open tabs and active tab selection
-            let targetOpenIds = this.openTabIds().filter(id => this.states().has(id));
-            if (targetOpenIds.length === 0) {
-                const capRequests = this.savedCapsules().filter(r => r.capsuleId === this.activeCapsuleId());
-                if (capRequests.length > 0) {
-                    targetOpenIds = capRequests.map(r => r.id);
-                } else if (this.savedCapsules().length > 0) {
-                    targetOpenIds = [this.savedCapsules()[0].id];
+            // 6. Restore open tabs and active tab selection (if user did not already start working offline)
+            if (!hadOfflineWorkAtStart) {
+                let targetOpenIds = this.openTabIds().filter(id => {
+                    const st = this.states().get(id);
+                    return Boolean(st) && (!st!.capsuleId || st!.capsuleId === this.activeCapsuleId());
+                });
+                if (targetOpenIds.length === 0) {
+                    const capRequests = this.savedCapsules().filter(r => r.capsuleId === this.activeCapsuleId());
+                    if (capRequests.length > 0) {
+                        targetOpenIds = capRequests.map(r => r.id);
+                    } else if (this.savedCapsules().length > 0) {
+                        targetOpenIds = [this.savedCapsules()[0].id];
+                    }
                 }
-            }
 
-            if (targetOpenIds.length > 0) {
-                this.openTabIds.set(targetOpenIds);
-                const currentActive = this.activeTabId();
-                if (!currentActive || !targetOpenIds.includes(currentActive)) {
-                    this.activeTabId.set(targetOpenIds[0] || null);
+                if (targetOpenIds.length > 0) {
+                    this.openTabIds.set(targetOpenIds);
+                    const currentActive = this.activeTabId();
+                    if (!currentActive || !targetOpenIds.includes(currentActive)) {
+                        this.activeTabId.set(targetOpenIds[0] || null);
+                    }
                 }
             }
 
@@ -2930,6 +2981,9 @@ export class TabStateService {
             console.error('Failed to load backend data', e);
         } finally {
             this.isLoadingBackendData.set(false);
+            if (!hadOfflineWorkAtStart && this.capsuleSwitchVersion === loadSwitchVersion) {
+                this.isCapsuleLoading.set(false);
+            }
         }
     }
 
