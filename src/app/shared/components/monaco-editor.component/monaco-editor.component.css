@@ -21,6 +21,28 @@
     box-shadow: none !important;
 }
 
+/* Prevent long unwrapped lines (e.g. in Pretty or Key-Field modes) from overflowing into the vertical scrollbar on the far right */
+::ng-deep .monaco-editor .decorationsOverviewRuler {
+    display: none !important;
+}
+
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.vertical {
+    background: var(--vscode-editor-background, var(--postonsteroids-bg-primary)) !important;
+    z-index: 12 !important;
+}
+
+::ng-deep .monaco-editor .monaco-scrollable-element::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    background: var(--vscode-editor-background, var(--postonsteroids-bg-primary));
+    pointer-events: none;
+    z-index: 10;
+}
+
 ::ng-deep .monaco-lock-icon {
     display: flex;
     align-items: center;

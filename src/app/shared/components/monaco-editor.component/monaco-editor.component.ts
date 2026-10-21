@@ -58,12 +58,21 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     readOnly: this.disabled() || this.readOnly(),
     automaticLayout: true,
     minimap: { enabled: false },
-    scrollbar: { useShadows: false },
+    overviewRulerLanes: 0,
+    overviewRulerBorder: false,
+    hideCursorInOverviewRuler: true,
+    scrollBeyondLastColumn: 4,
+    scrollbar: {
+      useShadows: false,
+      verticalScrollbarSize: 12,
+      horizontalScrollbarSize: 10,
+    },
     stickyScroll: { enabled: false },
     scrollBeyondLastLine: false,
     fixedOverflowWidgets: true,
     glyphMargin: this.enableEncryptionToggles(),
     wordWrap: this.wordWrap() ? 'on' : 'off',
+    wrappingIndent: 'indent',
     fontSize: 13,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
   }));
@@ -98,7 +107,15 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         if (monacoGlobal && monacoGlobal.editor) {
            monacoGlobal.editor.setTheme(theme);
         }
-        editor.updateOptions({ readOnly, glyphMargin, wordWrap });
+        editor.updateOptions({
+          readOnly,
+          glyphMargin,
+          wordWrap,
+          overviewRulerLanes: 0,
+          overviewRulerBorder: false,
+          hideCursorInOverviewRuler: true,
+          scrollBeyondLastColumn: 4,
+        });
 
         if (this.enableEncryptionToggles()) {
            this.themeUpdateId++; // Increment so class name changes
@@ -155,12 +172,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               if (this.enableEncryptionToggles()) {
                 this.updateDecorations();
               }
-              // Sync the Angular value signal with the restored model's content
+              // Sync the Angular value signal with the restored model's content without emitting a fake user edit
               const cachedValue = cachedModel.getValue();
               this.value.set(cachedValue);
-              // Notify Angular form of the restored value (triggers writeValue,
-              // which will see isRestoringModel=true and skip setValue)
-              this.onChange(cachedValue);
+              this.lastValidContent = cachedValue;
               this.isRestoringModel = false;
 
               // Restore scroll position for this specific tab and editor

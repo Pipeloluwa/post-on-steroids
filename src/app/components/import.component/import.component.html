@@ -169,24 +169,30 @@
                         <!-- Option A: Save to Backend -->
                         <button type="button" (click)="confirmImport(true)"
                             [disabled]="!authService.isLoggedIn()"
-                            class="p-4 rounded-xl border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 hover:border-purple-500 text-left transition-all cursor-pointer group flex flex-col gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
-                            <div class="flex items-center gap-2 text-purple-400 font-semibold text-xs group-hover:text-purple-300">
-                                <mat-icon class="text-[18px]!">cloud_done</mat-icon>
-                                <span>Save to Backend</span>
+                            class="p-4 rounded-xl border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 hover:border-purple-500 text-left transition-all cursor-pointer select-none group flex flex-col gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <div class="flex items-center justify-between pointer-events-none">
+                                <div class="flex items-center gap-2 text-purple-400 font-semibold text-xs group-hover:text-purple-300">
+                                    <mat-icon class="text-[18px]!">cloud_done</mat-icon>
+                                    <span>Save to Backend</span>
+                                </div>
+                                <mat-icon class="text-[18px]! text-purple-400">check_circle</mat-icon>
                             </div>
-                            <p class="text-[11px] text-(--postonsteroids-text-secondary) leading-snug">
+                            <p class="text-[11px] text-(--postonsteroids-text-secondary) leading-snug pointer-events-none">
                                 Persists to database. Synced across all your devices and sessions.
                             </p>
                         </button>
 
                         <!-- Option B: Local Only -->
                         <button type="button" (click)="confirmImport(false)"
-                            class="p-4 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) hover:border-(--postonsteroids-accent) text-left transition-all cursor-pointer group flex flex-col gap-1.5">
-                            <div class="flex items-center gap-2 text-(--postonsteroids-text-primary) font-semibold text-xs group-hover:text-(--postonsteroids-accent)">
-                                <mat-icon class="text-[18px]!">computer</mat-icon>
-                                <span>Keep Local Only</span>
+                            class="p-4 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) hover:border-(--postonsteroids-accent) text-left transition-all cursor-pointer select-none group flex flex-col gap-1.5">
+                            <div class="flex items-center justify-between pointer-events-none">
+                                <div class="flex items-center gap-2 text-(--postonsteroids-text-primary) font-semibold text-xs group-hover:text-(--postonsteroids-accent)">
+                                    <mat-icon class="text-[18px]!">computer</mat-icon>
+                                    <span>Keep Local Only</span>
+                                </div>
+                                <mat-icon class="text-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-accent)">radio_button_unchecked</mat-icon>
                             </div>
-                            <p class="text-[11px] text-(--postonsteroids-text-secondary) leading-snug">
+                            <p class="text-[11px] text-(--postonsteroids-text-secondary) leading-snug pointer-events-none">
                                 Loads into current workspace without writing to server database.
                             </p>
                         </button>

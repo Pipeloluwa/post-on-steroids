@@ -3,6 +3,7 @@ import { MatIcon } from '@angular/material/icon';
 import { RouterModule } from '@angular/router';
 import { ThemeService } from '../../services/theme.service';
 import { SidebarService } from '../../services/sidebar.service';
+import { AuthService } from '../../services/auth.service';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -13,6 +14,7 @@ import { CommonModule } from '@angular/common';
 export class MenuComponent {
   protected themeService = inject(ThemeService);
   protected sidebarService = inject(SidebarService);
+  protected authService = inject(AuthService);
 
   menu = signal<{ name: string; icon: string; path: string; exact?: boolean }[]>([
     { name: 'Steroid', icon: 'dashboard', path: '/', exact: true },
@@ -26,5 +28,8 @@ export class MenuComponent {
   toggleTheme(): void {
     this.themeService.toggleTheme();
   }
-}
 
+  openChangePassword(): void {
+    this.authService.openChangePasswordModal();
+  }
+}

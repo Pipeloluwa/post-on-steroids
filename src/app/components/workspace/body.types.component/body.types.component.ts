@@ -31,13 +31,26 @@ export class BodyTypesComponent {
   tabId = input.required<string>();
 
   wrapStyles = WRAP_STYLE_OPTIONS;
-  wrapStyle = signal<WrapStyle>('pretty');
-  isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
+  wrapStyle = computed<WrapStyle>(() => {
+    const stateStyle = this.tabStateService.getState(this.tabId())?.bodyWrapStyle as WrapStyle | undefined;
+    if (stateStyle) return stateStyle;
+    if (this.isBrowser) {
+      const saved = localStorage.getItem('onsteroids_body_wrap_style') as WrapStyle | null;
+      if (saved && ['pretty', 'key-field', 'word-wrap', 'collapsed'].includes(saved)) return saved;
+    }
+    return 'pretty';
+  });
+  isWordWrap = computed(() => true);
   wrapResponse = computed(() => this.isWordWrap());
   
   rawBodyContent = computed(() => {
     const state = this.tabStateService.getState(this.tabId());
-    return this.rawType() === 'JSON' ? (state?.rawBodyJson || '{}') : (state?.rawBodyXml || '');
+    const raw = this.rawType() === 'JSON' ? (state?.rawBodyJson || '{}') : (state?.rawBodyXml || '');
+    const style = this.wrapStyle();
+    if (style !== 'pretty' && style !== 'word-wrap') {
+      return formatBodyByStyle(raw, style, this.rawType());
+    }
+    return raw;
   });
 
   onRawBodyChange(content: string) {
@@ -185,24 +198,31 @@ export class BodyTypesComponent {
 
   private originalPrettyContent: string | null = null;
 
+  private setWrapStyle(style: WrapStyle) {
+    if (this.isBrowser) {
+      localStorage.setItem('onsteroids_body_wrap_style', style);
+    }
+    const id = this.tabId();
+    if (id) {
+      this.tabStateService.updateState(id, { bodyWrapStyle: style }, false);
+    }
+    this.applyWrapTransformation(style);
+  }
+
   wrapPretty() {
-    this.wrapStyle.set('pretty');
-    this.applyWrapTransformation('pretty');
+    this.setWrapStyle('pretty');
   }
 
   wrapKeyField() {
-    this.wrapStyle.set('key-field');
-    this.applyWrapTransformation('key-field');
+    this.setWrapStyle('key-field');
   }
 
   wrapSoft() {
-    this.wrapStyle.set('word-wrap');
-    this.applyWrapTransformation('word-wrap');
+    this.setWrapStyle('word-wrap');
   }
 
   wrapCollapsed() {
-    this.wrapStyle.set('collapsed');
-    this.applyWrapTransformation('collapsed');
+    this.setWrapStyle('collapsed');
   }
 
   private applyWrapTransformation(style: WrapStyle) {
@@ -243,9 +263,9 @@ export class BodyTypesComponent {
 
     let key = extracted?.key || '';
     let value = extracted?.value || '';
+    const content = this.rawBodyContent();
 
     if (!key) {
-      const content = this.rawBodyContent();
       if (content) {
         try {
           const parsed = JSON.parse(content);
@@ -273,13 +293,64 @@ export class BodyTypesComponent {
       }
     }
 
+    const fullPath = this.findPathInObject(content, key, value);
     const state = this.tabStateService.getState(this.tabId());
     this.variableService.openAddModal(key, value, {
       tabId: this.tabId(),
+      requestId: state?.id,
       requestName: state?.name,
       requestUrl: state?.url,
       type: 'body',
-      propertyKey: key
+      propertyKey: fullPath || key
     });
+  }
+
+  private findPathInObject(obj: any, targetKey: string, targetVal?: string): string | null {
+    if (!obj || !targetKey) return null;
+    let parsed = obj;
+    if (typeof parsed === 'string') {
+      try { parsed = JSON.parse(parsed); } catch { return null; }
+    }
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const lowerKey = targetKey.toLowerCase();
+
+    function search(curr: any, path: string[], matchValue: boolean): string | null {
+      if (!curr || typeof curr !== 'object') return null;
+
+      if (Array.isArray(curr)) {
+        for (let i = 0; i < curr.length; i++) {
+          const res = search(curr[i], [...path, String(i)], matchValue);
+          if (res) return res;
+        }
+        return null;
+      }
+
+      for (const k of Object.keys(curr)) {
+        if (k.toLowerCase() === lowerKey) {
+          if (matchValue && targetVal !== undefined && targetVal !== '') {
+            const v = curr[k];
+            const s = typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
+            if (s === targetVal) {
+              return [...path, k].join('.');
+            }
+          } else {
+            return [...path, k].join('.');
+          }
+        }
+      }
+
+      for (const k of Object.keys(curr)) {
+        const child = curr[k];
+        if (child && typeof child === 'object') {
+          const res = search(child, [...path, k], matchValue);
+          if (res) return res;
+        }
+      }
+
+      return null;
+    }
+
+    return search(parsed, [], true) || search(parsed, [], false);
   }
 }

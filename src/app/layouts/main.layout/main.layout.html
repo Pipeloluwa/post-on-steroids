@@ -44,7 +44,7 @@
         [isAuthenticating]="authService.isAuthenticating()" [errorMessage]="authService.errorMessage()"
         [successMessage]="authService.successMessage()" [(userEmail)]="authService.userEmail"
         [(otp)]="authService.otp" (onClose)="closeAuthModal()" (onContinueWithoutSignIn)="closeAuthModal()" (onSendOtp)="sendOtp()"
-        (onAuthenticate)="authenticate()" (onBackToEmail)="authService.isOtpSent.set(false)" />
+        (onAuthenticate)="authenticate()" (onBackToEmail)="authService.resetToEmailStep()" />
 
     <!-- Offline Banner -->
     @if (!networkService.isOnline()) {

@@ -74,7 +74,15 @@ export class RequestDetailsComponent {
 
         this.isSharing.set(true);
         try {
-            const shareUrl = await this.tabStateService.shareCapsule(capsuleId);
+            // Ensure any unsaved or dirty requests/capsules are saved to backend first
+            const cap = this.tabStateService.capsules().find(c => c.id === capsuleId);
+            const isDirty = this.tabStateService.openTabs().some(t => t.isDirty);
+            if (isDirty || cap?.isLocalOnly) {
+                await this.tabStateService.saveToCapsule();
+            }
+
+            const effectiveId = this.tabStateService.activeCapsuleId() || capsuleId;
+            const shareUrl = await this.tabStateService.shareCapsule(effectiveId);
             this.generatedLink.set(shareUrl);
             this.showShareModal.set(true);
         } catch (e: any) {
@@ -84,11 +92,27 @@ export class RequestDetailsComponent {
         }
     }
 
-    copyLink() {
-        navigator.clipboard.writeText(this.generatedLink()).then(() => {
+    async copyLink() {
+        const link = this.generatedLink();
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(link);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = link;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
             this.showShareModal.set(false);
             this.onNotify.emit('Capsule link copied to clipboard!');
-        });
+        } catch {
+            this.showShareModal.set(false);
+            this.onNotify.emit('Capsule link copied to clipboard!');
+        }
     }
 
     async onSaveOptionSelected(option: string) {
@@ -133,16 +157,21 @@ export class RequestDetailsComponent {
     }
 
     async saveRequest() {
-        await this.tabStateService.saveToCapsule(this.tabId());
+        try {
+            await this.tabStateService.saveToCapsule(this.tabId());
 
-        if (!this.isLoggedIn()) {
-            this.waitingForAuth.set(true);
-            this.pendingAction.set('save');
-            this.onAuthRequired.emit();
-            this.onNotify.emit('Saved locally! Sign in to sync with cloud.');
-            return;
+            if (!this.isLoggedIn()) {
+                this.waitingForAuth.set(true);
+                this.pendingAction.set('save');
+                this.onAuthRequired.emit();
+                this.onNotify.emit('Saved locally! Sign in to sync with cloud.');
+                return;
+            }
+
+            this.onNotify.emit('Capsule, requests, and variables saved successfully!');
+        } catch (e: any) {
+            console.error('Failed to save request/capsule:', e);
+            this.onNotify.emit(e?.error?.message || e?.message || 'Failed to save capsule to cloud.');
         }
-
-        this.onNotify.emit('Capsule, requests, and variables saved successfully!');
     }
 }

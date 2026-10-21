@@ -1,6 +1,6 @@
 <div class="relative w-full h-full flex items-center">
     <!-- Overlay for syntax highlighting -->
-    @if (type() !== 'password' && value()) {
+    @if (effectiveType() !== 'password' && value()) {
     <div #overlayDiv class="absolute inset-0 pointer-events-none whitespace-pre overflow-hidden" 
          [class]="customClass()" style="border-color: transparent; background: transparent;">
         <div style="transform: translateY(0.5px); display: inline-block; min-width: 100%; padding-right: 100px;">
@@ -19,13 +19,13 @@
     </div>
     }
 
-    <input #inputField [type]="type()" [value]="value()" (input)="onInput($event)"
+    <input #inputField [type]="effectiveType()" [value]="value()" (input)="onInput($event)"
         (keyup)="updateCursorPosition()" (click)="updateCursorPosition()" (keydown)="onKeyDown($event)"
         (paste)="pasteEvent.emit($event)" (scroll)="onScroll($event)"
         (mousemove)="onMouseMove($event)" (mouseleave)="onMouseLeave()"
         [placeholder]="placeholder()" [class]="customClass()"
-        [style.color]="type() !== 'password' && value() ? 'transparent' : 'inherit'"
-        [style.caret-color]="type() !== 'password' && value() ? 'var(--postonsteroids-text-primary)' : 'inherit'"
+        [style.color]="effectiveType() !== 'password' && value() ? 'transparent' : 'inherit'"
+        [style.caret-color]="effectiveType() !== 'password' && value() ? 'var(--postonsteroids-text-primary)' : 'inherit'"
         style="background: transparent; position: relative; z-index: 10;" />
 
     @if(suggestionState().list.length > 0) {

@@ -50,6 +50,8 @@ export class VariableService {
             }
         }, { allowSignalWrites: true });
 
+        this.authService.registerSaveChecker(() => this.isSyncing());
+
         // Note: TabStateService.loadBackendData() orchestrates variable loading after
         // capsules, requests, and active capsule are fully restored.
         this.authService.onLogout.subscribe(() => {
@@ -57,8 +59,87 @@ export class VariableService {
         });
     }
 
+    public getSourceMapForCapsule(capId: string): Record<string, VariableSource> {
+        if (!this.localStorageService) return {};
+        const user = this.authService.currentUser();
+        const userKey = user?.id ? `onsteroids_user_var_sources_${capId}_${user.id}` : (user?.email ? `onsteroids_user_var_sources_${capId}_${user.email}` : null);
+        let raw = userKey ? this.localStorageService.getItem(userKey) : null;
+        if (!raw) {
+            raw = this.localStorageService.getItem(`onsteroids_var_sources_${capId}`);
+        }
+        if (raw) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return parsed;
+                }
+            } catch {}
+        }
+        return {};
+    }
+
+    public saveSourceMapForCapsule(capId: string, map: Record<string, VariableSource>): void {
+        if (!this.localStorageService) return;
+        const json = JSON.stringify(map);
+        this.localStorageService.setItem(`onsteroids_var_sources_${capId}`, json);
+        const user = this.authService.currentUser();
+        if (user?.id) {
+            this.localStorageService.setItem(`onsteroids_user_var_sources_${capId}_${user.id}`, json);
+        }
+        if (user?.email) {
+            this.localStorageService.setItem(`onsteroids_user_var_sources_${capId}_${user.email}`, json);
+        }
+    }
+
+    public getCachedVariablesForCapsule(capId: string): IGlobalVariable[] {
+        if (!this.localStorageService) return [];
+        const user = this.authService.currentUser();
+        const userKey = user?.id ? `onsteroids_user_vars_${capId}_${user.id}` : (user?.email ? `onsteroids_user_vars_${capId}_${user.email}` : null);
+        let saved = userKey ? this.localStorageService.getItem(userKey) : null;
+        if (!saved) {
+            saved = this.localStorageService.getItem(`onsteroids_vars_${capId}`) ||
+                this.localStorageService.getItem(`onsteroids_last_vars_${capId}`);
+        }
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    return parsed;
+                }
+            } catch {}
+        }
+        return [];
+    }
+
     private cacheVariablesForCapsule(capId: string, vars: IGlobalVariable[]) {
-        const json = JSON.stringify(vars);
+        if (!vars || !Array.isArray(vars)) return;
+
+        // Persist dedicated source map for this capsule
+        const existingSourceMap = this.getSourceMapForCapsule(capId);
+        let sourceMapChanged = false;
+
+        const enrichedVars = vars.map(v => {
+            const kLower = (v.key || '').trim().toLowerCase();
+            if (!kLower) return v;
+
+            if (v.source) {
+                existingSourceMap[kLower] = { ...v.source };
+                sourceMapChanged = true;
+                return v;
+            } else if (existingSourceMap[kLower]) {
+                return {
+                    ...v,
+                    source: { ...existingSourceMap[kLower] }
+                };
+            }
+            return v;
+        });
+
+        if (sourceMapChanged) {
+            this.saveSourceMapForCapsule(capId, existingSourceMap);
+        }
+
+        const json = JSON.stringify(enrichedVars);
         this.localStorageService.setItem(`onsteroids_vars_${capId}`, json);
         this.localStorageService.setItem(`onsteroids_last_vars_${capId}`, json);
         const user = this.authService.currentUser();
@@ -73,34 +154,27 @@ export class VariableService {
     public async loadVariables(capsuleId?: string): Promise<void> {
         const user = this.authService.currentUser();
         const capId = capsuleId || this.tabStateService.activeCapsuleId() || '1';
-        
-        // 1. Check local cache for this specific capsule
-        const userKey = user?.id ? `onsteroids_user_vars_${capId}_${user.id}` : (user?.email ? `onsteroids_user_vars_${capId}_${user.email}` : null);
-        let saved = userKey ? this.localStorageService.getItem(userKey) : null;
-        
-        if (!saved) {
-            saved = this.localStorageService.getItem(`onsteroids_vars_${capId}`) ||
-                this.localStorageService.getItem(`onsteroids_last_vars_${capId}`);
-        }
+        const sourceMap = this.getSourceMapForCapsule(capId);
 
         let localVars: IGlobalVariable[] | null = null;
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed)) {
-                    localVars = parsed;
-                }
-            } catch (e) {
-                // Ignore parse errors
-            }
+        const cached = this.getCachedVariablesForCapsule(capId);
+        if (cached && cached.length > 0) {
+            localVars = cached.map(v => {
+                const kLower = (v.key || '').trim().toLowerCase();
+                return {
+                    ...v,
+                    source: v.source ?? sourceMap[kLower]
+                };
+            });
         }
 
         // 2. Immediately isolate in-memory state for this capsule.
         // If this capsule has local variables cached, show them.
         // If not cached, reset to empty (or default baseUrl only for offline guest capsule '1').
         // This ensures variables from previously opened capsules NEVER leak!
-        if (localVars !== null) {
+        if (localVars !== null && localVars.length > 0) {
             this.variables.set(localVars);
+            this.reanchorVariableSources(capId);
         } else if (!this.authService.isLoggedIn() && capId === '1') {
             this.variables.set([
                 { id: '1', key: 'baseUrl', value: 'http://acegeld.runasp.net/api/v1', enabled: true }
@@ -128,6 +202,8 @@ export class VariableService {
     restoreUserVariables(user?: any, targetCapId?: string) {
         const u = user || this.authService.currentUser();
         const capId = targetCapId || this.tabStateService.activeCapsuleId() || '1';
+        const sourceMap = this.getSourceMapForCapsule(capId);
+
         const keysToTry: string[] = [];
         if (u?.id) keysToTry.push(`onsteroids_user_vars_${capId}_${u.id}`);
         if (u?.email) keysToTry.push(`onsteroids_user_vars_${capId}_${u.email}`);
@@ -139,25 +215,46 @@ export class VariableService {
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed)) {
-                        this.variables.set(parsed);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        const enriched = parsed.map(v => {
+                            const kLower = (v.key || '').trim().toLowerCase();
+                            return {
+                                ...v,
+                                source: v.source ?? sourceMap[kLower]
+                            };
+                        });
+                        this.variables.set(enriched);
                         this.saveVariables(false, capId);
+                        this.reanchorVariableSources(capId);
                         return;
                     }
                 } catch (e) {}
             }
         }
-        this.variables.set([]);
+        if (this.variables().length === 0) {
+            this.variables.set([]);
+        }
     }
 
-    setVariables(vars: IGlobalVariable[], targetCapId?: string) {
+    setVariables(vars: IGlobalVariable[], targetCapId?: string, syncBackend = true) {
         if (Array.isArray(vars)) {
-            this.variables.set(vars);
-            this.saveVariables(true, targetCapId);
+            const capId = targetCapId || this.tabStateService.activeCapsuleId() || '1';
+            const sourceMap = this.getSourceMapForCapsule(capId);
+            const enriched = vars.map(v => {
+                const kLower = (v.key || '').trim().toLowerCase();
+                return {
+                    ...v,
+                    source: v.source ?? sourceMap[kLower]
+                };
+            });
+            this.variables.set(enriched);
+            this.saveVariables(syncBackend, capId);
+            this.reanchorVariableSources(capId);
         }
     }
 
     private hasPendingSync = false;
+    private systemSourceVarIds = new Map<string, string>();
 
     async loadVariablesFromBackend(forceNoCapsuleFilter = false, targetCapId?: string): Promise<void> {
         if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
@@ -169,12 +266,39 @@ export class VariableService {
             return;
         }
 
+        const currentCap = this.tabStateService.capsules().find(c => c.id === capId);
+        if (currentCap?.isLocalOnly) {
+            return;
+        }
+
         try {
             const qs = (!forceNoCapsuleFilter && isGuid) ? `?capsuleId=${capId}` : '';
             const res = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
             );
             if (res?.data && Array.isArray(res.data)) {
+                const cachedVars = this.getCachedVariablesForCapsule(capId);
+                let sourceMap = this.getSourceMapForCapsule(capId);
+                const inMemVars = this.variables();
+
+                // Extract backend-persisted __var_sources__ system variable if present
+                const sysSourceEntry = res.data.find(v => (v.variableKey || v.key || '').trim() === '__var_sources__');
+                if (sysSourceEntry) {
+                    if (sysSourceEntry.id) {
+                        this.systemSourceVarIds.set(capId, sysSourceEntry.id);
+                    }
+                    const rawSysVal = sysSourceEntry.variableValue ?? sysSourceEntry.value;
+                    if (rawSysVal && typeof rawSysVal === 'string') {
+                        try {
+                            const parsedBackendSources = JSON.parse(rawSysVal);
+                            if (parsedBackendSources && typeof parsedBackendSources === 'object' && !Array.isArray(parsedBackendSources)) {
+                                sourceMap = { ...parsedBackendSources, ...sourceMap };
+                                this.saveSourceMapForCapsule(capId, sourceMap);
+                            }
+                        } catch {}
+                    }
+                }
+
                 // Filter out internal system variables from the user-facing variables list
                 const userVars: IGlobalVariable[] = res.data
                     .filter(v => {
@@ -183,17 +307,25 @@ export class VariableService {
                     })
                     .map(v => {
                         const key = (v.variableKey || v.key || '').trim();
+                        const keyLower = key.toLowerCase();
                         const val = v.variableValue !== undefined ? v.variableValue : (v.value !== undefined ? v.value : '');
-                        const existing = this.variables().find(
-                            ev => ev.id === v.id || (ev.key || '').trim().toLowerCase() === key.toLowerCase()
+
+                        const existingCached = cachedVars.find(
+                            ev => ev.id === v.id || (ev.key || '').trim().toLowerCase() === keyLower
                         );
+                        const existingInMem = inMemVars.find(
+                            ev => ev.id === v.id || (ev.key || '').trim().toLowerCase() === keyLower
+                        );
+
+                        const resolvedSource = existingInMem?.source ?? existingCached?.source ?? sourceMap[keyLower];
+
                         return {
                             id: v.id,
                             key: key,
-                            value: (val ?? existing?.value ?? ''),
-                            type: v.type ?? existing?.type ?? 'global',
+                            value: (val ?? existingInMem?.value ?? existingCached?.value ?? ''),
+                            type: v.type ?? existingInMem?.type ?? existingCached?.type ?? 'global',
                             enabled: (v.isEnabled !== undefined ? v.isEnabled : (v.enabled !== undefined ? v.enabled : true)),
-                            source: existing?.source
+                            source: resolvedSource
                         };
                     });
 
@@ -215,12 +347,15 @@ export class VariableService {
                     })
                     .map(v => ({
                         ...v,
-                        id: v.id && v.id.length > 8 ? v.id.substring(0, 7) : v.id
+                        id: v.id && v.id.length > 8 ? v.id.substring(0, 7) : v.id,
+                        source: v.source ?? sourceMap[(v.key || '').trim().toLowerCase()]
                     }));
 
                 const finalVars = [...userVars, ...extraLocalVars];
                 this.variables.set(finalVars);
                 this.saveVariables(false, capId);
+                this.reanchorVariableSources(capId);
+
                 if (extraLocalVars.length > 0 && this.authService.isLoggedIn() && isGuid) {
                     this.syncVariablesToBackend(capId);
                 }
@@ -238,6 +373,17 @@ export class VariableService {
         }
         this.isSyncing.set(true);
         try {
+            const capsuleId = targetCapId || this.tabStateService.activeCapsuleId();
+            const isGuid = capsuleId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capsuleId);
+            if (!isGuid) {
+                return;
+            }
+
+            const currentCap = this.tabStateService.capsules().find(c => c.id === capsuleId);
+            if (currentCap?.isLocalOnly) {
+                return;
+            }
+
             const userVars = this.variables().filter(v => !(v.key || '').startsWith('__'));
             const payloadVars: any[] = userVars.map(v => ({
                 id: v.id && v.id.length > 8 ? v.id : null,
@@ -249,10 +395,26 @@ export class VariableService {
                 enabled: v.enabled ?? true
             }));
 
-            const capsuleId = targetCapId || this.tabStateService.activeCapsuleId();
-            const isGuid = capsuleId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capsuleId);
-            if (!isGuid) {
-                return;
+            // Also persist the capsule's variable source map as an internal system variable
+            const sourceMap = this.getSourceMapForCapsule(capsuleId);
+            for (const v of userVars) {
+                const kLower = (v.key || '').trim().toLowerCase();
+                if (kLower && v.source) {
+                    sourceMap[kLower] = { ...v.source };
+                }
+            }
+            if (Object.keys(sourceMap).length > 0) {
+                const sourcesJson = JSON.stringify(sourceMap);
+                const sysId = this.systemSourceVarIds.get(capsuleId) || null;
+                payloadVars.push({
+                    id: sysId && sysId.length > 8 ? sysId : null,
+                    key: '__var_sources__',
+                    variableKey: '__var_sources__',
+                    value: sourcesJson,
+                    variableValue: sourcesJson,
+                    type: 'global',
+                    enabled: false
+                });
             }
 
             const payload = { 
@@ -268,6 +430,10 @@ export class VariableService {
                 const idMap = new Map<string, string>();
                 for (const dbVar of res.data) {
                     const dbKey = (dbVar.variableKey || dbVar.key || '').trim();
+                    if (dbKey === '__var_sources__' && dbVar.id && capsuleId) {
+                        this.systemSourceVarIds.set(capsuleId, dbVar.id);
+                        continue;
+                    }
                     if (dbKey.startsWith('__')) continue;
                     const matched = this.variables().find(
                         v => (v.key || '').trim().toLowerCase() === dbKey.toLowerCase()
@@ -281,6 +447,9 @@ export class VariableService {
                         const newId = idMap.get(v.id);
                         return newId ? { ...v, id: newId } : v;
                     }));
+                    if (capsuleId) {
+                        this.cacheVariablesForCapsule(capsuleId, this.variables());
+                    }
                 }
             }
         } catch (e) {
@@ -314,6 +483,14 @@ export class VariableService {
 
     addVariable(key: string = '', value: string = '', source?: VariableSource, type: 'global' | 'path' = 'global') {
         const trimmedKey = (key || '').trim();
+        const capId = this.tabStateService.activeCapsuleId() || '1';
+
+        if (trimmedKey && source) {
+            const sourceMap = this.getSourceMapForCapsule(capId);
+            sourceMap[trimmedKey.toLowerCase()] = { ...source };
+            this.saveSourceMapForCapsule(capId, sourceMap);
+        }
+
         if (!trimmedKey) {
             const newVar: IGlobalVariable = {
                 id: generateUUID().substring(0, 7),
@@ -336,13 +513,15 @@ export class VariableService {
             this.variables.update(vars => {
                 const updated = [...vars];
                 const existing = updated[existingIndex];
+                const sourceMap = this.getSourceMapForCapsule(capId);
+                const resolvedSource = source !== undefined ? source : (existing.source ?? sourceMap[trimmedKey.toLowerCase()]);
                 updated[existingIndex] = {
                     ...existing,
                     key: trimmedKey,
                     value: value,
                     type: type,
                     enabled: true,
-                    source: source !== undefined ? source : existing.source
+                    source: resolvedSource
                 };
                 return updated;
             });
@@ -361,12 +540,51 @@ export class VariableService {
     }
 
     updateVariable(updatedVar: IGlobalVariable) {
-        this.variables.update(vars => vars.map(v => v.id === updatedVar.id ? updatedVar : v));
+        const capId = this.tabStateService.activeCapsuleId() || '1';
+        const sourceMap = this.getSourceMapForCapsule(capId);
+        const existing = this.variables().find(v => v.id === updatedVar.id);
+        const oldKeyLower = (existing?.key || '').trim().toLowerCase();
+        const newKeyLower = (updatedVar.key || '').trim().toLowerCase();
+
+        // Always preserve existing dynamic source even when the user manually edits the variable value or key
+        const preservedSource = updatedVar.source
+            ?? existing?.source
+            ?? (oldKeyLower ? sourceMap[oldKeyLower] : undefined)
+            ?? (newKeyLower ? sourceMap[newKeyLower] : undefined);
+
+        const finalVar: IGlobalVariable = preservedSource
+            ? { ...updatedVar, source: { ...preservedSource } }
+            : updatedVar;
+
+        let mapUpdated = false;
+        if (oldKeyLower && oldKeyLower !== newKeyLower && sourceMap[oldKeyLower]) {
+            delete sourceMap[oldKeyLower];
+            mapUpdated = true;
+        }
+        if (newKeyLower && finalVar.source) {
+            sourceMap[newKeyLower] = { ...finalVar.source };
+            mapUpdated = true;
+        }
+        if (mapUpdated) {
+            this.saveSourceMapForCapsule(capId, sourceMap);
+        }
+
+        this.variables.update(vars => vars.map(v => v.id === finalVar.id ? finalVar : v));
         this.saveVariables();
     }
 
     removeVariable(id: string) {
+        const toRemove = this.variables().find(v => v.id === id);
         this.variables.update(vars => vars.filter(v => v.id !== id));
+        if (toRemove?.key) {
+            const capId = this.tabStateService.activeCapsuleId() || '1';
+            const sourceMap = this.getSourceMapForCapsule(capId);
+            const kLower = toRemove.key.trim().toLowerCase();
+            if (sourceMap[kLower]) {
+                delete sourceMap[kLower];
+                this.saveSourceMapForCapsule(capId, sourceMap);
+            }
+        }
         this.saveVariables();
     }
 
@@ -374,13 +592,14 @@ export class VariableService {
         if (!oldId || !newId || oldId === newId) return;
         let changed = false;
         this.variables.update(vars => vars.map(v => {
-            if (v.source && v.source.tabId === oldId) {
+            if (v.source && (v.source.tabId === oldId || v.source.requestId === oldId)) {
                 changed = true;
                 return {
                     ...v,
                     source: {
                         ...v.source,
-                        tabId: newId
+                        tabId: v.source.tabId === oldId ? newId : v.source.tabId,
+                        requestId: (v.source.requestId === oldId || !v.source.requestId) ? newId : v.source.requestId
                     }
                 };
             }
@@ -393,6 +612,14 @@ export class VariableService {
 
     urlsMatch(url1?: string, url2?: string): boolean {
         if (!url1 || !url2) return false;
+        // Fast raw comparison (handles unexpanded {{baseUrl}}/path before variables load)
+        const raw1 = url1.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+        const raw2 = url2.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+        if (raw1 === raw2) return true;
+        const rawP1 = raw1.split('?')[0];
+        const rawP2 = raw2.split('?')[0];
+        if (rawP1 && rawP1 === rawP2) return true;
+
         const norm1 = this.normalizeUrl(url1);
         const norm2 = this.normalizeUrl(url2);
         if (norm1 === norm2) return true;
@@ -415,11 +642,27 @@ export class VariableService {
     requestMatchesSource(source: VariableSource, currentTabId: string, requestState?: any, resolvedUrl?: string): boolean {
         if (!source) return false;
 
-        // 1. Direct tabId or request id match
-        if (source.tabId && (source.tabId === currentTabId || (requestState && source.tabId === requestState.id))) {
+        const resolvedSourceTabId = this.tabStateService.resolveTabId(source.tabId);
+        const resolvedSourceReqId = source.requestId ? this.tabStateService.resolveTabId(source.requestId) : undefined;
+        const resolvedCurrentTabId = this.tabStateService.resolveTabId(currentTabId);
+        const currentReqId = requestState?.id ? this.tabStateService.resolveTabId(requestState.id) : undefined;
+
+        // 1. Direct tabId or request id match (including through id redirects)
+        if (resolvedSourceTabId && (
+            resolvedSourceTabId === resolvedCurrentTabId ||
+            resolvedSourceTabId === currentTabId ||
+            (currentReqId && resolvedSourceTabId === currentReqId) ||
+            (requestState?.id && resolvedSourceTabId === requestState.id)
+        )) {
             return true;
         }
-        if (source.requestId && requestState && source.requestId === requestState.id) {
+
+        if (resolvedSourceReqId && (
+            resolvedSourceReqId === resolvedCurrentTabId ||
+            resolvedSourceReqId === currentTabId ||
+            (currentReqId && resolvedSourceReqId === currentReqId) ||
+            (requestState?.id && resolvedSourceReqId === requestState.id)
+        )) {
             return true;
         }
 
@@ -437,8 +680,10 @@ export class VariableService {
         if (source.requestName && requestState?.name) {
             const sn = source.requestName.trim().toLowerCase();
             const rn = requestState.name.trim().toLowerCase();
-            if (sn && rn && sn === rn && sn !== 'new request') {
-                return true;
+            if (sn && rn && sn === rn) {
+                if (sn !== 'new request' || (source.requestUrl && requestState.url && this.urlsMatch(source.requestUrl, requestState.url))) {
+                    return true;
+                }
             }
         }
 
@@ -450,7 +695,8 @@ export class VariableService {
 
         // 1. Direct tabId lookup in active states map
         if (v.source.tabId) {
-            const state = this.tabStateService.getState(v.source.tabId);
+            const resolvedId = this.tabStateService.resolveTabId(v.source.tabId);
+            const state = this.tabStateService.getState(resolvedId) || this.tabStateService.getState(v.source.tabId);
             if (state) return state;
         }
 
@@ -459,7 +705,9 @@ export class VariableService {
         const allStates = this.tabStateService.getAllStates();
         const reqId = v.source.requestId || v.source.tabId;
         if (reqId) {
-            const state = allReqs.find(r => r.id === reqId) || allStates.find(r => r.id === reqId);
+            const resolvedReqId = this.tabStateService.resolveTabId(reqId);
+            const state = allReqs.find(r => r.id === resolvedReqId || r.id === reqId) ||
+                allStates.find(r => r.id === resolvedReqId || r.id === reqId);
             if (state) {
                 v.source.tabId = state.id;
                 if (state.id) v.source.requestId = state.id;
@@ -481,9 +729,22 @@ export class VariableService {
         // 4. Fallback: match by name
         if (v.source.requestName) {
             const sn = v.source.requestName.trim().toLowerCase();
-            if (sn && sn !== 'new request') {
-                const state = allReqs.find(r => r.name?.trim().toLowerCase() === sn) ||
-                    allStates.find(r => r.name?.trim().toLowerCase() === sn);
+            if (sn) {
+                const state = allReqs.find(r => {
+                    const rn = r.name?.trim().toLowerCase();
+                    if (rn !== sn) return false;
+                    if (sn === 'new request') {
+                        return v.source?.requestUrl ? this.urlsMatch(r.url, v.source.requestUrl) : true;
+                    }
+                    return true;
+                }) || allStates.find(r => {
+                    const rn = r.name?.trim().toLowerCase();
+                    if (rn !== sn) return false;
+                    if (sn === 'new request') {
+                        return v.source?.requestUrl ? this.urlsMatch(r.url, v.source.requestUrl) : true;
+                    }
+                    return true;
+                });
                 if (state) {
                     v.source.tabId = state.id;
                     if (state.id) v.source.requestId = state.id;
@@ -495,27 +756,92 @@ export class VariableService {
         return undefined;
     }
 
-    syncVariablesFromResponse(tabId: string, responseBody: any, responseHeaders: any[], requestState?: any, resolvedUrl?: string) {
-        if (responseBody === undefined && (!responseHeaders || responseHeaders.length === 0)) return;
-        let hasChanges = false;
+    reanchorVariableSources(targetCapId?: string): void {
+        const capId = targetCapId || this.tabStateService.activeCapsuleId() || '1';
+        const sourceMap = this.getSourceMapForCapsule(capId);
+        let changed = false;
 
         this.variables.update(vars => {
             return vars.map(v => {
-                if (!v.source) return v;
+                const kLower = (v.key || '').trim().toLowerCase();
+                const src = v.source ?? (kLower ? sourceMap[kLower] : undefined);
+                if (!src) return v;
 
-                const matchesTab = this.requestMatchesSource(v.source, tabId, requestState, resolvedUrl);
-                if (!matchesTab) return v;
+                const workingVar: IGlobalVariable = v.source ? v : { ...v, source: { ...src } };
+                if (!v.source) changed = true;
+
+                const matchedState = this.findStateForVariable(workingVar);
+                if (matchedState && matchedState.id && workingVar.source) {
+                    const resolvedId = this.tabStateService.resolveTabId(matchedState.id);
+                    const oldTabId = workingVar.source.tabId;
+                    const oldReqId = workingVar.source.requestId;
+                    const oldUrl = workingVar.source.requestUrl;
+                    const oldName = workingVar.source.requestName;
+
+                    if (oldTabId !== resolvedId || oldReqId !== resolvedId || (matchedState.url && oldUrl !== matchedState.url) || (matchedState.name && oldName !== matchedState.name)) {
+                        changed = true;
+                        return {
+                            ...workingVar,
+                            source: {
+                                ...workingVar.source,
+                                tabId: resolvedId,
+                                requestId: resolvedId,
+                                requestUrl: matchedState.url || workingVar.source.requestUrl,
+                                requestName: matchedState.name || workingVar.source.requestName
+                            }
+                        };
+                    }
+                }
+                return workingVar;
+            });
+        });
+
+        if (changed) {
+            this.saveVariables(false, capId);
+        }
+    }
+
+    syncVariablesFromResponse(tabId: string, responseBody: any, responseHeaders: any[], requestState?: any, resolvedUrl?: string) {
+        if (responseBody === undefined && (!responseHeaders || responseHeaders.length === 0)) return;
+        const capId = this.tabStateService.activeCapsuleId() || '1';
+        const sourceMap = this.getSourceMapForCapsule(capId);
+        let hasChanges = false;
+        let anchorsChanged = false;
+
+        this.variables.update(vars => {
+            return vars.map(v => {
+                const kLower = (v.key || '').trim().toLowerCase();
+                const src = v.source ?? (kLower ? sourceMap[kLower] : undefined);
+                if (!src) return v;
+
+                const activeSource: VariableSource = { ...src };
+                const matchesTab = this.requestMatchesSource(activeSource, tabId, requestState, resolvedUrl);
+                if (!matchesTab) {
+                    return v.source ? v : { ...v, source: activeSource };
+                }
 
                 // Refresh source anchors so subsequent lookups are instantaneous
                 if (requestState) {
-                    if (requestState.url && !v.source.requestUrl) v.source.requestUrl = requestState.url;
-                    if (requestState.name && !v.source.requestName) v.source.requestName = requestState.name;
-                    if (requestState.id) v.source.requestId = requestState.id;
+                    if (requestState.url && activeSource.requestUrl !== requestState.url) {
+                        activeSource.requestUrl = requestState.url;
+                        anchorsChanged = true;
+                    }
+                    if (requestState.name && activeSource.requestName !== requestState.name) {
+                        activeSource.requestName = requestState.name;
+                        anchorsChanged = true;
+                    }
+                    if (requestState.id && activeSource.requestId !== requestState.id) {
+                        activeSource.requestId = requestState.id;
+                        anchorsChanged = true;
+                    }
                 }
-                v.source.tabId = tabId;
+                if (activeSource.tabId !== tabId) {
+                    activeSource.tabId = tabId;
+                    anchorsChanged = true;
+                }
 
-                if (v.source.type === 'response') {
-                    const prop = v.source.propertyKey?.trim();
+                if (activeSource.type === 'response') {
+                    const prop = activeSource.propertyKey?.trim();
                     let newVal: any = undefined;
 
                     if (prop && responseBody !== undefined && responseBody !== null) {
@@ -533,52 +859,59 @@ export class VariableService {
 
                     if (newVal !== undefined && newVal !== null) {
                         const strVal = typeof newVal === 'object' ? JSON.stringify(newVal) : String(newVal);
-                        if (strVal !== v.value) {
+                        if (strVal !== v.value || !v.source) {
                             hasChanges = true;
-                            return { ...v, value: strVal };
+                            return { ...v, value: strVal, source: activeSource };
                         }
                     }
                 }
-                return v;
+                return anchorsChanged || !v.source ? { ...v, source: activeSource } : v;
             });
         });
 
-        if (hasChanges) {
-            this.saveVariables();
+        if (hasChanges || anchorsChanged) {
+            this.saveVariables(hasChanges);
         }
     }
 
     syncVariablesFromInputs(tabId: string, state: any) {
         if (!state) return;
+        const capId = this.tabStateService.activeCapsuleId() || '1';
+        const sourceMap = this.getSourceMapForCapsule(capId);
         let hasChanges = false;
 
         this.variables.update(vars => {
             return vars.map(v => {
-                if (!v.source) return v;
+                const kLower = (v.key || '').trim().toLowerCase();
+                const src = v.source ?? (kLower ? sourceMap[kLower] : undefined);
+                if (!src) return v;
 
-                const matchesTab = this.requestMatchesSource(v.source, tabId, state);
-                if (!matchesTab) return v;
+                const activeSource: VariableSource = { ...src };
+                const matchesTab = this.requestMatchesSource(activeSource, tabId, state);
+                if (!matchesTab) {
+                    return v.source ? v : { ...v, source: activeSource };
+                }
 
-                if (state.url && !v.source.requestUrl) v.source.requestUrl = state.url;
-                if (state.name && !v.source.requestName) v.source.requestName = state.name;
-                if (state.id) v.source.requestId = state.id;
-                v.source.tabId = tabId;
+                if (state.url && !activeSource.requestUrl) activeSource.requestUrl = state.url;
+                if (state.name && !activeSource.requestName) activeSource.requestName = state.name;
+                if (state.id) activeSource.requestId = state.id;
+                activeSource.tabId = tabId;
 
-                const prop = v.source.propertyKey?.trim();
+                const prop = activeSource.propertyKey?.trim();
 
-                if (v.source.type === 'header' && prop && state.headers) {
+                if (activeSource.type === 'header' && prop && state.headers) {
                     const match = state.headers.find((h: any) => h.key?.trim().toLowerCase() === prop.toLowerCase());
                     if (match && match.value !== undefined && match.value !== v.value) {
                         hasChanges = true;
-                        return { ...v, value: match.value };
+                        return { ...v, value: match.value, source: activeSource };
                     }
-                } else if (v.source.type === 'param' && prop && state.params) {
+                } else if (activeSource.type === 'param' && prop && state.params) {
                     const match = state.params.find((p: any) => p.key?.trim().toLowerCase() === prop.toLowerCase());
                     if (match && match.value !== undefined && match.value !== v.value) {
                         hasChanges = true;
-                        return { ...v, value: match.value };
+                        return { ...v, value: match.value, source: activeSource };
                     }
-                } else if (v.source.type === 'body' && (state.rawBodyJson || state.rawBody)) {
+                } else if (activeSource.type === 'body' && (state.rawBodyJson || state.rawBody)) {
                     const raw = state.rawBodyJson || state.rawBody;
                     let newVal: any = undefined;
                     if (prop) {
@@ -590,12 +923,12 @@ export class VariableService {
                         const strVal = typeof newVal === 'object' ? JSON.stringify(newVal) : String(newVal);
                         if (strVal !== v.value) {
                             hasChanges = true;
-                            return { ...v, value: strVal };
+                            return { ...v, value: strVal, source: activeSource };
                         }
                     }
                 }
 
-                return v;
+                return !v.source ? { ...v, source: activeSource } : v;
             });
         });
 

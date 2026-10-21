@@ -6,6 +6,7 @@ import { SidebarService } from '../../services/sidebar.service';
 import { TabStateService } from '../../services/tab.state.service';
 import { NotificationService } from '../../services/notification.service';
 import { VariableService } from '../../services/variable.service';
+import { AuthService } from '../../services/auth.service';
 import { AboutModalComponent } from '../about.modal.component/about.modal.component';
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
@@ -42,6 +43,7 @@ export class NavbarComponent {
 
     sidebarService = inject(SidebarService);
     tabStateService = inject(TabStateService);
+    authService = inject(AuthService);
     private variableService = inject(VariableService);
     private router = inject(Router);
     private notificationService = inject(NotificationService);
@@ -49,8 +51,20 @@ export class NavbarComponent {
     @ViewChild('createCapsuleModal') createCapsuleModal?: CreateCapsuleModalComponent;
 
     showFileMenu = signal<boolean>(false);
+    showUserMenu = signal<boolean>(false);
     showAboutModal = signal<boolean>(false);
     showHelpModal = signal<boolean>(false);
+
+    toggleUserMenu(event: MouseEvent) {
+        event.stopPropagation();
+        this.showFileMenu.set(false);
+        this.showUserMenu.update(v => !v);
+    }
+
+    openChangePassword() {
+        this.showUserMenu.set(false);
+        this.authService.openChangePasswordModal();
+    }
 
     toggleSidebar() {
         this.sidebarService.toggle();
@@ -68,6 +82,7 @@ export class NavbarComponent {
 
     toggleFileMenu(event: MouseEvent) {
         event.stopPropagation();
+        this.showUserMenu.set(false);
         this.showFileMenu.update(v => !v);
     }
 
@@ -104,8 +119,13 @@ export class NavbarComponent {
             this.notificationService.notify('No active request to save.');
             return;
         }
-        await this.tabStateService.saveToCapsule(activeId);
-        this.notificationService.notify('Capsule, requests, and variables saved successfully!');
+        try {
+            await this.tabStateService.saveToCapsule(activeId);
+            this.notificationService.notify('Capsule, requests, and variables saved successfully!');
+        } catch (e: any) {
+            console.error('Failed to save request/capsule:', e);
+            this.notificationService.notify(e?.error?.message || e?.message || 'Failed to save capsule to cloud.');
+        }
     }
 
     importOpen() {
@@ -165,6 +185,9 @@ export class NavbarComponent {
     onDocumentClick() {
         if (this.showFileMenu()) {
             this.showFileMenu.set(false);
+        }
+        if (this.showUserMenu()) {
+            this.showUserMenu.set(false);
         }
     }
 

@@ -25,18 +25,42 @@ export class ResponseViewerComponent {
     private notificationService = inject(NotificationService);
 
     activeTab = signal('Body');
-    activeMode = signal('Pretty');
+    activeMode = computed<'Pretty' | 'Raw'>(() => {
+        const stateMode = this.tabState()?.responseActiveMode;
+        if (stateMode === 'Pretty' || stateMode === 'Raw') return stateMode;
+        if (typeof localStorage !== 'undefined') {
+            const saved = localStorage.getItem('onsteroids_response_active_mode');
+            if (saved === 'Pretty' || saved === 'Raw') return saved;
+        }
+        return 'Pretty';
+    });
     responseType = signal('JSON');
     responseTypes = signal(['JSON', 'XML']);
     
     wrapStyles = WRAP_STYLE_OPTIONS;
-    wrapStyle = signal<WrapStyle>('pretty');
-    isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
+    wrapStyle = computed<WrapStyle>(() => {
+        const stateStyle = this.tabState()?.responseWrapStyle as WrapStyle | undefined;
+        if (stateStyle) return stateStyle;
+        if (typeof localStorage !== 'undefined') {
+            const saved = localStorage.getItem('onsteroids_response_wrap_style') as WrapStyle | null;
+            if (saved && ['pretty', 'key-field', 'word-wrap', 'collapsed'].includes(saved)) return saved;
+        }
+        return 'pretty';
+    });
+    isWordWrap = computed(() => true);
     wrapResponse = computed(() => this.isWordWrap());
-    wrapConsole = signal(false);
+    wrapConsole = computed<boolean>(() => {
+        const stateWrap = this.tabState()?.consoleWrap;
+        if (stateWrap !== undefined) return stateWrap;
+        if (typeof localStorage !== 'undefined') {
+            return localStorage.getItem('onsteroids_console_wrap') === 'true';
+        }
+        return false;
+    });
 
     tabId = input.required<string>();
     tabState = computed(() => this.tabStateService.getState(this.tabId()));
+    isLoading = computed(() => this.tabState()?.isLoading ?? false);
 
     // ── Derived from active tab state ──────────────────────────────────────
     responseBody = computed(() => this.tabState()?.responseBody ?? null);
@@ -125,25 +149,43 @@ export class ResponseViewerComponent {
     });
 
     setTab(tab: string) { this.activeTab.set(tab); }
-    setMode(mode: string) { this.activeMode.set(mode); }
+    setMode(mode: 'Pretty' | 'Raw') {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('onsteroids_response_active_mode', mode);
+        }
+        const id = this.tabId();
+        if (id) {
+            this.tabStateService.updateState(id, { responseActiveMode: mode }, false);
+        }
+    }
     setResponseType(type: string) { this.responseType.set(type); }
 
     @ViewChild(MonacoEditorComponent) monacoEditor?: MonacoEditorComponent;
 
+    private setWrapStyle(style: WrapStyle) {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('onsteroids_response_wrap_style', style);
+        }
+        const id = this.tabId();
+        if (id) {
+            this.tabStateService.updateState(id, { responseWrapStyle: style }, false);
+        }
+    }
+
     wrapPretty() {
-        this.wrapStyle.set('pretty');
+        this.setWrapStyle('pretty');
     }
 
     wrapKeyField() {
-        this.wrapStyle.set('key-field');
+        this.setWrapStyle('key-field');
     }
 
     wrapSoft() {
-        this.wrapStyle.set('word-wrap');
+        this.setWrapStyle('word-wrap');
     }
 
     wrapCollapsed() {
-        this.wrapStyle.set('collapsed');
+        this.setWrapStyle('collapsed');
     }
 
     addResponseToVariable() {
@@ -198,12 +240,12 @@ export class ResponseViewerComponent {
 
         const lowerKey = targetKey.toLowerCase();
 
-        function search(curr: any, path: string[]): string | null {
+        function search(curr: any, path: string[], matchValue: boolean): string | null {
             if (!curr || typeof curr !== 'object') return null;
 
             if (Array.isArray(curr)) {
                 for (let i = 0; i < curr.length; i++) {
-                    const res = search(curr[i], [...path, String(i)]);
+                    const res = search(curr[i], [...path, String(i)], matchValue);
                     if (res) return res;
                 }
                 return null;
@@ -211,7 +253,7 @@ export class ResponseViewerComponent {
 
             for (const k of Object.keys(curr)) {
                 if (k.toLowerCase() === lowerKey) {
-                    if (targetVal !== undefined && targetVal !== '') {
+                    if (matchValue && targetVal !== undefined && targetVal !== '') {
                         const v = curr[k];
                         const s = typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
                         if (s === targetVal) {
@@ -226,7 +268,7 @@ export class ResponseViewerComponent {
             for (const k of Object.keys(curr)) {
                 const child = curr[k];
                 if (child && typeof child === 'object') {
-                    const res = search(child, [...path, k]);
+                    const res = search(child, [...path, k], matchValue);
                     if (res) return res;
                 }
             }
@@ -234,7 +276,7 @@ export class ResponseViewerComponent {
             return null;
         }
 
-        return search(parsed, []);
+        return search(parsed, [], true) || search(parsed, [], false);
     }
 
     dialogService = inject(DialogService);
@@ -301,6 +343,13 @@ export class ResponseViewerComponent {
     }
 
     toggleConsoleWrap() {
-        this.wrapConsole.update(value => !value);
+        const next = !this.wrapConsole();
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('onsteroids_console_wrap', String(next));
+        }
+        const id = this.tabId();
+        if (id) {
+            this.tabStateService.updateState(id, { consoleWrap: next }, false);
+        }
     }
 }

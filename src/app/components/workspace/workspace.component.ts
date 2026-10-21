@@ -14,6 +14,7 @@ import { NotificationService } from '../../shared/services/notification.service'
 import { LocalStorageService } from '../../shared/services/local.storage.service';
 import { TabStateService } from '../../shared/services/tab.state.service';
 import { DialogService } from '../../shared/services/dialog.service';
+import { RequestExecutionService } from '../../shared/services/request.execution.service';
 
 @Component({
     selector: 'app-workspace',
@@ -46,6 +47,7 @@ export class WorkspaceComponent {
     notificationService = inject(NotificationService);
     tabStateService = inject(TabStateService);
     dialogService = inject(DialogService);
+    private executionService = inject(RequestExecutionService);
 
     requestHeight = signal<number>(450); // Pixel height
     isResizing = signal<boolean>(false);
@@ -63,10 +65,32 @@ export class WorkspaceComponent {
         }
 
         if (this.isBrowser) {
-            const savedExpanded = localStorage.getItem('onsteroids_expanded_example_req');
-            if (savedExpanded) {
-                this.expandedExampleRequestId.set(savedExpanded);
-                this.tabStateService.getExamples(savedExpanded).catch(() => {});
+            const savedSidebarOpen = localStorage.getItem('onsteroids_workspace_sidebar_open');
+            if (savedSidebarOpen !== null) {
+                this.isSidebarOpen.set(savedSidebarOpen !== 'false');
+            }
+
+            const savedExpandedList = localStorage.getItem('onsteroids_expanded_example_reqs');
+            if (savedExpandedList) {
+                try {
+                    const parsed = JSON.parse(savedExpandedList);
+                    if (Array.isArray(parsed)) {
+                        this.expandedExampleRequestIds.set(new Set(parsed));
+                        if (parsed.length > 0) {
+                            this.expandedExampleRequestId.set(parsed[parsed.length - 1]);
+                        }
+                        for (const reqId of parsed) {
+                            this.tabStateService.getExamples(reqId).catch(() => {});
+                        }
+                    }
+                } catch { }
+            } else {
+                const savedExpanded = localStorage.getItem('onsteroids_expanded_example_req');
+                if (savedExpanded) {
+                    this.expandedExampleRequestId.set(savedExpanded);
+                    this.expandedExampleRequestIds.set(new Set([savedExpanded]));
+                    this.tabStateService.getExamples(savedExpanded).catch(() => {});
+                }
             }
         }
     }
@@ -111,7 +135,13 @@ export class WorkspaceComponent {
     }
 
     toggleSidebar() {
-        this.isSidebarOpen.update(v => !v);
+        this.isSidebarOpen.update(v => {
+            const next = !v;
+            if (this.isBrowser) {
+                localStorage.setItem('onsteroids_workspace_sidebar_open', String(next));
+            }
+            return next;
+        });
     }
 
     @ViewChild('createCapsuleModal') createCapsuleModal?: CreateCapsuleModalComponent;
@@ -217,7 +247,12 @@ export class WorkspaceComponent {
 
     // Request Examples
     expandedExampleRequestId = signal<string | null>(null);
+    expandedExampleRequestIds = signal<Set<string>>(new Set());
     requestExamplesMap = this.tabStateService.requestExamplesMap;
+
+    isRequestExpanded(requestId: string): boolean {
+        return this.expandedExampleRequestIds().has(requestId) || this.expandedExampleRequestId() === requestId;
+    }
 
     isExamplesLoading(requestId: string): boolean {
         return this.tabStateService.isExamplesLoading(requestId);
@@ -225,15 +260,28 @@ export class WorkspaceComponent {
 
     async toggleExamples(requestId: string, event: Event) {
         event.stopPropagation();
-        if (this.expandedExampleRequestId() === requestId) {
-            this.expandedExampleRequestId.set(null);
+        const currentSet = new Set(this.expandedExampleRequestIds());
+        if (currentSet.has(requestId) || this.expandedExampleRequestId() === requestId) {
+            currentSet.delete(requestId);
+            this.expandedExampleRequestIds.set(currentSet);
+            const remaining = Array.from(currentSet);
+            this.expandedExampleRequestId.set(remaining.length > 0 ? remaining[remaining.length - 1] : null);
             if (this.isBrowser) {
-                localStorage.removeItem('onsteroids_expanded_example_req');
+                localStorage.setItem('onsteroids_expanded_example_reqs', JSON.stringify(remaining));
+                if (remaining.length > 0) {
+                    localStorage.setItem('onsteroids_expanded_example_req', remaining[remaining.length - 1]);
+                } else {
+                    localStorage.removeItem('onsteroids_expanded_example_req');
+                }
             }
             return;
         }
+        currentSet.add(requestId);
+        this.expandedExampleRequestIds.set(currentSet);
         this.expandedExampleRequestId.set(requestId);
         if (this.isBrowser) {
+            const list = Array.from(currentSet);
+            localStorage.setItem('onsteroids_expanded_example_reqs', JSON.stringify(list));
             localStorage.setItem('onsteroids_expanded_example_req', requestId);
         }
         await this.tabStateService.getExamples(requestId);
@@ -243,9 +291,20 @@ export class WorkspaceComponent {
         event.stopPropagation();
         try {
             const snapshot = typeof example.requestSnapshot === 'string' ? JSON.parse(example.requestSnapshot) : example.requestSnapshot;
-            const targetId = example.requestId || this.tabStateService.activeTabId();
+            const rawTargetId = example.requestId || this.tabStateService.activeTabId() || '';
+            const targetId = this.tabStateService.resolveTabId(rawTargetId);
             if (targetId) {
-                this.tabStateService.updateState(targetId, snapshot);
+                // 1. Cancel any active in-flight request execution for this tab so its live response won't clobber this example
+                this.executionService.cancelRequest(targetId);
+                // 2. Advance execution token to reject any trailing async responses
+                this.tabStateService.nextExecutionToken(targetId);
+
+                // 3. Load example snapshot with isLoading: false and isDirty: false
+                this.tabStateService.updateState(targetId, {
+                    ...snapshot,
+                    isLoading: false,
+                    isDirty: false
+                });
                 this.tabStateService.setActiveTab(targetId);
                 this.notificationService.notify(`Loaded example "${example.name}".`);
             }
@@ -290,13 +349,17 @@ export class WorkspaceComponent {
                 event.preventDefault();
                 const activeId = this.tabStateService.activeTabId();
                 if (activeId) {
-                    this.tabStateService.saveToCapsule(activeId);
-                    if (!this.authService.isLoggedIn()) {
-                        this.authService.openAuthModal();
-                        this.notificationService.notify('Saved locally! Sign in to sync with cloud.');
-                    } else {
-                        this.notificationService.notify('Capsule, requests, and variables saved successfully!');
-                    }
+                    this.tabStateService.saveToCapsule(activeId).then(() => {
+                        if (!this.authService.isLoggedIn()) {
+                            this.authService.openAuthModal();
+                            this.notificationService.notify('Saved locally! Sign in to sync with cloud.');
+                        } else {
+                            this.notificationService.notify('Capsule, requests, and variables saved successfully!');
+                        }
+                    }).catch(e => {
+                        console.error('Failed to save request/capsule:', e);
+                        this.notificationService.notify(e?.error?.message || e?.message || 'Failed to save capsule to cloud.');
+                    });
                 }
             } else if (event.key.toLowerCase() === 'z') {
                 if (event.shiftKey) {

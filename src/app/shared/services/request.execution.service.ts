@@ -27,49 +27,68 @@ export class RequestExecutionService {
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
 
     cancelRequest(tabId: string) {
-        this.tabStateService.updateState(tabId, { isLoading: false });
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        this.tabStateService.nextExecutionToken(effectiveId);
+        this.tabStateService.updateState(effectiveId, { isLoading: false });
 
-        const token = this.cancellationTokens.get(tabId);
+        const token = this.cancellationTokens.get(effectiveId) || this.cancellationTokens.get(tabId);
         if (token) {
             token.cancelled = true;
             if (token.cancelFn) token.cancelFn();
+            this.cancellationTokens.delete(effectiveId);
             this.cancellationTokens.delete(tabId);
         }
     }
 
     async executeRequest(tabId: string, isAutoAuthRetry: boolean = false, chainDepth: number = 0): Promise<void> {
-        const state = this.tabStateService.getState(tabId);
-        if (!state || state.id !== tabId) return;
+        const effectiveTabId = this.tabStateService.resolveTabId(tabId);
+        const state = this.tabStateService.getState(effectiveTabId);
+        if (!state) return;
 
         let originalTabId: string | null | undefined;
         if (isAutoAuthRetry) {
             originalTabId = this.tabStateService.activeTabId();
-            if (originalTabId && originalTabId !== tabId) {
-                this.tabStateService.setActiveTab(tabId);
+            if (originalTabId && originalTabId !== effectiveTabId) {
+                this.tabStateService.setActiveTab(effectiveTabId);
                 // Yield so UI renders
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
 
         const cancelToken = { cancelled: false, cancelFn: undefined as (() => void) | undefined };
-        this.cancellationTokens.set(tabId, cancelToken);
+        this.cancellationTokens.set(effectiveTabId, cancelToken);
+        if (effectiveTabId !== tabId) {
+            this.cancellationTokens.set(tabId, cancelToken);
+        }
 
-        // Set Tab to Loading
-        this.tabStateService.updateState(tabId, { isLoading: true });
+        // Generate a new execution token for fencing against race conditions
+        const executionToken = this.tabStateService.nextExecutionToken(effectiveTabId);
+
+        // Reset Tab to Loading and clear previous response immediately so stale example/live response won't linger
+        this.tabStateService.updateState(effectiveTabId, {
+            isLoading: true,
+            responseBody: null,
+            responseStatus: null,
+            responseTime: null,
+            responseSize: null,
+            responseHeaders: [],
+            responseCookies: [],
+            testResults: []
+        });
 
         // Yield to the event loop to allow Angular to paint the "Cancel" button before heavy synchronous work
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        if (cancelToken.cancelled) return;
+        if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
 
         if (!navigator.onLine) {
-            this.tabStateService.updateState(tabId, { isLoading: false });
+            this.tabStateService.updateState(effectiveTabId, { isLoading: false });
             this.notificationService.notify('You are offline. Request will automatically execute when the connection is restored.');
             
             const handleOnline = () => {
                 window.removeEventListener('online', handleOnline);
                 this.notificationService.notify('Connection restored. Executing request...');
-                this.executeRequest(tabId, isAutoAuthRetry, chainDepth);
+                this.executeRequest(effectiveTabId, isAutoAuthRetry, chainDepth);
             };
             window.addEventListener('online', handleOnline);
             return;
@@ -188,7 +207,7 @@ export class RequestExecutionService {
                     autoEncryptHeaders: freshState.encryption?.autoEncryptHeaders || false
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
-                if (cancelToken.cancelled) return;
+                if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 encryptionLogs = encResult.logs || '';
                 if (encResult.logs) preRequestLogs += 'Encryption Logs:\n' + encResult.logs + '\n\n';
 
@@ -205,12 +224,14 @@ export class RequestExecutionService {
                     }
                     params = encResult.context.params || params;
                 } else if (encResult.error) {
+                    if (!this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                     encryptionLogs = `Encryption Error: ${encResult.error}`;
                     preRequestLogs += `\nEncryption Error: ${encResult.error}\n\n`;
                     console.error(' [Encryption] ERROR - Encryption script failed:', encResult.error);
 
                     const errorStr = `Encryption Script Error:\n${encResult.error}`;
-                    this.tabStateService.updateState(tabId, {
+                    const targetId = this.tabStateService.resolveTabId(effectiveTabId);
+                    this.tabStateService.updateState(targetId, {
                         isLoading: false,
                         responseStatus: 400,
                         responseBody: errorStr,
@@ -220,6 +241,7 @@ export class RequestExecutionService {
                         responseTime: Math.floor(performance.now() - startTime),
                         scripts: { ...freshState.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
                     });
+                    this.cancellationTokens.delete(effectiveTabId);
                     this.cancellationTokens.delete(tabId);
                     return;
                 }
@@ -234,7 +256,7 @@ export class RequestExecutionService {
                     params
                 };
                 const result = await this.sandboxService.executeScript(preScriptCode, context);
-                if (cancelToken.cancelled) return;
+                if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 preRequestLogs += result.logs || '';
 
                 if (result.success && result.context) {
@@ -242,9 +264,11 @@ export class RequestExecutionService {
                     body = result.context.body !== undefined ? result.context.body : body;
                     params = result.context.params || params;
                 } else if (result.error) {
+                    if (!this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                     preRequestLogs += `\nError: ${result.error}`;
                     const errorStr = `Pre-Request Script Error:\n${result.error}`;
-                    this.tabStateService.updateState(tabId, {
+                    const targetId = this.tabStateService.resolveTabId(effectiveTabId);
+                    this.tabStateService.updateState(targetId, {
                         isLoading: false,
                         responseStatus: 400,
                         responseBody: errorStr,
@@ -254,6 +278,7 @@ export class RequestExecutionService {
                         responseTime: Math.floor(performance.now() - startTime),
                         scripts: { ...freshState.scripts, preRequestConsole: preRequestLogs, encryptionConsole: encryptionLogs }
                     });
+                    this.cancellationTokens.delete(effectiveTabId);
                     this.cancellationTokens.delete(tabId);
                     return;
                 }
@@ -456,11 +481,13 @@ export class RequestExecutionService {
                 }
             } catch (err: any) {
                 if (err.message === 'Request cancelled') {
-                    this.tabStateService.updateState(tabId, { isLoading: false });
+                    const targetId = this.tabStateService.resolveTabId(effectiveTabId);
+                    this.tabStateService.updateState(targetId, { isLoading: false });
                     return; // Stop processing
                 }
                 httpResponse = err as HttpErrorResponse;
             } finally {
+                this.cancellationTokens.delete(effectiveTabId);
                 this.cancellationTokens.delete(tabId);
             }
 
@@ -633,6 +660,13 @@ export class RequestExecutionService {
                 }
             }
 
+            // Check if this execution is still current before committing results
+            if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) {
+                return;
+            }
+
+            const targetId = this.tabStateService.resolveTabId(effectiveTabId);
+
             // 11. Update Tab State
             const responseData = {
                 responseBody: responseBodyParsed,
@@ -649,21 +683,24 @@ export class RequestExecutionService {
                 }
             };
 
-            this.tabStateService.updateState(tabId, {
+            this.tabStateService.updateState(targetId, {
                 isLoading: false,
                 ...responseData
             });
 
-            // Dynamically sync any variables sourced from this request's response or headers
+            const latestReqState = this.tabStateService.getState(targetId) || freshState;
+
+            // Dynamically sync any variables sourced from this request's inputs (body, headers, params) or response
+            this.variableService.syncVariablesFromInputs(targetId, latestReqState);
             this.variableService.syncVariablesFromResponse(
-                tabId,
+                targetId,
                 responseBodyParsed,
                 responseData.responseHeaders,
-                freshState,
+                latestReqState,
                 resolvedUrl
             );
 
-            this.tabStateService.cacheResponse(tabId, freshState.url, {
+            this.tabStateService.cacheResponse(targetId, freshState.url, {
                 responseBody: responseBodyParsed,
                 responseStatus: status,
                 responseTime,

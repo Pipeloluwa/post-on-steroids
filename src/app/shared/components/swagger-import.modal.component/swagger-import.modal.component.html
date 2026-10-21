@@ -19,8 +19,8 @@
 
         <label class="mt-3 flex items-center gap-2 cursor-pointer select-none text-xs text-(--postonsteroids-text-secondary)">
             <input type="checkbox" [checked]="saveToBackend()" (change)="saveToBackend.set($any($event.target).checked)"
-                class="rounded border-(--postonsteroids-border) text-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30" />
-            <span>Save imported Swagger capsule to backend database</span>
+                class="cursor-pointer rounded border-(--postonsteroids-border) text-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30" />
+            <span class="cursor-pointer">Save imported Swagger capsule to backend database</span>
         </label>
 
         @if (statusMessage()) {

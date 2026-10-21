@@ -3,8 +3,8 @@
     <div class="absolute -top-32 -left-32 w-96 h-96 bg-(--postonsteroids-accent)/15 rounded-full blur-3xl pointer-events-none"></div>
     <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-(--postonsteroids-accent)/10 rounded-full blur-3xl pointer-events-none"></div>
 
-    <div class="w-full max-w-[420px] bg-(--postonsteroids-bg-secondary) rounded-2xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden relative z-10 transition-all">
-            <!-- Brand Header -->
+    <div class="w-full max-w-[440px] bg-(--postonsteroids-bg-secondary) rounded-2xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden relative z-10 transition-all">
+        <!-- Brand Header -->
         <div class="p-8 pb-6 border-b border-(--postonsteroids-border) text-center">
             <div class="inline-flex items-center justify-center mb-4">
                 <img src="icons/onsteroids-icon.svg" alt="OnSteroid" width="56" height="56" loading="eager" fetchpriority="high" class="size-14 rounded-2xl shadow-lg shadow-(--postonsteroids-accent)/25" />
@@ -13,12 +13,17 @@
                 OnSteroid<span class="text-(--postonsteroids-accent)">.</span>
             </h1>
             <p class="text-[13px] font-medium text-(--postonsteroids-text-secondary) mt-1">
-                {{ authService.isOtpSent() ? 'Verify your identity' : 'Sign in to sync your capsules, or continue as guest' }}
+                @switch (authService.authStep()) {
+                    @case ('otp') { Verify your identity }
+                    @case ('create-password') { {{ authService.isPasswordResetFlow() ? 'Set a new password for your account' : 'Create your account password' }} }
+                    @case ('login-password') { Welcome back — enter your password }
+                    @default { Sign in to sync your capsules, or continue as guest }
+                }
             </p>
         </div>
 
         <!-- Form Body -->
-        <div class="p-8 pt-6 space-y-6">
+        <div class="p-8 pt-6 space-y-5">
             <!-- Error Banner -->
             @if (authService.errorMessage()) {
             <div class="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-[13px] flex items-start gap-2.5 animate-in fade-in">
@@ -35,86 +40,288 @@
             </div>
             }
 
-            @if (!authService.isOtpSent()) {
-            <!-- Step 1: Email Form -->
-            <form (ngSubmit)="onSendOtp()" class="space-y-4">
-                <div>
-                    <label for="user-email" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-2">
-                        Work or Personal Email
-                    </label>
-                    <div class="relative">
-                        <input id="user-email" type="email" [ngModel]="authService.userEmail()"
-                            (ngModelChange)="authService.userEmail.set($event)" name="email" required
-                            placeholder="name@company.com"
-                            autocomplete="email"
-                            class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
-                    </div>
-                </div>
-
-                <button type="submit" [disabled]="authService.isAuthenticating() || !authService.userEmail()"
-                    class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
-                    @if (authService.isAuthenticating()) {
-                    <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Sending Code...</span>
-                    } @else {
-                    <span>Send Login Code</span>
-                    <mat-icon class="text-[18px]! size-[18px]!">arrow_forward</mat-icon>
-                    }
-                </button>
-            </form>
-            } @else {
-            <!-- Step 2: OTP Verification Form -->
-            <form (ngSubmit)="onAuthenticate()" class="space-y-4">
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <label for="otp-input" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted)">
-                            6-Digit Security Code
+            @switch (authService.authStep()) {
+                @case ('email') {
+                <!-- Step 1: Email Form -->
+                <form (ngSubmit)="onSendOtp(false)" class="space-y-4">
+                    <div>
+                        <label for="user-email" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-2">
+                            Work or Personal Email
                         </label>
-                        <button type="button" (click)="onBackToEmail()"
+                        <div class="relative">
+                            <input id="user-email" type="email" [ngModel]="authService.userEmail()"
+                                (ngModelChange)="authService.userEmail.set($event)" name="email" required
+                                placeholder="name@company.com"
+                                autocomplete="email"
+                                class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
+                        </div>
+                    </div>
+
+                    <button type="submit" [disabled]="authService.isAuthenticating() || !authService.userEmail()"
+                        class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
+                        @if (authService.isAuthenticating()) {
+                        <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Checking Account...</span>
+                        } @else {
+                        <span>Continue</span>
+                        <mat-icon class="text-[18px]! size-[18px]!">arrow_forward</mat-icon>
+                        }
+                    </button>
+
+                    @if (authService.userEmail()) {
+                    <div class="text-center pt-1">
+                        <button type="button" (click)="onForgotPassword()" [disabled]="authService.isAuthenticating()"
                             class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                            Forgot your password? Reset via email OTP
+                        </button>
+                    </div>
+                    }
+                </form>
+                }
+
+                @case ('otp') {
+                <!-- Step 2: OTP Verification Form -->
+                <form (ngSubmit)="onAuthenticate()" class="space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="otp-input" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                                6-Digit Security Code
+                            </label>
+                            <button type="button" (click)="onBackToEmail()"
+                                class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                                Change email
+                            </button>
+                        </div>
+                        <div class="relative">
+                            <input id="otp-input" [type]="isOtpMasked() ? 'password' : 'text'" [ngModel]="authService.otp()"
+                                (input)="onOtpInput($event)" name="otp" required maxlength="6"
+                                inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
+                                placeholder="••••••"
+                                class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-12 text-[22px] font-mono text-center tracking-[0.5em] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
+                            <button type="button" (click)="toggleOtpMask()"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer flex items-center justify-center"
+                                [title]="isOtpMasked() ? 'Show verification code' : 'Hide verification code'"
+                                aria-label="Toggle OTP visibility">
+                                <mat-icon class="text-[18px]! size-[18px]!">{{ isOtpMasked() ? 'visibility' : 'visibility_off' }}</mat-icon>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between mt-2 text-[11px]">
+                            <span class="text-(--postonsteroids-text-muted)">
+                                Sent to <strong class="text-(--postonsteroids-text-secondary)">{{ authService.userEmail() }}</strong>
+                            </span>
+                            <span [class.text-emerald-400]="authService.otp().length === 6"
+                                  [class.text-(--postonsteroids-text-muted)]="authService.otp().length < 6"
+                                  class="font-mono font-medium">
+                                {{ authService.otp().length }}/6 digits
+                            </span>
+                        </div>
+                    </div>
+
+                    @if (authService.isAuthenticating()) {
+                    <div class="h-12 rounded-xl bg-(--postonsteroids-accent)/10 border border-(--postonsteroids-accent)/30 flex items-center justify-center gap-x-2.5 text-(--postonsteroids-accent) text-xs font-semibold animate-in fade-in">
+                        <div class="w-4 h-4 border-2 border-(--postonsteroids-accent)/30 border-t-(--postonsteroids-accent) rounded-full animate-spin"></div>
+                        <span>Verifying code...</span>
+                    </div>
+                    }
+
+                    <div class="pt-2 text-center">
+                        <button type="button" (click)="onSendOtp(true)" [disabled]="authService.isAuthenticating()"
+                            class="text-[12px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline transition-colors cursor-pointer">
+                            Didn't receive code? Resend
+                        </button>
+                    </div>
+                </form>
+                }
+
+                @case ('create-password') {
+                <!-- Step 3: Create Account Password & Confirm Password Form -->
+                @let pv = authService.passwordValidation();
+                <form (ngSubmit)="onCompleteAccountCreation()" class="space-y-4">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-(--postonsteroids-text-muted)">
+                            Account: <strong class="text-(--postonsteroids-text-primary)">{{ authService.userEmail() }}</strong>
+                        </span>
+                        <button type="button" (click)="onBackToEmail()"
+                            class="text-(--postonsteroids-accent) hover:underline cursor-pointer">
                             Change email
                         </button>
                     </div>
-                    <div class="relative">
-                        <input id="otp-input" [type]="isOtpMasked() ? 'password' : 'text'" [ngModel]="authService.otp()"
-                            (input)="onOtpInput($event)" name="otp" required maxlength="6"
-                            inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code"
-                            placeholder="••••••"
-                            class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-12 text-[22px] font-mono text-center tracking-[0.5em] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
-                        <button type="button" (click)="toggleOtpMask()"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer flex items-center justify-center"
-                            [title]="isOtpMasked() ? 'Show verification code' : 'Hide verification code'"
-                            aria-label="Toggle OTP visibility">
-                            <mat-icon class="text-[18px]! size-[18px]!">{{ isOtpMasked() ? 'visibility' : 'visibility_off' }}</mat-icon>
-                        </button>
-                    </div>
-                    <div class="flex items-center justify-between mt-2 text-[11px]">
-                        <span class="text-(--postonsteroids-text-muted)">
-                            Sent to <strong class="text-(--postonsteroids-text-secondary)">{{ authService.userEmail() }}</strong>
-                        </span>
-                        <span [class.text-emerald-400]="authService.otp().length === 6"
-                              [class.text-(--postonsteroids-text-muted)]="authService.otp().length < 6"
-                              class="font-mono font-medium">
-                            {{ authService.otp().length }}/6 digits
-                        </span>
-                    </div>
-                </div>
 
-                @if (authService.isAuthenticating()) {
-                <div class="h-12 rounded-xl bg-(--postonsteroids-accent)/10 border border-(--postonsteroids-accent)/30 flex items-center justify-center gap-x-2.5 text-(--postonsteroids-accent) text-xs font-semibold animate-in fade-in">
-                    <div class="w-4 h-4 border-2 border-(--postonsteroids-accent)/30 border-t-(--postonsteroids-accent) rounded-full animate-spin"></div>
-                    <span>Verifying code & entering workspace...</span>
-                </div>
+                    <!-- Password Field -->
+                    <div>
+                        <label for="create-password-input" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-1.5">
+                            Create Password
+                        </label>
+                        <div class="relative">
+                            <input id="create-password-input" [type]="isPasswordMasked() ? 'password' : 'text'"
+                                [ngModel]="authService.password()" (ngModelChange)="authService.password.set($event)"
+                                name="password" required autocomplete="new-password"
+                                placeholder="Enter a strong password"
+                                class="w-full h-11 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl pl-4 pr-11 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
+                            <button type="button" (click)="togglePasswordMask()"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer flex items-center justify-center"
+                                [title]="isPasswordMasked() ? 'Show password' : 'Hide password'"
+                                aria-label="Toggle password visibility">
+                                <mat-icon class="text-[18px]! size-[18px]!">{{ isPasswordMasked() ? 'visibility' : 'visibility_off' }}</mat-icon>
+                            </button>
+                        </div>
+
+                        <!-- Strength Meter -->
+                        @if (authService.password().length > 0) {
+                        <div class="mt-2 space-y-1">
+                            <div class="flex items-center justify-between text-[11px]">
+                                <span class="text-(--postonsteroids-text-muted)">Password strength</span>
+                                <span class="font-semibold"
+                                      [class.text-red-400]="pv.passedCount <= 2"
+                                      [class.text-amber-400]="pv.passedCount === 3"
+                                      [class.text-sky-400]="pv.passedCount === 4"
+                                      [class.text-emerald-400]="pv.passedCount === 5">
+                                    {{ pv.strengthLabel }}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-5 gap-1 h-1.5">
+                                @for (step of [1, 2, 3, 4, 5]; track step) {
+                                <div class="rounded-full transition-colors duration-200"
+                                     [class.bg-(--postonsteroids-border)]="pv.passedCount < step"
+                                     [class.bg-red-500]="pv.passedCount >= step && pv.passedCount <= 2"
+                                     [class.bg-amber-400]="pv.passedCount >= step && pv.passedCount === 3"
+                                     [class.bg-sky-400]="pv.passedCount >= step && pv.passedCount === 4"
+                                     [class.bg-emerald-500]="pv.passedCount >= step && pv.passedCount === 5"></div>
+                                }
+                            </div>
+                        </div>
+                        }
+                    </div>
+
+                    <!-- Confirm Password Field -->
+                    <div>
+                        <label for="confirm-password-input" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-1.5">
+                            Confirm Password
+                        </label>
+                        <div class="relative">
+                            <input id="confirm-password-input" [type]="isConfirmPasswordMasked() ? 'password' : 'text'"
+                                [ngModel]="authService.confirmPassword()" (ngModelChange)="authService.confirmPassword.set($event)"
+                                name="confirmPassword" required autocomplete="new-password"
+                                placeholder="Re-enter your password"
+                                class="w-full h-11 bg-(--postonsteroids-bg-tertiary) border rounded-xl pl-4 pr-11 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:ring-2 transition-all"
+                                [class.border-(--postonsteroids-border)]="!authService.confirmPassword()"
+                                [class.border-emerald-500/60]="authService.confirmPassword() && pv.passwordsMatch"
+                                [class.border-red-500/60]="authService.confirmPassword() && !pv.passwordsMatch"
+                                [class.focus:border-(--postonsteroids-accent)]="!authService.confirmPassword()"
+                                [class.focus:ring-(--postonsteroids-accent)/20]="!authService.confirmPassword()" />
+                            <button type="button" (click)="toggleConfirmPasswordMask()"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer flex items-center justify-center"
+                                [title]="isConfirmPasswordMasked() ? 'Show confirm password' : 'Hide confirm password'"
+                                aria-label="Toggle confirm password visibility">
+                                <mat-icon class="text-[18px]! size-[18px]!">{{ isConfirmPasswordMasked() ? 'visibility' : 'visibility_off' }}</mat-icon>
+                            </button>
+                        </div>
+                        @if (authService.confirmPassword().length > 0) {
+                        <div class="mt-1.5 flex items-center gap-1.5 text-[11px]"
+                             [class.text-emerald-400]="pv.passwordsMatch"
+                             [class.text-red-400]="!pv.passwordsMatch">
+                            <mat-icon class="text-[14px]! size-[14px]!">{{ pv.passwordsMatch ? 'check_circle' : 'cancel' }}</mat-icon>
+                            <span>{{ pv.passwordsMatch ? 'Passwords match' : 'Passwords do not match' }}</span>
+                        </div>
+                        }
+                    </div>
+
+                    <!-- Password Rules Checklist -->
+                    <div class="p-3 rounded-xl bg-(--postonsteroids-bg-tertiary)/70 border border-(--postonsteroids-border)/70 space-y-1.5 text-[11px]">
+                        <div class="font-semibold text-(--postonsteroids-text-secondary) mb-1">Password requirements:</div>
+                        <div class="grid grid-cols-2 gap-x-2 gap-y-1.5">
+                            <div class="flex items-center gap-1.5" [class.text-emerald-400]="pv.minLength" [class.text-(--postonsteroids-text-muted)]="!pv.minLength">
+                                <mat-icon class="text-[14px]! size-[14px]! shrink-0">{{ pv.minLength ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                                <span>8+ characters</span>
+                            </div>
+                            <div class="flex items-center gap-1.5" [class.text-emerald-400]="pv.hasUpper" [class.text-(--postonsteroids-text-muted)]="!pv.hasUpper">
+                                <mat-icon class="text-[14px]! size-[14px]! shrink-0">{{ pv.hasUpper ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                                <span>Uppercase (A-Z)</span>
+                            </div>
+                            <div class="flex items-center gap-1.5" [class.text-emerald-400]="pv.hasLower" [class.text-(--postonsteroids-text-muted)]="!pv.hasLower">
+                                <mat-icon class="text-[14px]! size-[14px]! shrink-0">{{ pv.hasLower ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                                <span>Lowercase (a-z)</span>
+                            </div>
+                            <div class="flex items-center gap-1.5" [class.text-emerald-400]="pv.hasNumber" [class.text-(--postonsteroids-text-muted)]="!pv.hasNumber">
+                                <mat-icon class="text-[14px]! size-[14px]! shrink-0">{{ pv.hasNumber ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                                <span>Number (0-9)</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 col-span-2" [class.text-emerald-400]="pv.hasSpecial" [class.text-(--postonsteroids-text-muted)]="!pv.hasSpecial">
+                                <mat-icon class="text-[14px]! size-[14px]! shrink-0">{{ pv.hasSpecial ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                                <span>Special character (!&#64;#$%^&amp;*)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" [disabled]="authService.isAuthenticating() || !pv.isValid"
+                        class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
+                        @if (authService.isAuthenticating()) {
+                        <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Creating Account...</span>
+                        } @else {
+                        <span>{{ authService.isPasswordResetFlow() ? 'Save Password & Sign In' : 'Create Account & Sign In' }}</span>
+                        <mat-icon class="text-[18px]! size-[18px]!">check_circle</mat-icon>
+                        }
+                    </button>
+                </form>
                 }
 
-                <div class="pt-2 text-center">
-                    <button type="button" (click)="onSendOtp()" [disabled]="authService.isAuthenticating()"
-                        class="text-[12px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline transition-colors cursor-pointer">
-                        Didn't receive code? Resend
+                @case ('login-password') {
+                <!-- Step 4: Returning User Password Sign-In Form -->
+                <form (ngSubmit)="onLoginWithPassword()" class="space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="login-password-input" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                                Password
+                            </label>
+                            <button type="button" (click)="onBackToEmail()"
+                                class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                                Change email
+                            </button>
+                        </div>
+                        <div class="mb-2.5 text-[12px] text-(--postonsteroids-text-secondary)">
+                            Signing in as <strong class="text-(--postonsteroids-text-primary)">{{ authService.userEmail() }}</strong>
+                        </div>
+                        <div class="relative">
+                            <input id="login-password-input" [type]="isPasswordMasked() ? 'password' : 'text'"
+                                [ngModel]="authService.password()" (ngModelChange)="authService.password.set($event)"
+                                name="loginPassword" required autocomplete="current-password"
+                                placeholder="Enter your password"
+                                class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl pl-4 pr-11 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
+                            <button type="button" (click)="togglePasswordMask()"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer flex items-center justify-center"
+                                [title]="isPasswordMasked() ? 'Show password' : 'Hide password'"
+                                aria-label="Toggle password visibility">
+                                <mat-icon class="text-[18px]! size-[18px]!">{{ isPasswordMasked() ? 'visibility' : 'visibility_off' }}</mat-icon>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" [disabled]="authService.isAuthenticating() || !authService.password()"
+                        class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
+                        @if (authService.isAuthenticating()) {
+                        <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Signing In...</span>
+                        } @else {
+                        <span>Sign In</span>
+                        <mat-icon class="text-[18px]! size-[18px]!">login</mat-icon>
+                        }
                     </button>
-                </div>
-            </form>
+
+                    <div class="flex items-center justify-between pt-1 text-[12px]">
+                        <button type="button" (click)="onForgotPassword()" [disabled]="authService.isAuthenticating()"
+                            class="text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                            Forgot password?
+                        </button>
+                        <button type="button" (click)="onSignInWithOtpInstead()" [disabled]="authService.isAuthenticating()"
+                            class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline cursor-pointer">
+                            Sign in with OTP code
+                        </button>
+                    </div>
+                </form>
+                }
             }
+
             <!-- Continue without logging in -->
             <div class="pt-2 border-t border-(--postonsteroids-border)/60">
                 <button type="button" (click)="continueAsGuest()"

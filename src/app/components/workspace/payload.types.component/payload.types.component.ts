@@ -378,7 +378,15 @@ export class PayloadTypesComponent {
   }
 
   // State for Auth
-  isTokenVisible = signal(false);
+  tokenVisibilityOverride = signal<boolean | null>(null);
+  isTokenVisible = computed(() => {
+    const override = this.tokenVisibilityOverride();
+    if (override !== null) {
+      return override;
+    }
+    const token = (this.auth()?.token ?? '').trimStart();
+    return token.startsWith('{');
+  });
   isRunningEncryptionScript = signal(false);
 
   tabId = input.required<string>();
@@ -411,6 +419,7 @@ export class PayloadTypesComponent {
     const state = this.tabState();
     this.variableService.openAddModal(key || '', value || '', {
       tabId: this.tabId(),
+      requestId: state?.id,
       requestName: state?.name,
       requestUrl: state?.url,
       type,
@@ -504,13 +513,21 @@ export class PayloadTypesComponent {
     this.tabStateService.updateState(this.tabId(), { auth: updated });
   }
   updateAuth(field: keyof Omit<AuthState, 'type'>, val: string) {
+    if (field === 'token') {
+      const trimmed = val.trimStart();
+      if (trimmed.startsWith('{')) {
+        this.tokenVisibilityOverride.set(true);
+      } else {
+        this.tokenVisibilityOverride.set(false);
+      }
+    }
     const current = this.auth();
     const updated: AuthState = { ...current, [field]: val };
     this.tabStateService.updateState(this.tabId(), { auth: updated });
   }
 
   toggleTokenVisibility() {
-    this.isTokenVisible.update(v => !v);
+    this.tokenVisibilityOverride.set(!this.isTokenVisible());
   }
 
   // ── Scripts ──────────────────────────────────────────────────────────

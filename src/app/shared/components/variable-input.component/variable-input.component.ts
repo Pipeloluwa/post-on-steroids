@@ -57,6 +57,16 @@ export class VariableInputComponent implements ControlValueAccessor {
     placeholder = input<string>('');
     customClass = input<string>('');
     type = input<string>('text');
+    effectiveType = computed(() => {
+        const rawType = this.type();
+        if (rawType === 'password') {
+            const val = (this.value() || '').trimStart();
+            if (val.startsWith('{')) {
+                return 'text';
+            }
+        }
+        return rawType;
+    });
     
     value = signal<string>('');
     currentCursorIndex = signal<number>(0);
@@ -81,7 +91,7 @@ export class VariableInputComponent implements ControlValueAccessor {
     parsedSegments = computed(() => {
         const val = this.value();
         if (!val) return [];
-        if (this.type() === 'password') {
+        if (this.effectiveType() === 'password') {
             return [{ text: val, type: 'normal' as const }];
         }
         
@@ -170,6 +180,19 @@ export class VariableInputComponent implements ControlValueAccessor {
             }
         }
 
+        const lastOpenSingle = textBeforeCursor.lastIndexOf('{');
+        const lastCloseSingle = textBeforeCursor.lastIndexOf('}');
+        if (lastOpenSingle !== -1 && lastOpenSingle >= lastCloseSingle) {
+            const searchToken = textBeforeCursor.substring(lastOpenSingle + 1);
+            if (/^[a-zA-Z0-9_-]*$/.test(searchToken)) {
+                const globalKeys = allVars.filter(v => v.type === 'global' || !v.type).map(v => v.key);
+                return {
+                    type: 'global',
+                    list: globalKeys.filter(k => k.toLowerCase().includes(searchToken.toLowerCase()))
+                };
+            }
+        }
+
         return { type: 'none', list: [] as string[] };
     });
 
@@ -235,9 +258,18 @@ export class VariableInputComponent implements ControlValueAccessor {
         this.suppressSuggestions.set(false);
         const inputElement = event.target as HTMLInputElement;
         const newVal = inputElement.value;
+        const selStart = inputElement.selectionStart;
+        const selEnd = inputElement.selectionEnd;
         this.value.set(newVal);
         this.onChange(newVal);
         this.updateCursorPosition();
+        if (selStart !== null && selEnd !== null) {
+            requestAnimationFrame(() => {
+                if (this.inputField?.nativeElement) {
+                    this.inputField.nativeElement.setSelectionRange(selStart, selEnd);
+                }
+            });
+        }
     }
     
     onKeyDown(event: KeyboardEvent) {
@@ -306,20 +338,25 @@ export class VariableInputComponent implements ControlValueAccessor {
         const textAfterCursor = val.substring(cursor);
         
         if (state.type === 'global') {
-            const lastOpenBracket = textBeforeCursor.lastIndexOf('{{');
+            const lastOpenDouble = textBeforeCursor.lastIndexOf('{{');
+            const lastOpenSingle = textBeforeCursor.lastIndexOf('{');
+            const lastOpenBracket = lastOpenDouble !== -1 ? lastOpenDouble : lastOpenSingle;
             if (lastOpenBracket !== -1) {
-                const beforeVar = val.substring(0, lastOpenBracket + 2);
-                const hasClosingBrackets = textAfterCursor.startsWith('}}');
-                const hasSingleClosingBracket = textAfterCursor.startsWith('}');
-                let closingStr = '}}';
-                if (hasClosingBrackets) closingStr = '';
-                else if (hasSingleClosingBracket) closingStr = '}';
+                const beforeVar = val.substring(0, lastOpenBracket);
+                const hasClosingDouble = textAfterCursor.startsWith('}}');
+                const hasClosingSingle = textAfterCursor.startsWith('}');
+                let afterCursor = textAfterCursor;
+                if (hasClosingDouble) {
+                    afterCursor = textAfterCursor.substring(2);
+                } else if (hasClosingSingle) {
+                    afterCursor = textAfterCursor.substring(1);
+                }
                 
-                const newVal = beforeVar + suggestion + closingStr + textAfterCursor;
+                const newVal = beforeVar + '{{' + suggestion + '}}' + afterCursor;
                 this.value.set(newVal);
                 this.onChange(newVal);
                 
-                const newCursorPos = lastOpenBracket + 2 + suggestion.length + closingStr.length;
+                const newCursorPos = beforeVar.length + 2 + suggestion.length + 2;
                 this.restoreFocus(newCursorPos);
             }
         } else if (state.type === 'path') {
@@ -378,7 +415,7 @@ export class VariableInputComponent implements ControlValueAccessor {
     }
 
     onMouseMove(event: MouseEvent) {
-        if (this.type() === 'password') {
+        if (this.effectiveType() === 'password') {
             this.hoveredVariable.set(null);
             return;
         }

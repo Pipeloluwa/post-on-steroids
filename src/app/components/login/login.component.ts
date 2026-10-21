@@ -16,9 +16,19 @@ export class LoginComponent implements OnInit {
     private router = inject(Router);
 
     isOtpMasked = signal<boolean>(true);
+    isPasswordMasked = signal<boolean>(true);
+    isConfirmPasswordMasked = signal<boolean>(true);
 
     toggleOtpMask() {
         this.isOtpMasked.update(m => !m);
+    }
+
+    togglePasswordMask() {
+        this.isPasswordMasked.update(m => !m);
+    }
+
+    toggleConfirmPasswordMask() {
+        this.isConfirmPasswordMasked.update(m => !m);
     }
 
     ngOnInit() {
@@ -27,9 +37,12 @@ export class LoginComponent implements OnInit {
         }
     }
 
-    async onSendOtp() {
-        const success = await this.authService.sendOtp();
-        // stays on page, OTP input shows if success
+    async onSendOtp(forceOtp = false) {
+        if (forceOtp && this.authService.isPasswordResetFlow()) {
+            await this.authService.startPasswordReset();
+            return;
+        }
+        await this.authService.sendOtp(forceOtp);
     }
 
     onOtpInput(event: Event) {
@@ -45,18 +58,39 @@ export class LoginComponent implements OnInit {
 
     async onAuthenticate() {
         if (this.authService.otp().length !== 6) return;
-        const success = await this.authService.authenticate();
+        const loggedInImmediately = await this.authService.authenticate();
+        if (loggedInImmediately) {
+            this.router.navigate(['/steroid']);
+        }
+    }
+
+    async onCompleteAccountCreation() {
+        const success = await this.authService.completeAccountCreation();
         if (success) {
             this.router.navigate(['/steroid']);
         }
     }
 
+    async onLoginWithPassword() {
+        const success = await this.authService.loginWithPassword();
+        if (success) {
+            this.router.navigate(['/steroid']);
+        }
+    }
+
+    async onForgotPassword() {
+        await this.authService.startPasswordReset();
+    }
+
+    async onSignInWithOtpInstead() {
+        await this.authService.signInWithOtpInstead();
+    }
+
     onBackToEmail() {
-        this.authService.isOtpSent.set(false);
-        this.authService.otp.set('');
         this.isOtpMasked.set(true);
-        this.authService.errorMessage.set(null);
-        this.authService.successMessage.set(null);
+        this.isPasswordMasked.set(true);
+        this.isConfirmPasswordMasked.set(true);
+        this.authService.resetToEmailStep();
     }
 
     continueAsGuest() {

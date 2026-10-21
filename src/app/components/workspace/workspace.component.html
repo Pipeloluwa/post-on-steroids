@@ -87,7 +87,7 @@
                             <button (click)="toggleExamples(req.id, $event)" title="Toggle Examples"
                                     class="p-0.5 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0">
                                 <mat-icon class="text-[13px]! size-[13px]! transition-transform"
-                                          [class.rotate-90]="expandedExampleRequestId() === req.id">chevron_right</mat-icon>
+                                          [class.rotate-90]="isRequestExpanded(req.id)">chevron_right</mat-icon>
                             </button>
 
                             <span class="text-[10px] font-bold min-w-[46px] shrink-0 mr-1 text-left" [style.color]="getMethodColor(req.method)">
@@ -111,7 +111,7 @@
                         </div>
 
                         <!-- Nested Examples list -->
-                        @if (expandedExampleRequestId() === req.id) {
+                        @if (isRequestExpanded(req.id)) {
                             <div class="pl-6 pr-2 py-1 bg-(--postonsteroids-bg-primary)/40 border-t border-(--postonsteroids-border)/10 flex flex-col gap-y-1">
                                 @if (isExamplesLoading(req.id) && (!requestExamplesMap().get(req.id) || requestExamplesMap().get(req.id)!.length === 0)) {
                                     <div class="flex items-center gap-x-1.5 py-1 px-1 text-[10px] text-(--postonsteroids-text-muted)">

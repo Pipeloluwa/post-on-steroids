@@ -1,7 +1,7 @@
 import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { catchError, switchMap } from 'rxjs/operators';
+import { catchError, switchMap, finalize } from 'rxjs/operators';
 import { throwError, from } from 'rxjs';
 import { AUTH_TOKEN_KEY, API_BASE_URL } from '../constants/api.constants';
 import { AuthService } from '../services/auth.service';
@@ -14,6 +14,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     
     // Only intercept requests going to our own backend API
     if (isPlatformBrowser(platformId) && req.url.startsWith(API_BASE_URL)) {
+        const isSaveOrUpdate = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !req.url.includes('/auth/');
+        if (isSaveOrUpdate) {
+            authService.startSaveRequest();
+        }
+
         const token = localStorage.getItem(AUTH_TOKEN_KEY);
         if (token && !req.url.includes('/auth/refresh')) {
             req = req.clone({
@@ -24,6 +29,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         }
 
         return next(req).pipe(
+            finalize(() => {
+                if (isSaveOrUpdate) {
+                    authService.endSaveRequest();
+                }
+            }),
             catchError((error: HttpErrorResponse) => {
                 if (error.status === 401 && !req.url.includes('/auth/refresh') && !req.url.includes('/auth/logout')) {
                     if (!isRefreshing && authService.isLoggedIn() && !authService.isLoggingOut()) {
