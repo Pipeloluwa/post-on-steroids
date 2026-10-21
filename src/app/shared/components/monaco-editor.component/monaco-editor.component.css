@@ -21,26 +21,33 @@
     box-shadow: none !important;
 }
 
-/* Prevent long unwrapped lines (e.g. in Pretty or Key-Field modes) from overflowing into the vertical scrollbar on the far right */
+/* Ensure the vertical and horizontal scrollbars render above long unwrapped text lines */
 ::ng-deep .monaco-editor .decorationsOverviewRuler {
     display: none !important;
 }
 
-::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.vertical {
-    background: var(--vscode-editor-background, var(--postonsteroids-bg-primary)) !important;
-    z-index: 12 !important;
+::ng-deep .monaco-editor .monaco-scrollable-element > .lines-content {
+    z-index: 1 !important;
 }
 
-::ng-deep .monaco-editor .monaco-scrollable-element::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 14px;
-    background: var(--vscode-editor-background, var(--postonsteroids-bg-primary));
-    pointer-events: none;
-    z-index: 10;
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.vertical,
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal {
+    background: var(--vscode-editor-background, var(--postonsteroids-bg-primary)) !important;
+    opacity: 1 !important;
+    z-index: 30 !important;
+}
+
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.vertical > .slider,
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal > .slider {
+    background: var(--postonsteroids-bg-hover) !important;
+    z-index: 31 !important;
+}
+
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.vertical > .slider:hover,
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.vertical > .slider.active,
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal > .slider:hover,
+::ng-deep .monaco-editor .monaco-scrollable-element > .scrollbar.horizontal > .slider.active {
+    background: var(--postonsteroids-text-muted) !important;
 }
 
 ::ng-deep .monaco-lock-icon {

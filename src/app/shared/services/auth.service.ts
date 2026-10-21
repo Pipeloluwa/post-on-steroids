@@ -28,6 +28,7 @@ export interface SendOtpResponseData {
     hasPassword?: boolean;
     otpSent?: boolean;
     isPasswordReset?: boolean;
+    retryAfterSeconds?: number;
 }
 
 export interface ApiResponse<T> {
@@ -58,12 +59,16 @@ export interface PasswordValidationState {
     providedIn: 'root'
 })
 export class AuthService {
+    private static readonly OTP_COOLDOWN_UNTIL_KEY = 'post_on_steroids_otp_cooldown_until';
+    private static readonly OTP_COOLDOWN_TOTAL_KEY = 'post_on_steroids_otp_cooldown_total';
+
     private http = inject(HttpClient);
     private router = inject(Router);
     private notificationService = inject(NotificationService);
     private platformId = inject(PLATFORM_ID);
     private isBrowser = isPlatformBrowser(this.platformId);
     private injector = inject(Injector);
+    private otpCooldownTimer: ReturnType<typeof setInterval> | null = null;
 
     isLoggedIn = signal<boolean>(false);
     currentUser = signal<UserAuth | null>(null);
@@ -86,6 +91,21 @@ export class AuthService {
     showAuthModal = signal<boolean>(false);
     errorMessage = signal<string | null>(null);
     successMessage = signal<string | null>(null);
+
+    otpCooldownSeconds = signal<number>(0);
+    otpCooldownTotalSeconds = signal<number>(60);
+    isOtpRateLimited = computed<boolean>(() => this.otpCooldownSeconds() > 0);
+    otpCooldownFormatted = computed<string>(() => {
+        const total = Math.max(0, this.otpCooldownSeconds());
+        const mins = Math.floor(total / 60);
+        const secs = total % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    });
+    otpCooldownProgress = computed<number>(() => {
+        const remaining = this.otpCooldownSeconds();
+        const total = Math.max(1, this.otpCooldownTotalSeconds());
+        return Math.min(100, Math.max(0, Math.round((remaining / total) * 100)));
+    });
 
     passwordValidation = computed<PasswordValidationState>(() => {
         const pwd = this.password() || '';
@@ -177,6 +197,8 @@ export class AuthService {
     private loadSession() {
         if (!this.isBrowser) return;
 
+        this.restoreOtpCooldown();
+
         try {
             const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
             const savedRefreshToken = localStorage.getItem(AUTH_REFRESH_TOKEN_KEY);
@@ -198,6 +220,90 @@ export class AuthService {
             this.clearStorage();
             this.showAuthModal.set(true);
         }
+    }
+
+    startOtpCooldown(seconds = 60, totalSeconds?: number) {
+        const cleanSeconds = Math.max(1, Math.ceil(seconds));
+        const cleanTotal = Math.max(cleanSeconds, totalSeconds ?? 60);
+        const until = Date.now() + cleanSeconds * 1000;
+
+        this.otpCooldownTotalSeconds.set(cleanTotal);
+        this.otpCooldownSeconds.set(cleanSeconds);
+
+        if (this.isBrowser) {
+            localStorage.setItem(AuthService.OTP_COOLDOWN_UNTIL_KEY, String(until));
+            localStorage.setItem(AuthService.OTP_COOLDOWN_TOTAL_KEY, String(cleanTotal));
+        }
+
+        this.runOtpCooldownInterval(until);
+    }
+
+    private restoreOtpCooldown() {
+        if (!this.isBrowser) return;
+        const savedUntil = Number(localStorage.getItem(AuthService.OTP_COOLDOWN_UNTIL_KEY) || 0);
+        const savedTotal = Number(localStorage.getItem(AuthService.OTP_COOLDOWN_TOTAL_KEY) || 60);
+
+        if (savedUntil > Date.now()) {
+            const remaining = Math.max(1, Math.ceil((savedUntil - Date.now()) / 1000));
+            this.otpCooldownTotalSeconds.set(Math.max(remaining, savedTotal || 60));
+            this.otpCooldownSeconds.set(remaining);
+            this.runOtpCooldownInterval(savedUntil);
+        } else {
+            this.clearOtpCooldown();
+        }
+    }
+
+    private runOtpCooldownInterval(untilTimestamp: number) {
+        if (this.otpCooldownTimer) {
+            clearInterval(this.otpCooldownTimer);
+            this.otpCooldownTimer = null;
+        }
+
+        if (!this.isBrowser) return;
+
+        this.otpCooldownTimer = setInterval(() => {
+            const remaining = Math.max(0, Math.ceil((untilTimestamp - Date.now()) / 1000));
+            this.otpCooldownSeconds.set(remaining);
+            if (remaining <= 0) {
+                this.clearOtpCooldown();
+            }
+        }, 1000);
+    }
+
+    private clearOtpCooldown() {
+        if (this.otpCooldownTimer) {
+            clearInterval(this.otpCooldownTimer);
+            this.otpCooldownTimer = null;
+        }
+        this.otpCooldownSeconds.set(0);
+        if (this.isBrowser) {
+            localStorage.removeItem(AuthService.OTP_COOLDOWN_UNTIL_KEY);
+            localStorage.removeItem(AuthService.OTP_COOLDOWN_TOTAL_KEY);
+        }
+    }
+
+    private extractRetryAfterSeconds(err: unknown): number {
+        const httpErr = err as {
+            headers?: { get?: (name: string) => string | null };
+            error?: { message?: string; errors?: string[] };
+        };
+        const headerVal = httpErr?.headers?.get?.('Retry-After') || httpErr?.headers?.get?.('retry-after');
+        if (headerVal) {
+            const parsedHeader = parseInt(headerVal, 10);
+            if (!isNaN(parsedHeader) && parsedHeader > 0) {
+                return parsedHeader;
+            }
+        }
+        const msg = httpErr?.error?.message || httpErr?.error?.errors?.[0] || '';
+        const secMatch = msg.match(/(\d+)\s*s(?:ec(?:ond)?s?)?\b/i);
+        if (secMatch) {
+            return Math.max(1, parseInt(secMatch[1], 10));
+        }
+        const minMatch = msg.match(/(\d+)\s*minute/i);
+        if (minMatch) {
+            return Math.max(1, parseInt(minMatch[1], 10) * 60);
+        }
+        return 60;
     }
 
     toggleAuthModal() {
@@ -270,26 +376,56 @@ export class AuthService {
         this.errorMessage.set(null);
         this.successMessage.set(null);
 
+        // When forceOtp is false (Step 1 email check), first check if the account already has a password
+        // without consuming the 1-per-minute OTP generation rate limit.
+        if (!forceOtp) {
+            try {
+                const checkRes = await firstValueFrom(
+                    this.http.post<ApiResponse<SendOtpResponseData>>(`${API_BASE_URL}/auth/check-email`, { email, forceOtp: false })
+                );
+                if (checkRes?.data?.hasPassword) {
+                    this.isOtpSent.set(false);
+                    this.authStep.set('login-password');
+                    this.password.set('');
+                    this.confirmPassword.set('');
+                    this.successMessage.set(null);
+                    this.isAuthenticating.set(false);
+                    return true;
+                }
+            } catch (err: any) {
+                if (err?.status === 400 || err?.status === 422) {
+                    const msg = err.error?.message || err.error?.errors?.[0] || 'Please enter a valid email address.';
+                    this.errorMessage.set(msg);
+                    this.isAuthenticating.set(false);
+                    return false;
+                }
+                // Fall through to send-otp if check-email is unavailable
+            }
+        }
+
+        if (this.isOtpRateLimited()) {
+            this.errorMessage.set(`Please wait ${this.otpCooldownSeconds()}s before requesting a new verification code.`);
+            this.isAuthenticating.set(false);
+            return false;
+        }
+
         return new Promise<boolean>((resolve) => {
-            this.http.post<ApiResponse<SendOtpResponseData>>(`${API_BASE_URL}/auth/send-otp`, { email, forceOtp }).subscribe({
+            this.http.post<ApiResponse<SendOtpResponseData>>(`${API_BASE_URL}/auth/send-otp`, { email, forceOtp: true }).subscribe({
                 next: (res) => {
                     const data = res.data;
-                    if (data && data.hasPassword && data.otpSent === false && !forceOtp) {
-                        this.isOtpSent.set(false);
-                        this.authStep.set('login-password');
-                        this.password.set('');
-                        this.confirmPassword.set('');
-                        this.successMessage.set(null);
-                    } else {
-                        this.isOtpSent.set(true);
-                        this.authStep.set('otp');
-                        this.otp.set('');
-                        this.successMessage.set(res.message || `Verification code sent to ${email}`);
-                    }
+                    this.isOtpSent.set(true);
+                    this.authStep.set('otp');
+                    this.otp.set('');
+                    this.startOtpCooldown(data?.retryAfterSeconds ?? 60);
+                    this.successMessage.set(res.message || `Verification code sent to ${email}`);
                     this.isAuthenticating.set(false);
                     resolve(true);
                 },
                 error: (err) => {
+                    if (err?.status === 429) {
+                        const retrySec = this.extractRetryAfterSeconds(err);
+                        this.startOtpCooldown(retrySec);
+                    }
                     const msg = err.error?.message || err.error?.errors?.[0] || 'Failed to send verification code. Please try again.';
                     this.errorMessage.set(msg);
                     this.isAuthenticating.set(false);
@@ -303,6 +439,11 @@ export class AuthService {
         const email = this.userEmail().trim();
         if (!email) {
             this.errorMessage.set('Please enter your email address first to reset your password.');
+            return false;
+        }
+
+        if (this.isOtpRateLimited()) {
+            this.errorMessage.set(`Please wait ${this.otpCooldownSeconds()}s before requesting a new password reset code.`);
             return false;
         }
 
@@ -320,11 +461,16 @@ export class AuthService {
                     this.isOtpSent.set(true);
                     this.authStep.set('otp');
                     this.otp.set('');
+                    this.startOtpCooldown(res.data?.retryAfterSeconds ?? 60);
                     this.successMessage.set(res.message || `Password reset code sent to ${email}`);
                     this.isAuthenticating.set(false);
                     resolve(true);
                 },
                 error: (err) => {
+                    if (err?.status === 429) {
+                        const retrySec = this.extractRetryAfterSeconds(err);
+                        this.startOtpCooldown(retrySec);
+                    }
                     const msg = err.error?.message || err.error?.errors?.[0] || 'Failed to send password reset code. Please try again.';
                     this.errorMessage.set(msg);
                     this.isAuthenticating.set(false);

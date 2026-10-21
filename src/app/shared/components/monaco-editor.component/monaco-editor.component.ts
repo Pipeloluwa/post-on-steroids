@@ -72,7 +72,6 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     fixedOverflowWidgets: true,
     glyphMargin: this.enableEncryptionToggles(),
     wordWrap: this.wordWrap() ? 'on' : 'off',
-    wrappingIndent: 'indent',
     fontSize: 13,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
   }));

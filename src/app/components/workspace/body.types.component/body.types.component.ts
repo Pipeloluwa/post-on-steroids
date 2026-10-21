@@ -40,17 +40,12 @@ export class BodyTypesComponent {
     }
     return 'pretty';
   });
-  isWordWrap = computed(() => true);
+  isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
   wrapResponse = computed(() => this.isWordWrap());
   
   rawBodyContent = computed(() => {
     const state = this.tabStateService.getState(this.tabId());
-    const raw = this.rawType() === 'JSON' ? (state?.rawBodyJson || '{}') : (state?.rawBodyXml || '');
-    const style = this.wrapStyle();
-    if (style !== 'pretty' && style !== 'word-wrap') {
-      return formatBodyByStyle(raw, style, this.rawType());
-    }
-    return raw;
+    return this.rawType() === 'JSON' ? (state?.rawBodyJson || '{}') : (state?.rawBodyXml || '');
   });
 
   onRawBodyChange(content: string) {

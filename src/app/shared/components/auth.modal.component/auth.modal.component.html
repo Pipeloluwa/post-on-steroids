@@ -65,10 +65,28 @@
                     </button>
                     @if (userEmail()) {
                     <div class="text-center">
-                        <button type="button" (click)="onForgotPassword()" [disabled]="isAuthenticating()"
-                            class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                        <button type="button" (click)="onForgotPassword()"
+                            [disabled]="isAuthenticating() || authService.isOtpRateLimited()"
+                            class="text-xs text-(--postonsteroids-accent) hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
                             Forgot password? Reset via email OTP
                         </button>
+                    </div>
+                    }
+                    @if (authService.isOtpRateLimited()) {
+                    <div class="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-1.5 animate-in fade-in">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
+                                <mat-icon class="text-[14px]! size-[14px]! text-amber-400">hourglass_top</mat-icon>
+                                <span>Next OTP request available in</span>
+                            </span>
+                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                                {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
+                            </span>
+                        </div>
+                        <div class="w-full h-1.5 bg-(--postonsteroids-border)/60 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-400 rounded-full transition-all duration-500"
+                                 [style.width.%]="authService.otpCooldownProgress()"></div>
+                        </div>
                     </div>
                     }
                 </div>
@@ -105,16 +123,53 @@
                         <span>Verifying code...</span>
                     </div>
                     }
-                    <div class="flex items-center justify-between text-[12px] font-normal">
+
+                    <!-- OTP Rate Limit Indicator & Resend Control -->
+                    @if (authService.isOtpRateLimited()) {
+                    <div class="p-3 rounded-xl bg-(--postonsteroids-bg-tertiary)/80 border border-(--postonsteroids-border) space-y-2 font-normal animate-in fade-in"
+                         role="status" aria-live="polite">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
+                                <mat-icon class="text-[15px]! size-[15px]! text-amber-400">hourglass_top</mat-icon>
+                                <span>New OTP available in</span>
+                            </span>
+                            <span class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                                {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
+                            </span>
+                        </div>
+                        <div class="w-full h-1.5 bg-(--postonsteroids-border)/60 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-400 rounded-full transition-all duration-500"
+                                 [style.width.%]="authService.otpCooldownProgress()"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] text-(--postonsteroids-text-muted) pt-0.5">
+                            <button type="button" (click)="backToEmail()"
+                                class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer font-medium">
+                                Back
+                            </button>
+                            <span>Rate limit: 1 OTP / min</span>
+                            <button type="button" disabled
+                                class="text-(--postonsteroids-text-muted)/60 cursor-not-allowed font-medium">
+                                Resend locked
+                            </button>
+                        </div>
+                    </div>
+                    } @else {
+                    <div class="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 flex items-center justify-between text-[12px] font-normal animate-in fade-in">
                         <button type="button" (click)="backToEmail()"
-                            class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer">
+                            class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer font-medium">
                             Back
                         </button>
+                        <span class="flex items-center gap-1 text-[11px] text-emerald-400">
+                            <mat-icon class="text-[14px]! size-[14px]!">check_circle</mat-icon>
+                            <span>Ready for new code</span>
+                        </span>
                         <button type="button" (click)="onResendOtp()" [disabled]="isAuthenticating()"
-                            class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline transition-colors cursor-pointer">
-                            Resend code
+                            class="inline-flex items-center gap-1 font-semibold text-(--postonsteroids-accent) hover:underline disabled:opacity-50 transition-colors cursor-pointer">
+                            <mat-icon class="text-[14px]! size-[14px]!">refresh</mat-icon>
+                            <span>Resend OTP</span>
                         </button>
                     </div>
+                    }
                 </div>
                 }
 
@@ -256,11 +311,30 @@
                         <span class="text-(--postonsteroids-text-muted)">
                             Signed in as <strong class="text-(--postonsteroids-text-primary)">{{ userEmail() }}</strong>
                         </span>
-                        <button type="button" (click)="onForgotPassword()" [disabled]="isAuthenticating()"
-                            class="text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                        <button type="button" (click)="onForgotPassword()"
+                            [disabled]="isAuthenticating() || authService.isOtpRateLimited()"
+                            class="text-(--postonsteroids-accent) hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
                             Forgot current?
                         </button>
                     </div>
+
+                    @if (authService.isOtpRateLimited()) {
+                    <div class="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-1.5 animate-in fade-in">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
+                                <mat-icon class="text-[14px]! size-[14px]! text-amber-400">hourglass_top</mat-icon>
+                                <span>Next OTP request available in</span>
+                            </span>
+                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                                {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
+                            </span>
+                        </div>
+                        <div class="w-full h-1.5 bg-(--postonsteroids-border)/60 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-400 rounded-full transition-all duration-500"
+                                 [style.width.%]="authService.otpCooldownProgress()"></div>
+                        </div>
+                    </div>
+                    }
 
                     <!-- Current Password Field -->
                     <div>
@@ -441,15 +515,35 @@
                     </button>
 
                     <div class="flex items-center justify-between text-[12px]">
-                        <button type="button" (click)="onForgotPassword()" [disabled]="isAuthenticating()"
-                            class="text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                        <button type="button" (click)="onForgotPassword()"
+                            [disabled]="isAuthenticating() || authService.isOtpRateLimited()"
+                            class="text-(--postonsteroids-accent) hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
                             Forgot password?
                         </button>
-                        <button type="button" (click)="onSignInWithOtpInstead()" [disabled]="isAuthenticating()"
-                            class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline cursor-pointer">
+                        <button type="button" (click)="onSignInWithOtpInstead()"
+                            [disabled]="isAuthenticating() || authService.isOtpRateLimited()"
+                            class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
                             Sign in with OTP code
                         </button>
                     </div>
+
+                    @if (authService.isOtpRateLimited()) {
+                    <div class="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-1.5 animate-in fade-in">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
+                                <mat-icon class="text-[14px]! size-[14px]! text-amber-400">hourglass_top</mat-icon>
+                                <span>Next OTP request available in</span>
+                            </span>
+                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                                {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
+                            </span>
+                        </div>
+                        <div class="w-full h-1.5 bg-(--postonsteroids-border)/60 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-400 rounded-full transition-all duration-500"
+                                 [style.width.%]="authService.otpCooldownProgress()"></div>
+                        </div>
+                    </div>
+                    }
                 </div>
                 }
             }

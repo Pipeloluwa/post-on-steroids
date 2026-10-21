@@ -47,7 +47,7 @@ export class ResponseViewerComponent {
         }
         return 'pretty';
     });
-    isWordWrap = computed(() => true);
+    isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
     wrapResponse = computed(() => this.isWordWrap());
     wrapConsole = computed<boolean>(() => {
         const stateWrap = this.tabState()?.consoleWrap;

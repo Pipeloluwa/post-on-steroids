@@ -191,3 +191,33 @@ input[type="password"]::-ms-clear {
   width: 0 !important;
   height: 0 !important;
 }
+
+/* Ensure Monaco Editor vertical and horizontal scrollbars render cleanly above unwrapped text lines */
+.monaco-editor .decorationsOverviewRuler {
+  display: none !important;
+}
+
+.monaco-editor .monaco-scrollable-element > .lines-content {
+  z-index: 1 !important;
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar.vertical,
+.monaco-editor .monaco-scrollable-element > .scrollbar.horizontal {
+  background: var(--vscode-editor-background, var(--postonsteroids-bg-primary)) !important;
+  opacity: 1 !important;
+  z-index: 30 !important;
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar.vertical > .slider,
+.monaco-editor .monaco-scrollable-element > .scrollbar.horizontal > .slider {
+  background: var(--postonsteroids-bg-hover) !important;
+  z-index: 31 !important;
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar.vertical > .slider:hover,
+.monaco-editor .monaco-scrollable-element > .scrollbar.vertical > .slider.active,
+.monaco-editor .monaco-scrollable-element > .scrollbar.horizontal > .slider:hover,
+.monaco-editor .monaco-scrollable-element > .scrollbar.horizontal > .slider.active {
+  background: var(--postonsteroids-text-muted) !important;
+}
+
