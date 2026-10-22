@@ -172,22 +172,12 @@ export class WorkspaceComponent {
         }
     }
 
-    readonly sidebarSkeletons = [
-        { id: 1, width: '72%' },
-        { id: 2, width: '56%' },
-        { id: 3, width: '80%' },
-        { id: 4, width: '60%' },
-        { id: 5, width: '66%' },
-    ];
-
     openRequest(request: any) {
-        if (this.tabStateService.isCapsuleLoading()) return;
         this.tabStateService.addOpenTab(request);
         this.tabStateService.setActiveTab(request.id);
     }
 
     addNewRequest() {
-        if (this.tabStateService.isCapsuleLoading()) return;
         this.tabStateService.createAndOpenNewTab();
     }
 

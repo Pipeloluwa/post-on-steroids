@@ -45,13 +45,7 @@ export class RequestTabsComponent {
     activeTabId = this.tabStateService.activeTabId;
     isTabsLoading = computed(() => this.tabStateService.isCapsuleLoading());
 
-    readonly skeletonTabs = [
-        { id: 1, width: '68px', delay: '0ms' },
-        { id: 2, width: '54px', delay: '75ms' },
-        { id: 3, width: '76px', delay: '150ms' },
-        { id: 4, width: '50px', delay: '225ms' },
-        { id: 5, width: '62px', delay: '300ms' },
-    ];
+    readonly skeletonTabs = [1, 2, 3];
 
     // Right click context menu state
     contextMenu = signal<{ isOpen: boolean; x: number; y: number; tabId: string | null }>({
@@ -336,7 +330,6 @@ export class RequestTabsComponent {
     }
 
     addTab() {
-        if (this.isTabsLoading()) return;
         const newId = this.tabStateService.createAndOpenNewTab();
 
         setTimeout(() => {

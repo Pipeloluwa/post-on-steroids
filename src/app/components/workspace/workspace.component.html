@@ -46,15 +46,14 @@
             <div class="flex items-center justify-between px-2 py-1.5 border-b border-(--postonsteroids-border)/40 mb-1">
                 <div class="flex items-center gap-x-1.5">
                     <input type="checkbox"
-                           [disabled]="tabStateService.isCapsuleLoading()"
-                           [checked]="!tabStateService.isCapsuleLoading() && tabStateService.allCapsuleRequests().length > 0 && selectedRequestIds().size === tabStateService.allCapsuleRequests().length"
+                           [checked]="tabStateService.allCapsuleRequests().length > 0 && selectedRequestIds().size === tabStateService.allCapsuleRequests().length"
                            (change)="toggleSelectAllRequests()"
                            title="Select all requests"
-                           class="accent-(--postonsteroids-accent) cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" />
+                           class="accent-(--postonsteroids-accent) cursor-pointer" />
                     <span class="text-[10px] font-bold text-(--postonsteroids-text-secondary) tracking-widest uppercase">Requests</span>
                 </div>
                 <div class="flex items-center gap-x-1">
-                    @if (selectedRequestIds().size > 0 && !tabStateService.isCapsuleLoading()) {
+                    @if (selectedRequestIds().size > 0) {
                         <button (click)="batchDeleteSelectedRequests()"
                                 [disabled]="isDeletingRequests()"
                                 title="Delete selected requests"
@@ -63,26 +62,14 @@
                             <span>{{ selectedRequestIds().size }}</span>
                         </button>
                     }
-                    <button (click)="addNewRequest()"
-                            [disabled]="tabStateService.isCapsuleLoading()"
-                            title="New Request in Capsule"
-                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed">
+                    <button (click)="addNewRequest()" title="New Request in Capsule"
+                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
                         <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
                     </button>
                 </div>
             </div>
 
             <div class="flex flex-col">
-                @if (tabStateService.isCapsuleLoading()) {
-                    @for (sk of sidebarSkeletons; track sk.id) {
-                        <div class="flex items-center gap-x-2 pl-2 pr-2.5 py-2.5 border-b border-(--postonsteroids-border)/10 select-none" aria-hidden="true">
-                            <div class="size-3.5 rounded-[3px] bg-(--postonsteroids-text-muted)/15 animate-pulse shrink-0"></div>
-                            <div class="size-3 rounded-[3px] bg-(--postonsteroids-text-muted)/15 animate-pulse shrink-0"></div>
-                            <div class="h-2.5 w-8 rounded-[3px] bg-(--postonsteroids-accent)/25 animate-pulse shrink-0 mr-1"></div>
-                            <div class="h-2.5 rounded-[3px] bg-(--postonsteroids-text-muted)/20 animate-pulse" [style.width]="sk.width"></div>
-                        </div>
-                    }
-                } @else {
                 @for (req of tabStateService.allCapsuleRequests(); track req.id) {
                     <div class="flex flex-col border-b border-(--postonsteroids-border)/10">
                         <div class="flex items-center gap-x-1.5 pl-2 pr-1.5 py-2 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
@@ -161,7 +148,6 @@
                         </button>
                     </div>
                 }
-                }
             </div>
         </div>
     </div>
@@ -171,25 +157,7 @@
         <app-request-tabs-component />
 
         <div class="w-full flex-1 min-h-0 p-2 flex flex-col relative">
-            @if (tabStateService.isCapsuleLoading()) {
-            <div class="absolute inset-2 z-100 flex flex-col gap-y-2 select-none" role="status" aria-label="Loading capsule workspace">
-                <div class="w-full h-full flex flex-col gap-y-2 animate-pulse">
-                    <div class="h-10 bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
-                    <div class="h-[40px] bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
-                    <div class="flex-1 bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
-                    <div class="h-[6px] bg-(--postonsteroids-bg-secondary) rounded-full"></div>
-                    <div class="flex-1 bg-(--postonsteroids-bg-secondary) rounded border border-(--postonsteroids-border)"></div>
-                </div>
-                <div class="absolute inset-0 flex items-center justify-center bg-(--postonsteroids-bg-primary)/35 backdrop-blur-[1px] rounded">
-                    <div class="flex flex-col items-center gap-y-2.5 px-5 py-3 rounded-xl bg-(--postonsteroids-bg-secondary)/90 border border-(--postonsteroids-border) shadow-lg">
-                        <mat-icon class="animate-spin text-(--postonsteroids-accent) w-7! h-7! text-[28px]!">sync</mat-icon>
-                        <span class="text-[11px] font-semibold text-(--postonsteroids-text-secondary) animate-pulse uppercase tracking-widest">
-                            Loading Capsule Tabs...
-                        </span>
-                    </div>
-                </div>
-            </div>
-            } @else if (tabStateService.openTabs().length === 0) {
+            @if (tabStateService.openTabs().length === 0) {
             <div class="absolute inset-0 flex flex-col items-center justify-center gap-y-4 text-center select-none p-6 z-20">
                 <div class="w-14 h-14 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) flex items-center justify-center shadow-sm">
                     <mat-icon class="text-(--postonsteroids-accent) text-[28px]! size-[28px]!">tab_unselected</mat-icon>
