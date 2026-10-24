@@ -1,22 +1,22 @@
-import { Component, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DialogService } from '../services/dialog.service';
 
 @Component({
-  standalone: true,
   selector: 'app-dialog-modal',
   imports: [CommonModule, FormsModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (dialogService.show()) {
-      <div style="-webkit-app-region: no-drag;" class="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" (click)="onBackdropClick($event)">
-          <div class="w-full max-w-sm rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden" (click)="$event.stopPropagation()">
-              <div class="px-5 py-4 border-b border-(--postonsteroids-border)">
+      <div style="-webkit-app-region: no-drag;" class="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto" (click)="onBackdropClick($event)">
+          <div class="w-full max-w-sm my-auto max-h-[calc(100dvh-2rem)] rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden" (click)="$event.stopPropagation()">
+              <div class="px-5 py-4 border-b border-(--postonsteroids-border) shrink-0">
                   <h2 class="text-sm font-semibold text-(--postonsteroids-text-primary)">
                       {{ dialogService.options()?.title }}
                   </h2>
               </div>
-              <div class="p-5 flex flex-col gap-4">
+              <div class="p-5 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
                   <p class="text-xs text-(--postonsteroids-text-secondary) leading-relaxed">
                       {{ dialogService.options()?.message }}
                   </p>
@@ -33,7 +33,7 @@ import { DialogService } from '../services/dialog.service';
                       />
                   }
               </div>
-              <div class="px-5 py-3 border-t border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-end gap-3">
+              <div class="px-5 py-3 border-t border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-end gap-3 shrink-0">
                   <button (click)="dialogService.cancel()"
                       class="px-4 py-1.5 text-xs font-medium rounded text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer">
                       {{ dialogService.options()?.cancelText }}

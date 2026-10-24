@@ -83,3 +83,39 @@
     opacity: 0.85;
     filter: grayscale(0%);
 }
+
+/* Stored global variable token highlighting */
+::ng-deep .monaco-global-var-token {
+    color: #22c55e !important;
+    background-color: rgba(34, 197, 94, 0.14) !important;
+    border-radius: 4px !important;
+    padding: 1px 3px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+}
+
+::ng-deep .monaco-global-var-token span,
+::ng-deep .monaco-global-var-token * {
+    color: #22c55e !important;
+}
+
+/* Stored utility variable token highlighting */
+::ng-deep .monaco-utility-var-token {
+    color: #3b82f6 !important;
+    background-color: rgba(59, 130, 246, 0.14) !important;
+    border-radius: 4px !important;
+    padding: 1px 3px !important;
+    font-weight: 600 !important;
+}
+
+::ng-deep .monaco-utility-var-token span,
+::ng-deep .monaco-utility-var-token * {
+    color: #3b82f6 !important;
+}
+
+/* Suppress any squiggly error under global/utility variables */
+::ng-deep .monaco-editor .squiggly-error.monaco-global-var-token,
+::ng-deep .monaco-editor .squiggly-error.monaco-utility-var-token {
+    background: none !important;
+    border-bottom: none !important;
+}

@@ -21,6 +21,14 @@
                         + New Capsule...
                     </option>
                 </select>
+                <button (click)="duplicateCurrentCapsule()" title="Duplicate current capsule" [disabled]="isDuplicatingCapsule()"
+                    class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors flex items-center justify-center cursor-pointer shrink-0 disabled:opacity-50">
+                    @if (isDuplicatingCapsule()) {
+                        <mat-icon class="text-[16px]! size-[16px]! animate-spin">sync</mat-icon>
+                    } @else {
+                        <mat-icon class="text-[16px]! size-[16px]!">content_copy</mat-icon>
+                    }
+                </button>
             }
             <button (click)="toggleSidebar()" title="Toggle Sidebar"
                     class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors flex items-center justify-center cursor-pointer shrink-0">
@@ -140,7 +148,7 @@
                     </div>
                 }
 
-                @if (tabStateService.allCapsuleRequests().length === 0) {
+                @if (tabStateService.allCapsuleRequests().length === 0 && !tabStateService.isCapsuleLoading() && !tabStateService.isLoadingBackendData()) {
                     <div class="pl-4 pr-3 py-3 text-[11px] text-(--postonsteroids-text-muted) italic flex flex-col items-start gap-y-2">
                         <span>No requests in capsule.</span>
                         <button (click)="addNewRequest()" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer flex items-center gap-x-1">
@@ -157,7 +165,7 @@
         <app-request-tabs-component />
 
         <div class="w-full flex-1 min-h-0 p-2 flex flex-col relative">
-            @if (tabStateService.openTabs().length === 0) {
+            @if (tabStateService.openTabs().length === 0 && !tabStateService.isCapsuleLoading() && !tabStateService.isLoadingBackendData()) {
             <div class="absolute inset-0 flex flex-col items-center justify-center gap-y-4 text-center select-none p-6 z-20">
                 <div class="w-14 h-14 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) flex items-center justify-center shadow-sm">
                     <mat-icon class="text-(--postonsteroids-accent) text-[28px]! size-[28px]!">tab_unselected</mat-icon>

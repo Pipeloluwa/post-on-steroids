@@ -1,6 +1,7 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { generateUUID } from '../utils/uuid.util';
+import { environment } from '../../../environments/environment';
 
 export interface SandboxResult {
   success: boolean;
@@ -37,7 +38,7 @@ export class SandboxExecutionService {
 
       const sandboxScript = `
 window.addEventListener("message", async (event) => {
-  const { id, code, context } = event.data;
+  const { id, code, context, proxyUrl, proxyFallbackUrl, isElectron } = event.data;
   if (!id) return;
 
   let logs = [];
@@ -47,7 +48,192 @@ window.addEventListener("message", async (event) => {
     originalConsoleLog(...args);
   };
 
+  const _rawFetch = window.fetch ? window.fetch.bind(window) : null;
+
+  async function _proxyFetch(input, init) {
+    if (isElectron && _rawFetch) {
+      return _rawFetch(input, init);
+    }
+
+    let targetUrl = '';
+    let options = init || {};
+
+    if (typeof input === 'string') {
+      targetUrl = input;
+    } else if (input && typeof input === 'object') {
+      targetUrl = input.url || String(input);
+      options = Object.assign({}, input, options);
+    } else {
+      targetUrl = String(input || '');
+    }
+
+    const method = (options.method || 'GET').toUpperCase();
+
+    const headersObj = {};
+    if (options.headers) {
+      if (typeof options.headers.forEach === 'function') {
+        options.headers.forEach((v, k) => { headersObj[k] = String(v); });
+      } else if (Array.isArray(options.headers)) {
+        options.headers.forEach(([k, v]) => { headersObj[k] = String(v); });
+      } else if (typeof options.headers === 'object') {
+        Object.entries(options.headers).forEach(([k, v]) => { headersObj[k] = String(v); });
+      }
+    }
+
+    let bodyPayload = options.body;
+    if (bodyPayload !== undefined && bodyPayload !== null && typeof bodyPayload !== 'string') {
+      try {
+        bodyPayload = JSON.stringify(bodyPayload);
+      } catch {
+        bodyPayload = String(bodyPayload);
+      }
+    }
+
+    const proxyPayload = {
+      url: targetUrl,
+      method: method,
+      headers: headersObj,
+      body: bodyPayload,
+      verifySsl: false
+    };
+
+    const endpoints = [proxyUrl, proxyFallbackUrl].filter(Boolean);
+    const uniqueEndpoints = Array.from(new Set(endpoints));
+    let lastError = null;
+
+    for (const ep of uniqueEndpoints) {
+      try {
+        const fetchFn = _rawFetch || window.fetch;
+        const res = await fetchFn(ep, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(proxyPayload)
+        });
+
+        if (!res.ok && res.status >= 500 && uniqueEndpoints.length > 1) {
+          continue;
+        }
+
+        const json = await res.json();
+        const data = (json && json.data) ? json.data : json;
+        const status = (data && data.statusCode) || res.status || 200;
+        const resBody = (data && data.body != null) ? String(data.body) : '';
+        const resHeaders = new Headers((data && data.headers) || {});
+
+        return new Response(resBody, {
+          status: status,
+          statusText: String(status),
+          headers: resHeaders
+        });
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error('Proxy request failed for: ' + targetUrl);
+  }
+
+  window.fetch = _proxyFetch;
+
+  if (!isElectron && typeof XMLHttpRequest !== 'undefined') {
+    window.XMLHttpRequest = function() {
+      let _method = 'GET';
+      let _url = '';
+      let _headers = {};
+      const _listeners = {};
+
+      const xhr = {
+        readyState: 0,
+        status: 0,
+        statusText: '',
+        responseText: '',
+        response: '',
+        onreadystatechange: null,
+        onload: null,
+        onerror: null,
+        open: function(m, u) {
+          _method = m || 'GET';
+          _url = u || '';
+          this.readyState = 1;
+        },
+        setRequestHeader: function(k, v) {
+          _headers[k] = v;
+        },
+        send: function(body) {
+          _proxyFetch(_url, { method: _method, headers: _headers, body: body })
+            .then(async res => {
+              const text = await res.text();
+              this.status = res.status;
+              this.statusText = res.statusText;
+              this.responseText = text;
+              this.response = text;
+              this.readyState = 4;
+              if (typeof this.onreadystatechange === 'function') this.onreadystatechange();
+              if (typeof this.onload === 'function') this.onload();
+              if (_listeners['load']) _listeners['load'].forEach(f => f());
+            })
+            .catch(err => {
+              this.status = 0;
+              this.statusText = '';
+              this.readyState = 4;
+              if (typeof this.onreadystatechange === 'function') this.onreadystatechange();
+              if (typeof this.onerror === 'function') this.onerror(err);
+              if (_listeners['error']) _listeners['error'].forEach(f => f(err));
+            });
+        },
+        addEventListener: function(type, fn) {
+          if (!_listeners[type]) _listeners[type] = [];
+          _listeners[type].push(fn);
+        }
+      };
+      return xhr;
+    };
+  }
+
   let pm = { ...context };
+
+  pm.sendRequest = function(req, callback) {
+    let url = typeof req === 'string' ? req : (req && req.url);
+    let method = (req && req.method) || 'GET';
+    let headers = (req && (req.headers || req.header)) || {};
+    let body = req && req.body;
+    if (body && typeof body === 'object' && body.raw) {
+      body = body.raw;
+    }
+    if (Array.isArray(headers)) {
+      const hObj = {};
+      headers.forEach(h => { if (h && h.key) hObj[h.key] = h.value; });
+      headers = hObj;
+    }
+
+    const promise = _proxyFetch(url, { method, headers, body })
+      .then(async res => {
+        const rawText = await res.text();
+        let parsedJson = null;
+        try { parsedJson = JSON.parse(rawText); } catch {}
+        const responseObj = {
+          code: res.status,
+          status: res.statusText,
+          headers: res.headers,
+          text: () => rawText,
+          json: () => parsedJson,
+          body: rawText
+        };
+        if (typeof callback === 'function') {
+          callback(null, responseObj);
+        }
+        return responseObj;
+      })
+      .catch(err => {
+        if (typeof callback === 'function') {
+          callback(err, null);
+        } else {
+          throw err;
+        }
+      });
+
+    return promise;
+  };
 
   try {
     const contextKeys = Object.keys(context);
@@ -81,6 +267,7 @@ window.addEventListener("message", async (event) => {
 
     const fnBodyLines = [
       "return (async () => {",
+      "const fetch = _proxyFetch;",
       paramDeclarations,
       code,
       "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params); if (_preReturn !== undefined) { body = _preReturn; } }",
@@ -93,8 +280,8 @@ window.addEventListener("message", async (event) => {
     ];
     const fnBody = fnBodyLines.join(String.fromCharCode(10));
       
-    const executeInSandbox = new Function("pm", "context", "test", fnBody);
-    await executeInSandbox(pm, context, test);
+    const executeInSandbox = new Function("pm", "context", "test", "_proxyFetch", fnBody);
+    await executeInSandbox(pm, context, test, _proxyFetch);
 
     // Extract test results from PASS/FAIL console logs if any
     for (const log of logs) {
@@ -157,9 +344,18 @@ window.addEventListener("message", async (event) => {
 
       window.addEventListener('message', listener);
 
+      const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+
       // Send code to the sandbox
       // The origin is '*' because a sandboxed iframe without allow-same-origin has an opaque origin
-      this.iframe.contentWindow.postMessage({ id: executionId, code, context }, '*');
+      this.iframe.contentWindow.postMessage({
+        id: executionId,
+        code,
+        context,
+        proxyUrl: environment.proxyUrl,
+        proxyFallbackUrl: environment.proxyFallbackUrl,
+        isElectron
+      }, '*');
     });
   }
 

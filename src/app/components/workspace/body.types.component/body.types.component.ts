@@ -10,7 +10,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { ChangeDetectionStrategy } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 
-import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle } from '../../../shared/utils/format.utils';
+import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle, parseJsonSafe } from '../../../shared/utils/format.utils';
 
 @Component({
   selector: 'app-body-types-component',
@@ -90,7 +90,7 @@ export class BodyTypesComponent {
           try {
               const bodyStr = this.rawBodyContent();
               if (bodyStr) {
-                  const bodyObj = JSON.parse(bodyStr);
+                  const bodyObj = parseJsonSafe(bodyStr);
                   newEncryptedBodyPaths = this.getPrimitivePaths(bodyObj);
               }
           } catch (e) {
@@ -263,7 +263,7 @@ export class BodyTypesComponent {
     if (!key) {
       if (content) {
         try {
-          const parsed = JSON.parse(content);
+          const parsed = parseJsonSafe(content);
           if (typeof parsed === 'object' && parsed !== null) {
             const keys = Object.keys(parsed);
             if (keys.length > 0) {
@@ -304,7 +304,7 @@ export class BodyTypesComponent {
     if (!obj || !targetKey) return null;
     let parsed = obj;
     if (typeof parsed === 'string') {
-      try { parsed = JSON.parse(parsed); } catch { return null; }
+      try { parsed = parseJsonSafe(parsed); } catch { return null; }
     }
     if (!parsed || typeof parsed !== 'object') return null;
 

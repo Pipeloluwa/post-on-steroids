@@ -7,6 +7,7 @@ import { LocalStorageService } from './local.storage.service';
 import { IGlobalVariable, VariableSource } from '../../interfaces/services/IVariableService';
 import { TabStateService } from './tab.state.service';
 import { AuthService } from './auth.service';
+import { parseJsonSafe } from '../utils/format.utils';
 
 @Injectable({
     providedIn: 'root'
@@ -901,13 +902,13 @@ export class VariableService {
 
                 if (activeSource.type === 'header' && prop && state.headers) {
                     const match = state.headers.find((h: any) => h.key?.trim().toLowerCase() === prop.toLowerCase());
-                    if (match && match.value !== undefined && match.value !== v.value) {
+                    if (match && match.value !== undefined && match.value !== v.value && !/\{\{.*?\}\}/.test(String(match.value))) {
                         hasChanges = true;
                         return { ...v, value: match.value, source: activeSource };
                     }
                 } else if (activeSource.type === 'param' && prop && state.params) {
                     const match = state.params.find((p: any) => p.key?.trim().toLowerCase() === prop.toLowerCase());
-                    if (match && match.value !== undefined && match.value !== v.value) {
+                    if (match && match.value !== undefined && match.value !== v.value && !/\{\{.*?\}\}/.test(String(match.value))) {
                         hasChanges = true;
                         return { ...v, value: match.value, source: activeSource };
                     }
@@ -921,7 +922,7 @@ export class VariableService {
                     }
                     if (newVal !== undefined && newVal !== null) {
                         const strVal = typeof newVal === 'object' ? JSON.stringify(newVal) : String(newVal);
-                        if (strVal !== v.value) {
+                        if (strVal !== v.value && !/\{\{.*?\}\}/.test(strVal) && !/^__POS_VAR_PLACEHOLDER_\d+__$/.test(strVal)) {
                             hasChanges = true;
                             return { ...v, value: strVal, source: activeSource };
                         }
@@ -947,7 +948,7 @@ export class VariableService {
 
         if (typeof current === 'string') {
             try {
-                current = JSON.parse(current);
+                current = parseJsonSafe(current);
             } catch {
                 // Try XML tag extraction: e.g. <token>xyz</token>
                 const tagRegex = new RegExp(`<${path}[^>]*>([\\s\\S]*?)<\\/${path}>`, 'i');
@@ -1130,5 +1131,162 @@ export class VariableService {
         resolvedText = resolvedText.replace(/\$randomIPv4/gi, () => `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`);
 
         return resolvedText;
+    }
+
+    private generateUtilityValue(utilityName: string): { value: string; isLiteral: boolean } {
+        switch (utilityName.toLowerCase()) {
+            case '$guid':
+            case '$randomuuid':
+                return { value: crypto.randomUUID(), isLiteral: false };
+            case '$timestamp':
+                return { value: Date.now().toString(), isLiteral: true };
+            case '$randomint':
+                return { value: Math.floor(Math.random() * 1000).toString(), isLiteral: true };
+            case '$randomemail':
+                return { value: `test_${Math.floor(Math.random() * 10000)}@example.com`, isLiteral: false };
+            case '$randomname':
+                return { value: 'John Doe', isLiteral: false };
+            case '$randomword':
+                return { value: 'lorem', isLiteral: false };
+            case '$randomcolor':
+                return { value: '#' + Math.floor(Math.random() * 16777215).toString(16), isLiteral: false };
+            case '$randomcity':
+                return { value: 'New York', isLiteral: false };
+            case '$randomstreetaddress':
+                return { value: '123 Main St', isLiteral: false };
+            case '$randomphonenumber':
+                return { value: '555-0100', isLiteral: false };
+            case '$randomboolean':
+                return { value: Math.random() > 0.5 ? 'true' : 'false', isLiteral: true };
+            case '$randomalphanumeric':
+                return { value: Math.random().toString(36).substring(2, 10), isLiteral: false };
+            case '$randomipv4':
+                return {
+                    value: `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`,
+                    isLiteral: false
+                };
+            default:
+                return { value: utilityName, isLiteral: false };
+        }
+    }
+
+    private isValidJsonLiteral(val: string): boolean {
+        if (!val) return false;
+        if (val === 'true' || val === 'false' || val === 'null') return true;
+        if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) return true;
+        if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
+            try {
+                JSON.parse(val);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private lookupEnabledVariable(rawKey: string): IGlobalVariable | undefined {
+        const cleanTarget = (rawKey || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase();
+        if (!cleanTarget) return undefined;
+        return this.variables().find(v => {
+            if (!v.enabled || !v.key) return false;
+            const cleanK = v.key.replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase();
+            return cleanK === cleanTarget;
+        });
+    }
+
+    resolveJson(text: string): string {
+        if (!text) return text;
+        const tokenRegex = /"(?:[^"\\]|\\.)*"|(\{\{\s*([^{}\r\n]+?)\s*\}\})|(\$(?:guid|timestamp|randomInt|randomUUID|randomEmail|randomName|randomWord|randomColor|randomCity|randomStreetAddress|randomPhoneNumber|randomBoolean|randomAlphaNumeric|randomIPv4)\b)/gi;
+
+        return text.replace(tokenRegex, (match, unquotedVarFull, unquotedVarKey, unquotedUtil, offset, fullStr) => {
+            if (match.startsWith('"')) {
+                const inner = match.slice(1, -1);
+                if (!inner.includes('{{') && !inner.includes('$')) {
+                    return match;
+                }
+                const resolvedInner = inner
+                    .replace(/\{\{\s*([^{}\r\n]+?)\s*\}\}/g, (m, key) => {
+                        const found = this.lookupEnabledVariable(key);
+                        if (!found) return m;
+                        const val = (this.getVariableValue(found) ?? '').trim();
+                        return JSON.stringify(val).slice(1, -1);
+                    })
+                    .replace(/\$(?:guid|timestamp|randomInt|randomUUID|randomEmail|randomName|randomWord|randomColor|randomCity|randomStreetAddress|randomPhoneNumber|randomBoolean|randomAlphaNumeric|randomIPv4)\b/gi, (u) => {
+                        const { value } = this.generateUtilityValue(u);
+                        return JSON.stringify(value).slice(1, -1);
+                    });
+                return `"${resolvedInner}"`;
+            }
+
+            const textAfter = fullStr.slice(offset + match.length);
+            const isPropertyKey = /^\s*:/.test(textAfter);
+
+            if (unquotedVarFull) {
+                const found = this.lookupEnabledVariable(unquotedVarKey);
+                if (!found) return match;
+                const dynamicVal = (this.getVariableValue(found) ?? '').trim();
+                if (!isPropertyKey && this.isValidJsonLiteral(dynamicVal)) {
+                    return dynamicVal;
+                }
+                return JSON.stringify(dynamicVal);
+            }
+
+            if (unquotedUtil) {
+                const { value, isLiteral } = this.generateUtilityValue(unquotedUtil);
+                if (!isPropertyKey && isLiteral) {
+                    return value;
+                }
+                return JSON.stringify(value);
+            }
+
+            return match;
+        });
+    }
+
+    resolveScript(code: string): string {
+        if (!code) return code;
+        const scriptRegex = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|(\/\/.*|\/\*[\s\S]*?\*\/)|(\{\{\s*([^{}\r\n]+?)\s*\}\})|(\$(?:guid|timestamp|randomInt|randomUUID|randomEmail|randomName|randomWord|randomColor|randomCity|randomStreetAddress|randomPhoneNumber|randomBoolean|randomAlphaNumeric|randomIPv4)\b)/gi;
+
+        return code.replace(scriptRegex, (match, comment, unquotedVarFull, unquotedVarKey, unquotedUtil) => {
+            if (comment) return match;
+
+            if (match.startsWith('"') || match.startsWith("'") || match.startsWith('`')) {
+                const quote = match[0];
+                const inner = match.slice(1, -1);
+                if (!inner.includes('{{') && !inner.includes('$')) {
+                    return match;
+                }
+                const resolvedInner = inner
+                    .replace(/\{\{\s*([^{}\r\n]+?)\s*\}\}/g, (m, key) => {
+                        const found = this.lookupEnabledVariable(key);
+                        if (!found) return m;
+                        const val = (this.getVariableValue(found) ?? '').trim();
+                        return JSON.stringify(val).slice(1, -1);
+                    })
+                    .replace(/\$(?:guid|timestamp|randomInt|randomUUID|randomEmail|randomName|randomWord|randomColor|randomCity|randomStreetAddress|randomPhoneNumber|randomBoolean|randomAlphaNumeric|randomIPv4)\b/gi, (u) => {
+                        const { value } = this.generateUtilityValue(u);
+                        return JSON.stringify(value).slice(1, -1);
+                    });
+                return `${quote}${resolvedInner}${quote}`;
+            }
+
+            if (unquotedVarFull) {
+                const found = this.lookupEnabledVariable(unquotedVarKey);
+                if (!found) return match;
+                const dynamicVal = (this.getVariableValue(found) ?? '').trim();
+                if (this.isValidJsonLiteral(dynamicVal)) {
+                    return dynamicVal;
+                }
+                return JSON.stringify(dynamicVal);
+            }
+
+            if (unquotedUtil) {
+                const { value, isLiteral } = this.generateUtilityValue(unquotedUtil);
+                return isLiteral ? value : JSON.stringify(value);
+            }
+
+            return match;
+        });
     }
 }

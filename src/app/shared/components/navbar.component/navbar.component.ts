@@ -112,6 +112,24 @@ export class NavbarComponent {
         this.createCapsuleModal?.open();
     }
 
+    async duplicateCurrentCapsule() {
+        this.showFileMenu.set(false);
+        const activeCapsuleId = this.tabStateService.activeCapsuleId();
+        const activeCapsule = this.tabStateService.capsules().find(c => c.id === activeCapsuleId);
+        if (!activeCapsule) {
+            this.notificationService.notify('No active capsule found to duplicate.');
+            return;
+        }
+        try {
+            const duplicated = await this.tabStateService.duplicateCapsule(activeCapsule);
+            await this.tabStateService.switchCapsule(duplicated);
+            this.notificationService.notify(`Capsule "${activeCapsule.name}" duplicated as "${duplicated.name}".`);
+        } catch (e: any) {
+            console.error('Failed to duplicate capsule:', e);
+            this.notificationService.notify(e?.message || 'Failed to duplicate capsule.');
+        }
+    }
+
     async saveCurrentRequest() {
         this.showFileMenu.set(false);
         const activeId = this.tabStateService.activeTabId();

@@ -27,12 +27,12 @@
         }
     </ul>
 
-    <div class="md:mt-auto p-2 md:p-3 flex flex-col justify-center gap-y-2 shrink-0">
+    <div class="md:mt-auto p-1.5 md:p-3 flex flex-row md:flex-col items-center justify-center gap-1.5 md:gap-y-2 shrink-0">
         @if (authService.isLoggedIn()) {
         <button type="button" (click)="openChangePassword()"
             title="Change Password"
-            class="h-[40px] py-2 px-3 flex items-center gap-2.5 rounded-xl cursor-pointer transition-all duration-200 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) border border-transparent hover:border-(--postonsteroids-border)/60"
-            [class.justify-center]="sidebarService.isCollapsed()">
+            class="h-9 px-2.5 md:h-[40px] md:w-full flex items-center justify-center md:justify-start gap-2.5 rounded-xl cursor-pointer transition-all duration-200 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) border border-transparent hover:border-(--postonsteroids-border)/60"
+            [class.md:justify-center]="sidebarService.isCollapsed()">
             <mat-icon class="text-[19px]! size-[19px]! shrink-0">lock_reset</mat-icon>
             @if (!sidebarService.isCollapsed()) {
             <span class="hidden md:inline text-[12px] font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">Password</span>
@@ -40,7 +40,7 @@
         </button>
         }
 
-        <div class="flex items-center justify-between p-1 bg-(--postonsteroids-bg-tertiary) rounded-xl border border-(--postonsteroids-border)/50 transition-all duration-300 gap-x-2 md:gap-y-4"
+        <div class="flex items-center justify-between p-1 bg-(--postonsteroids-bg-tertiary) rounded-xl border border-(--postonsteroids-border)/50 transition-all duration-300 gap-1 md:gap-y-4"
             [class.md:flex-col]="sidebarService.isCollapsed()">
             <button (click)="themeService.setTheme('light')" 
                 class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"

@@ -368,14 +368,12 @@ export class TabStateService {
     }
 
     private hasOfflineWork(): boolean {
+        const openTabs = this.openTabs();
         // If they opened multiple tabs
-        if (this.openTabIds().length > 1) return true;
+        if (openTabs.length > 1) return true;
         
         // Check the single open tab
-        const firstTabId = this.openTabIds()[0];
-        if (!firstTabId) return false;
-        
-        const state = this.states().get(firstTabId);
+        const state = openTabs[0];
         if (!state) return false;
         
         // If they typed a URL or changed the method or have a response
@@ -713,6 +711,9 @@ export class TabStateService {
     constructor() {
         if (this.isBrowser) {
             this.loadFromStorage();
+            if (this.authService.isLoggedIn() && this.openTabs().length === 0) {
+                this.isCapsuleLoading.set(true);
+            }
         }
 
         // 1. Lightweight tab & capsule metadata persisted immediately
@@ -2818,13 +2819,16 @@ export class TabStateService {
     }
 
     async loadBackendData(): Promise<void> {
-        if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
+        if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) {
+            this.isCapsuleLoading.set(false);
+            return;
+        }
         if (this.isLoadingBackendData()) return;
 
         const hadOfflineWorkAtStart = this.hasOfflineWork();
         const loadSwitchVersion = this.capsuleSwitchVersion;
         this.isLoadingBackendData.set(true);
-        if (!hadOfflineWorkAtStart) {
+        if (!hadOfflineWorkAtStart || this.openTabs().length === 0) {
             this.isCapsuleLoading.set(true);
         }
 
@@ -2981,7 +2985,7 @@ export class TabStateService {
             console.error('Failed to load backend data', e);
         } finally {
             this.isLoadingBackendData.set(false);
-            if (!hadOfflineWorkAtStart && this.capsuleSwitchVersion === loadSwitchVersion) {
+            if (this.capsuleSwitchVersion === loadSwitchVersion) {
                 this.isCapsuleLoading.set(false);
             }
         }

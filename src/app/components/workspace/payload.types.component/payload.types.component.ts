@@ -128,16 +128,16 @@ export class PayloadTypesComponent {
   async runActiveEncryptionScript() {
         this.isRunningEncryptionScript.set(true);
         try {
-      const code = this.encryption().script;
+      const code = this.variableService.resolveScript(this.encryption().script || '');
       const state = this.tabState();
       let requestBody = '';
       
       if (state?.bodyType === 'raw') {
-          requestBody = state.rawBody || '';
+          requestBody = this.variableService.resolveJson(state.rawBody || '');
       } else if (state?.bodyType === 'form-data') {
           const fd: Record<string, string> = {};
           for (const row of state.formData || []) {
-             if (row.enabled && row.key) fd[row.key] = row.value;
+             if (row.enabled && row.key) fd[this.variableService.resolveScript(row.key)] = this.variableService.resolveScript(row.value);
           }
           requestBody = JSON.stringify(fd);
       }
@@ -265,7 +265,7 @@ export class PayloadTypesComponent {
 
 
   async runCurrentPhaseScript() {
-      const code = this.getScriptContent();
+      const code = this.variableService.resolveScript(this.getScriptContent() || '');
       try {
           const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
           // Simple sandbox stub for pre/post scripts

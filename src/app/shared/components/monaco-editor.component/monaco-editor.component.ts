@@ -9,6 +9,7 @@ import { MatIcon } from '@angular/material/icon';
 
 @Component({
   selector: 'app-monaco-editor',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, MonacoEditorModule, MatIcon],
   templateUrl: './monaco-editor.component.html',
   styleUrl: './monaco-editor.component.css',
@@ -48,6 +49,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   floatingVarPosition = signal<{ top: number; left: number }>({ top: 0, left: 0 });
   private isMouseDownOnFloatingVar = false;
   private selectionDisposables: any[] = [];
+
+  hoveredVariable = signal<{ key: string; val: string; type: string; x: number; y: number } | null>(null);
+  isMouseInPopup = false;
+  private hoverClearTimeout: any = null;
+  private variableDecorations: string[] = [];
 
   value = signal<string>('');
   disabled = signal<boolean>(false);
@@ -91,9 +97,21 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
   private static modelCache = new Map<string, any>();
   private static completionProvidersRegistered = new Set<string>();
+  private static isMarkersHookInstalled = false;
+  private static variableServiceRef: VariableService | null = null;
   public static lastFocusedEditor: MonacoEditorComponent | null = null;
 
   constructor() {
+    MonacoEditorComponent.variableServiceRef = this.variableService;
+
+    // Re-apply stored variable decorations whenever variables change
+    effect(() => {
+      const vars = this.variableService.variables();
+      if (this.editorInstance() && this.isBrowser) {
+        this.updateVariableDecorations();
+      }
+    });
+
     // Dynamically update editor options when theme changes without recreating the editor
     effect(() => {
       const theme = this.themeService.isDarkMode() ? 'vs-dark' : 'vs';
@@ -171,6 +189,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               if (this.enableEncryptionToggles()) {
                 this.updateDecorations();
               }
+              this.updateVariableDecorations();
               // Sync the Angular value signal with the restored model's content without emitting a fake user edit
               const cachedValue = cachedModel.getValue();
               this.value.set(cachedValue);
@@ -206,6 +225,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
             if (this.enableEncryptionToggles()) {
               this.updateDecorations();
             }
+            this.updateVariableDecorations();
 
             // Restore scroll position for this specific tab and editor
             const scrollState = owner
@@ -292,27 +312,30 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     if (this.isBrowser) {
       const monacoGlobal = (window as any).monaco;
       if (monacoGlobal && monacoGlobal.languages) {
+        MonacoEditorComponent.installMarkersHook(monacoGlobal);
+
+        if (monacoGlobal.languages?.json?.jsonDefaults) {
+          monacoGlobal.languages.json.jsonDefaults.setDiagnosticsOptions({
+            validate: true,
+            allowComments: true,
+            trailingCommas: 'ignore',
+            schemas: []
+          });
+        }
+
         const lang = this.language();
         if (!MonacoEditorComponent.completionProvidersRegistered.has(lang)) {
           monacoGlobal.languages.registerCompletionItemProvider(lang, {
             triggerCharacters: ['{', '$'],
             provideCompletionItems: (model: any, position: any) => {
               const word = model.getWordUntilPosition(position);
-              const range = {
-                startLineNumber: position.lineNumber,
-                endLineNumber: position.lineNumber,
-                startColumn: word.startColumn,
-                endColumn: word.endColumn
-              };
-
               const lineContent = model.getLineContent(position.lineNumber);
               const textBeforeWord = lineContent.substring(0, word.startColumn - 1);
               
               const isDoubleOpen = textBeforeWord.endsWith('{{');
-              const isSingleOpen = !isDoubleOpen && textBeforeWord.endsWith('{');
-              const isUtility = !isDoubleOpen && !isSingleOpen && textBeforeWord.endsWith('$');
+              const isUtility = !isDoubleOpen && textBeforeWord.endsWith('$');
 
-              if (isDoubleOpen || isSingleOpen || isUtility) {
+              if (isDoubleOpen || isUtility) {
                 const textAfterWord = lineContent.substring(word.endColumn - 1);
                 let consumeClosing = 0;
                 if (!isUtility) {
@@ -345,20 +368,20 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
                     detail: 'Utility Variable',
                     documentation: `Generates a random ${u}`
                   }));
-                  return { suggestions };
+                  return { suggestions, incomplete: true };
                 }
 
-                const prefix = isSingleOpen ? '{' : '';
-                const variables = this.variableService.variables();
+                const varService = MonacoEditorComponent.variableServiceRef;
+                const variables = varService ? varService.variables() : [];
                 const suggestions = variables.map((v: any) => ({
                   label: v.key,
                   kind: monacoGlobal.languages.CompletionItemKind.Variable,
-                  insertText: `${prefix}${v.key}}}`,
+                  insertText: `${v.key}}}`,
                   range: replaceRange,
                   detail: `Value: ${v.value || '(empty)'}`,
                   documentation: `Variable: {{${v.key}}}`
                 }));
-                return { suggestions };
+                return { suggestions, incomplete: true };
               }
               return { suggestions: [] };
             }
@@ -412,6 +435,120 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const model = editor.getModel();
       if (model) {
         this.onValueChange(model.getValue());
+        this.updateVariableDecorations();
+
+        const monacoGlobal = (window as any).monaco;
+        if (monacoGlobal?.editor?.getModelMarkers) {
+          const markers = monacoGlobal.editor.getModelMarkers({ resource: model.uri });
+          if (markers?.length) {
+            const filtered = MonacoEditorComponent.filterVariableMarkers(model, markers);
+            if (filtered.length !== markers.length) {
+              monacoGlobal.editor.setModelMarkers(model, 'json', filtered);
+            }
+          }
+        }
+      }
+    });
+
+    // Variable hover detection and popup trigger
+    editor.onMouseMove?.((e: any) => {
+      if (!this.isBrowser) return;
+      const pos = e.target?.position;
+      if (!pos) {
+        if (!this.isMouseInPopup) {
+          if (!this.hoverClearTimeout) {
+            this.hoverClearTimeout = setTimeout(() => {
+              if (!this.isMouseInPopup) this.hoveredVariable.set(null);
+              this.hoverClearTimeout = null;
+            }, 300);
+          }
+        }
+        return;
+      }
+
+      const model = editor.getModel();
+      if (!model || model.isDisposed?.()) return;
+
+      const lineContent = model.getLineContent(pos.lineNumber);
+      const regex = /\{\{([^{}]+)\}\}/g;
+      let m: RegExpExecArray | null;
+      let found = false;
+
+      while ((m = regex.exec(lineContent)) !== null) {
+        const startCol = m.index + 1;
+        const endCol = m.index + m[0].length + 1;
+
+        if (pos.column >= startCol && pos.column <= endCol) {
+          found = true;
+          if (this.hoverClearTimeout) {
+            clearTimeout(this.hoverClearTimeout);
+            this.hoverClearTimeout = null;
+          }
+          const rawKey = m[1].trim();
+          const cleanKey = rawKey.replace(/^[:{]+/, '').replace(/[}]+$/, '').trim();
+          const v = this.variableService.variables().find(
+            x => (x.key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase() === cleanKey.toLowerCase()
+          );
+
+          const clientX = e.event?.browserEvent?.clientX ?? 0;
+          const clientY = e.event?.browserEvent?.clientY ?? 0;
+
+          const x = Math.max(120, Math.min(clientX, (window?.innerWidth || 1000) - 130));
+          const y = clientY + 15 > (window?.innerHeight || 800) - 120 ? clientY - 110 : clientY;
+
+          this.hoveredVariable.set({
+            key: cleanKey,
+            val: v ? (v.value || '') : '',
+            type: 'global',
+            x,
+            y
+          });
+          break;
+        }
+      }
+
+      if (!found && !this.isMouseInPopup) {
+        if (!this.hoverClearTimeout) {
+          this.hoverClearTimeout = setTimeout(() => {
+            if (!this.isMouseInPopup) this.hoveredVariable.set(null);
+            this.hoverClearTimeout = null;
+          }, 300);
+        }
+      }
+    });
+
+    editor.onMouseLeave?.(() => {
+      if (!this.isMouseInPopup) {
+        if (this.hoverClearTimeout) {
+          clearTimeout(this.hoverClearTimeout);
+          this.hoverClearTimeout = null;
+        }
+        this.hoverClearTimeout = setTimeout(() => {
+          if (!this.isMouseInPopup) this.hoveredVariable.set(null);
+          this.hoverClearTimeout = null;
+        }, 300);
+      }
+    });
+
+    editor.onMouseDown?.(() => {
+      if (!this.isMouseInPopup) {
+        this.hoveredVariable.set(null);
+      }
+    });
+
+    // Ensure variable decorations and initial marker filtering run after mount
+    requestAnimationFrame(() => {
+      this.updateVariableDecorations();
+      const model = editor.getModel();
+      const monacoGlobal = (window as any).monaco;
+      if (model && monacoGlobal?.editor?.getModelMarkers) {
+        const markers = monacoGlobal.editor.getModelMarkers({ resource: model.uri });
+        if (markers?.length) {
+          const filtered = MonacoEditorComponent.filterVariableMarkers(model, markers);
+          if (filtered.length !== markers.length) {
+            monacoGlobal.editor.setModelMarkers(model, 'json', filtered);
+          }
+        }
       }
     });
 
@@ -544,6 +681,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.hoverClearTimeout) {
+      clearTimeout(this.hoverClearTimeout);
+      this.hoverClearTimeout = null;
+    }
+
     this.selectionDisposables.forEach(d => d?.dispose?.());
     this.selectionDisposables = [];
 
@@ -553,6 +695,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     }
 
     const editor = this.editorInstance();
+    if (editor?.deltaDecorations && this.variableDecorations.length > 0) {
+      editor.deltaDecorations(this.variableDecorations, []);
+      this.variableDecorations = [];
+    }
 
     // Persist the current scroll position into the tab state before the editor
     // is destroyed. Without this, switching payload-type tabs (e.g. Encryption →
@@ -889,6 +1035,166 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
     this.addVariableClick.emit();
     this.showFloatingVar.set(false);
+  }
+
+  updateVariableValue(key: string, newValue: string) {
+    const hover = this.hoveredVariable();
+    if (hover && hover.key === key) {
+      this.hoveredVariable.set({ ...hover, val: newValue });
+    }
+
+    const cleanKey = (key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim();
+    const lowerKey = cleanKey.toLowerCase();
+    const v = this.variableService.variables().find(
+      x => (x.key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase() === lowerKey
+    );
+
+    if (v) {
+      this.variableService.updateVariable({ ...v, value: newValue });
+    } else {
+      this.variableService.addVariable(cleanKey, newValue, undefined, 'global');
+    }
+  }
+
+  private updateVariableDecorations() {
+    const editor = this.editorInstance();
+    if (!editor || !this.isBrowser) return;
+    const monacoGlobal = (window as any).monaco;
+    if (!monacoGlobal) return;
+    const model = editor.getModel();
+    if (!model || model.isDisposed?.()) return;
+
+    const decorations: any[] = [];
+    const text = model.getValue();
+    if (!text) {
+      if (editor.deltaDecorations) {
+        this.variableDecorations = editor.deltaDecorations(this.variableDecorations, []);
+      }
+      return;
+    }
+
+    try {
+      // 1. Global / stored variables: {{varName}}
+      const globalVarMatches = model.findMatches(
+        '\\{\\{[^{}]+\\}\\}',
+        true,
+        true,
+        false,
+        null,
+        false
+      );
+
+      const variables = this.variableService.variables();
+      const varMap = new Map<string, string>();
+      for (const v of variables) {
+        if (v.key) varMap.set(v.key.trim().toLowerCase(), v.value || '');
+      }
+
+      for (const match of globalVarMatches) {
+        const matchText = model.getValueInRange(match.range);
+        const varKey = matchText.slice(2, -2).trim();
+        const val = varMap.get(varKey.toLowerCase());
+        const valDisplay = val !== undefined ? (val || '(empty)') : '(not set)';
+
+        decorations.push({
+          range: match.range,
+          options: {
+            inlineClassName: 'monaco-global-var-token',
+            hoverMessage: {
+              value: `**Global Variable**: \`{{${varKey}}}\`\n\n**Current Value**: \`${valDisplay}\``
+            }
+          }
+        });
+      }
+
+      // 2. Utility variables: $guid, $timestamp, etc.
+      const utilMatches = model.findMatches(
+        '\\$[a-zA-Z0-9_]+',
+        true,
+        true,
+        false,
+        null,
+        false
+      );
+
+      for (const match of utilMatches) {
+        const utilText = model.getValueInRange(match.range);
+        decorations.push({
+          range: match.range,
+          options: {
+            inlineClassName: 'monaco-utility-var-token',
+            hoverMessage: {
+              value: `**Utility Variable**: \`${utilText}\`\n\nGenerates dynamic value at request execution time.`
+            }
+          }
+        });
+      }
+
+      if (editor.deltaDecorations) {
+        this.variableDecorations = editor.deltaDecorations(this.variableDecorations, decorations);
+      }
+    } catch {
+      // Ignore if editor/model is mid-transition
+    }
+  }
+
+  private static installMarkersHook(monacoGlobal: any) {
+    if (MonacoEditorComponent.isMarkersHookInstalled || !monacoGlobal?.editor?.setModelMarkers) {
+      return;
+    }
+    MonacoEditorComponent.isMarkersHookInstalled = true;
+    const originalSetModelMarkers = monacoGlobal.editor.setModelMarkers;
+
+    monacoGlobal.editor.setModelMarkers = function(model: any, owner: string, markers: any[]) {
+      if (!markers || markers.length === 0 || !model || model.isDisposed?.()) {
+        return originalSetModelMarkers.call(this, model, owner, markers || []);
+      }
+
+      const filtered = MonacoEditorComponent.filterVariableMarkers(model, markers);
+      return originalSetModelMarkers.call(this, model, owner, filtered);
+    };
+  }
+
+  private static filterVariableMarkers(model: any, markers: any[]): any[] {
+    try {
+      if (!markers || markers.length === 0) return markers;
+      const text = model.getValue?.();
+      if (!text || (!text.includes('{{') && !text.includes('$'))) {
+        return markers;
+      }
+
+      const varRanges: { startLine: number; startCol: number; endLine: number; endCol: number }[] = [];
+      const regex = /(\{\{[^{}]*?\}\}|\$[a-zA-Z0-9_]+)/g;
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(text)) !== null) {
+        const startPos = model.getPositionAt(match.index);
+        const endPos = model.getPositionAt(match.index + match[0].length);
+        varRanges.push({
+          startLine: startPos.lineNumber,
+          startCol: startPos.column,
+          endLine: endPos.lineNumber,
+          endCol: endPos.column
+        });
+      }
+
+      if (varRanges.length === 0) return markers;
+
+      return markers.filter((m: any) => {
+        const touches = varRanges.some(vr => {
+          if (m.endLineNumber < vr.startLine || m.startLineNumber > vr.endLine) {
+            return false;
+          }
+          if (m.startLineNumber === vr.startLine && m.endLineNumber === vr.endLine) {
+            return (m.startColumn <= vr.endCol + 2 && m.endColumn >= vr.startCol - 2);
+          }
+          return true;
+        });
+
+        return !touches;
+      });
+    } catch {
+      return markers;
+    }
   }
 }
 

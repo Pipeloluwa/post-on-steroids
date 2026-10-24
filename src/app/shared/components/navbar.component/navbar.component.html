@@ -1,12 +1,12 @@
 <nav style="-webkit-app-region: drag;"
-    class="w-full shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-4 z-50">
-    <div class="w-full min-h-12 flex flex-wrap items-center justify-between gap-y-2 gap-x-4 py-1">
+    class="w-full shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-3 sm:px-4 z-50">
+    <div class="w-full min-h-12 flex items-center justify-between gap-x-2 sm:gap-x-4 py-1">
         
         <!-- Left Section: Logo, Sidebar Toggle & Menu Tabs -->
         <div class="flex items-center gap-x-2 shrink-0">
             <!-- Logo -->
             <a routerLink="/steroid" style="-webkit-app-region: no-drag;"
-                class="flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline mr-2">
+                class="flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline mr-1 sm:mr-2">
                 <img src="icons/onsteroids-icon.svg" alt="OnSteroid" width="24" height="24" loading="eager" fetchpriority="high" class="size-6 rounded-lg shadow-sm shadow-(--postonsteroids-accent)/30 group-hover:scale-105 transition-transform" />
                 <span class="text-[14px] font-bold tracking-wider text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
                     OnSteroid
@@ -21,11 +21,11 @@
             </button>
 
             <!-- Menu Tabs: File, About, Help/Updates -->
-            <div class="flex items-center gap-x-0.5 border-l border-(--postonsteroids-border) pl-2" style="-webkit-app-region: no-drag;">
+            <div class="flex items-center gap-x-0.5 border-l border-(--postonsteroids-border) pl-1.5 sm:pl-2" style="-webkit-app-region: no-drag;">
                 <!-- File Menu Dropdown Trigger -->
                 <div class="relative">
                     <button (click)="toggleFileMenu($event)"
-                        class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover) hover:text-(--postonsteroids-text-primary)"
+                        class="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover) hover:text-(--postonsteroids-text-primary)"
                         [class.bg-(--postonsteroids-bg-hover)]="showFileMenu()"
                         [class.text-(--postonsteroids-text-primary)]="showFileMenu()"
                         [class.text-(--postonsteroids-text-secondary)]="!showFileMenu()">
@@ -52,6 +52,14 @@
                                 <div class="flex items-center gap-2">
                                     <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-amber-400 transition-colors">folder_special</mat-icon>
                                     <span>New Capsule...</span>
+                                </div>
+                            </button>
+
+                            <button (click)="duplicateCurrentCapsule()"
+                                class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
+                                <div class="flex items-center gap-2">
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-amber-400 transition-colors">content_copy</mat-icon>
+                                    <span>Duplicate Capsule</span>
                                 </div>
                             </button>
 
@@ -133,10 +141,10 @@
         <div class="flex-1"></div>
 
         <!-- Right Section: Utilities + Auth (Permanently pinned to far right) -->
-        <div class="flex items-center justify-end gap-x-3 shrink-0" style="-webkit-app-region: no-drag;">
+        <div class="flex items-center justify-end gap-x-2 sm:gap-x-3 shrink-0" style="-webkit-app-region: no-drag;">
             @if (!isElectron) {
-                <div class="flex items-center gap-x-2">
-                    <span class="text-[10px] text-(--postonsteroids-text-muted) hidden lg:block italic mt-0.5">
+                <div class="flex items-center gap-x-2 shrink-0">
+                    <span class="text-[10px] text-(--postonsteroids-text-muted) italic mt-0.5 whitespace-nowrap shrink-0">
                         * Some API calls may fail on Web. For full performance, download the Desktop App.
                     </span>
                     <a href="/OnSteroid Setup 1.0.0.exe" download="OnSteroid Setup 1.0.0.exe" title="Download Desktop App for full performance and unlimited access"
@@ -148,22 +156,22 @@
             }
 
             <a routerLink="/utilities" title="Utilities"
-                class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-3 py-1 text-[12px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-200 no-underline">
+                class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-3 py-1 text-[12px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-200 no-underline shrink-0">
                 <mat-icon class="text-[16px]! size-4!">handyman</mat-icon>
                 <span>Utilities</span>
             </a>
 
             @if (isLoggedIn()) {
-            <div class="flex items-center gap-x-2 relative">
+            <div class="flex items-center gap-x-2 relative shrink-0">
                 <button type="button" (click)="toggleUserMenu($event)"
                     title="Account options"
-                    class="flex items-center gap-x-2 pl-1.5 pr-2.5 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/40 transition-all cursor-pointer">
+                    class="flex items-center gap-x-2 pl-1.5 pr-2.5 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/40 transition-all cursor-pointer shrink-0">
                     <div
-                        class="size-6 tracking-wider rounded-full bg-linear-to-br from-(--postonsteroids-accent) to-(--postonsteroids-accent-hover) flex items-center justify-center text-[10px] font-bold text-white shadow-inner select-none">
+                        class="size-6 tracking-wider rounded-full bg-linear-to-br from-(--postonsteroids-accent) to-(--postonsteroids-accent-hover) flex items-center justify-center text-[10px] font-bold text-white shadow-inner select-none shrink-0">
                         {{ userInitials() }}
                     </div>
                     <div class="flex items-center gap-x-1.5 min-w-0">
-                        <span class="text-xs font-medium text-(--postonsteroids-text-primary) max-w-40 truncate"
+                        <span class="text-xs font-medium text-(--postonsteroids-text-primary) max-w-44 truncate"
                             [title]="userEmail()">
                             {{ userEmail() }}
                         </span>
@@ -200,12 +208,12 @@
                 }
 
                 <button (click)="openChangePassword()" title="Change password"
-                    class="flex items-center justify-center size-8 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-accent)/15 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/40 transition-all cursor-pointer">
+                    class="flex items-center justify-center size-8 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-accent)/15 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/40 transition-all cursor-pointer shrink-0">
                     <mat-icon class="text-[16px]! size-4!">key</mat-icon>
                 </button>
                 <button (click)="onLogout.emit()" title="Sign out"
                     [disabled]="isLoggingOut()"
-                    class="flex items-center justify-center size-8 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-400 border border-(--postonsteroids-border) hover:border-red-500/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    class="flex items-center justify-center size-8 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-400 border border-(--postonsteroids-border) hover:border-red-500/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
                     @if (isLoggingOut()) {
                         <mat-icon class="text-[16px]! size-4! animate-spin">refresh</mat-icon>
                     } @else {
@@ -215,7 +223,7 @@
             </div>
             } @else {
             <button (click)="onToggleAuth.emit()"
-                class="flex items-center gap-x-2 px-3 py-1.5 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-200 cursor-pointer group">
+                class="flex items-center gap-x-2 px-3 py-1.5 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-200 cursor-pointer group shrink-0">
                 <mat-icon
                     class="text-[18px]! size-4.5! text-(--postonsteroids-text-secondary) group-hover:text-(--postonsteroids-text-primary)">account_circle</mat-icon>
                 <span

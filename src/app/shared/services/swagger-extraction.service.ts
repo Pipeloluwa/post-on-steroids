@@ -84,33 +84,43 @@ export class SwaggerExtractionService {
             }
         }
 
-        // Direct fetch fallback in case proxy is offline or target is local
-        try {
-            const rawText = await firstValueFrom(
-                this.http.get(targetUrl, {
-                    responseType: 'text' as const,
-                    headers: { 'Accept': accept }
-                })
-            );
-            let parsedJson: any = null;
+        // Direct fetch fallback only for Electron where web security is disabled.
+        // In the browser, direct calls to external URLs fail due to CORS.
+        if (isElectron) {
             try {
-                parsedJson = JSON.parse(rawText);
-            } catch { }
+                const rawText = await firstValueFrom(
+                    this.http.get(targetUrl, {
+                        responseType: 'text' as const,
+                        headers: { 'Accept': accept }
+                    })
+                );
+                let parsedJson: any = null;
+                try {
+                    parsedJson = JSON.parse(rawText);
+                } catch { }
 
-            return {
-                ok: true,
-                status: 200,
-                text: rawText,
-                json: parsedJson
-            };
-        } catch {
-            return {
-                ok: false,
-                status: 0,
-                text: '',
-                json: null
-            };
+                return {
+                    ok: true,
+                    status: 200,
+                    text: rawText,
+                    json: parsedJson
+                };
+            } catch {
+                return {
+                    ok: false,
+                    status: 0,
+                    text: '',
+                    json: null
+                };
+            }
         }
+
+        return {
+            ok: false,
+            status: 0,
+            text: 'CORS bypass failed through proxy',
+            json: null
+        };
     }
 
     /**

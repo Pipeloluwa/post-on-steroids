@@ -161,7 +161,9 @@ export class RequestExecutionService {
                         ? (freshState.rawBodyXml || '')
                         : (freshState.rawBodyJson || '{}');
 
-                    let resolvedRaw = this.variableService.resolve(rawBodyContent);
+                    let resolvedRaw = freshState.rawType === 'JSON'
+                        ? this.variableService.resolveJson(rawBodyContent)
+                        : this.variableService.resolve(rawBodyContent);
 
                     // Strip comments if the payload is JSON so it can be parsed and sent cleanly
                     if (freshState.rawType === 'JSON') {
@@ -189,7 +191,9 @@ export class RequestExecutionService {
             let preRequestLogs = '';
 
             // 5a. Encryption Script
-            const encryptionScriptCode = freshState.encryption?.script;
+            const encryptionScriptCode = freshState.encryption?.script
+                ? this.variableService.resolveScript(freshState.encryption.script)
+                : '';
             let encryptionLogs = '';
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
                 // Serialize body to JSON string for encryption script
@@ -248,7 +252,9 @@ export class RequestExecutionService {
             }
 
             // 5b. Pre-Request Script
-            const preScriptCode = freshState.scripts?.preRequest;
+            const preScriptCode = freshState.scripts?.preRequest
+                ? this.variableService.resolveScript(freshState.scripts.preRequest)
+                : '';
             if (preScriptCode && preScriptCode.trim()) {
                 const context = {
                     headers,
@@ -360,10 +366,10 @@ export class RequestExecutionService {
             let finalUrl = resolvedUrl;
 
             // Check if running inside Electron wrapper
-            const isElectron = /electron/i.test(navigator.userAgent);
+            const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
 
-            // Check if CORS bypass is enabled (We do not need proxy in Electron because webSecurity is disabled)
-            let isUsingProxy = (freshState.settings?.bypassCors && !isElectron);
+            // In the browser version, route every URL call through proxy to avoid CORS issues
+            let isUsingProxy = !isElectron || !!freshState.settings?.bypassCors;
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
             let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;
@@ -410,42 +416,67 @@ export class RequestExecutionService {
                         bodyPayload = typeof body === 'string' ? body : JSON.stringify(body);
                     }
 
-                    const proxyUrl = environment.proxyUrl;
+                    const proxyEndpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));
+                    let lastResult: any = null;
 
-                    if (freshState.bodyType === 'form-data' && finalBody instanceof FormData) {
-                        const fd = new FormData();
-                        fd.append('url', targetUrl);
-                        fd.append('method', freshState.method);
-                        fd.append('headers', JSON.stringify(headersObj));
-                        fd.append('verifySsl', String(freshState.settings?.verifySsl ?? true));
-                        fd.append('bodyType', 'form-data');
-                        
-                        // Append original files and fields
-                        const rawFormData = freshState.formData;
-                        for (const row of body) {
-                            const originalRow = rawFormData.find((f: any) => f.key === row.key);
-                            if (originalRow && originalRow.type === 'file' && originalRow.file) {
-                                fd.append(row.key, originalRow.file, originalRow.file.name);
-                            } else {
-                                fd.append(row.key, row.value);
+                    for (const currentProxyUrl of proxyEndpoints) {
+                        if (freshState.bodyType === 'form-data' && finalBody instanceof FormData) {
+                            const fd = new FormData();
+                            fd.append('url', targetUrl);
+                            fd.append('method', freshState.method);
+                            fd.append('headers', JSON.stringify(headersObj));
+                            fd.append('verifySsl', String(freshState.settings?.verifySsl ?? true));
+                            fd.append('bodyType', 'form-data');
+                            
+                            // Append original files and fields
+                            const rawFormData = freshState.formData;
+                            for (const row of body) {
+                                const originalRow = rawFormData.find((f: any) => f.key === row.key);
+                                if (originalRow && originalRow.type === 'file' && originalRow.file) {
+                                    fd.append(row.key, originalRow.file, originalRow.file.name);
+                                } else {
+                                    fd.append(row.key, row.value);
+                                }
                             }
+
+                            reqObservable = this.http.post<any>(`${currentProxyUrl}/multipart`, fd, {
+                                observe: 'response' as const
+                            });
+                        } else {
+                            const proxyPayload = {
+                                url: targetUrl,
+                                method: freshState.method,
+                                headers: headersObj,
+                                body: bodyPayload,
+                                verifySsl: freshState.settings?.verifySsl ?? true
+                            };
+                            reqObservable = this.http.post<any>(currentProxyUrl, proxyPayload, {
+                                headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
+                                observe: 'response' as const
+                            });
                         }
 
-                        reqObservable = this.http.post<any>(`${proxyUrl}/multipart`, fd, {
-                            observe: 'response' as const
+                        lastResult = await new Promise((resolve, reject) => {
+                            const sub = reqObservable.subscribe({
+                                next: (res: any) => resolve(res),
+                                error: (err: any) => resolve(err)
+                            });
+                            cancelToken.cancelFn = () => {
+                                sub.unsubscribe();
+                                reject(new Error('Request cancelled'));
+                            };
                         });
+
+                        // If not a network/connection error (status 0 or 502/503), accept this result
+                        if (!(lastResult instanceof HttpErrorResponse) || (lastResult.status > 0 && lastResult.status < 500)) {
+                            break;
+                        }
+                    }
+
+                    if (!(lastResult instanceof HttpErrorResponse) && lastResult?.body) {
+                        proxyReturnedResponse = lastResult.body.data ? lastResult.body.data : lastResult.body;
                     } else {
-                        const proxyPayload = {
-                            url: targetUrl,
-                            method: freshState.method,
-                            headers: headersObj,
-                            body: bodyPayload,
-                            verifySsl: freshState.settings?.verifySsl ?? true
-                        };
-                        reqObservable = this.http.post<any>(proxyUrl, proxyPayload, {
-                            headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
-                            observe: 'response' as const
-                        });
+                        httpResponse = lastResult;
                     }
                 } else {
                     switch (freshState.method) {
@@ -460,23 +491,18 @@ export class RequestExecutionService {
                         case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
                         default: reqObservable = this.http.request(freshState.method, finalUrl, { ...reqOptions, body: finalBody }); break;
                     }
-                }
 
-                const rawResult: any = await new Promise((resolve, reject) => {
-                    const sub = reqObservable.subscribe({
-                        next: (res: any) => resolve(res),
-                        error: (err: any) => resolve(err)
+                    const rawResult: any = await new Promise((resolve, reject) => {
+                        const sub = reqObservable.subscribe({
+                            next: (res: any) => resolve(res),
+                            error: (err: any) => resolve(err)
+                        });
+                        cancelToken.cancelFn = () => {
+                            sub.unsubscribe();
+                            reject(new Error('Request cancelled'));
+                        };
                     });
-                    cancelToken.cancelFn = () => {
-                        sub.unsubscribe();
-                        reject(new Error('Request cancelled'));
-                    };
-                });
 
-                if (isUsingProxy && !(rawResult instanceof HttpErrorResponse) && rawResult?.body) {
-                    // Unpack the new BaseSuccessResponse wrapper if it exists
-                    proxyReturnedResponse = rawResult.body.data ? rawResult.body.data : rawResult.body;
-                } else {
                     httpResponse = rawResult;
                 }
             } catch (err: any) {
@@ -523,7 +549,9 @@ export class RequestExecutionService {
                         if (!this.networkService.isOnline()) {
                             rawResponseBody = 'Internet connection lost. Please check your network and try again.';
                         } else if (isUsingProxy) {
-                            rawResponseBody = 'Failed to connect to local proxy (OnSteroidApi at https://localhost:7131). Please ensure OnSteroidApi is running.';
+                            rawResponseBody = environment.production
+                                ? 'Failed to connect to OnSteroid proxy (proxy.onsteroid.com). Please check your internet connection or verify the endpoint.'
+                                : `Failed to connect to local proxy (OnSteroidApi at ${environment.proxyUrl}). Please ensure OnSteroidApi is running.`;
                         } else {
                             rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue. Ensure the endpoint is reachable.';
                         }
@@ -554,7 +582,9 @@ export class RequestExecutionService {
             }
 
             // 9. Post-Response Script Execution
-            const postScriptCode = freshState.scripts?.postResponse;
+            const postScriptCode = freshState.scripts?.postResponse
+                ? this.variableService.resolveScript(freshState.scripts.postResponse)
+                : '';
             let postResponseLogs = '';
             if (postScriptCode && postScriptCode.trim()) {
                 const context = {
@@ -576,7 +606,9 @@ export class RequestExecutionService {
             }
 
             // 9.5 Test Script Execution
-            const testScriptCode = freshState.scripts?.testScript;
+            const testScriptCode = freshState.scripts?.testScript
+                ? this.variableService.resolveScript(freshState.scripts.testScript)
+                : '';
             let testResults: any[] = [];
             if (freshState.scripts?.testScriptEnabled && testScriptCode && testScriptCode.trim()) {
                 const testContext = {

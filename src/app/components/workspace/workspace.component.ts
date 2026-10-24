@@ -35,7 +35,8 @@ import { RequestExecutionService } from '../../shared/services/request.execution
         '(document:mousemove)': 'onMouseMove($event)',
         '(document:mouseup)': 'onMouseUp()',
         '(document:keydown)': 'handleKeyboardShortcuts($event)',
-        '(window:beforeunload)': 'onBeforeUnload($event)'
+        '(window:beforeunload)': 'onBeforeUnload($event)',
+        '(window:resize)': 'onWindowResize()'
     }
 })
 export class WorkspaceComponent {
@@ -62,6 +63,9 @@ export class WorkspaceComponent {
             if (!isNaN(height)) {
                 this.requestHeight.set(this.clampHeight(height));
             }
+        } else if (this.isBrowser) {
+            const sensibleDefault = Math.max(160, Math.min(450, Math.floor((window.innerHeight - 200) * 0.52)));
+            this.requestHeight.set(sensibleDefault);
         }
 
         if (this.isBrowser) {
@@ -95,10 +99,15 @@ export class WorkspaceComponent {
         }
     }
 
+    onWindowResize() {
+        if (!this.isBrowser) return;
+        this.requestHeight.update(h => this.clampHeight(h));
+    }
+
     private clampHeight(height: number): number {
         const minHeight = 100; // Decreased to allow pulling the divider further up
         const screenHeight = this.isBrowser ? window.innerHeight : 1000;
-        const maxHeight = Math.max(minHeight, screenHeight - 130);
+        const maxHeight = Math.max(minHeight, screenHeight - 200);
         return Math.max(minHeight, Math.min(height, maxHeight));
     }
 
@@ -154,6 +163,30 @@ export class WorkspaceComponent {
         const capsule = this.tabStateService.capsules().find(c => c.id === capsuleId);
         if (capsule) {
             await this.tabStateService.switchCapsule(capsule);
+        }
+    }
+
+    isDuplicatingCapsule = signal<boolean>(false);
+
+    async duplicateCurrentCapsule() {
+        if (this.isDuplicatingCapsule()) return;
+        const activeCapsuleId = this.tabStateService.activeCapsuleId();
+        const activeCapsule = this.tabStateService.capsules().find(c => c.id === activeCapsuleId);
+        if (!activeCapsule) {
+            this.notificationService.notify('No active capsule found to duplicate.');
+            return;
+        }
+
+        this.isDuplicatingCapsule.set(true);
+        try {
+            const duplicated = await this.tabStateService.duplicateCapsule(activeCapsule);
+            await this.tabStateService.switchCapsule(duplicated);
+            this.notificationService.notify(`Capsule "${activeCapsule.name}" duplicated as "${duplicated.name}".`);
+        } catch (e: any) {
+            console.error('Failed to duplicate capsule:', e);
+            this.notificationService.notify(e?.message || 'Failed to duplicate capsule.');
+        } finally {
+            this.isDuplicatingCapsule.set(false);
         }
     }
 

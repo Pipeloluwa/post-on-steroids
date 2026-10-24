@@ -1,6 +1,6 @@
 @if (show()) {
-<div style="-webkit-app-region: no-drag;" class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-4" (click)="onClose.emit()">
-    <div class="w-full max-w-lg my-auto max-h-[90vh] overflow-y-auto p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-5 relative" (click)="$event.stopPropagation()">
+<div style="-webkit-app-region: no-drag;" class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-3 sm:p-4" (click)="onClose.emit()">
+    <div class="w-full max-w-lg my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 sm:p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-5 relative" (click)="$event.stopPropagation()">
         <!-- Close Button -->
         <button (click)="onClose.emit()"
             class="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer">

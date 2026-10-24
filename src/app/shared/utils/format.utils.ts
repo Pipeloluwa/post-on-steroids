@@ -30,10 +30,46 @@ export function formatBodyByStyle(content: any, style: WrapStyle, type: 'JSON' |
   return isXml ? formatXmlPretty(str) : formatJsonPretty(content);
 }
 
+const UNQUOTED_VAR_OR_STRING_REGEX = /"(?:[^"\\]|\\.)*"|(\/\/.*|\/\*[\s\S]*?\*\/)|(\{\{[^{}\r\n]*\}\}|\$(?:guid|timestamp|randomInt|randomUUID|randomEmail|randomName|randomWord|randomColor|randomCity|randomStreetAddress|randomPhoneNumber|randomBoolean|randomAlphaNumeric|randomIPv4)\b)/gi;
+
+export function parseJsonWithVariables(content: string): { parsed: any; restore: (formatted: string) => string } {
+  const placeholders: string[] = [];
+  const sanitized = content.replace(UNQUOTED_VAR_OR_STRING_REGEX, (match, comment, unquotedVar) => {
+    if (comment) {
+      return comment.replace(/[^\r\n]/g, ' ');
+    }
+    if (!unquotedVar) return match;
+    const idx = placeholders.length;
+    placeholders.push(unquotedVar);
+    return `"__POS_VAR_PLACEHOLDER_${idx}__"`;
+  });
+  const parsed = JSON.parse(sanitized);
+  const restore = (formatted: string): string => {
+    if (placeholders.length === 0) return formatted;
+    return formatted.replace(/"__POS_VAR_PLACEHOLDER_(\d+)__"/g, (m, idxStr) => {
+      const idx = parseInt(idxStr, 10);
+      return placeholders[idx] ?? m;
+    });
+  };
+  return { parsed, restore };
+}
+
+export function parseJsonSafe(content: any): any {
+  if (typeof content !== 'string') return content;
+  try {
+    return JSON.parse(content);
+  } catch {
+    return parseJsonWithVariables(content).parsed;
+  }
+}
+
 export function formatJsonPretty(content: any): string {
   try {
-    const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-    return JSON.stringify(parsed, null, 2);
+    if (typeof content === 'string') {
+      const { parsed, restore } = parseJsonWithVariables(content);
+      return restore(JSON.stringify(parsed, null, 2));
+    }
+    return JSON.stringify(content, null, 2);
   } catch {
     return typeof content === 'string' ? content : String(content);
   }
@@ -41,17 +77,23 @@ export function formatJsonPretty(content: any): string {
 
 export function formatJsonKeyField(content: any): string {
   try {
-    const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+    let parsed = content;
+    let restore = (s: string) => s;
+    if (typeof content === 'string') {
+      const res = parseJsonWithVariables(content);
+      parsed = res.parsed;
+      restore = res.restore;
+    }
     if (typeof parsed === 'object' && parsed !== null) {
       if (Array.isArray(parsed)) {
         const items = parsed.map(item => '  ' + JSON.stringify(item));
-        return '[\n' + items.join(',\n') + '\n]';
+        return restore('[\n' + items.join(',\n') + '\n]');
       }
       const entries = Object.entries(parsed);
       const lines = entries.map(([k, v]) => `  ${JSON.stringify(k)}: ${JSON.stringify(v)}`);
-      return '{\n' + lines.join(',\n') + '\n}';
+      return restore('{\n' + lines.join(',\n') + '\n}');
     }
-    return JSON.stringify(parsed);
+    return restore(JSON.stringify(parsed));
   } catch {
     return typeof content === 'string' ? content : String(content);
   }
@@ -59,8 +101,11 @@ export function formatJsonKeyField(content: any): string {
 
 export function formatJsonCollapsed(content: any): string {
   try {
-    const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-    return JSON.stringify(parsed);
+    if (typeof content === 'string') {
+      const { parsed, restore } = parseJsonWithVariables(content);
+      return restore(JSON.stringify(parsed));
+    }
+    return JSON.stringify(content);
   } catch {
     return typeof content === 'string'
       ? content.replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim()
