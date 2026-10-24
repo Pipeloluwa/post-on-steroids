@@ -686,6 +686,82 @@ export class TabStateService {
         return Array.from(map.values());
     });
 
+    getCapsuleRequestsSync(capsuleId: string): RequestState[] {
+        if (!capsuleId) return [];
+
+        const map = new Map<string, RequestState>();
+
+        // 1. If it's the active capsule, include all live and open tab states
+        if (capsuleId === this.activeCapsuleId()) {
+            for (const r of this.allCapsuleRequests()) {
+                map.set(r.id, r);
+            }
+        }
+
+        // 2. Check savedCapsules
+        for (const r of this.savedCapsules()) {
+            if (r.capsuleId === capsuleId || (!r.capsuleId && capsuleId === '1')) {
+                if (!map.has(r.id)) map.set(r.id, r);
+            }
+        }
+
+        // 3. Check all states in memory
+        for (const r of this.states().values()) {
+            if (r.capsuleId === capsuleId || (!r.capsuleId && capsuleId === '1')) {
+                if (!map.has(r.id)) map.set(r.id, r);
+            }
+        }
+
+        // 4. Check cached localStorage session if available
+        if (this.isBrowser) {
+            try {
+                const rawSession = localStorage.getItem('onsteroids_last_session');
+                if (rawSession) {
+                    const session = JSON.parse(rawSession);
+                    if (session.states && Array.isArray(session.states)) {
+                        for (const entry of session.states) {
+                            const r = entry[1] || entry;
+                            if (r && (r.capsuleId === capsuleId || (!r.capsuleId && capsuleId === '1'))) {
+                                if (!map.has(r.id)) map.set(r.id, r);
+                            }
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        return Array.from(map.values());
+    }
+
+    async getCapsuleRequests(capsuleId: string): Promise<RequestState[]> {
+        const syncList = this.getCapsuleRequestsSync(capsuleId);
+        if (syncList.length > 0) return syncList;
+
+        // If not found in memory/cache and user is logged in, fetch from backend
+        if (this.isBrowser && this.authService.isLoggedIn() && capsuleId && capsuleId !== '1') {
+            try {
+                const res = await firstValueFrom(
+                    this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${capsuleId}`)
+                );
+                if (res?.data && Array.isArray(res.data)) {
+                    const mapped = res.data.map(dto => this.mapDtoToState({ ...dto, capsuleId }));
+                    this.states.update(map => {
+                        const next = new Map(map);
+                        for (const mr of mapped) {
+                            if (!next.has(mr.id)) next.set(mr.id, mr);
+                        }
+                        return next;
+                    });
+                    return mapped;
+                }
+            } catch (err) {
+                console.error(`Failed to fetch requests for capsule ${capsuleId}`, err);
+            }
+        }
+
+        return syncList;
+    }
+
     // Reactive list of open tabs (mirrors the horizontal tab strip)
     openTabs = computed<RequestState[]>(() => {
         const ids = this.openTabIds();
@@ -3046,7 +3122,7 @@ export class TabStateService {
         }
     }
 
-    private mapDtoToState(dto: any): RequestState {
+    mapDtoToState(dto: any): RequestState {
         const base = this.getDefaultState(dto.id || this.createId());
         let encHeaders: string[] = [];
         let encBodyPaths: string[] = [];

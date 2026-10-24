@@ -27,32 +27,56 @@ export class ExportComponent {
         });
     }
 
-    exportSelected() {
+    isExporting = signal<boolean>(false);
+
+    async exportSelected() {
         const selectedIds = this.selectedCapsules();
         const selectedData = this.capsules().filter(c => selectedIds.has(c.id));
-        const activeId = this.tabStateService.activeCapsuleId();
-        const allSavedRequests = this.tabStateService.savedCapsules();
-        const allVars = this.variableService.variables();
-        
-        for (const capsule of selectedData) {
-            const requests = capsule.id === activeId
-                ? this.tabStateService.allCapsuleRequests()
-                : allSavedRequests.filter(r => r.capsuleId === capsule.id);
+        if (selectedData.length === 0 || this.isExporting()) return;
 
-            const exportData = {
-                version: "1.0.0",
-                exportedAt: new Date().toISOString(),
-                capsules: [{
+        this.isExporting.set(true);
+        try {
+            const exportedCapsules = [];
+            for (const capsule of selectedData) {
+                const requests = await this.tabStateService.getCapsuleRequests(capsule.id);
+                const vars = capsule.id === this.tabStateService.activeCapsuleId()
+                    ? this.variableService.variables()
+                    : this.variableService.getCachedVariablesForCapsule(capsule.id);
+
+                exportedCapsules.push({
                     id: capsule.id,
                     name: capsule.name,
-                    requests: requests,
-                    variables: allVars
-                }],
-                variables: allVars
-            };
+                    requests,
+                    variables: vars
+                });
+            }
 
-            const safeName = capsule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
-            this.downloadJson(exportData, `${safeName}_export_${new Date().getTime()}.json`);
+            const allExtractedVars = exportedCapsules.flatMap(c => c.variables || []);
+
+            if (exportedCapsules.length === 1) {
+                const single = exportedCapsules[0];
+                const exportData = {
+                    version: "1.0.0",
+                    collection: single.name,
+                    capsule: single.name,
+                    exportedAt: new Date().toISOString(),
+                    capsules: [single],
+                    requests: single.requests,
+                    variables: single.variables
+                };
+                const safeName = single.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
+                this.downloadJson(exportData, `${safeName}_export_${Date.now()}.json`);
+            } else {
+                const exportData = {
+                    version: "1.0.0",
+                    exportedAt: new Date().toISOString(),
+                    capsules: exportedCapsules,
+                    variables: allExtractedVars
+                };
+                this.downloadJson(exportData, `onsteroid_capsules_export_${Date.now()}.json`);
+            }
+        } finally {
+            this.isExporting.set(false);
         }
     }
 
@@ -65,30 +89,40 @@ export class ExportComponent {
         link.click();
         URL.revokeObjectURL(url);
     }
-    exportAsJson() {
-        const activeId = this.tabStateService.activeCapsuleId();
-        const allSavedRequests = this.tabStateService.savedCapsules();
-        const allVars = this.variableService.variables();
-        
-        for (const capsule of this.capsules()) {
-            const requests = capsule.id === activeId
-                ? this.tabStateService.allCapsuleRequests()
-                : allSavedRequests.filter(r => r.capsuleId === capsule.id);
+
+    async exportAsJson() {
+        const allCapsules = this.capsules();
+        if (allCapsules.length === 0 || this.isExporting()) return;
+
+        this.isExporting.set(true);
+        try {
+            const exportedCapsules = [];
+            for (const capsule of allCapsules) {
+                const requests = await this.tabStateService.getCapsuleRequests(capsule.id);
+                const vars = capsule.id === this.tabStateService.activeCapsuleId()
+                    ? this.variableService.variables()
+                    : this.variableService.getCachedVariablesForCapsule(capsule.id);
+
+                exportedCapsules.push({
+                    id: capsule.id,
+                    name: capsule.name,
+                    requests,
+                    variables: vars
+                });
+            }
+
+            const allExtractedVars = exportedCapsules.flatMap(c => c.variables || []);
 
             const exportData = {
                 version: "1.0.0",
                 exportedAt: new Date().toISOString(),
-                capsules: [{
-                    id: capsule.id,
-                    name: capsule.name,
-                    requests: requests,
-                    variables: allVars
-                }],
-                variables: allVars
+                capsules: exportedCapsules,
+                variables: allExtractedVars
             };
 
-            const safeName = capsule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
-            this.downloadJson(exportData, `${safeName}_export_${new Date().getTime()}.json`);
+            this.downloadJson(exportData, `onsteroid_all_capsules_export_${Date.now()}.json`);
+        } finally {
+            this.isExporting.set(false);
         }
     }
 }

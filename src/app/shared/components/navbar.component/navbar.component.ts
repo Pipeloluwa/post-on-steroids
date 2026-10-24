@@ -166,14 +166,28 @@ export class NavbarComponent {
     exportCapsule() {
         this.showFileMenu.set(false);
         const colName = this.tabStateService.activeCapsuleName() || 'capsule';
-        const requests = this.tabStateService.savedCapsules();
-        this.downloadJson({
+        const activeCapId = this.tabStateService.activeCapsuleId();
+        const requests = this.tabStateService.getCapsuleRequestsSync(activeCapId);
+        const vars = this.variableService.variables();
+
+        const exportData = {
+            version: "1.0.0",
             collection: colName,
+            capsule: colName,
             exportedAt: new Date().toISOString(),
+            capsules: [{
+                id: activeCapId,
+                name: colName,
+                requests,
+                variables: vars
+            }],
             requests,
-            variables: this.variableService.variables()
-        }, `capsule_${colName}.json`);
-        this.notificationService.notify(`Capsule "${colName}" exported successfully.`);
+            variables: vars
+        };
+
+        const safeName = colName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
+        this.downloadJson(exportData, `capsule_${safeName}.json`);
+        this.notificationService.notify(`Capsule "${colName}" exported successfully (${requests.length} request${requests.length !== 1 ? 's' : ''}).`);
     }
 
     closeActiveTab() {

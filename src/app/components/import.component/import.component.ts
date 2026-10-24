@@ -177,11 +177,13 @@ export class ImportComponent implements OnInit {
                 variables: extractedVars
             });
         }
-        // 2. OnSteroid Multi-Capsule Format
-        else if (data.capsules && Array.isArray(data.capsules)) {
-            for (const cap of data.capsules) {
-                const capName = cap.name || 'Imported Capsule';
-                const reqs = Array.isArray(cap.requests) ? cap.requests : [];
+        // 2. OnSteroid Multi-Capsule Format: data.capsules (array or object)
+        else if (data.capsules && (Array.isArray(data.capsules) || typeof data.capsules === 'object')) {
+            const capList = Array.isArray(data.capsules) ? data.capsules : [data.capsules];
+            for (const cap of capList) {
+                if (!cap) continue;
+                const capName = cap.name || cap.collection || cap.capsule || cap.title || 'Imported Capsule';
+                const reqs = Array.isArray(cap.requests) ? cap.requests : (Array.isArray(cap.items) ? cap.items : []);
                 const explicitVars = cap.variables || cap.variable || data.variables || data.variable;
                 const extractedVars = extractRequestsVariables(reqs, explicitVars);
                 groups.push({
@@ -191,22 +193,46 @@ export class ImportComponent implements OnInit {
                 });
             }
         }
-        // 3. OnSteroid Single Capsule Format
-        else if (data.collection && Array.isArray(data.requests)) {
-            const explicitVars = data.variables || data.variable;
-            const extractedVars = extractRequestsVariables(data.requests, explicitVars);
+        // 3. Single Capsule Format with direct requests/items array
+        else if (Array.isArray(data.requests) || Array.isArray(data.items)) {
+            const reqs = Array.isArray(data.requests) ? data.requests : data.items;
+            const capName = data.collection || data.capsule || data.capsuleName || data.collectionName || data.name || (data.capsule && data.capsule.name) || 'Imported Capsule';
+            const explicitVars = data.variables || data.variable || (data.capsule && data.capsule.variables);
+            const extractedVars = extractRequestsVariables(reqs, explicitVars);
             groups.push({
-                name: data.collection,
-                requests: data.requests,
+                name: typeof capName === 'string' ? capName : 'Imported Capsule',
+                requests: reqs,
                 variables: extractedVars
             });
         }
-        // 4. Raw Array of Requests
+        // 4. Nested capsule object: { capsule: { name: "...", requests: [...] } }
+        else if (data.capsule && typeof data.capsule === 'object' && !Array.isArray(data.capsule)) {
+            const cap = data.capsule;
+            const capName = cap.name || cap.collection || 'Imported Capsule';
+            const reqs = Array.isArray(cap.requests) ? cap.requests : (Array.isArray(cap.items) ? cap.items : []);
+            const explicitVars = cap.variables || cap.variable || data.variables || data.variable;
+            const extractedVars = extractRequestsVariables(reqs, explicitVars);
+            groups.push({
+                name: capName,
+                requests: reqs,
+                variables: extractedVars
+            });
+        }
+        // 5. Raw Array of Requests
         else if (Array.isArray(data)) {
             const extractedVars = extractRequestsVariables(data);
             groups.push({
                 name: 'Imported Requests',
                 requests: data,
+                variables: extractedVars
+            });
+        }
+        // 6. Single Endpoint / Request JSON (e.g. from "Export Endpoint")
+        else if (data.url !== undefined && (data.method !== undefined || data.headers !== undefined)) {
+            const extractedVars = extractRequestsVariables([data], data.variables);
+            groups.push({
+                name: data.name || 'Imported Endpoint',
+                requests: [data],
                 variables: extractedVars
             });
         }
@@ -223,20 +249,7 @@ export class ImportComponent implements OnInit {
                     id: capId,
                     name: group.name,
                     variables: group.variables || [],
-                    requests: group.requests.map(rawReq => {
-                        const reqId = this.tabStateService.createId();
-                        const baseState = this.tabStateService.getDefaultState(reqId);
-                        return {
-                            ...baseState,
-                            ...rawReq,
-                            id: reqId,
-                            capsuleId: capId,
-                            name: rawReq.name || 'Imported Request',
-                            url: rawReq.url || '',
-                            method: (rawReq.method || 'GET').toUpperCase(),
-                            isDirty: false
-                        } as RequestState;
-                    })
+                    requests: group.requests.map(rawReq => this.normalizeImportedRequest(rawReq, capId))
                 };
             }),
             variables: allExtractedVars
@@ -252,6 +265,108 @@ export class ImportComponent implements OnInit {
             capsuleNames: importPayload.capsules.map(c => c.name),
             payload: importPayload
         };
+    }
+
+    private normalizeImportedRequest(rawReq: any, capId: string): RequestState {
+        const reqId = this.tabStateService.createId();
+        const baseState = this.tabStateService.getDefaultState(reqId);
+
+        if (!rawReq || typeof rawReq !== 'object') {
+            return baseState;
+        }
+
+        // Check if rawReq is in backend DTO format (e.g. paramKey, headerKey, preRequestScript)
+        const isDto = (
+            rawReq.paramKey !== undefined ||
+            rawReq.headerKey !== undefined ||
+            rawReq.preRequestScript !== undefined ||
+            rawReq.authType !== undefined ||
+            rawReq.encryptionAlgorithm !== undefined
+        );
+
+        if (isDto) {
+            const state = this.tabStateService.mapDtoToState({ ...rawReq, capsuleId: capId });
+            return {
+                ...state,
+                id: reqId,
+                capsuleId: capId,
+                isDirty: false
+            };
+        }
+
+        // If postman-like raw item with request object: { name, request }
+        if (rawReq.request) {
+            const mapped = this.mapPostmanRequest(rawReq);
+            return {
+                ...baseState,
+                ...mapped,
+                id: reqId,
+                capsuleId: capId,
+                isDirty: false
+            } as RequestState;
+        }
+
+        // Normalize params array
+        const params = Array.isArray(rawReq.params)
+            ? rawReq.params.map((p: any) => ({
+                enabled: p.enabled ?? p.isEnabled ?? true,
+                key: p.key ?? p.paramKey ?? '',
+                value: p.value ?? p.paramValue ?? ''
+            }))
+            : baseState.params;
+
+        // Normalize headers array
+        const headers = Array.isArray(rawReq.headers)
+            ? rawReq.headers.map((h: any) => ({
+                enabled: h.enabled ?? h.isEnabled ?? true,
+                key: h.key ?? h.headerKey ?? '',
+                value: h.value ?? h.headerValue ?? ''
+            }))
+            : baseState.headers;
+
+        // Normalize formData array
+        const formData = Array.isArray(rawReq.formData)
+            ? rawReq.formData.map((f: any) => ({
+                enabled: f.enabled ?? f.isEnabled ?? true,
+                key: f.key ?? '',
+                value: f.value ?? '',
+                type: f.type === 'file' ? 'file' : 'text'
+            }))
+            : baseState.formData;
+
+        return {
+            ...baseState,
+            ...rawReq,
+            id: reqId,
+            capsuleId: capId,
+            name: rawReq.name || 'Imported Request',
+            url: rawReq.url || '',
+            method: (rawReq.method || 'GET').toUpperCase(),
+            params,
+            headers,
+            formData,
+            auth: {
+                type: rawReq.auth?.type || (rawReq.authType as any) || 'none',
+                token: rawReq.auth?.token || rawReq.authToken || ''
+            },
+            scripts: {
+                ...baseState.scripts,
+                ...(rawReq.scripts || {}),
+                preRequest: rawReq.scripts?.preRequest || rawReq.preRequestScript || '',
+                postResponse: rawReq.scripts?.postResponse || rawReq.postResponseScript || '',
+                testScript: rawReq.scripts?.testScript || rawReq.testScript || '',
+                testScriptEnabled: rawReq.scripts?.testScriptEnabled ?? rawReq.testScriptEnabled ?? false
+            },
+            encryption: {
+                ...baseState.encryption,
+                ...(rawReq.encryption || {})
+            },
+            settings: {
+                ...baseState.settings,
+                ...(rawReq.settings || {})
+            },
+            isDirty: false
+        } as RequestState;
     }
 
     private flattenPostmanItems(items: any[]): { name: string; request: any }[] {

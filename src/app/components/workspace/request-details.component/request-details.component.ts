@@ -126,16 +126,26 @@ export class RequestDetailsComponent {
             } else if (option === 'Export Capsule') {
                 const capsuleId = this.tabStateService.activeCapsuleId();
                 const capsule = this.tabStateService.capsules().find(c => c.id === capsuleId);
-                const collectionName = capsule ? capsule.name : 'My Capsule';
-                const collectionRequests = this.tabStateService.savedCapsules();
+                const collectionName = capsule ? capsule.name : (this.tabStateService.activeCapsuleName() || 'My Capsule');
+                const collectionRequests = this.tabStateService.getCapsuleRequestsSync(capsuleId);
+                const vars = this.variableService.variables();
                 const exportData = {
+                    version: "1.0.0",
                     collection: collectionName,
+                    capsule: collectionName,
                     exportedAt: new Date().toISOString(),
+                    capsules: [{
+                        id: capsuleId,
+                        name: collectionName,
+                        requests: collectionRequests,
+                        variables: vars
+                    }],
                     requests: collectionRequests,
-                    variables: this.variableService.variables()
+                    variables: vars
                 };
-                this.downloadJson(exportData, `capsule_${collectionName}.json`);
-                this.onNotify.emit(`Capsule "${collectionName}" exported successfully.`);
+                const safeName = collectionName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
+                this.downloadJson(exportData, `capsule_${safeName}.json`);
+                this.onNotify.emit(`Capsule "${collectionName}" exported successfully (${collectionRequests.length} request${collectionRequests.length !== 1 ? 's' : ''}).`);
             }
         } finally {
             setTimeout(() => this.isExporting.set(false), 300);
