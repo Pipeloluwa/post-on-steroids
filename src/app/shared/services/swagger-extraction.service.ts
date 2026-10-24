@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { isLocalhostOrLoopbackUrl } from '../utils/url.util';
 
 /**
  * Service for extracting OpenAPI/Swagger specifications from various sources
@@ -75,7 +76,39 @@ export class SwaggerExtractionService {
      */
     private async fetchWithProxy(targetUrl: string, accept = 'application/json'): Promise<{ ok: boolean; status: number; text: string; json: any }> {
         const isElectron = /electron/i.test(navigator.userAgent);
-        
+        const isLoopback = isLocalhostOrLoopbackUrl(targetUrl);
+
+        // Direct fetch for localhost or 127.* since cloud/remote proxy cannot reach local machine
+        if (isLoopback) {
+            try {
+                const rawText = await firstValueFrom(
+                    this.http.get(targetUrl, {
+                        responseType: 'text' as const,
+                        headers: { 'Accept': accept }
+                    })
+                );
+                let parsedJson: any = null;
+                try {
+                    parsedJson = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;
+                } catch { }
+
+                return {
+                    ok: true,
+                    status: 200,
+                    text: typeof rawText === 'string' ? rawText : JSON.stringify(rawText),
+                    json: parsedJson
+                };
+            } catch {
+                return {
+                    ok: false,
+                    status: 0,
+                    text: '',
+                    json: null
+                };
+            }
+        }
+
+        // In browser version, route all non-loopback calls through proxy
         if (!isElectron) {
             const proxyEndpoints = [this.proxyUrl, this.proxyFallbackUrl];
             for (const proxyEndpoint of proxyEndpoints) {
@@ -126,13 +159,13 @@ export class SwaggerExtractionService {
                 );
                 let parsedJson: any = null;
                 try {
-                    parsedJson = JSON.parse(rawText);
+                    parsedJson = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;
                 } catch { }
 
                 return {
                     ok: true,
                     status: 200,
-                    text: rawText,
+                    text: typeof rawText === 'string' ? rawText : JSON.stringify(rawText),
                     json: parsedJson
                 };
             } catch {

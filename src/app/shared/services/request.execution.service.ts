@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
 import { generateUUID } from '../utils/uuid.util';
+import { isLocalhostOrLoopbackUrl } from '../utils/url.util';
 import { environment } from '../../../environments/environment';
 import { TabStateService, FormDataRow } from './tab.state.service';
 import { VariableService } from './variable.service';
@@ -367,9 +368,11 @@ export class RequestExecutionService {
 
             // Check if running inside Electron wrapper
             const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+            const isLoopback = isLocalhostOrLoopbackUrl(resolvedUrl);
 
-            // In the browser version, route every URL call through proxy to avoid CORS issues
-            let isUsingProxy = !isElectron || !!freshState.settings?.bypassCors;
+            // In the browser version, route every URL call through proxy to avoid CORS issues,
+            // EXCEPT localhost or 127.* which must be called directly.
+            let isUsingProxy = !isLoopback && (!isElectron || !!freshState.settings?.bypassCors);
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
             let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;

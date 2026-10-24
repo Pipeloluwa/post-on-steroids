@@ -2,6 +2,7 @@ import { Component, signal, inject, ChangeDetectionStrategy, output, ViewChild, 
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { generateUUID } from '../../utils/uuid.util';
+import { isLocalhostOrLoopbackUrl } from '../../utils/url.util';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../services/tab.state.service';
 import { SwaggerExtractionService } from '../../services/swagger-extraction.service';
@@ -49,9 +50,9 @@ export class SwaggerImportModalComponent {
             return;
         }
 
-        // Auto-prepend https:// if protocol is omitted
+        // Auto-prepend http:// for localhost/127 or https:// if protocol is omitted
         if (!/^https?:\/\//i.test(url)) {
-            url = 'https://' + url;
+            url = (isLocalhostOrLoopbackUrl(url) ? 'http://' : 'https://') + url;
             this.swaggerUrl.set(url);
         }
 

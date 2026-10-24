@@ -50,11 +50,23 @@ window.addEventListener("message", async (event) => {
 
   const _rawFetch = window.fetch ? window.fetch.bind(window) : null;
 
-  async function _proxyFetch(input, init) {
-    if (isElectron && _rawFetch) {
-      return _rawFetch(input, init);
+  function isLocalhostOrLoopbackUrl(url) {
+    if (!url) return false;
+    var trimmed = String(url).trim().toLowerCase();
+    try {
+      var parsed = new URL(trimmed.includes('://') ? trimmed : 'http://' + trimmed);
+      var hostname = parsed.hostname.toLowerCase();
+      return hostname === 'localhost' ||
+             hostname.endsWith('.localhost') ||
+             hostname === '::1' ||
+             hostname === '[::1]' ||
+             /^127\.\d+\.\d+\.\d+$/.test(hostname);
+    } catch (e) {
+      return /(^|[/:@])(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)(:\d+)?([/?#]|$)/i.test(trimmed);
     }
+  }
 
+  async function _proxyFetch(input, init) {
     let targetUrl = '';
     let options = init || {};
 
@@ -65,6 +77,10 @@ window.addEventListener("message", async (event) => {
       options = Object.assign({}, input, options);
     } else {
       targetUrl = String(input || '');
+    }
+
+    if ((isElectron || isLocalhostOrLoopbackUrl(targetUrl)) && _rawFetch) {
+      return _rawFetch(input, init);
     }
 
     const method = (options.method || 'GET').toUpperCase();
