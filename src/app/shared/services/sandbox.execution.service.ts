@@ -300,9 +300,21 @@ window.addEventListener("message", async (event) => {
     pm['testResults'] = testResults;
     pm['testPassed'] = testPassed;
 
-    parent.postMessage({ id, success: true, context: pm, logs: logs.join("\\n") }, "*");
+    delete pm.sendRequest;
+    const cleanContext = {};
+    for (const key of Object.keys(pm)) {
+      if (typeof pm[key] !== 'function') {
+        try {
+          cleanContext[key] = JSON.parse(JSON.stringify(pm[key]));
+        } catch {
+          cleanContext[key] = String(pm[key]);
+        }
+      }
+    }
+
+    parent.postMessage({ id, success: true, context: cleanContext, logs: logs.join("\\n") }, "*");
   } catch (err) {
-    parent.postMessage({ id, success: false, error: err.toString(), logs: logs.join("\\n") }, "*");
+    parent.postMessage({ id, success: false, error: err ? (err.message || err.toString()) : "Execution error", logs: logs.join("\\n") }, "*");
   } finally {
     console.log = originalConsoleLog;
   }
@@ -346,12 +358,30 @@ window.addEventListener("message", async (event) => {
 
       const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
 
+      let safeContext = context;
+      try {
+        safeContext = JSON.parse(JSON.stringify(context || {}));
+      } catch {
+        safeContext = {};
+        if (context && typeof context === 'object') {
+          for (const k of Object.keys(context)) {
+            if (typeof context[k] !== 'function') {
+              try {
+                safeContext[k] = JSON.parse(JSON.stringify(context[k]));
+              } catch {
+                safeContext[k] = String(context[k]);
+              }
+            }
+          }
+        }
+      }
+
       // Send code to the sandbox
       // The origin is '*' because a sandboxed iframe without allow-same-origin has an opaque origin
       this.iframe.contentWindow.postMessage({
         id: executionId,
         code,
-        context,
+        context: safeContext,
         proxyUrl: environment.proxyUrl,
         proxyFallbackUrl: environment.proxyFallbackUrl,
         isElectron
