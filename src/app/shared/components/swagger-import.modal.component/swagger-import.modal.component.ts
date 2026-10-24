@@ -43,14 +43,22 @@ export class SwaggerImportModalComponent {
     }
 
     async importFromSwagger() {
-        const url = this.swaggerUrl().trim();
+        let url = this.swaggerUrl().trim();
         if (!url) {
-            this.setStatus('Please enter a Swagger URL ending with /swagger/index.html.', true);
+            this.setStatus('Please enter a Swagger or OpenAPI URL.', true);
             return;
         }
 
-        if (!url.endsWith('/swagger/index.html')) {
-            this.setStatus('Swagger URL must end with /swagger/index.html.', true);
+        // Auto-prepend https:// if protocol is omitted
+        if (!/^https?:\/\//i.test(url)) {
+            url = 'https://' + url;
+            this.swaggerUrl.set(url);
+        }
+
+        try {
+            new URL(url);
+        } catch {
+            this.setStatus('Please enter a valid URL (e.g. https://example.com/swagger or https://example.com/swagger/v1/swagger.json).', true);
             return;
         }
 
@@ -122,7 +130,7 @@ export class SwaggerImportModalComponent {
 
                 const method = methodKey.toUpperCase();
                 const operationName = (operation.summary || operation.operationId || `${method} ${pathKey}`).trim();
-                const displayName = `${collectionName} — ${operationName}`;
+                const displayName = `${collectionName} â€” ${operationName}`;
                 const requestId = this.createId();
                 const url = new URL(pathKey, baseServiceUrl).toString();
 
@@ -180,7 +188,21 @@ export class SwaggerImportModalComponent {
             }
         }
 
-        return indexUrl.replace(/\/swagger\/index\.html$/i, '/') || indexUrl;
+        // Check host and basePath for Swagger 2.0
+        if (openApi['host']) {
+            const scheme = (Array.isArray(openApi['schemes']) && openApi['schemes'][0]) || 'https';
+            const basePath = openApi['basePath'] || '';
+            return `${scheme}://${openApi['host']}${basePath}`.replace(/\/+$/, '/');
+        }
+
+        try {
+            const parsed = new URL(indexUrl);
+            let path = parsed.pathname;
+            path = path.replace(/(\/swagger)?(\/index\.html|\/v\d+\/swagger\.json|\/[^/]+\.json|\/swagger)?$/i, '');
+            return `${parsed.origin}${path}`.replace(/\/+$/, '/') || `${parsed.origin}/`;
+        } catch {
+            return indexUrl.replace(/\/swagger\/index\.html$/i, '/').replace(/\/+$/, '/') || indexUrl;
+        }
     }
 
     private extractParameters(parameters: any, openApi: Record<string, any>): { queryParams: { enabled: boolean; key: string; value: string }[]; headerParams: { enabled: boolean; key: string; value: string }[]; pathParams: { enabled: boolean; key: string; value: string }[] } {

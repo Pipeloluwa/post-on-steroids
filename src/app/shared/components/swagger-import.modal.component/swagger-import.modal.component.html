@@ -4,16 +4,16 @@
         <div class="flex items-start justify-between gap-x-3 mb-4">
             <div>
                 <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Import from Swagger</h3>
-                <p class="text-[12px] text-(--postonsteroids-text-secondary) mt-1">Enter a Swagger URL that ends with <span class="font-semibold">/swagger/index.html</span>.</p>
+                <p class="text-[12px] text-(--postonsteroids-text-secondary) mt-1">Enter any Swagger UI or OpenAPI URL (e.g. Swagger UI, JSON/YAML spec, or docs endpoint).</p>
             </div>
             <button (click)="close()" class="text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) rounded-full p-2 cursor-pointer">
                 <mat-icon class="text-[20px]! size-[20px]!">close</mat-icon>
             </button>
         </div>
 
-        <label for="swaggerUrlInput" class="block text-[12px] text-(--postonsteroids-text-secondary) mb-2">Swagger URL</label>
+        <label for="swaggerUrlInput" class="block text-[12px] text-(--postonsteroids-text-secondary) mb-2">Swagger / OpenAPI URL</label>
         <input id="swaggerUrlInput" #swaggerUrlInput type="url" [value]="swaggerUrl()" (input)="swaggerUrl.set($any($event.target).value)"
-            placeholder="https://example.com/swagger/index.html"
+            placeholder="e.g. https://example.com/swagger or /v1/swagger.json"
             class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30"
             aria-label="Swagger URL input" />
 

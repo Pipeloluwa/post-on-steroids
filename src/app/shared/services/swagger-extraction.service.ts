@@ -17,25 +17,55 @@ export class SwaggerExtractionService {
 
     /**
      * Extracts OpenAPI spec from a Swagger URL
-     * Tries multiple methods: direct endpoints first, then HTML parsing as fallback
+     * Tries multiple methods: direct endpoint check, common JSON endpoints, then HTML parsing as fallback
      */
     async extractSwaggerSpec(swaggerUrl: string): Promise<Record<string, any>> {
-        const baseUrl = this.normalizeSwaggerUrl(swaggerUrl);
+        const trimmedUrl = swaggerUrl.trim();
 
+        // 1. Direct check: what if the provided URL is already a direct JSON/OpenAPI document?
+        try {
+            const directRes = await this.fetchWithProxy(trimmedUrl, 'application/json,text/plain,*/*');
+            if (directRes.ok && directRes.json && (directRes.json['openapi'] || directRes.json['swagger'] || directRes.json['paths'])) {
+                return directRes.json;
+            }
+        } catch { }
+
+        // 2. Try common direct JSON endpoints against the normalized base URL
+        const baseUrl = this.normalizeSwaggerUrl(trimmedUrl);
         const directJson = await this.tryDirectJsonEndpoints(baseUrl);
         if (directJson) {
             return directJson;
         }
 
-        const htmlJson = await this.extractFromHtml(swaggerUrl);
-        if (htmlJson) {
-            return htmlJson;
+        // Also try direct JSON endpoints against trimmedUrl if it has a sub-path different from baseUrl
+        if (baseUrl !== trimmedUrl) {
+            const directJsonFromOriginal = await this.tryDirectJsonEndpoints(trimmedUrl);
+            if (directJsonFromOriginal) {
+                return directJsonFromOriginal;
+            }
+        }
+
+        // 3. Try HTML extraction from original URL
+        try {
+            const htmlJson = await this.extractFromHtml(trimmedUrl);
+            if (htmlJson) {
+                return htmlJson;
+            }
+        } catch { }
+
+        // 4. Try HTML extraction with /swagger/index.html or /swagger if original didn't have it
+        if (!trimmedUrl.toLowerCase().includes('/swagger')) {
+            try {
+                const swaggerHtml = await this.extractFromHtml(`${baseUrl}/swagger/index.html`);
+                if (swaggerHtml) {
+                    return swaggerHtml;
+                }
+            } catch { }
         }
 
         throw new Error(
-            `Unable to extract Swagger spec from ${swaggerUrl}. ` +
-            'Tried common direct JSON endpoints and inspected Swagger UI assets (index.html / index.js). ' +
-            'If this is a Swagger UI build, verify the app is reachable and includes a URL ending with .json.'
+            `Unable to extract Swagger/OpenAPI spec from ${swaggerUrl}. ` +
+            'Please verify that the API is online, CORS proxy is reachable, and the endpoint serves a valid Swagger UI or OpenAPI document.'
         );
     }
 
@@ -129,11 +159,18 @@ export class SwaggerExtractionService {
     private async tryDirectJsonEndpoints(baseUrl: string): Promise<Record<string, any> | null> {
         const endpoints = [
             '/swagger/v1/swagger.json',
+            '/v3/api-docs',
+            '/v1/swagger.json',
+            '/v2/swagger.json',
             '/api-docs',
             '/openapi.json',
             '/v1/openapi.json',
             '/swagger.json',
             '/swagger/index.json',
+            '/api/swagger.json',
+            '/api/v1/swagger.json',
+            '/api/v1/openapi.json',
+            '/v3/api-docs/swagger-config'
         ];
 
         for (const endpoint of endpoints) {
@@ -141,8 +178,17 @@ export class SwaggerExtractionService {
                 const jsonUrl = new URL(endpoint, baseUrl).toString();
                 const res = await this.fetchWithProxy(jsonUrl, 'application/json');
 
-                if (res.ok && res.json && (res.json['openapi'] || res.json['swagger'])) {
-                    return res.json;
+                if (res.ok && res.json) {
+                    if (res.json['openapi'] || res.json['swagger'] || res.json['paths']) {
+                        return res.json;
+                    }
+                    if (typeof res.json.url === 'string') {
+                        const targetUrl = new URL(res.json.url, jsonUrl).toString();
+                        const subRes = await this.fetchWithProxy(targetUrl, 'application/json');
+                        if (subRes.ok && subRes.json && (subRes.json['openapi'] || subRes.json['swagger'] || subRes.json['paths'])) {
+                            return subRes.json;
+                        }
+                    }
                 }
             } catch {
                 // Continue to next endpoint
@@ -332,17 +378,37 @@ export class SwaggerExtractionService {
      * Removes /swagger/index.html suffix if present
      */
     private normalizeSwaggerUrl(url: string): string {
-        // If it ends with /swagger/index.html, return the base
-        if (url.endsWith('/swagger/index.html')) {
-            return url.replace(/\/swagger\/index\.html$/i, '');
+        let normalized = url.trim();
+
+        // If it ends with .json, return origin or base directory
+        if (/\.json$/i.test(normalized)) {
+            try {
+                return new URL(normalized).origin;
+            } catch {
+                return normalized.replace(/\/[^/]+\.json$/i, '');
+            }
         }
 
-        // If it ends with /index.html, return the parent directory
-        if (url.endsWith('/index.html')) {
-            return url.replace(/\/index\.html$/i, '');
+        // If it ends with /swagger/index.html
+        if (/\/swagger\/index\.html\/?$/i.test(normalized)) {
+            return normalized.replace(/\/swagger\/index\.html\/?$/i, '');
         }
 
-        // Return as-is if already base URL
-        return url;
+        // If it ends with /index.html
+        if (/\/index\.html\/?$/i.test(normalized)) {
+            return normalized.replace(/\/index\.html\/?$/i, '');
+        }
+
+        // If it ends with /swagger
+        if (/\/swagger\/?$/i.test(normalized)) {
+            return normalized.replace(/\/swagger\/?$/i, '');
+        }
+
+        // Strip trailing slash
+        if (normalized.endsWith('/')) {
+            normalized = normalized.slice(0, -1);
+        }
+
+        return normalized;
     }
 }
