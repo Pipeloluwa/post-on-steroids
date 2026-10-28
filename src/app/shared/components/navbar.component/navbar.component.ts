@@ -10,6 +10,7 @@ import { AuthService } from '../../services/auth.service';
 import { AboutModalComponent } from '../about.modal.component/about.modal.component';
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
+import { DESKTOP_DOWNLOADS_CONFIG, DesktopPackage, buildDownloadLink } from '../../constants/desktop-downloads.constants';
 
 @Component({
     selector: 'app-navbar-component',
@@ -52,12 +53,28 @@ export class NavbarComponent {
 
     showFileMenu = signal<boolean>(false);
     showUserMenu = signal<boolean>(false);
+    showDownloadsMenu = signal<boolean>(false);
     showAboutModal = signal<boolean>(false);
     showHelpModal = signal<boolean>(false);
+
+    downloadsConfig = signal(DESKTOP_DOWNLOADS_CONFIG);
+    packages = computed(() => this.downloadsConfig().packages);
+
+    toggleDownloadsMenu(event: MouseEvent) {
+        event.stopPropagation();
+        this.showFileMenu.set(false);
+        this.showUserMenu.set(false);
+        this.showDownloadsMenu.update(v => !v);
+    }
+
+    getDownloadUrl(pkg: DesktopPackage): string {
+        return buildDownloadLink(pkg, this.downloadsConfig());
+    }
 
     toggleUserMenu(event: MouseEvent) {
         event.stopPropagation();
         this.showFileMenu.set(false);
+        this.showDownloadsMenu.set(false);
         this.showUserMenu.update(v => !v);
     }
 
@@ -83,6 +100,7 @@ export class NavbarComponent {
     toggleFileMenu(event: MouseEvent) {
         event.stopPropagation();
         this.showUserMenu.set(false);
+        this.showDownloadsMenu.set(false);
         this.showFileMenu.update(v => !v);
     }
 
@@ -220,6 +238,9 @@ export class NavbarComponent {
         }
         if (this.showUserMenu()) {
             this.showUserMenu.set(false);
+        }
+        if (this.showDownloadsMenu()) {
+            this.showDownloadsMenu.set(false);
         }
     }
 
