@@ -12,6 +12,7 @@
   },
   "files": [
     "main.js",
+    "preload.js",
     "package.json",
     "dist/post-on-steroids/browser/**/*"
   ],
@@ -23,5 +24,16 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true
+  },
+  "mac": {
+    "target": ["dmg", "zip"],
+    "icon": "public/icons/onsteroids-icon-512.png",
+    "category": "public.app-category.developer-tools"
+  },
+  "linux": {
+    "target": ["tar.gz", "zip"],
+    "maintainer": "Papic Nation <support@onsteroid.com>",
+    "icon": "public/icons/onsteroids-icon-512.png",
+    "category": "Development"
   }
 }
