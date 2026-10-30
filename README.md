@@ -67,3 +67,6 @@ PostOnSteroid is an **open-source project**, and contributions are highly apprec
 
 Please ensure your code follows the established Angular guidelines found in `AGENTS.md` (e.g., using signals, standalone components, and strict typing).
 
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](LICENSE) file for the full license text.
