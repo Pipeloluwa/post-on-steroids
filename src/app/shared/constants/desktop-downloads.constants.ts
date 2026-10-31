@@ -48,7 +48,7 @@ export const DESKTOP_DOWNLOADS_CONFIG: DesktopDownloadsConfig = {
   // Configurable Homepage URL
   homepageUrl: 'https://onsteroid.com',
   homepageDownloadUrl: 'https://onsteroid.com/download',
-  downloadsDirectoryUrl: '/downloads',
+  downloadsDirectoryUrl: 'https://onsteroid.com/download',
 
   packages: [
     {
