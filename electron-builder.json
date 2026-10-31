@@ -4,7 +4,7 @@
   "publish": [
     {
       "provider": "generic",
-      "url": "https://onsteroid.com/"
+      "url": "https://onsteroid.com/download/"
     }
   ],
   "directories": {
@@ -17,23 +17,27 @@
     "dist/post-on-steroids/browser/**/*"
   ],
   "win": {
-    "target": ["nsis"],
-    "icon": "public/icons/onsteroids-icon.ico"
+    "target": ["nsis", "zip"],
+    "icon": "public/icons/onsteroids-icon.ico",
+    "artifactName": "${productName}-win-${arch}.${ext}"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true
+    "createDesktopShortcut": true,
+    "artifactName": "${productName}-Setup.${ext}"
   },
   "mac": {
     "target": ["dmg", "zip"],
     "icon": "public/icons/onsteroids-icon-512.png",
-    "category": "public.app-category.developer-tools"
+    "category": "public.app-category.developer-tools",
+    "artifactName": "${productName}.${ext}"
   },
   "linux": {
     "target": ["tar.gz", "zip"],
     "maintainer": "Papic Nation <support@onsteroid.com>",
     "icon": "public/icons/onsteroids-icon-512.png",
-    "category": "Development"
+    "category": "Development",
+    "artifactName": "${productName}-linux-${arch}.${ext}"
   }
 }
