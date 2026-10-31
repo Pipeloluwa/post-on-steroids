@@ -16,4 +16,9 @@ export class NotificationService {
         this.show.set(true);
         this.hideTimeout = setTimeout(() => this.show.set(false), durationMs);
     }
+
+    close() {
+        clearTimeout(this.hideTimeout);
+        this.show.set(false);
+    }
 }

@@ -1,34 +1,100 @@
 @if (show()) {
 <div
-    class="fixed top-6 left-1/2 -translate-x-1/2 z-200 flex items-center gap-x-3 px-4 py-3 rounded-lg border shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300 max-w-[92vw] md:max-w-[550px]"
-    [class.bg-(--postonsteroids-bg-tertiary)]="type() === 'success' || type() === 'info'"
-    [class.border-(--postonsteroids-border)]="type() === 'success' || type() === 'info'"
-    [class.bg-amber-950/95]="type() === 'warning'"
-    [class.border-amber-500]="type() === 'warning'"
-    [class.shadow-amber-500/25]="type() === 'warning'"
-    [class.bg-red-950/95]="type() === 'error'"
-    [class.border-red-500]="type() === 'error'"
-    [class.shadow-red-500/25]="type() === 'error'">
+    class="fixed top-6 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-x-3 px-4 py-3 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300 max-w-[92vw] md:max-w-[560px] select-none"
+    [class.bg-[#FFFBEB]]="!isDark() && type() === 'warning'"
+    [class.border-amber-300]="!isDark() && type() === 'warning'"
+    [class.shadow-amber-900/10]="!isDark() && type() === 'warning'"
+    [class.text-amber-950]="!isDark() && type() === 'warning'"
+    [class.bg-[#1C1407]/95]="isDark() && type() === 'warning'"
+    [class.border-amber-600/70]="isDark() && type() === 'warning'"
+    [class.shadow-black/60]="isDark() && type() === 'warning'"
+    [class.text-amber-100]="isDark() && type() === 'warning'"
 
+    [class.bg-[#FEF2F2]]="!isDark() && type() === 'error'"
+    [class.border-red-300]="!isDark() && type() === 'error'"
+    [class.shadow-red-900/10]="!isDark() && type() === 'error'"
+    [class.text-red-950]="!isDark() && type() === 'error'"
+    [class.bg-[#1C0A0A]/95]="isDark() && type() === 'error'"
+    [class.border-red-600/70]="isDark() && type() === 'error'"
+    [class.shadow-black/60]="isDark() && type() === 'error'"
+    [class.text-red-100]="isDark() && type() === 'error'"
+
+    [class.bg-[#ECFDF5]]="!isDark() && type() === 'success'"
+    [class.border-emerald-300]="!isDark() && type() === 'success'"
+    [class.shadow-emerald-900/10]="!isDark() && type() === 'success'"
+    [class.text-emerald-950]="!isDark() && type() === 'success'"
+    [class.bg-[#061F17]/95]="isDark() && type() === 'success'"
+    [class.border-emerald-600/70]="isDark() && type() === 'success'"
+    [class.shadow-black/60]="isDark() && type() === 'success'"
+    [class.text-emerald-100]="isDark() && type() === 'success'"
+
+    [class.bg-[#EFF6FF]]="!isDark() && type() === 'info'"
+    [class.border-blue-300]="!isDark() && type() === 'info'"
+    [class.shadow-blue-900/10]="!isDark() && type() === 'info'"
+    [class.text-blue-950]="!isDark() && type() === 'info'"
+    [class.bg-[#08182B]/95]="isDark() && type() === 'info'"
+    [class.border-blue-600/70]="isDark() && type() === 'info'"
+    [class.shadow-black/60]="isDark() && type() === 'info'"
+    [class.text-blue-100]="isDark() && type() === 'info'">
+
+    <!-- Icon Container -->
     @if (type() === 'warning') {
-        <div class="flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/25 shrink-0 animate-pulse">
-            <mat-icon class="text-[19px]! size-[19px]! text-amber-400">warning</mat-icon>
+        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+             [class.bg-amber-100]="!isDark()"
+             [class.text-amber-700]="!isDark()"
+             [class.ring-1]="true"
+             [class.ring-amber-300/80]="!isDark()"
+             [class.bg-amber-900/50]="isDark()"
+             [class.text-amber-400]="isDark()"
+             [class.ring-amber-500/40]="isDark()">
+            <mat-icon class="text-[18px]! size-[18px]!">warning</mat-icon>
         </div>
     } @else if (type() === 'error') {
-        <div class="flex items-center justify-center w-7 h-7 rounded-full bg-red-500/25 shrink-0 animate-pulse">
-            <mat-icon class="text-[19px]! size-[19px]! text-red-400">error</mat-icon>
+        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+             [class.bg-red-100]="!isDark()"
+             [class.text-red-700]="!isDark()"
+             [class.ring-1]="true"
+             [class.ring-red-300/80]="!isDark()"
+             [class.bg-red-900/50]="isDark()"
+             [class.text-red-400]="isDark()"
+             [class.ring-red-500/40]="isDark()">
+            <mat-icon class="text-[18px]! size-[18px]!">error</mat-icon>
+        </div>
+    } @else if (type() === 'info') {
+        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+             [class.bg-blue-100]="!isDark()"
+             [class.text-blue-700]="!isDark()"
+             [class.ring-1]="true"
+             [class.ring-blue-300/80]="!isDark()"
+             [class.bg-blue-900/50]="isDark()"
+             [class.text-blue-400]="isDark()"
+             [class.ring-blue-500/40]="isDark()">
+            <mat-icon class="text-[18px]! size-[18px]!">info</mat-icon>
         </div>
     } @else {
-        <div class="flex items-center justify-center w-6 h-6 rounded-full bg-green-500/20 shrink-0">
-            <mat-icon class="text-[16px]! size-[16px]! text-green-500">check_circle</mat-icon>
+        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+             [class.bg-emerald-100]="!isDark()"
+             [class.text-emerald-700]="!isDark()"
+             [class.ring-1]="true"
+             [class.ring-emerald-300/80]="!isDark()"
+             [class.bg-emerald-900/50]="isDark()"
+             [class.text-emerald-400]="isDark()"
+             [class.ring-emerald-500/40]="isDark()">
+            <mat-icon class="text-[18px]! size-[18px]!">check_circle</mat-icon>
         </div>
     }
 
-    <span class="text-[13px] font-medium leading-snug"
-          [class.text-(--postonsteroids-text-primary)]="type() === 'success' || type() === 'info'"
-          [class.text-amber-200]="type() === 'warning'"
-          [class.text-red-200]="type() === 'error'">
+    <!-- Message text -->
+    <span class="text-[13px] font-medium leading-snug flex-1">
         {{ message() }}
     </span>
+
+    <!-- Dismiss Button -->
+    <button (click)="notificationService.close()" type="button" title="Dismiss"
+        class="size-6 flex items-center justify-center rounded-lg opacity-60 hover:opacity-100 transition-opacity cursor-pointer shrink-0 ml-1"
+        [class.hover:bg-black/10]="!isDark()"
+        [class.hover:bg-white/10]="isDark()">
+        <mat-icon class="text-[16px]! size-[16px]!">close</mat-icon>
+    </button>
 </div>
 }

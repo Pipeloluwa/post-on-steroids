@@ -30,6 +30,7 @@ export class ThemeService {
             effect(() => {
                 const effectiveTheme = this.isDarkMode() ? 'dark' : 'light';
                 document.documentElement.setAttribute('data-theme', effectiveTheme);
+                document.documentElement.classList.toggle('dark', effectiveTheme === 'dark');
                 localStorage.setItem('theme', this.theme());
 
                 try {

@@ -6,8 +6,6 @@ import { throwError, from } from 'rxjs';
 import { AUTH_TOKEN_KEY, API_BASE_URL } from '../constants/api.constants';
 import { AuthService } from '../services/auth.service';
 
-let isRefreshing = false;
-
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
     const platformId = inject(PLATFORM_ID);
     const authService = inject(AuthService) as AuthService;
@@ -35,12 +33,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
                 }
             }),
             catchError((error: HttpErrorResponse) => {
+                // If a backend request failed with 401 Unauthorized
                 if (error.status === 401 && !req.url.includes('/auth/refresh') && !req.url.includes('/auth/logout')) {
-                    if (!isRefreshing && authService.isLoggedIn() && !authService.isLoggingOut()) {
-                        isRefreshing = true;
+                    if (authService.isLoggedIn() && !authService.isLoggingOut()) {
                         return from(authService.refreshTokens()).pipe(
                             switchMap((success) => {
-                                isRefreshing = false;
                                 if (success) {
                                     const newToken = localStorage.getItem(AUTH_TOKEN_KEY);
                                     const cloned = req.clone({
@@ -50,16 +47,18 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
                                     });
                                     return next(cloned);
                                 } else {
-                                    authService.logout();
                                     return throwError(() => error);
                                 }
                             }),
                             catchError((refreshErr) => {
-                                isRefreshing = false;
-                                authService.logout();
                                 return throwError(() => refreshErr);
                             })
                         );
+                    }
+                } else if (req.url.includes('/auth/refresh') && (error.status === 401 || error.status === 400)) {
+                    // Direct failure on the refresh endpoint (refresh token expired)
+                    if (authService.isLoggedIn() && !authService.isLoggingOut()) {
+                        authService.logout({ isSessionExpired: true });
                     }
                 }
                 return throwError(() => error);

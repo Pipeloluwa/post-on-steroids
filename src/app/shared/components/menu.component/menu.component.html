@@ -40,26 +40,33 @@
         </button>
         }
 
-        <div class="flex items-center justify-between p-1 bg-(--postonsteroids-bg-tertiary) rounded-xl border border-(--postonsteroids-border)/50 transition-all duration-300 gap-1 md:gap-y-4"
-            [class.md:flex-col]="sidebarService.isCollapsed()">
+        <div class="w-full flex items-center justify-between p-1.5 bg-(--postonsteroids-bg-tertiary) rounded-xl border border-(--postonsteroids-border)/60 transition-all duration-300 gap-2.5"
+            [class.md:flex-col]="sidebarService.isCollapsed()"
+            [class.md:gap-y-2.5]="sidebarService.isCollapsed()">
             <button (click)="themeService.setTheme('light')" 
-                class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"
+                type="button"
+                title="Light Mode"
+                class="flex-1 h-8 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer w-full text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)"
                 [class.bg-(--postonsteroids-bg-primary)]="themeService.theme() === 'light'"
-                [class.text-(--postonsteroids-accent)]="themeService.theme() === 'light'"
+                [class.text-(--postonsteroids-accent)!]="themeService.theme() === 'light'"
                 [class.shadow-sm]="themeService.theme() === 'light'">
                 <mat-icon class="text-[18px]! size-[18px]!">light_mode</mat-icon>
             </button>
             <button (click)="themeService.setTheme('dark')" 
-                class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"
+                type="button"
+                title="Dark Mode"
+                class="flex-1 h-8 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer w-full text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)"
                 [class.bg-(--postonsteroids-bg-primary)]="themeService.theme() === 'dark'"
-                [class.text-(--postonsteroids-accent)]="themeService.theme() === 'dark'"
+                [class.text-(--postonsteroids-accent)!]="themeService.theme() === 'dark'"
                 [class.shadow-sm]="themeService.theme() === 'dark'">
                 <mat-icon class="text-[18px]! size-[18px]!">dark_mode</mat-icon>
             </button>
             <button (click)="themeService.setTheme('system')" 
-                class="flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-200 cursor-pointer w-full"
+                type="button"
+                title="System Theme"
+                class="flex-1 h-8 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer w-full text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)"
                 [class.bg-(--postonsteroids-bg-primary)]="themeService.theme() === 'system'"
-                [class.text-(--postonsteroids-accent)]="themeService.theme() === 'system'"
+                [class.text-(--postonsteroids-accent)!]="themeService.theme() === 'system'"
                 [class.shadow-sm]="themeService.theme() === 'system'">
                 <mat-icon class="text-[18px]! size-[18px]!">settings_brightness</mat-icon>
             </button>

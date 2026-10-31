@@ -242,6 +242,10 @@ export class VariableInputComponent implements ControlValueAccessor {
         return Math.max(0, offset);
     });
 
+    focus(): void {
+        this.inputField?.nativeElement?.focus();
+    }
+
     writeValue(val: string): void {
         this.value.set(val || '');
     }

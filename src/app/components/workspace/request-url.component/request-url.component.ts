@@ -10,6 +10,7 @@ import { AutoAuthService } from '../../../shared/services/auto-auth.service';
 import { AutoAuthModalComponent } from '../../../shared/components/auto-auth.modal.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { ThemeService } from '../../../shared/services/theme.service';
 import { input } from '@angular/core';
 
 @Component({
@@ -30,6 +31,7 @@ export class RequestUrlComponent {
     executionService = inject(RequestExecutionService);
     autoAuthService = inject(AutoAuthService);
     notificationService = inject(NotificationService);
+    themeService = inject(ThemeService);
     methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 
     tabId = input.required<string>();
@@ -97,6 +99,8 @@ export class RequestUrlComponent {
 
     url = computed(() => this.tabState()?.url || '');
     hasUrlError = signal(false);
+    isDark = computed(() => this.themeService.isDarkMode());
+    @ViewChild(VariableInputComponent) variableInput?: VariableInputComponent;
 
     constructor() {
     }
@@ -136,6 +140,7 @@ export class RequestUrlComponent {
         const currentUrl = (this.url() || '').trim();
         if (!currentUrl) {
             this.hasUrlError.set(true);
+            this.variableInput?.focus();
             this.notificationService.notify('Please enter a request URL before sending', 'warning');
             return;
         }

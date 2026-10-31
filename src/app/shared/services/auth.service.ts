@@ -708,20 +708,32 @@ export class AuthService {
         this.onLogin.next(data.user);
     }
 
-    async logout() {
+    private refreshPromise: Promise<boolean> | null = null;
+
+    async logout(options: { isSessionExpired?: boolean } = {}) {
         if (this.isLoggingOut()) return;
         this.isLoggingOut.set(true);
 
-        const startWait = Date.now();
-        const maxWaitMs = 15000;
-        while (this.hasPendingSaveOperations() && (Date.now() - startWait < maxWaitMs)) {
-            await new Promise(resolve => setTimeout(resolve, 150));
+        const isExpired = !!options.isSessionExpired;
+
+        // If session is expired, abort immediately without waiting for pending save ops
+        // (those save ops are guaranteed to fail with 401 anyway).
+        if (!isExpired) {
+            const startWait = Date.now();
+            const maxWaitMs = 15000;
+            while (this.hasPendingSaveOperations() && (Date.now() - startWait < maxWaitMs)) {
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
         }
+
+        // Always reset active saves count on logout so UI doesn't show perpetual saving state
+        this.activeSaveRequestsCount.set(0);
 
         const user = this.currentUser();
         const userToken = this.token();
 
-        if (userToken) {
+        // Only attempt backend logout call if session was not already expired
+        if (userToken && !isExpired) {
             await firstValueFrom(this.http.post(`${API_BASE_URL}/auth/logout`, {})).catch(() => {});
         }
 
@@ -736,7 +748,12 @@ export class AuthService {
         this.resetToEmailStep();
         this.showAuthModal.set(true);
         this.isLoggingOut.set(false);
-        this.notificationService.notify('Successfully logged out.');
+
+        if (isExpired) {
+            this.notificationService.notify('Your session has expired. Please sign in again.', 'warning');
+        } else {
+            this.notificationService.notify('Successfully logged out.');
+        }
     }
 
     private clearStorage() {
@@ -747,31 +764,51 @@ export class AuthService {
     }
 
     async refreshTokens(): Promise<boolean> {
-        const currentToken = this.token();
-        const currentRefresh = this.refreshToken();
+        // Deduplicate simultaneous refresh calls
+        if (this.refreshPromise) {
+            return this.refreshPromise;
+        }
+
+        const currentToken = this.token() || (this.isBrowser ? localStorage.getItem(AUTH_TOKEN_KEY) : null);
+        const currentRefresh = this.refreshToken() || (this.isBrowser ? localStorage.getItem(AUTH_REFRESH_TOKEN_KEY) : null);
+
         if (!currentRefresh) {
+            if (this.isLoggedIn()) {
+                await this.logout({ isSessionExpired: true });
+            }
             return false;
         }
 
-        try {
-            const res = await firstValueFrom(this.http.post<ApiResponse<AuthLoginResponseData>>(`${API_BASE_URL}/auth/refresh`, { 
-                accessToken: currentToken || '',
-                refreshToken: currentRefresh
-            }));
-            
-            if (res && res.data) {
-                this.token.set(res.data.token);
-                this.refreshToken.set(res.data.refreshToken);
-                if (this.isBrowser) {
-                    localStorage.setItem(AUTH_TOKEN_KEY, res.data.token);
-                    localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, res.data.refreshToken);
+        this.refreshPromise = (async () => {
+            try {
+                const res = await firstValueFrom(this.http.post<ApiResponse<AuthLoginResponseData>>(`${API_BASE_URL}/auth/refresh`, { 
+                    accessToken: currentToken || '',
+                    refreshToken: currentRefresh
+                }));
+                
+                if (res && res.data && res.data.token) {
+                    this.token.set(res.data.token);
+                    this.refreshToken.set(res.data.refreshToken);
+                    if (this.isBrowser) {
+                        localStorage.setItem(AUTH_TOKEN_KEY, res.data.token);
+                        localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, res.data.refreshToken);
+                    }
+                    return true;
                 }
-                return true;
+
+                // If response had no valid token data
+                await this.logout({ isSessionExpired: true });
+                return false;
+            } catch (e: any) {
+                console.error('Failed to refresh token', e);
+                // When refresh token has expired or is invalid (e.g. 401 or 400 from backend)
+                await this.logout({ isSessionExpired: true });
+                return false;
+            } finally {
+                this.refreshPromise = null;
             }
-        } catch (e) {
-            console.error('Failed to refresh token', e);
-        }
-        
-        return false;
+        })();
+
+        return this.refreshPromise;
     }
 }
