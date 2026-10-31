@@ -306,8 +306,15 @@ export class VariableInputComponent implements ControlValueAccessor {
     private scrollToSuggestion(index: number) {
         requestAnimationFrame(() => {
             const el = document.getElementById(`suggestion-item-${index}`);
-            if (el) {
-                el.scrollIntoView({ block: 'nearest' });
+            const parent = el?.parentElement;
+            if (el && parent) {
+                const elTop = el.offsetTop;
+                const elBottom = elTop + el.offsetHeight;
+                if (elTop < parent.scrollTop) {
+                    parent.scrollTop = elTop;
+                } else if (elBottom > parent.scrollTop + parent.clientHeight) {
+                    parent.scrollTop = elBottom - parent.clientHeight;
+                }
             }
         });
     }

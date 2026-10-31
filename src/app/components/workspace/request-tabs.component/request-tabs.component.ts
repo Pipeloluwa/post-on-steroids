@@ -133,9 +133,9 @@ export class RequestTabsComponent {
 
     private scrollToActiveTab() {
         setTimeout(() => {
-            const el = document.getElementById('tab' + this.tabStateService.activeTabId());
-            if (el && this.scrollContainer) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            const activeId = this.tabStateService.activeTabId();
+            if (activeId) {
+                this.scrollToTab(activeId);
                 setTimeout(() => this.updateScrollState(), 300);
             }
         }, 0);
@@ -241,9 +241,12 @@ export class RequestTabsComponent {
 
     private scrollToTab(id: string) {
         setTimeout(() => {
-            const activeEl = this.scrollContainer.nativeElement.querySelector(`#tab${id}`);
+            if (!this.scrollContainer) return;
+            const container = this.scrollContainer.nativeElement;
+            const activeEl = container.querySelector<HTMLElement>(`#tab${id}`);
             if (activeEl) {
-                activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                const targetLeft = activeEl.offsetLeft - container.clientWidth / 2 + activeEl.offsetWidth / 2;
+                container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
             }
         }, 0);
     }
@@ -286,15 +289,15 @@ export class RequestTabsComponent {
 
     onDragMoved(event: CdkDragMove<any>) {
         if (!this.scrollContainer) return;
-        
+
         const container = this.scrollContainer.nativeElement;
         const rect = container.getBoundingClientRect();
-        
+
         // Use pointer position to determine if we're near the edge
         const pointerX = event.pointerPosition.x;
         const edgeThreshold = 80;
         const scrollSpeed = 50;
-        
+
         if (pointerX < rect.left + edgeThreshold) {
             container.scrollLeft -= scrollSpeed;
         } else if (pointerX > rect.right - edgeThreshold) {
@@ -304,8 +307,6 @@ export class RequestTabsComponent {
 
     scrollLeft() {
         if (this.scrollContainer) {
-
-
             this.scrollContainer.nativeElement.scrollBy({ left: -200, behavior: 'smooth' });
             setTimeout(() => this.updateScrollState(), 300);
         }
@@ -322,10 +323,7 @@ export class RequestTabsComponent {
         const tab = this.tabs().find(t => t.name === endpoint);
         if (tab) {
             this.tabStateService.setActiveTab(tab.id);
-            const activeEl = this.scrollContainer.nativeElement.querySelector(`#tab${tab.id}`);
-            if (activeEl) {
-                activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-            }
+            this.scrollToTab(tab.id);
         }
     }
 
