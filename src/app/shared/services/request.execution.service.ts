@@ -113,7 +113,17 @@ export class RequestExecutionService {
             if (!freshState) return;
 
             // 1. Resolve URL
+            if (!(freshState.url || '').trim()) {
+                this.tabStateService.updateState(effectiveTabId, { isLoading: false });
+                this.notificationService.notify('Please enter a request URL before sending', 'warning');
+                return;
+            }
             const resolvedUrl = this.variableService.resolve(freshState.url);
+            if (!resolvedUrl.trim()) {
+                this.tabStateService.updateState(effectiveTabId, { isLoading: false });
+                this.notificationService.notify('Resolved request URL is empty. Please enter a valid URL', 'warning');
+                return;
+            }
 
             // 2. Prepare Headers
             let headers = freshState.headers

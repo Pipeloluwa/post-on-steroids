@@ -96,6 +96,7 @@ export class RequestUrlComponent {
     detectedEndpoint = signal<any>(null);
 
     url = computed(() => this.tabState()?.url || '');
+    hasUrlError = signal(false);
 
     constructor() {
     }
@@ -108,6 +109,9 @@ export class RequestUrlComponent {
     });
 
     onUrlChange(newUrl: string) {
+        if (this.hasUrlError() && newUrl?.trim()) {
+            this.hasUrlError.set(false);
+        }
         this.tabStateService.updateState(this.tabId(), { url: newUrl });
     }
 
@@ -129,6 +133,13 @@ export class RequestUrlComponent {
     }
 
     onSend() {
+        const currentUrl = (this.url() || '').trim();
+        if (!currentUrl) {
+            this.hasUrlError.set(true);
+            this.notificationService.notify('Please enter a request URL before sending', 'warning');
+            return;
+        }
+        this.hasUrlError.set(false);
         this.executionService.executeRequest(this.tabId());
     }
 
