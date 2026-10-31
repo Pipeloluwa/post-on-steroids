@@ -1,7 +1,10 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const https = require('https');
 const path = require('path');
 const url = require('url');
 const { autoUpdater } = require('electron-updater');
+
+const UPDATE_BASE_URL = 'https://onsteroid.com/download';
 
 // Auto Updater Configuration
 autoUpdater.autoDownload = true;
@@ -55,13 +58,71 @@ function createWindow() {
   });
 }
 
+function isNewerVersion(remoteVer, currentVer) {
+  const r = String(remoteVer || '').trim().split('.').map(Number);
+  const c = String(currentVer || '').trim().split('.').map(Number);
+  for (let i = 0; i < Math.max(r.length, c.length); i++) {
+    const rv = r[i] || 0;
+    const cv = c[i] || 0;
+    if (rv > cv) return true;
+    if (rv < cv) return false;
+  }
+  return false;
+}
+
+function checkArchiveManifestUpdate() {
+  const manifestFile =
+    process.platform === 'linux'
+      ? 'latest-linux.yml'
+      : process.platform === 'darwin'
+        ? 'latest-mac.yml'
+        : 'latest.yml';
+
+  https
+    .get(`${UPDATE_BASE_URL}/${manifestFile}`, (res) => {
+      if (res.statusCode !== 200) return;
+      let raw = '';
+      res.on('data', (chunk) => (raw += chunk));
+      res.on('end', () => {
+        const verMatch = raw.match(/^version:\s*['"]?([^\s'"]+)['"]?/m);
+        const pathMatch = raw.match(/^path:\s*['"]?([^\r\n'"]+)['"]?/m);
+        const remoteVersion = verMatch ? verMatch[1] : null;
+        const packageFile = pathMatch ? pathMatch[1].trim() : null;
+
+        if (remoteVersion && isNewerVersion(remoteVersion, app.getVersion()) && packageFile) {
+          dialog
+            .showMessageBox({
+              type: 'info',
+              buttons: ['Download Update', 'Later'],
+              title: 'Update Available',
+              message: `OnSteroid v${remoteVersion} is available.`,
+              detail: 'Download the latest package for your platform from onsteroid.com.'
+            })
+            .then(({ response }) => {
+              if (response === 0) {
+                shell.openExternal(`${UPDATE_BASE_URL}/${packageFile}`);
+              }
+            });
+        }
+      });
+    })
+    .on('error', () => {});
+}
+
 app.on('ready', () => {
   createWindow();
-  
+
   // Check for updates shortly after app starts
   setTimeout(() => {
-    autoUpdater.checkForUpdatesAndNotify().catch(err => {
-      console.error('Failed to check for updates:', err);
+    // Linux tar.gz/zip builds do not run inside an AppImage container, so use manifest check directly
+    if (process.platform === 'linux' && !process.env.APPIMAGE) {
+      checkArchiveManifestUpdate();
+      return;
+    }
+
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {
+      // Fallback for portable/archive builds across Windows, macOS, and Linux
+      checkArchiveManifestUpdate();
     });
   }, 3000);
 });

@@ -11,7 +11,8 @@
     "serve:ssr:post-on-steroids": "node dist/post-on-steroids/server/server.mjs",
     "electron": "electron .",
     "electron:serve": "ng build --base-href ./ && electron .",
-    "electron:build": "ng build --base-href ./ && electron-builder"
+    "electron:build": "ng build --base-href ./ && electron-builder && node scripts/generate-update-manifests.mjs",
+    "electron:manifests": "node scripts/generate-update-manifests.mjs"
   },
   "prettier": {
     "printWidth": 100,
