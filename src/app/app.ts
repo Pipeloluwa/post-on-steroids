@@ -1,14 +1,17 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, OnInit } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { MainLayout } from './layouts/main.layout/main.layout';
+import { VersionCheckService } from './shared/services/version-check.service';
 
 @Component({
-  standalone: true,
   selector: 'app-root',
   imports: [RouterOutlet],
-  templateUrl: './app.html'
+  templateUrl: './app.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class App {
+export class App implements OnInit {
+  private readonly versionCheckService = inject(VersionCheckService);
 
-
+  ngOnInit(): void {
+    this.versionCheckService.init();
+  }
 }

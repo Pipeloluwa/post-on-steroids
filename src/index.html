@@ -6,6 +6,39 @@
   <title>OnSteroid - Simple & Fast API Client Request App</title>
   <base href="/">
   
+  <!-- HTTP Cache-Control Directives for Web Browser -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+
+  <!-- Web Browser Cache-Busting: Forces fresh fetch on new visits via URL parameter -->
+  <script>
+    (function () {
+      var isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+      if (isElectron) return;
+
+      try {
+        var url = new URL(window.location.href);
+        var params = url.searchParams;
+        var hasCacheToken = params.has('_v') || params.has('_t') || params.has('_cb');
+        var sessionKey = '__onsteroid_visit_stamp__';
+        var visitRecorded = sessionStorage.getItem(sessionKey);
+        var now = Date.now();
+
+        if (!hasCacheToken && (!visitRecorded || (now - parseInt(visitRecorded, 10)) > 300000)) {
+          sessionStorage.setItem(sessionKey, now.toString());
+          params.set('_cb', now.toString());
+          window.location.replace(url.toString());
+          return;
+        }
+
+        sessionStorage.setItem(sessionKey, now.toString());
+      } catch (e) {
+        // Fallback gracefully
+      }
+    })();
+  </script>
+  
   <!-- Basic SEO Meta Tags -->
   <meta name="description" content="OnSteroid is a simple and lightning-fast API client request app. Organize your requests into capsules, write pre/post scripts, and sync your workflow seamlessly to the cloud.">
   <meta name="keywords" content="API testing, REST client, API client, Postman alternative, developer tools, API debugging, OnSteroid, API development, HTTP client">

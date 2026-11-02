@@ -4,14 +4,17 @@
   "main": "main.js",
   "scripts": {
     "ng": "ng",
+    "version:gen": "node scripts/generate-version.mjs",
+    "prebuild": "node scripts/generate-version.mjs",
+    "prestart": "node scripts/generate-version.mjs",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "node scripts/generate-version.mjs && ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "serve:ssr:post-on-steroids": "node dist/post-on-steroids/server/server.mjs",
     "electron": "electron .",
-    "electron:serve": "ng build --base-href ./ && electron .",
-    "electron:build": "ng build --base-href ./ && electron-builder && node scripts/generate-update-manifests.mjs",
+    "electron:serve": "node scripts/generate-version.mjs && ng build --base-href ./ && electron .",
+    "electron:build": "node scripts/generate-version.mjs && ng build --base-href ./ && electron-builder && node scripts/generate-update-manifests.mjs",
     "electron:manifests": "node scripts/generate-update-manifests.mjs"
   },
   "prettier": {
