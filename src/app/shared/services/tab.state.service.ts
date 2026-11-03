@@ -10,6 +10,12 @@ import { VariableService } from './variable.service';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractRequestsVariables } from '../utils/import-variable.util';
 import { getAppBaseUrl } from '../utils/url.util';
+import {
+    DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
+    DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
+    DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
+    DEFAULT_TEST_SCRIPT_SKELETON
+} from '../constants/script.snippets.constants';
 
 export interface KeyValue {
     enabled: boolean;
@@ -3309,12 +3315,12 @@ export class TabStateService {
             ],
             auth: { type: 'none', token: '' },
             scripts: {
-                preRequest: 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}',
-                postResponse: 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}',
+                preRequest: DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
+                postResponse: DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
                 preRequestConsole: '',
                 postResponseConsole: '',
                 encryptionConsole: '',
-                testScript: 'function testScript(responseStatus, responseTime, responseBody){\n    let passed = true;\n    //Add test assertions here\n    return passed;\n}',
+                testScript: DEFAULT_TEST_SCRIPT_SKELETON,
                 testScriptEnabled: false
             },
             encryption: {
@@ -3324,7 +3330,7 @@ export class TabStateService {
                 autoEncryptHeaders: false,
                 encryptedHeaders: [],
                 encryptedBodyPaths: [],
-                script: 'async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {\n    //only code written within this code block will be executed\n}'
+                script: DEFAULT_ENCRYPTION_SCRIPT_SKELETON
             },
             settings: { followRedirects: true, verifySsl: false, enableCookies: true, bypassCors: true },
             bodyType: 'none',

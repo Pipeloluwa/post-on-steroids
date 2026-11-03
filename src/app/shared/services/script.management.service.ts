@@ -58,6 +58,105 @@ export class ScriptManagementService {
         });
     }
 
+    getDefaultContentForScript(type: string, name?: string): string {
+        if (type === 'Encryption') {
+            return (name && name.toLowerCase().includes('decrypt')) 
+                ? DEFAULT_DECRYPTION_SCRIPT_SKELETON 
+                : DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
+        }
+        if (type === 'PreRequest') return DEFAULT_PRE_REQUEST_SCRIPT_SKELETON;
+        if (type === 'PostRequest') return DEFAULT_POST_RESPONSE_SCRIPT_SKELETON;
+        if (type === 'Test') return DEFAULT_TEST_SCRIPT_SKELETON;
+        return '';
+    }
+
+    getScriptContent(type: string, name: string): string {
+        const found = this.scripts().find(s => s.type === type && s.name.toLowerCase() === name.toLowerCase());
+        if (found && found.content && found.content.trim()) {
+            return found.content;
+        }
+        return this.getDefaultContentForScript(type, name);
+    }
+
+    getBuiltInDefaultScripts(): ScriptDto[] {
+        const now = new Date().toISOString();
+        return [
+            {
+                id: 'default_encrypt_fallback',
+                userId: 'virtual',
+                type: 'Encryption',
+                name: 'Encrypt',
+                content: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
+                isDefault: true,
+                createdAt: now,
+                updatedAt: now
+            },
+            {
+                id: 'default_decrypt_fallback',
+                userId: 'virtual',
+                type: 'Encryption',
+                name: 'Decrypt',
+                content: DEFAULT_DECRYPTION_SCRIPT_SKELETON,
+                isDefault: true,
+                createdAt: now,
+                updatedAt: now
+            },
+            {
+                id: 'default_prerequest_fallback',
+                userId: 'virtual',
+                type: 'PreRequest',
+                name: 'Pre-request',
+                content: DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
+                isDefault: true,
+                createdAt: now,
+                updatedAt: now
+            },
+            {
+                id: 'default_postresponse_fallback',
+                userId: 'virtual',
+                type: 'PostRequest',
+                name: 'Post-response',
+                content: DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
+                isDefault: true,
+                createdAt: now,
+                updatedAt: now
+            },
+            {
+                id: 'default_test_fallback',
+                userId: 'virtual',
+                type: 'Test',
+                name: 'Test',
+                content: DEFAULT_TEST_SCRIPT_SKELETON,
+                isDefault: true,
+                createdAt: now,
+                updatedAt: now
+            }
+        ];
+    }
+
+    ensureDefaultScripts(userScripts: ScriptDto[]): ScriptDto[] {
+        const builtIns = this.getBuiltInDefaultScripts();
+        const result = [...userScripts];
+
+        for (const builtIn of builtIns) {
+            const existing = result.find(s => s.type === builtIn.type && s.name.toLowerCase() === builtIn.name.toLowerCase());
+            if (!existing) {
+                result.push({ ...builtIn });
+            } else {
+                // If the default script exists in the list but has empty or blank content,
+                // populate it immediately with the standard skeleton from script.management.service
+                if (!existing.content || !existing.content.trim()) {
+                    existing.content = builtIn.content;
+                }
+                if (existing.isDefault === undefined) {
+                    existing.isDefault = true;
+                }
+            }
+        }
+
+        return result;
+    }
+
     async fetchMyScripts(): Promise<void> {
         if (!this.authService.isLoggedIn()) {
             this.loadOfflineScripts();
@@ -80,39 +179,15 @@ export class ScriptManagementService {
                         mergedScripts.push(os);
                     }
                 });
-                userScripts = mergedScripts;
 
-                // If backend does not provide the default Encrypt script, inject a fallback
-                if (!userScripts.find(s => s.name === 'Encrypt' && s.type === 'Encryption')) {
-                    userScripts.push({
-                        id: 'default_encrypt_fallback',
-                        userId: 'virtual',
-                        type: 'Encryption',
-                        name: 'Encrypt',
-                        content: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
-                        isDefault: true,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    });
-                }
-                
-                // If backend does not provide the default Decrypt script, inject a fallback
-                if (!userScripts.find(s => s.name === 'Decrypt' && s.type === 'Encryption')) {
-                    userScripts.push({
-                        id: 'default_decrypt_fallback',
-                        userId: 'virtual',
-                        type: 'Encryption',
-                        name: 'Decrypt',
-                        content: DEFAULT_DECRYPTION_SCRIPT_SKELETON,
-                        isDefault: true,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    });
-                }
-                this.scripts.set(userScripts);
+                // Always ensure default scripts for Encryption, Decryption, Pre-request, Post-response, Test
+                // are populated with their standard skeletons
+                const normalized = this.ensureDefaultScripts(mergedScripts);
+                this.scripts.set(normalized);
             }
         } catch (err) {
             console.error('Failed to fetch scripts', err);
+            this.loadOfflineScripts();
         } finally {
             this.isLoading.set(false);
         }
@@ -120,66 +195,19 @@ export class ScriptManagementService {
 
     private loadOfflineScripts(): void {
         const saved = this.localStorageService.getItem('onsteroids_offline_scripts');
+        let scriptsToLoad: ScriptDto[] = [];
         if (saved) {
             try {
-                let userScripts = JSON.parse(saved);
-                if (Array.isArray(userScripts)) {
-                if (!userScripts.find(s => s.name === 'Encrypt' && s.type === 'Encryption')) {
-                    userScripts.push({
-                        id: 'default_encrypt_fallback',
-                        userId: 'virtual',
-                        type: 'Encryption',
-                        name: 'Encrypt',
-                        content: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
-                        isDefault: true,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    });
-                }
-                
-                if (!userScripts.find(s => s.name === 'Decrypt' && s.type === 'Encryption')) {
-                    userScripts.push({
-                        id: 'default_decrypt_fallback',
-                        userId: 'virtual',
-                        type: 'Encryption',
-                        name: 'Decrypt',
-                        content: DEFAULT_DECRYPTION_SCRIPT_SKELETON,
-                        isDefault: true,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    });
-                }
-                    this.scripts.set(userScripts);
-                    return;
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    scriptsToLoad = parsed;
                 }
             } catch (e) { }
         }
         
-        // Load default fallback
-        const defaultScripts: ScriptDto[] = [
-            {
-                id: 'default_encrypt_fallback',
-                userId: 'offline',
-                type: 'Encryption',
-                name: 'Encrypt',
-                content: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
-                isDefault: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            },
-            {
-                id: 'default_decrypt_fallback',
-                userId: 'offline',
-                type: 'Encryption',
-                name: 'Decrypt',
-                content: DEFAULT_DECRYPTION_SCRIPT_SKELETON,
-                isDefault: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            }
-        ];
-        this.scripts.set(defaultScripts);
-        this.saveOfflineScripts(); // Ensure it gets saved so the UUID doesn't change on next load
+        const normalized = this.ensureDefaultScripts(scriptsToLoad);
+        this.scripts.set(normalized);
+        this.saveOfflineScripts();
     }
 
     private saveOfflineScripts(): void {
@@ -264,7 +292,8 @@ export class ScriptManagementService {
     }
 
     async deleteScript(id: string): Promise<boolean> {
-        if (id === 'default_encrypt_fallback' || id === 'default_decrypt_fallback') {
+        const target = this.scripts().find(s => s.id === id);
+        if (id.startsWith('default_') || target?.isDefault) {
             this.notificationService.notify('Cannot delete built-in default scripts.');
             return false;
         }
@@ -291,17 +320,11 @@ export class ScriptManagementService {
     }
 
     async resetScript(id: string): Promise<ScriptDto | null> {
-        let isVirtual = id === 'default_encrypt_fallback' || id === 'default_decrypt_fallback';
+        const isVirtual = id.startsWith('default_');
         const targetScript = this.scripts().find(s => s.id === id);
         if (!targetScript) return null;
 
-        let defaultContent = DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
-        if (targetScript.type === 'Encryption') {
-            defaultContent = targetScript.name === 'Decrypt' ? DEFAULT_DECRYPTION_SCRIPT_SKELETON : DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
-        }
-        else if (targetScript.type === 'PreRequest') defaultContent = DEFAULT_PRE_REQUEST_SCRIPT_SKELETON;
-        else if (targetScript.type === 'PostRequest') defaultContent = DEFAULT_POST_RESPONSE_SCRIPT_SKELETON;
-        else if (targetScript.type === 'Test') defaultContent = DEFAULT_TEST_SCRIPT_SKELETON;
+        const defaultContent = this.getDefaultContentForScript(targetScript.type, targetScript.name);
 
         if (!this.authService.isLoggedIn() || isVirtual) {
             let updatedScript: ScriptDto | null = null;
