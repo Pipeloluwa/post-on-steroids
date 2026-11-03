@@ -149,6 +149,10 @@ export class RequestTabsComponent {
     canScrollLeft = signal<boolean>(false);
     canScrollRight = signal<boolean>(true);
     isMouseOverTabs = false;
+    private isWheelScrolling = false;
+    private targetScrollLeft = 0;
+    private wheelAnimFrameId: number | null = null;
+    private lastAnimTime = 0;
 
     endpoints = computed(() => this.tabs().map(t => t.name));
 
@@ -191,10 +195,15 @@ export class RequestTabsComponent {
             const el = this.scrollContainer?.nativeElement;
             if (!el) return;
 
-            const scrollHandler = () => this.updateScrollState();
+            const scrollHandler = () => {
+                if (!this.isWheelScrolling && this.scrollContainer) {
+                    this.targetScrollLeft = this.scrollContainer.nativeElement.scrollLeft;
+                }
+                this.updateScrollState();
+            };
             const wheelHandler = (event: WheelEvent) => this.onWheel(event);
-            const mouseEnterHandler = () => { this.isMouseOverTabs = true; };
-            const mouseLeaveHandler = () => { this.isMouseOverTabs = false; };
+            const mouseEnterHandler = () => this.onTabsMouseEnter();
+            const mouseLeaveHandler = () => this.onTabsMouseLeave();
 
             el.addEventListener('scroll', scrollHandler, { passive: true });
             el.addEventListener('wheel', wheelHandler, { passive: false });
@@ -202,6 +211,7 @@ export class RequestTabsComponent {
             el.addEventListener('mouseleave', mouseLeaveHandler, { passive: true });
 
             this.destroyRef.onDestroy(() => {
+                this.stopWheelAnimation();
                 el.removeEventListener('scroll', scrollHandler);
                 el.removeEventListener('wheel', wheelHandler);
                 el.removeEventListener('mouseenter', mouseEnterHandler);
@@ -210,8 +220,20 @@ export class RequestTabsComponent {
         });
     }
 
+    private stopWheelAnimation() {
+        if (this.wheelAnimFrameId !== null) {
+            cancelAnimationFrame(this.wheelAnimFrameId);
+            this.wheelAnimFrameId = null;
+        }
+        this.isWheelScrolling = false;
+        this.lastAnimTime = 0;
+    }
+
     onTabsMouseEnter() {
         this.isMouseOverTabs = true;
+        if (this.scrollContainer && !this.isWheelScrolling) {
+            this.targetScrollLeft = this.scrollContainer.nativeElement.scrollLeft;
+        }
     }
 
     onTabsMouseLeave() {
@@ -248,9 +270,19 @@ export class RequestTabsComponent {
         const multiplier = event.deltaMode === 1 ? 33 : (event.deltaMode === 2 ? el.clientWidth : 1);
         const scrollDelta = rawDelta * multiplier;
 
-        const currentScroll = el.scrollLeft;
-        const isAtLeft = currentScroll <= 0;
-        const isAtRight = currentScroll >= maxScrollLeft - 1;
+        // Sync baseline target with current scroll position if idle or reversing direction
+        if (!this.isWheelScrolling) {
+            this.targetScrollLeft = el.scrollLeft;
+        } else {
+            const isMovingLeft = this.targetScrollLeft < el.scrollLeft;
+            const isMovingRight = this.targetScrollLeft > el.scrollLeft;
+            if ((scrollDelta > 0 && isMovingLeft) || (scrollDelta < 0 && isMovingRight)) {
+                this.targetScrollLeft = el.scrollLeft;
+            }
+        }
+
+        const isAtLeft = el.scrollLeft <= 0 && this.targetScrollLeft <= 0;
+        const isAtRight = el.scrollLeft >= maxScrollLeft - 1 && this.targetScrollLeft >= maxScrollLeft - 1;
 
         // If tabs are already at the boundary edge in the requested direction,
         // do NOT prevent default so general parent horizontal scrolling (e.g. on small window) functions naturally
@@ -261,8 +293,46 @@ export class RequestTabsComponent {
         // Only prevent default and consume event when within bounds and actively scrolling the tabs
         event.preventDefault();
 
-        el.scrollLeft += scrollDelta;
+        // Accumulate target scroll position clamped to container bounds
+        this.targetScrollLeft = Math.max(0, Math.min(maxScrollLeft, this.targetScrollLeft + scrollDelta));
+
+        if (!this.isWheelScrolling) {
+            this.isWheelScrolling = true;
+            this.lastAnimTime = performance.now();
+            this.wheelAnimFrameId = requestAnimationFrame((t) => this.animateScroll(t));
+        }
+    }
+
+    private animateScroll(timestamp: number) {
+        if (!this.scrollContainer) {
+            this.stopWheelAnimation();
+            return;
+        }
+        const el = this.scrollContainer.nativeElement;
+        const diff = this.targetScrollLeft - el.scrollLeft;
+
+        // If within sub-pixel threshold of target, snap and end animation
+        if (Math.abs(diff) < 0.75) {
+            el.scrollLeft = this.targetScrollLeft;
+            this.updateScrollState();
+            this.stopWheelAnimation();
+            return;
+        }
+
+        const dt = this.lastAnimTime ? Math.min(0.05, (timestamp - this.lastAnimTime) / 1000) : 0.016;
+        this.lastAnimTime = timestamp;
+
+        // Frame-rate independent exponential smoothing (lambda = 15 yields a silky ~150-180ms glide)
+        const factor = 1 - Math.exp(-15 * dt);
+        const step = diff * factor;
+
+        const minStep = 0.5 * Math.sign(diff);
+        const appliedStep = Math.abs(step) < Math.abs(minStep) ? minStep : step;
+
+        el.scrollLeft += appliedStep;
         this.updateScrollState();
+
+        this.wheelAnimFrameId = requestAnimationFrame((t) => this.animateScroll(t));
     }
 
     updateScrollState() {
@@ -314,6 +384,7 @@ export class RequestTabsComponent {
     }
 
     private scrollToTab(id: string) {
+        this.stopWheelAnimation();
         setTimeout(() => {
             if (!this.scrollContainer) return;
             const container = this.scrollContainer.nativeElement;
@@ -362,6 +433,7 @@ export class RequestTabsComponent {
     }
 
     onDragMoved(event: CdkDragMove<any>) {
+        this.stopWheelAnimation();
         if (!this.scrollContainer) return;
 
         const container = this.scrollContainer.nativeElement;
@@ -380,6 +452,7 @@ export class RequestTabsComponent {
     }
 
     scrollLeft() {
+        this.stopWheelAnimation();
         if (this.scrollContainer) {
             this.scrollContainer.nativeElement.scrollBy({ left: -200, behavior: 'smooth' });
             setTimeout(() => this.updateScrollState(), 300);
@@ -387,6 +460,7 @@ export class RequestTabsComponent {
     }
 
     scrollRight() {
+        this.stopWheelAnimation();
         if (this.scrollContainer) {
             this.scrollContainer.nativeElement.scrollBy({ left: 200, behavior: 'smooth' });
             setTimeout(() => this.updateScrollState(), 300);
@@ -402,6 +476,7 @@ export class RequestTabsComponent {
     }
 
     addTab() {
+        this.stopWheelAnimation();
         const newId = this.tabStateService.createAndOpenNewTab();
 
         setTimeout(() => {
