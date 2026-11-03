@@ -148,6 +148,7 @@ export class RequestTabsComponent {
 
     canScrollLeft = signal<boolean>(false);
     canScrollRight = signal<boolean>(true);
+    isMouseOverTabs = false;
 
     endpoints = computed(() => this.tabs().map(t => t.name));
 
@@ -192,37 +193,75 @@ export class RequestTabsComponent {
 
             const scrollHandler = () => this.updateScrollState();
             const wheelHandler = (event: WheelEvent) => this.onWheel(event);
+            const mouseEnterHandler = () => { this.isMouseOverTabs = true; };
+            const mouseLeaveHandler = () => { this.isMouseOverTabs = false; };
 
             el.addEventListener('scroll', scrollHandler, { passive: true });
             el.addEventListener('wheel', wheelHandler, { passive: false });
+            el.addEventListener('mouseenter', mouseEnterHandler, { passive: true });
+            el.addEventListener('mouseleave', mouseLeaveHandler, { passive: true });
 
             this.destroyRef.onDestroy(() => {
                 el.removeEventListener('scroll', scrollHandler);
                 el.removeEventListener('wheel', wheelHandler);
+                el.removeEventListener('mouseenter', mouseEnterHandler);
+                el.removeEventListener('mouseleave', mouseLeaveHandler);
             });
         });
     }
 
+    onTabsMouseEnter() {
+        this.isMouseOverTabs = true;
+    }
+
+    onTabsMouseLeave() {
+        this.isMouseOverTabs = false;
+    }
+
     onWheel(event: WheelEvent) {
-        if (!this.scrollContainer) return;
+        // Horizontal tab scrolling only affects when mouse has entered the horizontal tabs region
+        if (!this.isMouseOverTabs || !this.scrollContainer) return;
         const el = this.scrollContainer.nativeElement;
 
-        // If no overflow exists, allow standard behavior
-        if (el.scrollWidth <= el.clientWidth) return;
+        // Verify the cursor is physically inside the horizontal tabs bounding rectangle
+        const rect = el.getBoundingClientRect();
+        if (
+            event.clientX < rect.left ||
+            event.clientX > rect.right ||
+            event.clientY < rect.top ||
+            event.clientY > rect.bottom
+        ) {
+            this.isMouseOverTabs = false;
+            return;
+        }
 
-        // Determine dominant scroll delta: prioritize deltaX if significant (e.g. trackpad horizontal gesture),
-        // otherwise translate vertical wheel movement (deltaY) into horizontal scroll.
-        const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-        if (delta === 0) return;
+        // If tabs do not overflow horizontally, allow standard parent horizontal scrolling
+        const maxScrollLeft = el.scrollWidth - el.clientWidth;
+        if (maxScrollLeft <= 1) return;
+
+        // Honor trackpad horizontal gesture if present; otherwise translate vertical mouse wheel into horizontal scroll
+        const isHorizontalGesture = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+        const rawDelta = isHorizontalGesture ? event.deltaX : event.deltaY;
+        if (rawDelta === 0) return;
 
         // Normalize delta based on deltaMode (0: pixels, 1: lines, 2: pages)
         const multiplier = event.deltaMode === 1 ? 33 : (event.deltaMode === 2 ? el.clientWidth : 1);
-        const scrollDelta = delta * multiplier;
+        const scrollDelta = rawDelta * multiplier;
 
-        // Prevent vertical parent page scroll while scrolling over tabs
+        const currentScroll = el.scrollLeft;
+        const isAtLeft = currentScroll <= 0;
+        const isAtRight = currentScroll >= maxScrollLeft - 1;
+
+        // If tabs are already at the boundary edge in the requested direction,
+        // do NOT prevent default so general parent horizontal scrolling (e.g. on small window) functions naturally
+        if ((scrollDelta < 0 && isAtLeft) || (scrollDelta > 0 && isAtRight)) {
+            return;
+        }
+
+        // Only prevent default and consume event when within bounds and actively scrolling the tabs
         event.preventDefault();
 
-        el.scrollBy({ left: scrollDelta, behavior: 'auto' });
+        el.scrollLeft += scrollDelta;
         this.updateScrollState();
     }
 

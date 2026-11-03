@@ -26,3 +26,57 @@ export function isLocalhostOrLoopbackUrl(url: string | null | undefined): boolea
         return /(^|[/:@])(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)(:\d+)?([/?#]|$)/i.test(trimmed);
     }
 }
+
+/**
+ * Resolves the full base URL where the application is hosted, preserving any subpath / subdirectory prefix
+ * (e.g., https://www.privateweb.com/onsteroid or https://domain.com/tools/app).
+ *
+ * For example:
+ * - Hosted at root: https://onsteroid.com -> https://onsteroid.com
+ * - Hosted under subpath: https://www.privateweb.com/onsteroid -> https://www.privateweb.com/onsteroid
+ * - Hosted with deeper path: https://example.com/apps/dev/onsteroid -> https://example.com/apps/dev/onsteroid
+ * - Localhost dev server: http://localhost:4200 -> http://localhost:4200
+ * - Electron / file protocol: file:///path/to/app -> http://localhost:5000
+ */
+export function getAppBaseUrl(): string {
+    if (typeof window === 'undefined') return '';
+    const isFile = window.location.protocol === 'file:' || window.location.origin.startsWith('file:');
+    if (isFile) {
+        return 'http://localhost:5000';
+    }
+
+    const origin = window.location.origin;
+    let basePath = '';
+
+    // 1. Check document.baseURI (respects <base href="..."> if set to a subpath)
+    try {
+        if (typeof document !== 'undefined' && document.baseURI) {
+            const parsedBase = new URL(document.baseURI);
+            const path = parsedBase.pathname.replace(/\/+$/, '');
+            if (path && path !== '') {
+                basePath = path;
+            }
+        }
+    } catch { }
+
+    // 2. If no subpath found from baseURI, check window.location.pathname
+    if (!basePath) {
+        const fullPath = window.location.pathname || '';
+        // Known route segments in the Angular app
+        const knownRoutes = ['capsules', 'export', 'import', 'utilities', 'history', 'login', 'workspace'];
+        // Remove trailing index.html if present
+        const cleanPath = fullPath.replace(/\/index\.html$/i, '');
+        // Split path into segments
+        const segments = cleanPath.split('/').filter(Boolean);
+        // If the last segment is one of our known routes, strip it off
+        if (segments.length > 0 && knownRoutes.includes(segments[segments.length - 1].toLowerCase())) {
+            segments.pop();
+        }
+        if (segments.length > 0) {
+            basePath = '/' + segments.join('/');
+        }
+    }
+
+    basePath = basePath.replace(/\/+$/, '');
+    return `${origin}${basePath}`;
+}

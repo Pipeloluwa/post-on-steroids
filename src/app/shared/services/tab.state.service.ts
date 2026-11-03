@@ -9,6 +9,7 @@ import { API_BASE_URL } from '../constants/api.constants';
 import { VariableService } from './variable.service';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractRequestsVariables } from '../utils/import-variable.util';
+import { getAppBaseUrl } from '../utils/url.util';
 
 export interface KeyValue {
     enabled: boolean;
@@ -1757,9 +1758,10 @@ export class TabStateService {
         );
 
         if (res?.data) {
-            const isFile = window.location.origin.startsWith('file:');
-            const origin = isFile ? 'http://localhost:5000' : window.location.origin;
-            return `${origin}${isFile ? '/#/' : '/'}import?share=${res.data.shareToken}`;
+            const baseUrl = getAppBaseUrl();
+            const isFile = typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin.startsWith('file:'));
+            const hasHash = isFile || (typeof window !== 'undefined' && window.location.hash && window.location.hash.startsWith('#/'));
+            return `${baseUrl}${hasHash ? '/#/' : '/'}import?share=${res.data.shareToken}`;
         }
         throw new Error('Failed to generate share link');
     }
@@ -2027,8 +2029,22 @@ export class TabStateService {
     async importCapsuleFromUrl(urlOrToken: string): Promise<{ capsuleName: string; requestsCount: number }> {
         let token = urlOrToken.trim();
         if (token.includes('share=')) {
-            const url = new URL(token);
-            token = url.searchParams.get('share') || token;
+            try {
+                const parseableUrl = /^https?:\/\//i.test(token) ? token : `https://${token}`;
+                const url = new URL(parseableUrl);
+                let param = url.searchParams.get('share');
+                if (!param && url.hash.includes('share=')) {
+                    const hashIndex = url.hash.indexOf('?');
+                    if (hashIndex !== -1) {
+                        const hashSearch = url.hash.substring(hashIndex);
+                        param = new URLSearchParams(hashSearch).get('share');
+                    }
+                }
+                token = param || token;
+            } catch {
+                const match = token.match(/[?&]share=([^&#]+)/);
+                if (match) token = decodeURIComponent(match[1]);
+            }
         } else if (token.includes('/share/')) {
             const parts = token.split('/share/');
             token = parts[parts.length - 1].split('?')[0].split('#')[0];

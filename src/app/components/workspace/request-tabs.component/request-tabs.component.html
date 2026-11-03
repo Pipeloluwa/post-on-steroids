@@ -27,7 +27,9 @@
         cdkDropListOrientation="horizontal"
         [cdkDropListAutoScrollStep]="150"
         (cdkDropListDropped)="dropTab($event)"
-        class="w-full h-full flex items-center overflow-hidden overflow-x-auto no-scrollbar scroll-smooth">
+        (mouseenter)="onTabsMouseEnter()"
+        (mouseleave)="onTabsMouseLeave()"
+        class="w-full h-full flex items-center overflow-hidden overflow-x-auto no-scrollbar">
         @for (tab of tabs(); track tab.id) {
         <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)"
             (contextmenu)="onTabContextMenu($event, tab.id)" [title]="tab.name"
