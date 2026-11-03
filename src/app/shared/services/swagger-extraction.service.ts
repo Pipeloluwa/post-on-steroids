@@ -57,7 +57,7 @@ export class SwaggerExtractionService {
         // 4. Try HTML extraction with /swagger/index.html or /swagger if original didn't have it
         if (!trimmedUrl.toLowerCase().includes('/swagger')) {
             try {
-                const swaggerHtml = await this.extractFromHtml(`${baseUrl}/swagger/index.html`);
+                const swaggerHtml = await this.extractFromHtml(this.joinUrlPath(baseUrl, 'swagger/index.html'));
                 if (swaggerHtml) {
                     return swaggerHtml;
                 }
@@ -208,7 +208,7 @@ export class SwaggerExtractionService {
 
         for (const endpoint of endpoints) {
             try {
-                const jsonUrl = new URL(endpoint, baseUrl).toString();
+                const jsonUrl = this.joinUrlPath(baseUrl, endpoint);
                 const res = await this.fetchWithProxy(jsonUrl, 'application/json');
 
                 if (res.ok && res.json) {
@@ -216,7 +216,9 @@ export class SwaggerExtractionService {
                         return res.json;
                     }
                     if (typeof res.json.url === 'string') {
-                        const targetUrl = new URL(res.json.url, jsonUrl).toString();
+                        const targetUrl = /^https?:\/\//i.test(res.json.url)
+                            ? res.json.url
+                            : this.joinUrlPath(baseUrl, res.json.url);
                         const subRes = await this.fetchWithProxy(targetUrl, 'application/json');
                         if (subRes.ok && subRes.json && (subRes.json['openapi'] || subRes.json['swagger'] || subRes.json['paths'])) {
                             return subRes.json;
@@ -272,19 +274,17 @@ export class SwaggerExtractionService {
                     );
                 }
 
-                const absoluteUrl = new URL(jsonUrl, scriptUrl).toString();
-                const spec = await this.fetchOpenApiSpec(absoluteUrl);
+                const spec = await this.resolveAndFetchSpec(jsonUrl, scriptUrl);
                 if (!spec) {
-                    throw new Error(`Failed to download OpenAPI spec from ${absoluteUrl}.`);
+                    throw new Error(`Failed to download OpenAPI spec for ${jsonUrl}.`);
                 }
 
                 return spec;
             }
 
-            const absoluteUrl = new URL(jsonUrl, swaggerUrl).toString();
-            const spec = await this.fetchOpenApiSpec(absoluteUrl);
+            const spec = await this.resolveAndFetchSpec(jsonUrl, swaggerUrl);
             if (!spec) {
-                throw new Error(`Failed to download OpenAPI spec from ${absoluteUrl}.`);
+                throw new Error(`Failed to download OpenAPI spec for ${jsonUrl}.`);
             }
 
             return spec;
@@ -406,42 +406,94 @@ export class SwaggerExtractionService {
         return null;
     }
 
+    private async resolveAndFetchSpec(jsonUrl: string, contextUrl: string): Promise<Record<string, any> | null> {
+        if (/^https?:\/\//i.test(jsonUrl)) {
+            return this.fetchOpenApiSpec(jsonUrl);
+        }
+
+        // 1. Try subpath-preserving join with normalized service base
+        const serviceBase = this.normalizeSwaggerUrl(contextUrl);
+        const subpathUrl = this.joinUrlPath(serviceBase, jsonUrl);
+        try {
+            const spec = await this.fetchOpenApiSpec(subpathUrl);
+            if (spec) return spec;
+        } catch { }
+
+        // 2. Try standard URL resolution relative to contextUrl as fallback
+        try {
+            const absoluteUrl = new URL(jsonUrl, contextUrl).toString();
+            if (absoluteUrl !== subpathUrl) {
+                const spec = await this.fetchOpenApiSpec(absoluteUrl);
+                if (spec) return spec;
+            }
+        } catch { }
+
+        return null;
+    }
+
     /**
-     * Normalizes Swagger URL to base URL
-     * Removes /swagger/index.html suffix if present
+     * Appends a sub-path or endpoint to a base URL without stripping existing base path segments
+     */
+    private joinUrlPath(baseUrl: string, endpointPath: string): string {
+        const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+        const cleanEndpoint = endpointPath.trim().replace(/^\/+/, '');
+        if (!cleanBase) return `/${cleanEndpoint}`;
+        if (!cleanEndpoint) return cleanBase;
+        return `${cleanBase}/${cleanEndpoint}`;
+    }
+
+    /**
+     * Normalizes Swagger URL to base service URL.
+     * Strips Swagger documentation and JSON suffixes while strictly preserving any
+     * subpaths/suffixes after the domain name (e.g. /customer-service, /api/v1).
      */
     private normalizeSwaggerUrl(url: string): string {
-        let normalized = url.trim();
+        const normalized = url.trim();
 
-        // If it ends with .json, return origin or base directory
-        if (/\.json$/i.test(normalized)) {
-            try {
-                return new URL(normalized).origin;
-            } catch {
-                return normalized.replace(/\/[^/]+\.json$/i, '');
+        try {
+            const parsed = new URL(normalized);
+            let pathname = parsed.pathname;
+
+            const swaggerSuffixPatterns = [
+                /\/swagger\/index\.html\/?$/i,
+                /\/swagger\/v\d+\/swagger\.json\/?$/i,
+                /\/swagger\/index\.json\/?$/i,
+                /\/swagger\/[a-zA-Z0-9_.-]+\.json\/?$/i,
+                /\/v\d+\/swagger\.json\/?$/i,
+                /\/v\d+\/openapi\.json\/?$/i,
+                /\/v3\/api-docs(\/[^/]+)?\/?$/i,
+                /\/api-docs(\/[^/]+)?\/?$/i,
+                /\/swagger\.json\/?$/i,
+                /\/openapi\.json\/?$/i,
+                /\/index\.html\/?$/i,
+                /\/swagger\/?$/i,
+                /\/docs\/?$/i,
+                /\/api-docs\/?$/i
+            ];
+
+            for (const pattern of swaggerSuffixPatterns) {
+                if (pattern.test(pathname)) {
+                    pathname = pathname.replace(pattern, '');
+                    break;
+                }
             }
-        }
 
-        // If it ends with /swagger/index.html
-        if (/\/swagger\/index\.html\/?$/i.test(normalized)) {
-            return normalized.replace(/\/swagger\/index\.html\/?$/i, '');
-        }
+            // If it still ends with any generic .json file (e.g. /myspec.json)
+            if (/\.json$/i.test(pathname)) {
+                pathname = pathname.replace(/\/[^/]+\.json$/i, '');
+            }
 
-        // If it ends with /index.html
-        if (/\/index\.html\/?$/i.test(normalized)) {
-            return normalized.replace(/\/index\.html\/?$/i, '');
+            pathname = pathname.replace(/\/+$/, '');
+            return `${parsed.origin}${pathname}`;
+        } catch {
+            return normalized
+                .replace(/\/swagger\/index\.html\/?$/i, '')
+                .replace(/\/swagger\/v\d+\/swagger\.json\/?$/i, '')
+                .replace(/\/v\d+\/swagger\.json\/?$/i, '')
+                .replace(/\/swagger\/?$/i, '')
+                .replace(/\/index\.html\/?$/i, '')
+                .replace(/\/[^/]+\.json\/?$/i, '')
+                .replace(/\/+$/, '');
         }
-
-        // If it ends with /swagger
-        if (/\/swagger\/?$/i.test(normalized)) {
-            return normalized.replace(/\/swagger\/?$/i, '');
-        }
-
-        // Strip trailing slash
-        if (normalized.endsWith('/')) {
-            normalized = normalized.slice(0, -1);
-        }
-
-        return normalized;
     }
 }

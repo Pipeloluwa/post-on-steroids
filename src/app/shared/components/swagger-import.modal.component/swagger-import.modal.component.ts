@@ -131,9 +131,9 @@ export class SwaggerImportModalComponent {
 
                 const method = methodKey.toUpperCase();
                 const operationName = (operation.summary || operation.operationId || `${method} ${pathKey}`).trim();
-                const displayName = `${collectionName} â€” ${operationName}`;
+                const displayName = `${collectionName} — ${operationName}`;
                 const requestId = this.createId();
-                const url = new URL(pathKey, baseServiceUrl).toString();
+                const url = this.combineBaseUrlAndPath(baseServiceUrl, pathKey);
 
                 const mergedParams = this.mergeParameters(pathObject.parameters, operation.parameters, openApi);
                 let bodySource = operation.requestBody;
@@ -179,31 +179,136 @@ export class SwaggerImportModalComponent {
         return { collectionName, requests, variables };
     }
 
-    private resolveServerBaseUrl(openApi: Record<string, any>, indexUrl: string): string {
-        const servers = Array.isArray(openApi['servers']) ? openApi['servers'] : [];
-        if (servers.length > 0 && typeof servers[0].url === 'string') {
-            try {
-                return new URL(servers[0].url, indexUrl).toString();
-            } catch {
-                return indexUrl;
-            }
-        }
+    private combineBaseUrlAndPath(baseUrl: string, path: string): string {
+        const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+        const cleanPath = path.trim().replace(/^\/+/, '');
+        if (!cleanBase) return `/${cleanPath}`;
+        if (!cleanPath) return cleanBase;
+        return `${cleanBase}/${cleanPath}`;
+    }
 
-        // Check host and basePath for Swagger 2.0
-        if (openApi['host']) {
-            const scheme = (Array.isArray(openApi['schemes']) && openApi['schemes'][0]) || 'https';
-            const basePath = openApi['basePath'] || '';
-            return `${scheme}://${openApi['host']}${basePath}`.replace(/\/+$/, '/');
-        }
-
+    private extractServiceBaseFromUrl(indexUrl: string): string {
+        const trimmed = indexUrl.trim();
         try {
-            const parsed = new URL(indexUrl);
-            let path = parsed.pathname;
-            path = path.replace(/(\/swagger)?(\/index\.html|\/v\d+\/swagger\.json|\/[^/]+\.json|\/swagger)?$/i, '');
-            return `${parsed.origin}${path}`.replace(/\/+$/, '/') || `${parsed.origin}/`;
+            const parsed = new URL(trimmed);
+            let pathname = parsed.pathname;
+
+            const swaggerSuffixPatterns = [
+                /\/swagger\/index\.html\/?$/i,
+                /\/swagger\/v\d+\/swagger\.json\/?$/i,
+                /\/swagger\/index\.json\/?$/i,
+                /\/swagger\/[a-zA-Z0-9_.-]+\.json\/?$/i,
+                /\/v\d+\/swagger\.json\/?$/i,
+                /\/v\d+\/openapi\.json\/?$/i,
+                /\/v3\/api-docs(\/[^/]+)?\/?$/i,
+                /\/api-docs(\/[^/]+)?\/?$/i,
+                /\/swagger\.json\/?$/i,
+                /\/openapi\.json\/?$/i,
+                /\/index\.html\/?$/i,
+                /\/swagger\/?$/i,
+                /\/docs\/?$/i,
+                /\/api-docs\/?$/i
+            ];
+
+            for (const pattern of swaggerSuffixPatterns) {
+                if (pattern.test(pathname)) {
+                    pathname = pathname.replace(pattern, '');
+                    break;
+                }
+            }
+
+            if (/\.json$/i.test(pathname)) {
+                pathname = pathname.replace(/\/[^/]+\.json$/i, '');
+            }
+
+            pathname = pathname.replace(/\/+$/, '');
+            return `${parsed.origin}${pathname}`;
         } catch {
-            return indexUrl.replace(/\/swagger\/index\.html$/i, '/').replace(/\/+$/, '/') || indexUrl;
+            return trimmed
+                .replace(/\/swagger\/index\.html\/?$/i, '')
+                .replace(/\/swagger\/v\d+\/swagger\.json\/?$/i, '')
+                .replace(/\/v\d+\/swagger\.json\/?$/i, '')
+                .replace(/\/swagger\/?$/i, '')
+                .replace(/\/index\.html\/?$/i, '')
+                .replace(/\/[^/]+\.json\/?$/i, '')
+                .replace(/\/+$/, '');
         }
+    }
+
+    private resolveServerBaseUrl(openApi: Record<string, any>, indexUrl: string): string {
+        const serviceBase = this.extractServiceBaseFromUrl(indexUrl);
+        const servers = Array.isArray(openApi['servers']) ? openApi['servers'] : [];
+
+        // 1. OpenAPI 3.x servers array
+        if (servers.length > 0) {
+            let serverUrl = typeof servers[0]?.url === 'string' ? servers[0].url.trim() : '';
+
+            // Resolve server templated variables e.g. {environment}, {port}, {basePath}
+            if (serverUrl && servers[0].variables && typeof servers[0].variables === 'object') {
+                for (const [varName, varDef] of Object.entries(servers[0].variables)) {
+                    const val = (varDef as any)?.default ?? (Array.isArray((varDef as any)?.enum) ? (varDef as any).enum[0] : '');
+                    serverUrl = serverUrl.replaceAll(`{${varName}}`, String(val ?? ''));
+                }
+            }
+
+            // If server URL is empty, root slash '/', or './', use the detected serviceBase to preserve subpaths
+            if (!serverUrl || serverUrl === '/' || serverUrl === './') {
+                return serviceBase;
+            }
+
+            // If server URL is absolute (http:// or https://)
+            if (/^https?:\/\//i.test(serverUrl)) {
+                try {
+                    const parsedServer = new URL(serverUrl);
+                    const parsedServiceBase = new URL(serviceBase);
+
+                    // If server URL only has origin with no path (e.g. https://example.com or https://example.com/),
+                    // but the serviceBase has a subpath suffix after domain (e.g. https://example.com/customer-service),
+                    // preserve the subpath suffix so requests are not erroneously stripped to domain root!
+                    if ((!parsedServer.pathname || parsedServer.pathname === '/') && parsedServiceBase.pathname && parsedServiceBase.pathname !== '/') {
+                        return `${parsedServer.origin}${parsedServiceBase.pathname}`.replace(/\/+$/, '');
+                    }
+                    return serverUrl.replace(/\/+$/, '');
+                } catch {
+                    return serverUrl.replace(/\/+$/, '');
+                }
+            }
+
+            // Relative server URL (e.g. "/v1", "api/v1") - combine with serviceBase
+            const cleanRelative = serverUrl.replace(/^\/+/, '').replace(/\/+$/, '');
+            const cleanBase = serviceBase.replace(/\/+$/, '');
+            if (cleanBase.endsWith(`/${cleanRelative}`) || cleanBase.endsWith(cleanRelative)) {
+                return cleanBase;
+            }
+            return `${cleanBase}/${cleanRelative}`;
+        }
+
+        // 2. Swagger 2.0 host and basePath
+        if (openApi['host']) {
+            const scheme = (Array.isArray(openApi['schemes']) && openApi['schemes'][0]) ||
+                (serviceBase.startsWith('https') ? 'https' : 'http');
+            const host = String(openApi['host']).trim().replace(/\/+$/, '');
+            let basePath = typeof openApi['basePath'] === 'string' ? openApi['basePath'].trim() : '';
+            basePath = basePath.replace(/\/+$/, '');
+
+            try {
+                const parsedServiceBase = new URL(serviceBase);
+                const serviceSubpath = parsedServiceBase.pathname.replace(/\/+$/, '');
+                if (serviceSubpath && serviceSubpath !== '/') {
+                    if (!basePath || basePath === '/') {
+                        basePath = serviceSubpath;
+                    } else if (!basePath.startsWith(serviceSubpath)) {
+                        basePath = `${serviceSubpath}/${basePath.replace(/^\/+/, '')}`;
+                    }
+                }
+            } catch { }
+
+            const cleanBasePath = basePath ? (basePath.startsWith('/') ? basePath : `/${basePath}`) : '';
+            return `${scheme}://${host}${cleanBasePath}`;
+        }
+
+        // 3. Fallback to service base inferred from input indexUrl
+        return serviceBase;
     }
 
     private extractParameters(parameters: any, openApi: Record<string, any>): { queryParams: { enabled: boolean; key: string; value: string }[]; headerParams: { enabled: boolean; key: string; value: string }[]; pathParams: { enabled: boolean; key: string; value: string }[] } {
