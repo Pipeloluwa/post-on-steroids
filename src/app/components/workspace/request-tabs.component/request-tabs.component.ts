@@ -1,4 +1,4 @@
-import { Component, signal, computed, inject, ViewChild, ElementRef, afterNextRender } from '@angular/core';
+import { Component, signal, computed, inject, ViewChild, ElementRef, afterNextRender, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { CdkDragDrop, DragDropModule, CdkDragMove } from '@angular/cdk/drag-drop';
@@ -22,11 +22,13 @@ interface RequestTab {
     imports: [CommonModule, MatIcon, DragDropModule, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent],
     templateUrl: './request-tabs.component.html',
     styleUrl: './request-tabs.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RequestTabsComponent {
     variableService = inject(VariableService);
     tabStateService = inject(TabStateService);
     authService = inject(AuthService);
+    private destroyRef = inject(DestroyRef);
     @ViewChild('variableModal') variableModal!: VariableModalComponent;
     @ViewChild('swaggerModal') swaggerModal!: SwaggerImportModalComponent;
 
@@ -185,10 +187,43 @@ export class RequestTabsComponent {
 
         afterNextRender(() => {
             this.updateScrollState();
-            this.scrollContainer.nativeElement.addEventListener('scroll', () => {
-                this.updateScrollState();
+            const el = this.scrollContainer?.nativeElement;
+            if (!el) return;
+
+            const scrollHandler = () => this.updateScrollState();
+            const wheelHandler = (event: WheelEvent) => this.onWheel(event);
+
+            el.addEventListener('scroll', scrollHandler, { passive: true });
+            el.addEventListener('wheel', wheelHandler, { passive: false });
+
+            this.destroyRef.onDestroy(() => {
+                el.removeEventListener('scroll', scrollHandler);
+                el.removeEventListener('wheel', wheelHandler);
             });
         });
+    }
+
+    onWheel(event: WheelEvent) {
+        if (!this.scrollContainer) return;
+        const el = this.scrollContainer.nativeElement;
+
+        // If no overflow exists, allow standard behavior
+        if (el.scrollWidth <= el.clientWidth) return;
+
+        // Determine dominant scroll delta: prioritize deltaX if significant (e.g. trackpad horizontal gesture),
+        // otherwise translate vertical wheel movement (deltaY) into horizontal scroll.
+        const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        if (delta === 0) return;
+
+        // Normalize delta based on deltaMode (0: pixels, 1: lines, 2: pages)
+        const multiplier = event.deltaMode === 1 ? 33 : (event.deltaMode === 2 ? el.clientWidth : 1);
+        const scrollDelta = delta * multiplier;
+
+        // Prevent vertical parent page scroll while scrolling over tabs
+        event.preventDefault();
+
+        el.scrollBy({ left: scrollDelta, behavior: 'auto' });
+        this.updateScrollState();
     }
 
     updateScrollState() {
