@@ -17,6 +17,7 @@ import { VariableInputComponent } from '../../../shared/components/variable-inpu
 import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/test.snippets.constants';
 import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet, DEFAULT_ENCRYPTION_SCRIPT_SKELETON, DEFAULT_DECRYPTION_SCRIPT_SKELETON, DEFAULT_PRE_REQUEST_SCRIPT_SKELETON, DEFAULT_POST_RESPONSE_SCRIPT_SKELETON, DEFAULT_TEST_SCRIPT_SKELETON } from '../../../shared/constants/script.snippets.constants';
 import { DialogService } from '../../../shared/services/dialog.service';
+import { sanitizeJsonBodyForScripts } from '../../../shared/utils/format.utils';
 
 @Component({
   selector: 'app-payload-types-component',
@@ -202,7 +203,12 @@ export class PayloadTypesComponent {
       let requestBody = '';
       
       if (state?.bodyType === 'raw') {
-          requestBody = this.variableService.resolveJson(state.rawBody || '');
+          const rawBodyContent = state.rawType === 'XML'
+              ? (state.rawBodyXml || state.rawBody || '')
+              : (state.rawBodyJson || state.rawBody || '{}');
+          requestBody = state.rawType === 'XML'
+              ? this.variableService.resolve(rawBodyContent)
+              : this.variableService.resolveJson(rawBodyContent);
       } else if (state?.bodyType === 'form-data') {
           const fd: Record<string, string> = {};
           for (const row of state.formData || []) {
@@ -211,8 +217,8 @@ export class PayloadTypesComponent {
           requestBody = JSON.stringify(fd);
       }
       
-      // Strip single-line and multi-line comments from JSON body before passing to sandbox
-      const cleanBody = requestBody.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').trim();
+      // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
+      const cleanBody = state?.rawType === 'XML' ? requestBody.trim() : sanitizeJsonBodyForScripts(requestBody);
       
       const context = {
           headers: state?.headers || [],

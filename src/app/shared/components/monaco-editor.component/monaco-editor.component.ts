@@ -657,7 +657,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private getJsonPathAtLine(lines: string[], targetLineIndex: number): string | null {
     const targetLine = lines[targetLineIndex];
     if (!targetLine) return null;
-    const keyMatch = targetLine.match(/^\s*"([^"]+)"\s*:/);
+    const keyMatch = targetLine.match(/^\s*(?:\{\s*)?"([^"]+)"\s*:/);
     if (!keyMatch) return null;
 
     const targetKey = keyMatch[1];
@@ -670,7 +670,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const line = lines[i];
       const indent = line.search(/\S/);
       if (indent !== -1 && indent < currentIndent) {
-        const parentMatch = line.match(/^\s*"([^"]+)"\s*:\s*\{/);
+        const parentMatch = line.match(/^\s*(?:\{\s*)?"([^"]+)"\s*:\s*\{/);
         if (parentMatch) {
           path.unshift(parentMatch[1]);
           currentIndent = indent;
@@ -1159,12 +1159,12 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     try {
       if (!markers || markers.length === 0) return markers;
       const text = model.getValue?.();
-      if (!text || (!text.includes('{{') && !text.includes('$'))) {
+      if (!text) {
         return markers;
       }
 
       const varRanges: { startLine: number; startCol: number; endLine: number; endCol: number }[] = [];
-      const regex = /(\{\{[^{}]*?\}\}|\$[a-zA-Z0-9_]+)/g;
+      const regex = /(\{\{[^{}]*?\}\}|\$[a-zA-Z0-9_]+|(?<=:\s*)[A-Za-z0-9+/=_\-]{8,}(?=\s*(?:,|}|\]|\r|\n|$)))/g;
       let match: RegExpExecArray | null;
       while ((match = regex.exec(text)) !== null) {
         const startPos = model.getPositionAt(match.index);

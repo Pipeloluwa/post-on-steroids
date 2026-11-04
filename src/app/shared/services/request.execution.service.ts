@@ -11,6 +11,7 @@ import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
 import { NetworkService } from './network.service';
 import { API_BASE_URL } from '../constants/api.constants';
+import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
 
 @Injectable({
     providedIn: 'root'
@@ -176,9 +177,9 @@ export class RequestExecutionService {
                         ? this.variableService.resolveJson(rawBodyContent)
                         : this.variableService.resolve(rawBodyContent);
 
-                    // Strip comments if the payload is JSON so it can be parsed and sent cleanly
+                    // Safely strip comments and sanitize JSON payload so encrypted values with '/', '//', '/*' parse cleanly
                     if (freshState.rawType === 'JSON') {
-                        resolvedRaw = resolvedRaw.replace(/"(?:[^"\\]|\\.)*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (m: string, g: string) => g ? '' : m);
+                        resolvedRaw = sanitizeJsonBodyForScripts(resolvedRaw);
                     }
 
                     try {
@@ -209,8 +210,8 @@ export class RequestExecutionService {
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
                 // Serialize body to JSON string for encryption script
                 const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
-                // Strip single-line and multi-line comments from JSON body
-                const cleanBodyStr = bodyStr.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '').trim();
+                // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
+                const cleanBodyStr = freshState.rawType === 'XML' ? bodyStr.trim() : sanitizeJsonBodyForScripts(bodyStr);
 
                 const encContext = {
                     headers,

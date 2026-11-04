@@ -4,6 +4,7 @@ import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http
 import { firstValueFrom } from 'rxjs';
 import { generateUUID } from '../utils/uuid.util';
 import { isLocalhostOrLoopbackUrl } from '../utils/url.util';
+import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
 import { environment } from '../../../environments/environment';
 
 export interface SandboxResult {
@@ -560,11 +561,26 @@ window.addEventListener("message", async (event) => {
         }
       }
 
+      if (safeContext && typeof safeContext.body === 'string' && safeContext.body.trim()) {
+        const trimmedBody = safeContext.body.trim();
+        if (trimmedBody.startsWith('{') || trimmedBody.startsWith('[')) {
+          safeContext.body = sanitizeJsonBodyForScripts(safeContext.body);
+        }
+      }
+
+      // Upgrade any naive comment-stripping regex inside user scripts so `/` (`//` or `/*`) inside
+      // encrypted Base64 string values is never mistaken for a comment and stripped.
+      const safeCode = (code || '')
+        .split(".replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, '')")
+        .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? \'\' : m)')
+        .split('.replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, "")')
+        .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)');
+
       // Send code to the sandbox
       // The origin is '*' because a sandboxed iframe without allow-same-origin has an opaque origin
       this.iframe.contentWindow.postMessage({
         id: executionId,
-        code,
+        code: safeCode,
         context: safeContext
       }, '*');
     });

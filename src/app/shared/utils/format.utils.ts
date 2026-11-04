@@ -30,7 +30,72 @@ export function formatBodyByStyle(content: any, style: WrapStyle, type: 'JSON' |
   return isXml ? formatXmlPretty(str) : formatJsonPretty(content);
 }
 
-const UNQUOTED_VAR_OR_STRING_REGEX = /"(?:[^"\\]|\\.)*"|(\/\/.*|\/\*[\s\S]*?\*\/)|(\{\{[^{}\r\n]*\}\}|\$(?:guid|timestamp|randomInt|randomUUID|randomEmail|randomName|randomWord|randomColor|randomCity|randomStreetAddress|randomPhoneNumber|randomBoolean|randomAlphaNumeric|randomIPv4)\b)/gi;
+const UNQUOTED_VAR_OR_STRING_REGEX = /"(?:[^"\\]|\\.)*"|((?<=^|[\s,{[\]}:])(?:\/\/.*|\/\*[\s\S]*?\*\/))|(\{\{[^{}\r\n]*\}\}|\$(?:guid|timestamp|randomInt|randomUUID|randomEmail|randomName|randomWord|randomColor|randomCity|randomStreetAddress|randomPhoneNumber|randomBoolean|randomAlphaNumeric|randomIPv4)\b)/gi;
+
+/**
+ * Safely strips single-line (//) and multi-line (/* *\/) comments from a JSON-like string
+ * without corrupting `/`, `//`, or `/*` sequences inside quoted string values or unquoted Base64 tokens.
+ */
+export function stripJsonCommentsSafe(content: string): string {
+  if (!content) return '';
+  return content.replace(/"(?:[^"\\]|\\.)*"|((?<=^|[\s,{[\]}:])(?:\/\*[\s\S]*?\*\/|\/\/.*))/g, (match, comment) => {
+    return comment ? '' : match;
+  });
+}
+
+/**
+ * Sanitizes a JSON body string so that encrypted/Base64 values containing `/`, `//`, `/*`, `+`, `=`,
+ * unquoted ciphertext values, multi-line wrapped strings, comments, or trailing commas can be safely
+ * parsed by `JSON.parse` in both the Angular app and sandboxed encryption/decryption scripts.
+ */
+export function sanitizeJsonBodyForScripts(content: string): string {
+  if (!content || typeof content !== 'string') return content || '';
+  const trimmed = content.trim();
+  if (!trimmed) return '';
+
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch {
+    // Proceed with sanitization
+  }
+
+  // 1. Strip comments outside of double-quoted strings (and not in the middle of an unquoted token)
+  let s = stripJsonCommentsSafe(trimmed);
+
+  // 2. Remove raw line breaks inside double-quoted strings (e.g. multi-line pasted Base64 ciphertext)
+  s = s.replace(/"(?:[^"\\]|\\.)*"/g, (quoted) => {
+    if (!quoted.includes('\n') && !quoted.includes('\r')) return quoted;
+    return quoted.replace(/\r?\n\s*/g, '');
+  });
+
+  // 3. Convert single-quoted property values to valid double-quoted JSON strings
+  s = s.replace(/"(?:[^"\\]|\\.)*"|(:\s*)'([^'\\]*(?:\\.[^'\\]*)*)'/g, (match, colonPrefix, singleInner) => {
+    if (!colonPrefix) return match;
+    const unescaped = singleInner.replace(/\\'/g, "'");
+    return `${colonPrefix}${JSON.stringify(unescaped)}`;
+  });
+
+  // 4. Auto-quote unquoted property values (such as unquoted encrypted/Base64 strings with `/`, `+`, `=`)
+  s = s.replace(
+    /"(?:[^"\\]|\\.)*"|(:\s*)([^\s,"'{}\[\]][^,\r\n}\]]*?)(?=\s*(?:,|}|\]|\r|\n|$))/g,
+    (match, colonPrefix, rawVal) => {
+      if (!colonPrefix) return match;
+      const val = rawVal.trim();
+      if (!val) return match;
+      if (val === 'true' || val === 'false' || val === 'null') return match;
+      if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(val)) return match;
+      return `${colonPrefix}${JSON.stringify(val)}`;
+    }
+  );
+
+  // 5. Remove trailing commas before closing `}` or `]` outside of strings
+  s = s.replace(/"(?:[^"\\]|\\.)*"|(,)\s*(?=[}\]])/g, (match, comma) => {
+    return comma ? '' : match;
+  });
+
+  return s.trim();
+}
 
 export function parseJsonWithVariables(content: string): { parsed: any; restore: (formatted: string) => string } {
   const placeholders: string[] = [];
@@ -43,7 +108,12 @@ export function parseJsonWithVariables(content: string): { parsed: any; restore:
     placeholders.push(unquotedVar);
     return `"__POS_VAR_PLACEHOLDER_${idx}__"`;
   });
-  const parsed = JSON.parse(sanitized);
+  let parsed: any;
+  try {
+    parsed = JSON.parse(sanitized);
+  } catch {
+    parsed = JSON.parse(sanitizeJsonBodyForScripts(sanitized));
+  }
   const restore = (formatted: string): string => {
     if (placeholders.length === 0) return formatted;
     return formatted.replace(/"__POS_VAR_PLACEHOLDER_(\d+)__"/g, (m, idxStr) => {
@@ -59,7 +129,11 @@ export function parseJsonSafe(content: any): any {
   try {
     return JSON.parse(content);
   } catch {
-    return parseJsonWithVariables(content).parsed;
+    try {
+      return parseJsonWithVariables(content).parsed;
+    } catch {
+      return JSON.parse(sanitizeJsonBodyForScripts(content));
+    }
   }
 }
 

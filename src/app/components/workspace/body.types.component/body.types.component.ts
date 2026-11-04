@@ -82,28 +82,70 @@ export class BodyTypesComponent {
 
   toggleAutoEncryptBody() {
       const current = this.encryption();
-      let newEncryptedBodyPaths: string[] = [];
-      
-      if (current.encryptedBodyPaths && current.encryptedBodyPaths.length > 0) {
-          newEncryptedBodyPaths = [];
-      } else {
-          try {
-              const bodyStr = this.rawBodyContent();
-              if (bodyStr) {
-                  const bodyObj = parseJsonSafe(bodyStr);
-                  newEncryptedBodyPaths = this.getPrimitivePaths(bodyObj);
-              }
-          } catch (e) {
-              console.warn("Could not parse body to auto-encrypt paths");
-          }
-      }
-      
+      const bodyStr = this.monacoEditor()?.getEditorValue() || this.rawBodyContent();
+      const currentBodyPaths = this.extractBodyPaths(bodyStr);
+
+      const hasActiveCurrentPaths =
+          current.encryptedBodyPaths &&
+          current.encryptedBodyPaths.length > 0 &&
+          (currentBodyPaths.length === 0 || currentBodyPaths.some(p => current.encryptedBodyPaths.includes(p)));
+
+      const newEncryptedBodyPaths = hasActiveCurrentPaths ? [] : currentBodyPaths;
+
       const id = this.tabId();
       if (id) {
           this.tabStateService.updateState(id, {
               encryption: { ...current, encryptedBodyPaths: newEncryptedBodyPaths }
           });
       }
+  }
+
+  private extractBodyPaths(bodyStr: string): string[] {
+      if (!bodyStr || !bodyStr.trim()) return [];
+      try {
+          const bodyObj = parseJsonSafe(bodyStr);
+          if (bodyObj && typeof bodyObj === 'object') {
+              const paths = this.getPrimitivePaths(bodyObj);
+              if (paths.length > 0) return paths;
+          }
+      } catch {
+          // Fall back to line/regex extraction below if JSON is partially malformed
+      }
+
+      // Fallback: extract leaf property paths directly from raw JSON text
+      const paths: string[] = [];
+      const stack: string[] = [];
+      const lines = bodyStr.split(/\r?\n/);
+      for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line || line.startsWith('//')) continue;
+
+          const objOpen = line.match(/^"([^"]+)"\s*:\s*\{/);
+          if (objOpen) {
+              stack.push(objOpen[1]);
+              if (line.includes('}')) {
+                  stack.pop();
+              }
+              continue;
+          }
+
+          const propMatch = line.match(/^"?([a-zA-Z0-9_.\-]+)"?\s*:\s*(.+)$/);
+          if (propMatch) {
+              const key = propMatch[1];
+              const valPart = propMatch[2].trim();
+              if (!valPart.startsWith('{')) {
+                  const fullPath = stack.length > 0 ? `${stack.join('.')}.${key}` : key;
+                  if (!paths.includes(fullPath)) {
+                      paths.push(fullPath);
+                  }
+              }
+          }
+
+          if (line.startsWith('}') && stack.length > 0) {
+              stack.pop();
+          }
+      }
+      return paths;
   }
 
   private getPrimitivePaths(obj: any, currentPath = ''): string[] {
