@@ -219,25 +219,88 @@ export class PayloadTypesComponent {
       
       // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
       const cleanBody = state?.rawType === 'XML' ? requestBody.trim() : sanitizeJsonBodyForScripts(requestBody);
-      
+
+      const rawEncryptedHeaders = state?.encryption?.encryptedHeaders || [];
+      const autoEncryptHeaders = !!state?.encryption?.autoEncryptHeaders;
+      const normalizedEncryptedHeaders = Array.from(new Set([
+          ...rawEncryptedHeaders,
+          ...rawEncryptedHeaders.map(k => k.trim()),
+          ...rawEncryptedHeaders.map(k => this.variableService.resolve(k).trim())
+      ])).filter(Boolean);
+
+      const resolvedHeaders = (state?.headers || []).map(h => {
+          const resolvedKey = this.variableService.resolve(h.key || '').trim();
+          let resolvedVal = this.variableService.resolve(h.value || '').trim();
+          const isTargeted = autoEncryptHeaders || normalizedEncryptedHeaders.some(
+              ek => ek.toLowerCase() === resolvedKey.toLowerCase() || ek.toLowerCase() === (h.key || '').trim().toLowerCase()
+          );
+          if (isTargeted) {
+              // Strip accidental surrounding quotes/trailing comma if copied from JSON output
+              const quoteMatch = resolvedVal.match(/^["'](.*)["']\s*,?$/s);
+              if (quoteMatch) {
+                  resolvedVal = quoteMatch[1].trim();
+              }
+              resolvedVal = resolvedVal.replace(/[\r\n]+/g, '');
+          }
+          return {
+              ...h,
+              enabled: h.enabled !== false,
+              key: resolvedKey || h.key,
+              value: resolvedVal
+          };
+      });
+
+      // Ensure exact resolved keys of targeted headers are present in encryptedHeaders for script `.includes(h.key)` checks
+      for (const rh of resolvedHeaders) {
+          if (rh.key && rawEncryptedHeaders.some(ek => ek.trim().toLowerCase() === rh.key.trim().toLowerCase())) {
+              if (!normalizedEncryptedHeaders.includes(rh.key)) {
+                  normalizedEncryptedHeaders.push(rh.key);
+              }
+          }
+      }
+
       const context = {
-          headers: state?.headers || [],
+          headers: resolvedHeaders,
           body: cleanBody || requestBody,
           params: state?.params || [],
-          encryptedHeaders: state?.encryption.encryptedHeaders || [],
+          encryptedHeaders: normalizedEncryptedHeaders,
           encryptedBodyPaths: state?.encryption.encryptedBodyPaths || [],
           autoEncryptBody: state?.encryption.autoEncryptBody || false,
-          autoEncryptHeaders: state?.encryption.autoEncryptHeaders || false,
-          
+          autoEncryptHeaders: autoEncryptHeaders,
       };
 
       const result = await this.sandboxService.executeScript(code, context);
       const currentScripts = state?.scripts || {} as any;
 
       if (result.success) {
+          const headersOut: KeyValue[] = Array.isArray(result.context?.headers) ? result.context.headers : [];
+          const targetedOrModifiedHeaders = headersOut.filter((h, idx) => {
+              if (!h || h.enabled === false || !h.key || !h.key.trim()) return false;
+              const keyLower = h.key.trim().toLowerCase();
+              const wasTargeted = autoEncryptHeaders || normalizedEncryptedHeaders.some(ek => ek.trim().toLowerCase() === keyLower);
+              const wasModified = resolvedHeaders[idx] && resolvedHeaders[idx].value !== h.value;
+              return wasTargeted || wasModified;
+          });
+
           const bodyOut = result.context?.body;
-          const resultString = typeof bodyOut === 'object' ? JSON.stringify(bodyOut, null, 2) : String(bodyOut);
-          
+          const bodyString = typeof bodyOut === 'object' ? JSON.stringify(bodyOut, null, 2) : String(bodyOut ?? '');
+          const hasBodyTargets = (state?.encryption?.encryptedBodyPaths?.length ?? 0) > 0 || !!state?.encryption?.autoEncryptBody;
+          const bodyWasModified = bodyString.trim() !== '' && bodyString.trim() !== '{}' && bodyString.trim() !== (cleanBody || requestBody).trim();
+
+          let resultString = bodyString;
+          if (targetedOrModifiedHeaders.length > 0) {
+              const headersObj: Record<string, string> = {};
+              for (const h of targetedOrModifiedHeaders) {
+                  headersObj[h.key] = h.value;
+              }
+              const headersJson = JSON.stringify(headersObj, null, 2);
+              if (hasBodyTargets || bodyWasModified) {
+                  resultString = `Headers:\n${headersJson}\n\nBody:\n${bodyString}`;
+              } else {
+                  resultString = headersJson;
+              }
+          }
+
           let outText = `Result:\n${resultString}`;
           if (result.logs) {
               outText = `Logs:\n${result.logs}\n\n${outText}`;
@@ -504,10 +567,34 @@ export class PayloadTypesComponent {
     const rows = [...(this.tabState()?.[field] ?? [])] as KeyValue[];
     if (index < 0 || index >= rows.length) return;
     const row = rows[index];
+    const oldKey = row.key;
     if (key === 'enabled') rows[index] = { ...row, enabled: val as boolean };
     else if (key === 'key') rows[index] = { ...row, key: val as string };
     else if (key === 'value') rows[index] = { ...row, value: val as string };
-    this.tabStateService.updateState(this.tabId(), { [field]: rows });
+
+    const patch: Record<string, any> = { [field]: rows };
+
+    // Keep encryptedHeaders synchronized when a header key is edited or added while autoEncryptHeaders is active
+    if (field === 'headers' && key === 'key') {
+      const currentEnc = this.encryption();
+      const newKeyStr = (val as string) || '';
+      const encList = [...(currentEnc.encryptedHeaders || [])];
+      const oldIdx = oldKey ? encList.findIndex(k => k === oldKey || k.trim() === oldKey.trim()) : -1;
+
+      if (oldIdx !== -1) {
+        if (newKeyStr.trim()) {
+          encList[oldIdx] = newKeyStr;
+        } else {
+          encList.splice(oldIdx, 1);
+        }
+        patch['encryption'] = { ...currentEnc, encryptedHeaders: Array.from(new Set(encList)) };
+      } else if (currentEnc.autoEncryptHeaders && newKeyStr.trim()) {
+        encList.push(newKeyStr);
+        patch['encryption'] = { ...currentEnc, encryptedHeaders: Array.from(new Set(encList)) };
+      }
+    }
+
+    this.tabStateService.updateState(this.tabId(), patch);
   }
 
   // ── Params ───────────────────────────────────────────────────────────
@@ -557,8 +644,26 @@ export class PayloadTypesComponent {
     this.tabStateService.updateState(this.tabId(), { headers: [...this.headers(), { enabled: true, key: '', value: '' }] });
   }
   deleteHeader(i: number) {
-    const rows = this.headers().filter((_, idx) => idx !== i);
-    this.tabStateService.updateState(this.tabId(), { headers: rows.length ? rows : [{ enabled: true, key: '', value: '' }] });
+    const currentRows = this.headers();
+    const deletedKey = currentRows[i]?.key;
+    const rows = currentRows.filter((_, idx) => idx !== i);
+    const finalRows: KeyValue[] = rows.length ? rows : [{ enabled: true, key: '', value: '' }];
+    const patch: Record<string, any> = { headers: finalRows };
+
+    if (deletedKey) {
+      const currentEnc = this.encryption();
+      const remainingKeys = new Set(finalRows.filter(r => r.key && r.key.trim()).map(r => r.key.trim().toLowerCase()));
+      const filteredEnc = (currentEnc.encryptedHeaders || []).filter(
+        k => k !== deletedKey && k.trim() !== deletedKey.trim() && remainingKeys.has(k.trim().toLowerCase())
+      );
+      patch['encryption'] = {
+        ...currentEnc,
+        encryptedHeaders: filteredEnc,
+        autoEncryptHeaders: filteredEnc.length > 0 ? currentEnc.autoEncryptHeaders : false
+      };
+    }
+
+    this.tabStateService.updateState(this.tabId(), patch);
   }
 
   toggleRawHeaders() {
@@ -577,7 +682,15 @@ export class PayloadTypesComponent {
 
   private headersFromRaw() {
     const parsed = this.parseRawKV(this.rawHeadersText());
-    this.tabStateService.updateState(this.tabId(), { headers: parsed });
+    const currentEnc = this.encryption();
+    const patch: Record<string, any> = { headers: parsed };
+    if (currentEnc.autoEncryptHeaders) {
+      patch['encryption'] = {
+        ...currentEnc,
+        encryptedHeaders: parsed.filter(h => h.key && h.key.trim() !== '').map(h => h.key)
+      };
+    }
+    this.tabStateService.updateState(this.tabId(), patch);
   }
 
   // ── KV Utilities ─────────────────────────────────────────────────────
@@ -822,34 +935,74 @@ export class PayloadTypesComponent {
     }
   }
 
+  isHeaderEncrypted(key: string): boolean {
+    if (!key || !key.trim()) return false;
+    const current = this.encryption();
+    if (current.autoEncryptHeaders) return true;
+    const target = key.trim().toLowerCase();
+    return (current.encryptedHeaders || []).some(k => k.trim().toLowerCase() === target);
+  }
+
+  hasEncryptedHeaders(): boolean {
+    const current = this.encryption();
+    if (current.autoEncryptHeaders) return true;
+    const encList = current.encryptedHeaders || [];
+    if (encList.length === 0) return false;
+    const validHeaders = this.headers().filter(h => h.key && h.key.trim() !== '');
+    if (validHeaders.length === 0) return encList.length > 0;
+    return validHeaders.some(h => encList.some(ek => ek.trim().toLowerCase() === h.key.trim().toLowerCase()));
+  }
+
   toggleAutoEncryptHeaders() {
     const current = this.encryption();
-    let newEncryptedHeaders: string[] = [];
-    
-    // If any are encrypted, clear them. Otherwise, encrypt all valid headers.
-    if (current.encryptedHeaders && current.encryptedHeaders.length > 0) {
-        newEncryptedHeaders = [];
-    } else {
-        newEncryptedHeaders = this.headers()
-            .filter(h => h.key && h.key.trim() !== '')
-            .map(h => h.key);
-    }
-    
+    const validHeaderKeys = this.headers()
+      .filter(h => h.key && h.key.trim() !== '')
+      .map(h => h.key);
+
+    const isCurrentlyActive = this.hasEncryptedHeaders();
+    const newEncryptedHeaders = isCurrentlyActive ? [] : validHeaderKeys;
+    const newAutoEncrypt = !isCurrentlyActive;
+
     this.tabStateService.updateState(this.tabId(), {
-      encryption: { ...current, encryptedHeaders: newEncryptedHeaders }
+      encryption: {
+        ...current,
+        encryptedHeaders: newEncryptedHeaders,
+        autoEncryptHeaders: newAutoEncrypt
+      }
     });
   }
 
   toggleHeaderEncryption(key: string) {
     if (!key) return;
     const current = this.encryption();
-    const headers = new Set(current.encryptedHeaders || []);
-    if (headers.has(key)) {
-      headers.delete(key);
-    } else {
-      headers.add(key);
+    const targetLower = key.trim().toLowerCase();
+    let encList = [...(current.encryptedHeaders || [])];
+
+    if (current.autoEncryptHeaders && encList.length === 0) {
+      encList = this.headers()
+        .filter(h => h.key && h.key.trim() !== '')
+        .map(h => h.key);
     }
-    this.setEncryptionField('encryptedHeaders', Array.from(headers));
+
+    const exists = encList.some(k => k.trim().toLowerCase() === targetLower);
+    if (exists) {
+      encList = encList.filter(k => k.trim().toLowerCase() !== targetLower);
+    } else {
+      encList.push(key);
+    }
+
+    const validHeaderKeys = this.headers()
+      .filter(h => h.key && h.key.trim() !== '')
+      .map(h => h.key.trim().toLowerCase());
+    const allSelected = validHeaderKeys.length > 0 && validHeaderKeys.every(vk => encList.some(ek => ek.trim().toLowerCase() === vk));
+
+    this.tabStateService.updateState(this.tabId(), {
+      encryption: {
+        ...current,
+        encryptedHeaders: encList,
+        autoEncryptHeaders: allSelected
+      }
+    });
   }
 
   // ── Settings ─────────────────────────────────────────────────────────

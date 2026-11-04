@@ -126,10 +126,11 @@ export class RequestExecutionService {
                 return;
             }
 
-            // 2. Prepare Headers
-            let headers = freshState.headers
+            // 2. Prepare Headers (preserve `enabled: true` so encryption/decryption scripts checking `if (h.enabled && h.key)` process them)
+            let headers: { enabled?: boolean; key: string; value: string }[] = freshState.headers
                 .filter(h => h.enabled && h.key)
                 .map(h => ({
+                    enabled: true,
                     key: this.variableService.resolve(h.key).trim().replace(/[\r\n]+/g, ''),
                     value: this.variableService.resolve(h.value).trim().replace(/[\r\n]+/g, '')
                 }))
@@ -213,14 +214,38 @@ export class RequestExecutionService {
                 // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
                 const cleanBodyStr = freshState.rawType === 'XML' ? bodyStr.trim() : sanitizeJsonBodyForScripts(bodyStr);
 
+                const rawEncHeaders = freshState.encryption?.encryptedHeaders || [];
+                const autoEncHeaders = !!freshState.encryption?.autoEncryptHeaders;
+                const normalizedEncHeaders = Array.from(new Set([
+                    ...rawEncHeaders,
+                    ...rawEncHeaders.map(k => k.trim()),
+                    ...rawEncHeaders.map(k => this.variableService.resolve(k).trim()),
+                    ...(autoEncHeaders
+                        ? freshState.headers.filter(h => h.enabled && h.key).map(h => this.variableService.resolve(h.key).trim())
+                        : [])
+                ])).filter(Boolean);
+
+                for (const h of headers) {
+                    if (h.enabled && h.key && normalizedEncHeaders.some(ek => ek.toLowerCase() === h.key.toLowerCase())) {
+                        if (!normalizedEncHeaders.includes(h.key)) {
+                            normalizedEncHeaders.push(h.key);
+                        }
+                        // Strip accidental surrounding quotes/trailing comma on header values copied from JSON output
+                        const qm = h.value.match(/^["'](.*)["']\s*,?$/s);
+                        if (qm) {
+                            h.value = qm[1].trim();
+                        }
+                    }
+                }
+
                 const encContext = {
                     headers,
                     body: cleanBodyStr || bodyStr,
                     params,
-                    encryptedHeaders: freshState.encryption?.encryptedHeaders || [],
+                    encryptedHeaders: normalizedEncHeaders,
                     encryptedBodyPaths: freshState.encryption?.encryptedBodyPaths || [],
                     autoEncryptBody: freshState.encryption?.autoEncryptBody || false,
-                    autoEncryptHeaders: freshState.encryption?.autoEncryptHeaders || false
+                    autoEncryptHeaders: autoEncHeaders
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;

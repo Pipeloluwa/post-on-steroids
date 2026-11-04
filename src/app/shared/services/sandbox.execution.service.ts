@@ -568,6 +568,34 @@ window.addEventListener("message", async (event) => {
         }
       }
 
+      if (safeContext && Array.isArray(safeContext.headers)) {
+        const encHeaders: string[] = Array.isArray(safeContext.encryptedHeaders)
+          ? [...safeContext.encryptedHeaders]
+          : [];
+        safeContext.headers = safeContext.headers.map((h: any) => {
+          if (!h || typeof h !== 'object') return h;
+          const enabled = h.enabled !== false;
+          const key = typeof h.key === 'string' ? h.key : String(h.key ?? '');
+          let value = typeof h.value === 'string' ? h.value : String(h.value ?? '');
+          const isEncryptedHeader =
+            !!safeContext.autoEncryptHeaders ||
+            encHeaders.some(ek => typeof ek === 'string' && ek.trim().toLowerCase() === key.trim().toLowerCase());
+          if (isEncryptedHeader && key && !encHeaders.includes(key)) {
+            encHeaders.push(key);
+          }
+          if (isEncryptedHeader && value) {
+            const qm = value.trim().match(/^["'](.*)["']\s*,?$/s);
+            if (qm) {
+              value = qm[1].trim();
+            }
+          }
+          return { ...h, enabled, key, value };
+        });
+        if (Array.isArray(safeContext.encryptedHeaders)) {
+          safeContext.encryptedHeaders = encHeaders;
+        }
+      }
+
       // Upgrade any naive comment-stripping regex inside user scripts so `/` (`//` or `/*`) inside
       // encrypted Base64 string values is never mistaken for a comment and stripped.
       const safeCode = (code || '')
