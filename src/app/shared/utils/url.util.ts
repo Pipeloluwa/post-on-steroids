@@ -1,3 +1,6 @@
+import { environment } from "../../../environments/environment";
+
+
 /**
  * Determines whether a given URL points to localhost or a 127.x.x.x loopback address.
  *
@@ -42,7 +45,7 @@ export function getAppBaseUrl(): string {
     if (typeof window === 'undefined') return '';
     const isFile = window.location.protocol === 'file:' || window.location.origin.startsWith('file:');
     if (isFile) {
-        return 'http://localhost:5000';
+        return environment.appBaseUrl;
     }
 
     const origin = window.location.origin;

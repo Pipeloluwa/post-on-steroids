@@ -1,10 +1,11 @@
+import { environment } from './src/environments/environment'
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const https = require('https');
 const path = require('path');
 const url = require('url');
 const { autoUpdater } = require('electron-updater');
 
-const UPDATE_BASE_URL = 'https://onsteroid.com/download';
+const UPDATE_BASE_URL = environment.updateBaseUrl;
 
 // Auto Updater Configuration
 autoUpdater.autoDownload = true;
