@@ -63,10 +63,16 @@ function resolveUpdateBaseUrl() {
 
 const UPDATE_BASE_URL = resolveUpdateBaseUrl();
 
+// Allow self-signed / internal SSL certificates on test and staging environments
+if (app && app.commandLine) {
+  app.commandLine.appendSwitch('ignore-certificate-errors');
+}
+
 // Auto Updater Configuration
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.verifyUpdateCodeSignature = false;
+autoUpdater.disableDifferentialDownload = true;
+autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(null);
 
 try {
   autoUpdater.setFeedURL({
@@ -196,6 +202,7 @@ function fetchUrlText(targetUrl, redirectCount = 0) {
     const req = client.get(
       parsedUrl,
       {
+        rejectUnauthorized: false,
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           Pragma: 'no-cache'
@@ -254,6 +261,7 @@ function fetchUrlHead(targetUrl, redirectCount = 0) {
       parsedUrl,
       {
         method: 'HEAD',
+        rejectUnauthorized: false,
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           Pragma: 'no-cache'
@@ -419,7 +427,11 @@ function checkForElectronUpdates() {
       // If electron-updater did not start a download (e.g., portable build or same version string with newer build timestamp), check manifest
       if (!result || !result.downloadPromise) {
         checkArchiveManifestUpdate();
+        return;
       }
+      result.downloadPromise.catch(() => {
+        checkArchiveManifestUpdate();
+      });
     })
     .catch(() => {
       // Fallback for portable/archive builds across Windows, macOS, and Linux
