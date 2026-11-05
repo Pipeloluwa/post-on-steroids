@@ -1,6 +1,7 @@
 import { Injectable, inject, PLATFORM_ID, NgZone } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { APP_VERSION_INFO } from '../../../environments/version';
+import { getAppBaseUrl } from '../utils/url.util';
 
 @Injectable({
   providedIn: 'root'
@@ -70,7 +71,9 @@ export class VersionCheckService {
     }
 
     try {
-      const response = await fetch(`/version.json?_t=${Date.now()}`, {
+      const baseUrl = getAppBaseUrl().replace(/\/+$/, '');
+      const versionUrl = `${baseUrl ? `${baseUrl}/` : '/'}version.json?_t=${Date.now()}`;
+      const response = await fetch(versionUrl, {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',

@@ -140,24 +140,11 @@
                         <span class="text-[11px] text-(--postonsteroids-text-muted)">Channel: Continuous Progressive Delivery</span>
                     </div>
 
-                    <button (click)="checkForUpdates()" [disabled]="isCheckingUpdate()"
-                        class="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
-                        @if (isCheckingUpdate()) {
-                            <mat-icon class="text-[16px]! size-[16px]! animate-spin">sync</mat-icon>
-                            <span>Checking...</span>
-                        } @else {
-                            <mat-icon class="text-[16px]! size-[16px]!">refresh</mat-icon>
-                            <span>Check for Updates</span>
-                        }
-                    </button>
-                </div>
-
-                @if (updateCheckedMessage()) {
-                    <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 flex items-center gap-2 animate-fadeIn">
-                        <mat-icon class="text-[18px]! size-[18px]!">check_circle</mat-icon>
-                        <span class="font-medium">{{ updateCheckedMessage() }}</span>
+                    <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-500 text-xs font-semibold">
+                        <mat-icon class="text-[16px]! size-[16px]!">verified</mat-icon>
+                        <span>Auto-Updates Active</span>
                     </div>
-                }
+                </div>
 
                 <!-- Release Notes & Changelog -->
                 <div class="space-y-2">
