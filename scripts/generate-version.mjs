@@ -7,6 +7,66 @@ const rootDir = path.resolve(__dirname, '..');
 const pkgPath = path.join(rootDir, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 
+const helpModalPath = path.join(
+  rootDir,
+  'src',
+  'app',
+  'shared',
+  'components',
+  'help-updates.modal.component',
+  'help-updates.modal.component.ts'
+);
+
+function parseSemver(ver) {
+  return String(ver || '')
+    .trim()
+    .replace(/^v/i, '')
+    .replace(/-.*$/, '')
+    .split('.')
+    .map((n) => Number(n) || 0);
+}
+
+function compareSemver(a, b) {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
+
+// Synchronize version between package.json and help-updates.modal.component.ts
+let version = pkg.version || '1.0.0';
+if (fs.existsSync(helpModalPath)) {
+  try {
+    const modalContent = fs.readFileSync(helpModalPath, 'utf8');
+    const match = modalContent.match(/appVersion\s*=\s*['"]v?(\d+\.\d+\.\d+)([^'"]*)['"]/i);
+    if (match && match[1]) {
+      const modalSemver = match[1];
+      const suffix = match[2] || '-steroids';
+      const cmp = compareSemver(modalSemver, version);
+      if (cmp > 0) {
+        // Modal version was bumped -> sync into package.json
+        version = modalSemver;
+        pkg.version = version;
+        fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+      } else if (cmp < 0) {
+        // package.json version was bumped -> sync into help-updates.modal.component.ts
+        const updatedModal = modalContent.replace(
+          /appVersion\s*=\s*['"][^'"]+['"]/,
+          `appVersion = 'v${version}${suffix}'`
+        );
+        fs.writeFileSync(helpModalPath, updatedModal, 'utf8');
+      }
+    }
+  } catch {
+    // Ignore sync errors
+  }
+}
+
 function extractUpdateBaseUrl(envFilePath, fallbackUrl) {
   try {
     if (fs.existsSync(envFilePath)) {
@@ -35,7 +95,6 @@ const devUpdateBaseUrl = extractUpdateBaseUrl(
 const now = new Date();
 const buildTime = now.getTime();
 const buildDate = now.toISOString();
-const version = pkg.version || '1.0.0';
 
 const versionData = {
   version,
