@@ -10,6 +10,10 @@ const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8
 const version = pkg.version || '1.0.0';
 const releaseDate = new Date().toISOString();
 
+if (!fs.existsSync(releaseDir)) {
+  fs.mkdirSync(releaseDir, { recursive: true });
+}
+
 function getFileEntry(filename) {
   const filePath = path.join(releaseDir, filename);
   if (!fs.existsSync(filePath)) {
@@ -77,3 +81,40 @@ if (macEntries.length > 0) {
   );
   console.log(`Generated release/latest-mac.yml (${macEntries.map((e) => e.url).join(', ')})`);
 }
+
+// 4. Generate release/web.config so IIS serves .yml, .yaml, and .blockmap files in /download without 404.3 errors
+const downloadWebConfig = `<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <staticContent>
+      <remove fileExtension=".yml" />
+      <mimeMap fileExtension=".yml" mimeType="text/yaml" />
+      <remove fileExtension=".yaml" />
+      <mimeMap fileExtension=".yaml" mimeType="text/yaml" />
+      <remove fileExtension=".blockmap" />
+      <mimeMap fileExtension=".blockmap" mimeType="application/octet-stream" />
+      <remove fileExtension=".exe" />
+      <mimeMap fileExtension=".exe" mimeType="application/octet-stream" />
+      <remove fileExtension=".zip" />
+      <mimeMap fileExtension=".zip" mimeType="application/zip" />
+      <remove fileExtension=".tar.gz" />
+      <mimeMap fileExtension=".tar.gz" mimeType="application/gzip" />
+      <remove fileExtension=".gz" />
+      <mimeMap fileExtension=".gz" mimeType="application/gzip" />
+      <remove fileExtension=".deb" />
+      <mimeMap fileExtension=".deb" mimeType="application/vnd.debian.binary-package" />
+      <remove fileExtension=".dmg" />
+      <mimeMap fileExtension=".dmg" mimeType="application/x-apple-diskimage" />
+      <remove fileExtension=".AppImage" />
+      <mimeMap fileExtension=".AppImage" mimeType="application/octet-stream" />
+    </staticContent>
+    <security>
+      <requestFiltering>
+        <requestLimits maxAllowedContentLength="524288000" />
+      </requestFiltering>
+    </security>
+  </system.webServer>
+</configuration>
+`;
+fs.writeFileSync(path.join(releaseDir, 'web.config'), downloadWebConfig, 'utf8');
+console.log('Generated release/web.config (IIS MIME mappings for .yml, .blockmap, and installers)');

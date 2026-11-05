@@ -234,6 +234,103 @@ function fetchUrlText(targetUrl, redirectCount = 0) {
   });
 }
 
+function fetchUrlHead(targetUrl, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirectCount > 5) {
+      reject(new Error('Too many redirects'));
+      return;
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(targetUrl);
+    } catch (err) {
+      reject(err);
+      return;
+    }
+
+    const client = parsedUrl.protocol === 'http:' ? http : https;
+    const req = client.request(
+      parsedUrl,
+      {
+        method: 'HEAD',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache'
+        },
+        timeout: 15000
+      },
+      (res) => {
+        res.resume();
+        if (
+          res.statusCode &&
+          [301, 302, 303, 307, 308].includes(res.statusCode) &&
+          res.headers.location
+        ) {
+          const nextUrl = new URL(res.headers.location, parsedUrl).toString();
+          fetchUrlHead(nextUrl, redirectCount + 1).then(resolve).catch(reject);
+          return;
+        }
+
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}`));
+          return;
+        }
+
+        resolve(res.headers || {});
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy(new Error('Request timed out'));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function checkInstallerHeadFallback() {
+  const defaultInstaller =
+    process.platform === 'linux'
+      ? 'OnSteroid-linux-x64.tar.gz'
+      : process.platform === 'darwin'
+        ? 'OnSteroid.dmg'
+        : 'OnSteroid-Setup.exe';
+
+  const installerUrl = `${UPDATE_BASE_URL}/${defaultInstaller}`;
+
+  return fetchUrlHead(`${installerUrl}?_t=${Date.now()}`).then((headers) => {
+    const lastModified = headers['last-modified'];
+    const etag = headers['etag'] || '';
+    const contentType = headers['content-type'] || '';
+
+    // Ignore HTML fallback responses (e.g., SPA index.html rewrites)
+    if (/text\/html/i.test(contentType)) {
+      return;
+    }
+
+    if (lastModified && isNewerReleaseDate(lastModified)) {
+      const archiveKey = `head:${etag || lastModified}`;
+      if (promptedArchiveKey !== archiveKey) {
+        promptedArchiveKey = archiveKey;
+        showDialogBox({
+          type: 'info',
+          buttons: ['Download Update', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+          title: 'Update Available',
+          message: 'A new OnSteroid desktop build is available.',
+          detail: 'Download the latest setup package for your platform to update.'
+        }).then(({ response }) => {
+          if (response === 0) {
+            shell.openExternal(installerUrl);
+          }
+        });
+      }
+    }
+  });
+}
+
 function checkArchiveManifestUpdate() {
   if (isUpdateDownloaded || isCheckingArchiveManifest) {
     return;
@@ -295,7 +392,8 @@ function checkArchiveManifestUpdate() {
       }
     })
     .catch(() => {
-      // Ignore network/offline errors silently
+      // If latest.yml returned 404 (e.g., not uploaded or blocked by IIS MIME rules), check installer Last-Modified header
+      return checkInstallerHeadFallback().catch(() => {});
     })
     .finally(() => {
       isCheckingArchiveManifest = false;
