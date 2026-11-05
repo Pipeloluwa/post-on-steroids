@@ -7,6 +7,29 @@ const url = require('url');
 const { autoUpdater } = require('electron-updater');
 
 /**
+ * Reads local version metadata (buildTime, updateBaseUrl) generated during build.
+ */
+function readLocalVersionMeta() {
+  const versionJsonCandidates = [
+    path.join(__dirname, 'dist', 'post-on-steroids', 'browser', 'version.json'),
+    path.join(__dirname, 'public', 'version.json')
+  ];
+
+  for (const candidate of versionJsonCandidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return JSON.parse(fs.readFileSync(candidate, 'utf8'));
+      }
+    } catch {
+      // Ignore and try next candidate
+    }
+  }
+  return null;
+}
+
+const LOCAL_VERSION_META = readLocalVersionMeta();
+
+/**
  * Resolves updateBaseUrl from environment files (in source/dev) or packaged version.json (in app.asar).
  */
 function resolveUpdateBaseUrl() {
@@ -26,22 +49,12 @@ function resolveUpdateBaseUrl() {
     // Ignore and try version.json fallback
   }
 
-  const versionJsonCandidates = [
-    path.join(__dirname, 'dist', 'post-on-steroids', 'browser', 'version.json'),
-    path.join(__dirname, 'public', 'version.json')
-  ];
-
-  for (const candidate of versionJsonCandidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        const data = JSON.parse(fs.readFileSync(candidate, 'utf8'));
-        const resolved = isPackaged ? data.updateBaseUrl : (data.devUpdateBaseUrl || data.updateBaseUrl);
-        if (resolved && typeof resolved === 'string') {
-          return resolved.trim().replace(/\/+$/, '');
-        }
-      }
-    } catch {
-      // Ignore and try next candidate
+  if (LOCAL_VERSION_META) {
+    const resolved = isPackaged
+      ? LOCAL_VERSION_META.updateBaseUrl
+      : (LOCAL_VERSION_META.devUpdateBaseUrl || LOCAL_VERSION_META.updateBaseUrl);
+    if (resolved && typeof resolved === 'string') {
+      return resolved.trim().replace(/\/+$/, '');
     }
   }
 
@@ -67,8 +80,9 @@ try {
 let mainWindow;
 let isUpdateDownloaded = false;
 let isCheckingArchiveManifest = false;
-let promptedArchiveVersion = null;
+let promptedArchiveKey = null;
 let updateCheckInterval = null;
+let lastUpdateCheckTime = 0;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -111,6 +125,13 @@ function createWindow() {
     }),
   );
 
+  // Check for updates when user focuses the window (throttled to every 5 minutes)
+  mainWindow.on('focus', () => {
+    if (Date.now() - lastUpdateCheckTime > 5 * 60 * 1000) {
+      checkForElectronUpdates();
+    }
+  });
+
   mainWindow.on('closed', function () {
     mainWindow = null;
   });
@@ -142,6 +163,18 @@ function isNewerVersion(remoteVer, currentVer) {
     if (rv < cv) return false;
   }
   return false;
+}
+
+function isNewerReleaseDate(remoteReleaseDateStr) {
+  if (!remoteReleaseDateStr || !LOCAL_VERSION_META || typeof LOCAL_VERSION_META.buildTime !== 'number') {
+    return false;
+  }
+  const remoteTime = Date.parse(remoteReleaseDateStr);
+  if (Number.isNaN(remoteTime)) {
+    return false;
+  }
+  // Treat as a newer setup build if the manifest releaseDate is at least 60 seconds newer than local buildTime
+  return remoteTime > LOCAL_VERSION_META.buildTime + 60 * 1000;
 }
 
 function fetchUrlText(targetUrl, redirectCount = 0) {
@@ -221,24 +254,36 @@ function checkArchiveManifestUpdate() {
     .then((raw) => {
       const verMatch = raw.match(/^version:\s*['"]?([^\s'"]+)['"]?/m);
       const pathMatch = raw.match(/^path:\s*['"]?([^\r\n'"]+)['"]?/m);
+      const dateMatch = raw.match(/^releaseDate:\s*['"]?([^\r\n'"]+)['"]?/m);
+      const shaMatch = raw.match(/^sha512:\s*['"]?([^\s'"]+)['"]?/m);
+
       const remoteVersion = verMatch ? verMatch[1].trim() : null;
       const packageFile = pathMatch ? pathMatch[1].trim() : null;
+      const remoteReleaseDate = dateMatch ? dateMatch[1].trim() : null;
+      const remoteSha = shaMatch ? shaMatch[1].trim() : '';
+
+      const currentVersion = app.getVersion();
+      const hasNewerSemver = remoteVersion && isNewerVersion(remoteVersion, currentVersion);
+      const hasNewerBuildTimestamp =
+        remoteVersion === currentVersion && isNewerReleaseDate(remoteReleaseDate);
+
+      const archiveKey = `${remoteVersion || ''}:${remoteSha || remoteReleaseDate || ''}`;
 
       if (
         remoteVersion &&
         packageFile &&
-        promptedArchiveVersion !== remoteVersion &&
-        isNewerVersion(remoteVersion, app.getVersion())
+        promptedArchiveKey !== archiveKey &&
+        (hasNewerSemver || hasNewerBuildTimestamp)
       ) {
-        promptedArchiveVersion = remoteVersion;
+        promptedArchiveKey = archiveKey;
         showDialogBox({
           type: 'info',
           buttons: ['Download Update', 'Later'],
           defaultId: 0,
           cancelId: 1,
           title: 'Update Available',
-          message: `OnSteroid v${remoteVersion} is available.`,
-          detail: 'Download the latest package for your platform to update.'
+          message: `A new OnSteroid update (v${remoteVersion}) is available.`,
+          detail: 'Download the latest setup package for your platform to update.'
         }).then(({ response }) => {
           if (response === 0) {
             const downloadUrl = /^https?:\/\//i.test(packageFile)
@@ -262,6 +307,8 @@ function checkForElectronUpdates() {
     return;
   }
 
+  lastUpdateCheckTime = Date.now();
+
   // Unpacked builds or Linux tar.gz/zip builds (non-AppImage) cannot use Squirrel/NSIS differential updater directly
   if (!app.isPackaged || (process.platform === 'linux' && !process.env.APPIMAGE)) {
     checkArchiveManifestUpdate();
@@ -271,8 +318,8 @@ function checkForElectronUpdates() {
   autoUpdater
     .checkForUpdates()
     .then((result) => {
-      // If electron-updater skipped checking (returns null), fall back to manifest check
-      if (!result || !result.updateInfo) {
+      // If electron-updater did not start a download (e.g., portable build or same version string with newer build timestamp), check manifest
+      if (!result || !result.downloadPromise) {
         checkArchiveManifestUpdate();
       }
     })
