@@ -175,12 +175,16 @@ function isNewerReleaseDate(remoteReleaseDateStr) {
   if (!remoteReleaseDateStr || !LOCAL_VERSION_META || typeof LOCAL_VERSION_META.buildTime !== 'number') {
     return false;
   }
-  const remoteTime = Date.parse(remoteReleaseDateStr);
+  const remoteTime = typeof remoteReleaseDateStr === 'number'
+    ? remoteReleaseDateStr
+    : Date.parse(remoteReleaseDateStr);
   if (Number.isNaN(remoteTime)) {
     return false;
   }
-  // Treat as a newer setup build if the manifest releaseDate is at least 60 seconds newer than local buildTime
-  return remoteTime > LOCAL_VERSION_META.buildTime + 60 * 1000;
+  // Because generate-update-manifests.mjs writes the exact buildDate from public/version.json,
+  // the same build has remoteTime === LOCAL_VERSION_META.buildTime (0ms difference).
+  // Only treat as a newer same-version build if remoteTime is strictly greater than local buildTime.
+  return remoteTime > LOCAL_VERSION_META.buildTime + 1000;
 }
 
 function fetchUrlText(targetUrl, redirectCount = 0) {
@@ -241,101 +245,54 @@ function fetchUrlText(targetUrl, redirectCount = 0) {
   });
 }
 
-function fetchUrlHead(targetUrl, redirectCount = 0) {
-  return new Promise((resolve, reject) => {
-    if (redirectCount > 5) {
-      reject(new Error('Too many redirects'));
-      return;
-    }
+function promptManifestUpdate(remoteVersion, packageFile, remoteReleaseDate, remoteSha) {
+  const currentVersion = app.getVersion();
+  const hasNewerSemver = remoteVersion && isNewerVersion(remoteVersion, currentVersion);
+  const hasNewerBuildTimestamp =
+    remoteVersion === currentVersion && isNewerReleaseDate(remoteReleaseDate);
 
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(targetUrl);
-    } catch (err) {
-      reject(err);
-      return;
-    }
+  const archiveKey = `${remoteVersion || ''}:${remoteSha || remoteReleaseDate || ''}`;
 
-    const client = parsedUrl.protocol === 'http:' ? http : https;
-    const req = client.request(
-      parsedUrl,
-      {
-        method: 'HEAD',
-        rejectUnauthorized: false,
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache'
-        },
-        timeout: 15000
-      },
-      (res) => {
-        res.resume();
-        if (
-          res.statusCode &&
-          [301, 302, 303, 307, 308].includes(res.statusCode) &&
-          res.headers.location
-        ) {
-          const nextUrl = new URL(res.headers.location, parsedUrl).toString();
-          fetchUrlHead(nextUrl, redirectCount + 1).then(resolve).catch(reject);
-          return;
-        }
-
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode}`));
-          return;
-        }
-
-        resolve(res.headers || {});
+  if (
+    remoteVersion &&
+    packageFile &&
+    promptedArchiveKey !== archiveKey &&
+    (hasNewerSemver || hasNewerBuildTimestamp)
+  ) {
+    promptedArchiveKey = archiveKey;
+    showDialogBox({
+      type: 'info',
+      buttons: ['Download Update', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update Available',
+      message: `A new OnSteroid update (v${remoteVersion}) is available.`,
+      detail: 'Download the latest setup package for your platform to update.'
+    }).then(({ response }) => {
+      if (response === 0) {
+        const downloadUrl = /^https?:\/\//i.test(packageFile)
+          ? packageFile
+          : `${UPDATE_BASE_URL}/${packageFile.replace(/^\/+/, '')}`;
+        shell.openExternal(downloadUrl);
       }
-    );
-
-    req.on('timeout', () => {
-      req.destroy(new Error('Request timed out'));
     });
-    req.on('error', reject);
-    req.end();
-  });
+  }
 }
 
-function checkInstallerHeadFallback() {
-  const defaultInstaller =
-    process.platform === 'linux'
-      ? 'OnSteroid-linux-x64.tar.gz'
-      : process.platform === 'darwin'
-        ? 'OnSteroid.dmg'
-        : 'OnSteroid-Setup.exe';
+function checkLatestJsonFallback() {
+  const jsonUrl = `${UPDATE_BASE_URL}/latest.json?_t=${Date.now()}`;
+  return fetchUrlText(jsonUrl).then((raw) => {
+    const data = JSON.parse(raw);
+    if (!data || !data.version) return;
+    const platformEntry = data.platforms && data.platforms[process.platform];
+    if (!platformEntry || !platformEntry.path) return;
 
-  const installerUrl = `${UPDATE_BASE_URL}/${defaultInstaller}`;
-
-  return fetchUrlHead(`${installerUrl}?_t=${Date.now()}`).then((headers) => {
-    const lastModified = headers['last-modified'];
-    const etag = headers['etag'] || '';
-    const contentType = headers['content-type'] || '';
-
-    // Ignore HTML fallback responses (e.g., SPA index.html rewrites)
-    if (/text\/html/i.test(contentType)) {
-      return;
-    }
-
-    if (lastModified && isNewerReleaseDate(lastModified)) {
-      const archiveKey = `head:${etag || lastModified}`;
-      if (promptedArchiveKey !== archiveKey) {
-        promptedArchiveKey = archiveKey;
-        showDialogBox({
-          type: 'info',
-          buttons: ['Download Update', 'Later'],
-          defaultId: 0,
-          cancelId: 1,
-          title: 'Update Available',
-          message: 'A new OnSteroid desktop build is available.',
-          detail: 'Download the latest setup package for your platform to update.'
-        }).then(({ response }) => {
-          if (response === 0) {
-            shell.openExternal(installerUrl);
-          }
-        });
-      }
-    }
+    promptManifestUpdate(
+      String(data.version).trim(),
+      String(platformEntry.path).trim(),
+      data.buildTime || data.releaseDate,
+      platformEntry.sha512 || ''
+    );
   });
 }
 
@@ -367,41 +324,11 @@ function checkArchiveManifestUpdate() {
       const remoteReleaseDate = dateMatch ? dateMatch[1].trim() : null;
       const remoteSha = shaMatch ? shaMatch[1].trim() : '';
 
-      const currentVersion = app.getVersion();
-      const hasNewerSemver = remoteVersion && isNewerVersion(remoteVersion, currentVersion);
-      const hasNewerBuildTimestamp =
-        remoteVersion === currentVersion && isNewerReleaseDate(remoteReleaseDate);
-
-      const archiveKey = `${remoteVersion || ''}:${remoteSha || remoteReleaseDate || ''}`;
-
-      if (
-        remoteVersion &&
-        packageFile &&
-        promptedArchiveKey !== archiveKey &&
-        (hasNewerSemver || hasNewerBuildTimestamp)
-      ) {
-        promptedArchiveKey = archiveKey;
-        showDialogBox({
-          type: 'info',
-          buttons: ['Download Update', 'Later'],
-          defaultId: 0,
-          cancelId: 1,
-          title: 'Update Available',
-          message: `A new OnSteroid update (v${remoteVersion}) is available.`,
-          detail: 'Download the latest setup package for your platform to update.'
-        }).then(({ response }) => {
-          if (response === 0) {
-            const downloadUrl = /^https?:\/\//i.test(packageFile)
-              ? packageFile
-              : `${UPDATE_BASE_URL}/${packageFile.replace(/^\/+/, '')}`;
-            shell.openExternal(downloadUrl);
-          }
-        });
-      }
+      promptManifestUpdate(remoteVersion, packageFile, remoteReleaseDate, remoteSha);
     })
     .catch(() => {
-      // If latest.yml returned 404 (e.g., not uploaded or blocked by IIS MIME rules), check installer Last-Modified header
-      return checkInstallerHeadFallback().catch(() => {});
+      // If latest.yml returned 404 (e.g., blocked by IIS MIME rules), fall back to latest.json
+      return checkLatestJsonFallback().catch(() => {});
     })
     .finally(() => {
       isCheckingArchiveManifest = false;

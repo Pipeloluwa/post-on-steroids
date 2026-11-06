@@ -7,8 +7,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const releaseDir = path.join(rootDir, 'release');
 const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-const version = pkg.version || '1.0.0';
-const releaseDate = new Date().toISOString();
+
+// Read buildDate and buildTime from public/version.json so latest.yml matches the exact timestamp baked into the app bundle
+let versionMeta = null;
+const versionJsonPath = path.join(rootDir, 'public', 'version.json');
+if (fs.existsSync(versionJsonPath)) {
+  try {
+    versionMeta = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
+  } catch {
+    versionMeta = null;
+  }
+}
+
+const version = (versionMeta && versionMeta.version) || pkg.version || '1.0.0';
+const releaseDate = (versionMeta && versionMeta.buildDate) || new Date().toISOString();
+const buildTime = (versionMeta && versionMeta.buildTime) || Date.parse(releaseDate);
 
 if (!fs.existsSync(releaseDir)) {
   fs.mkdirSync(releaseDir, { recursive: true });
@@ -82,7 +95,24 @@ if (macEntries.length > 0) {
   console.log(`Generated release/latest-mac.yml (${macEntries.map((e) => e.url).join(', ')})`);
 }
 
-// 4. Generate release/web.config so IIS serves .yml, .yaml, and .blockmap files in /download without 404.3 errors
+// 4. Generate release/latest.json fallback (always served by IIS/web servers even if .yml MIME is missing)
+const primaryWinEntry = winExe || winZip;
+const primaryLinuxEntry = linuxTarGz || linuxZip;
+const primaryMacEntry = macZip || macDmg;
+const latestJson = {
+  version,
+  buildTime,
+  releaseDate,
+  platforms: {
+    win32: primaryWinEntry ? { path: primaryWinEntry.url, sha512: primaryWinEntry.sha512, size: primaryWinEntry.size } : null,
+    linux: primaryLinuxEntry ? { path: primaryLinuxEntry.url, sha512: primaryLinuxEntry.sha512, size: primaryLinuxEntry.size } : null,
+    darwin: primaryMacEntry ? { path: primaryMacEntry.url, sha512: primaryMacEntry.sha512, size: primaryMacEntry.size } : null
+  }
+};
+fs.writeFileSync(path.join(releaseDir, 'latest.json'), JSON.stringify(latestJson, null, 2) + '\n', 'utf8');
+console.log('Generated release/latest.json');
+
+// 5. Generate release/web.config so IIS serves .yml, .yaml, and .blockmap files in /download without 404.3 errors
 const downloadWebConfig = `<?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <system.webServer>
@@ -93,6 +123,8 @@ const downloadWebConfig = `<?xml version="1.0" encoding="utf-8"?>
       <mimeMap fileExtension=".yaml" mimeType="text/yaml" />
       <remove fileExtension=".blockmap" />
       <mimeMap fileExtension=".blockmap" mimeType="application/octet-stream" />
+      <remove fileExtension=".json" />
+      <mimeMap fileExtension=".json" mimeType="application/json" />
       <remove fileExtension=".exe" />
       <mimeMap fileExtension=".exe" mimeType="application/octet-stream" />
       <remove fileExtension=".zip" />
