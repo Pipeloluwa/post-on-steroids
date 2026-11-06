@@ -58,6 +58,16 @@ export class ScriptManagementService {
         });
     }
 
+    isBuiltInDefaultScript(type: string, name?: string, isDefault?: boolean, id?: string): boolean {
+        if (isDefault || (id && id.startsWith('default_'))) return true;
+        const lowerName = (name || '').trim().toLowerCase();
+        if (type === 'Encryption' && (lowerName === 'encrypt' || lowerName === 'decrypt')) return true;
+        if (type === 'PreRequest' && lowerName === 'pre-request') return true;
+        if (type === 'PostRequest' && lowerName === 'post-response') return true;
+        if (type === 'Test' && lowerName === 'test') return true;
+        return false;
+    }
+
     getDefaultContentForScript(type: string, name?: string): string {
         if (type === 'Encryption') {
             return (name && name.toLowerCase().includes('decrypt')) 
@@ -72,6 +82,9 @@ export class ScriptManagementService {
 
     getScriptContent(type: string, name: string): string {
         const found = this.scripts().find(s => s.type === type && s.name.toLowerCase() === name.toLowerCase());
+        if (this.isBuiltInDefaultScript(type, name, found?.isDefault, found?.id)) {
+            return this.getDefaultContentForScript(type, name);
+        }
         if (found && found.content && found.content.trim()) {
             return found.content;
         }
@@ -143,14 +156,10 @@ export class ScriptManagementService {
             if (!existing) {
                 result.push({ ...builtIn });
             } else {
-                // If the default script exists in the list but has empty or blank content,
-                // populate it immediately with the standard skeleton from script.management.service
-                if (!existing.content || !existing.content.trim()) {
-                    existing.content = builtIn.content;
-                }
-                if (existing.isDefault === undefined) {
-                    existing.isDefault = true;
-                }
+                // Always enforce script.snippets.constants.ts as the single source of truth for default scripts
+                existing.content = builtIn.content;
+                existing.originalContent = builtIn.content;
+                existing.isDefault = true;
             }
         }
 
@@ -262,9 +271,10 @@ export class ScriptManagementService {
     }
 
     async updateScript(id: string, name: string, content: string): Promise<ScriptDto | null> {
-        let isVirtual = id === 'default_encrypt_fallback' || id === 'default_decrypt_fallback';
+        const isVirtual = id.startsWith('default_');
+        const target = this.scripts().find(x => x.id === id);
 
-        if (!this.authService.isLoggedIn()) {
+        if (!this.authService.isLoggedIn() || isVirtual || this.isBuiltInDefaultScript(target?.type || '', name, target?.isDefault, id)) {
             let updatedScript: ScriptDto | null = null;
             this.scripts.update(s => s.map(x => {
                 if (x.id === id) {
@@ -273,15 +283,10 @@ export class ScriptManagementService {
                 }
                 return x;
             }));
-            this.saveOfflineScripts();
-            this.notificationService.notify('Script updated locally (offline)');
+            if (!this.authService.isLoggedIn()) {
+                this.saveOfflineScripts();
+            }
             return updatedScript;
-        }
-        
-        if (isVirtual && this.authService.isLoggedIn()) {
-            // It's a virtual fallback, but user is logged in and modified it.
-            // We should create it on the backend.
-            return this.createScript('Encryption', name, content);
         }
 
         try {

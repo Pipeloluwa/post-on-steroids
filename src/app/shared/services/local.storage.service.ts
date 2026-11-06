@@ -6,6 +6,7 @@ import { isPlatformBrowser } from "@angular/common";
 })
 export class LocalStorageService {
     static readonly JSON_RESIZE_HEIGHT = 'workspace_request_height';
+    static readonly SIDEBAR_RESIZE_WIDTH = 'workspace_sidebar_width';
     static readonly STORAGE_KEY = 'post_on_steroids_variables';
     
     private platformId = inject(PLATFORM_ID);

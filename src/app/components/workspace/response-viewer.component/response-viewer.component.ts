@@ -309,37 +309,42 @@ export class ResponseViewerComponent {
     }
 
     copyResponse() {
-        const data = JSON.stringify(this.responseBody(), null, 2);
-        this.copyToClipboard(data);
+        const formatted = this.formattedResponseBody();
+        const raw = this.responseBody();
+        const data = formatted || (raw !== null && raw !== undefined ? (typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2)) : '');
+        this.copyToClipboard(data, 'Response copied to clipboard');
     }
 
     copyEncryptionConsole() {
-        this.copyToClipboard(this.encryptionConsole());
+        this.copyToClipboard(this.encryptionConsole(), 'Encryption console copied to clipboard');
     }
 
     copyScriptConsole() {
-        this.copyToClipboard(this.activeScriptConsoleOutput());
+        this.copyToClipboard(this.activeScriptConsoleOutput(), 'Script console copied to clipboard');
     }
 
     copyTestResults() {
         const results = this.testResults().map(t => `${t.passed ? '✓' : '✗'} ${t.name}`).join('\n');
-        this.copyToClipboard(results);
+        this.copyToClipboard(results, 'Test results copied to clipboard');
     }
 
     copyHeaders() {
         const hdrs = this.responseHeaders().filter(h => h.enabled).map(h => `${h.key}: ${h.value}`).join('\n');
-        this.copyToClipboard(hdrs);
+        this.copyToClipboard(hdrs, 'Headers copied to clipboard');
     }
 
     copyCookies() {
         const cks = this.responseCookies().map(c => `${c.name}=${c.value}; Domain=${c.domain}; Path=${c.path}; Expires=${c.expires}`).join('\n');
-        this.copyToClipboard(cks);
+        this.copyToClipboard(cks, 'Cookies copied to clipboard');
     }
 
-    private copyToClipboard(text: string) {
-        if (!text) return;
+    private copyToClipboard(text: string, message = 'Copied to clipboard') {
+        if (!text) {
+            this.notificationService.notify('Nothing to copy');
+            return;
+        }
         navigator.clipboard.writeText(text);
-        // Could also trigger a notification here if we had NotificationService injected
+        this.notificationService.notify(message);
     }
 
     toggleConsoleWrap() {

@@ -736,26 +736,29 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     this.lastValidContent = this.value();
 
     editor.onDidChangeModelContent(() => {
-      if (this.isReverting) return;
+      if (this.isReverting || this.isRestoringModel) return;
 
       const model = editor.getModel();
       if (!model) return;
 
       const currentContent = model.getValue();
-      const lines = currentContent.split('\n');
+      const trimmed = currentContent.trim();
+      const lines = trimmed.split('\n');
 
-      // Validate: first line must be the function signature, last line must be closing brace
-      const firstLine = lines[0];
-      const lastLine = lines[lines.length - 1];
+      // Validate: first non-empty line must be the function signature, last non-empty line must be closing brace
+      const firstLine = lines[0]?.trim() || '';
+      const lastLine = lines[lines.length - 1]?.trim() || '';
 
       const isFirstLineValid = /^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(firstLine);
-      const isLastLineValid = lastLine.trim() === '}';
+      const isLastLineValid = lastLine === '}';
 
       if (!isFirstLineValid || !isLastLineValid) {
         // Revert to the last valid content
-        this.isReverting = true;
-        model.setValue(this.lastValidContent);
-        this.isReverting = false;
+        if (this.lastValidContent && this.lastValidContent !== currentContent) {
+          this.isReverting = true;
+          model.setValue(this.lastValidContent);
+          this.isReverting = false;
+        }
         return;
       }
 
@@ -787,7 +790,9 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const currentModel = editor.getModel();
       // Only call setValue if model content genuinely differs — setValue resets undo history!
       if (currentModel && currentModel.getValue() !== safeVal) {
+        this.isRestoringModel = true;
         currentModel.setValue(safeVal);
+        this.isRestoringModel = false;
       }
       if (this.enableEncryptionToggles()) {
         this.updateDecorations();

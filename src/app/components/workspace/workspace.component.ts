@@ -53,6 +53,8 @@ export class WorkspaceComponent {
     requestHeight = signal<number>(450); // Pixel height
     isResizing = signal<boolean>(false);
 
+    sidebarWidth = signal<number>(250); // Pixel width
+    isResizingSidebar = signal<boolean>(false);
 
     isSidebarOpen = signal<boolean>(true);
 
@@ -66,6 +68,14 @@ export class WorkspaceComponent {
         } else if (this.isBrowser) {
             const sensibleDefault = Math.max(160, Math.min(450, Math.floor((window.innerHeight - 200) * 0.52)));
             this.requestHeight.set(sensibleDefault);
+        }
+
+        const savedSidebarWidth = this.localStorageService.getItem(LocalStorageService.SIDEBAR_RESIZE_WIDTH);
+        if (savedSidebarWidth) {
+            const width = parseInt(savedSidebarWidth, 10);
+            if (!isNaN(width)) {
+                this.sidebarWidth.set(this.clampSidebarWidth(width));
+            }
         }
 
         if (this.isBrowser) {
@@ -102,6 +112,7 @@ export class WorkspaceComponent {
     onWindowResize() {
         if (!this.isBrowser) return;
         this.requestHeight.update(h => this.clampHeight(h));
+        this.sidebarWidth.update(w => this.clampSidebarWidth(w));
     }
 
     private clampHeight(height: number): number {
@@ -111,20 +122,38 @@ export class WorkspaceComponent {
         return Math.max(minHeight, Math.min(height, maxHeight));
     }
 
+    private clampSidebarWidth(width: number): number {
+        const minWidth = 160;
+        const screenWidth = this.isBrowser ? window.innerWidth : 1200;
+        const maxWidth = Math.max(minWidth, Math.min(600, screenWidth - 450));
+        return Math.max(minWidth, Math.min(width, maxWidth));
+    }
+
     startResizing(event: MouseEvent) {
         event.preventDefault();
         this.isResizing.set(true);
     }
 
+    startResizingSidebar(event: MouseEvent) {
+        event.preventDefault();
+        this.isResizingSidebar.set(true);
+    }
+
     onMouseMove(event: MouseEvent) {
-        if (!this.isResizing()) return;
+        if (!this.isResizing() && !this.isResizingSidebar()) return;
 
         const container = document.querySelector('.workspace-container');
         if (container) {
             const rect = container.getBoundingClientRect();
-            const tabHeight = 38;
-            const newHeight = event.clientY - rect.top - tabHeight;
-            this.requestHeight.set(this.clampHeight(newHeight));
+            if (this.isResizing()) {
+                const tabHeight = 38;
+                const newHeight = event.clientY - rect.top - tabHeight;
+                this.requestHeight.set(this.clampHeight(newHeight));
+            }
+            if (this.isResizingSidebar()) {
+                const newWidth = event.clientX - rect.left;
+                this.sidebarWidth.set(this.clampSidebarWidth(newWidth));
+            }
         }
     }
 
@@ -132,6 +161,10 @@ export class WorkspaceComponent {
         if (this.isResizing()) {
             this.isResizing.set(false);
             this.localStorageService.setItem(LocalStorageService.JSON_RESIZE_HEIGHT, this.requestHeight().toString());
+        }
+        if (this.isResizingSidebar()) {
+            this.isResizingSidebar.set(false);
+            this.localStorageService.setItem(LocalStorageService.SIDEBAR_RESIZE_WIDTH, this.sidebarWidth().toString());
         }
     }
 

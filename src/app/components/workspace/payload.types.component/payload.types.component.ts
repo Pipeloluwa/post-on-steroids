@@ -51,25 +51,31 @@ export class PayloadTypesComponent {
         const scripts = this.encryptionScripts();
         if (scripts.length > 0) {
             const currentScript = this.encryption()?.script || '';
-            if (!this.activeEncryptionScriptId()) {
+            const currentActiveId = this.activeEncryptionScriptId();
+            const activeExists = currentActiveId && scripts.some(s => s.id === currentActiveId);
+
+            if (!activeExists) {
                 let target = currentScript.includes('decryptScript')
-                    ? scripts.find(s => s.name === 'Decrypt')
-                    : scripts.find(s => s.name === 'Encrypt');
+                    ? scripts.find(s => s.name.toLowerCase() === 'decrypt')
+                    : scripts.find(s => s.name.toLowerCase() === 'encrypt');
                 if (!target) target = scripts[0];
                 if (target) {
                     this.activeEncryptionScriptId.set(target.id);
                 }
             }
 
-            if (!this.encryption()?.script || !this.encryption().script.trim()) {
+            if (!currentScript || !currentScript.trim()) {
                 const activeScript = scripts.find(s => s.id === this.activeEncryptionScriptId()) 
-                    || scripts.find(s => s.name === 'Encrypt') 
+                    || scripts.find(s => s.name.toLowerCase() === 'encrypt') 
                     || scripts[0];
                 if (activeScript) {
-                    const content = activeScript.content && activeScript.content.trim()
-                        ? activeScript.content
-                        : this.scriptManagementService.getDefaultContentForScript(activeScript.type, activeScript.name);
-                    this.setEncryptionField('script', content);
+                    const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript(activeScript.type, activeScript.name, activeScript.isDefault, activeScript.id);
+                    const content = isBuiltIn
+                        ? this.scriptManagementService.getDefaultContentForScript(activeScript.type, activeScript.name)
+                        : (activeScript.content && activeScript.content.trim()
+                            ? activeScript.content
+                            : this.scriptManagementService.getDefaultContentForScript(activeScript.type, activeScript.name));
+                    this.setEncryptionField('script', content, false);
                 }
             }
         }
@@ -78,15 +84,19 @@ export class PayloadTypesComponent {
     // Automatically sync Pre-request script state with script.management.service
     effect(() => {
         const preScripts = this.preRequestScripts();
-        if (preScripts.length > 0 && !this.activePreRequestScriptId()) {
+        const activeExists = this.activePreRequestScriptId() && preScripts.some(s => s.id === this.activePreRequestScriptId());
+        if (preScripts.length > 0 && !activeExists) {
             const defaultScript = preScripts.find(s => s.name === 'Pre-request' || s.isDefault) || preScripts[0];
             if (defaultScript) {
                 this.activePreRequestScriptId.set(defaultScript.id);
                 if (!this.scripts()?.preRequest || !this.scripts().preRequest.trim()) {
-                    const content = defaultScript.content && defaultScript.content.trim()
-                        ? defaultScript.content
-                        : this.scriptManagementService.getDefaultContentForScript('PreRequest', defaultScript.name);
-                    this.updateScript('preRequest', content);
+                    const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript('PreRequest', defaultScript.name, defaultScript.isDefault, defaultScript.id);
+                    const content = isBuiltIn
+                        ? this.scriptManagementService.getDefaultContentForScript('PreRequest', defaultScript.name)
+                        : (defaultScript.content && defaultScript.content.trim()
+                            ? defaultScript.content
+                            : this.scriptManagementService.getDefaultContentForScript('PreRequest', defaultScript.name));
+                    this.updateScript('preRequest', content, false);
                 }
             }
         }
@@ -95,15 +105,19 @@ export class PayloadTypesComponent {
     // Automatically sync Post-response script state with script.management.service
     effect(() => {
         const postScripts = this.postRequestScripts();
-        if (postScripts.length > 0 && !this.activePostRequestScriptId()) {
+        const activeExists = this.activePostRequestScriptId() && postScripts.some(s => s.id === this.activePostRequestScriptId());
+        if (postScripts.length > 0 && !activeExists) {
             const defaultScript = postScripts.find(s => s.name === 'Post-response' || s.isDefault) || postScripts[0];
             if (defaultScript) {
                 this.activePostRequestScriptId.set(defaultScript.id);
                 if (!this.scripts()?.postResponse || !this.scripts().postResponse.trim()) {
-                    const content = defaultScript.content && defaultScript.content.trim()
-                        ? defaultScript.content
-                        : this.scriptManagementService.getDefaultContentForScript('PostRequest', defaultScript.name);
-                    this.updateScript('postResponse', content);
+                    const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript('PostRequest', defaultScript.name, defaultScript.isDefault, defaultScript.id);
+                    const content = isBuiltIn
+                        ? this.scriptManagementService.getDefaultContentForScript('PostRequest', defaultScript.name)
+                        : (defaultScript.content && defaultScript.content.trim()
+                            ? defaultScript.content
+                            : this.scriptManagementService.getDefaultContentForScript('PostRequest', defaultScript.name));
+                    this.updateScript('postResponse', content, false);
                 }
             }
         }
@@ -112,15 +126,19 @@ export class PayloadTypesComponent {
     // Automatically sync Test script state with script.management.service
     effect(() => {
         const testScriptsList = this.testScripts();
-        if (testScriptsList.length > 0 && !this.activeTestScriptId()) {
+        const activeExists = this.activeTestScriptId() && testScriptsList.some(s => s.id === this.activeTestScriptId());
+        if (testScriptsList.length > 0 && !activeExists) {
             const defaultScript = testScriptsList.find(s => s.name === 'Test' || s.isDefault) || testScriptsList[0];
             if (defaultScript) {
                 this.activeTestScriptId.set(defaultScript.id);
                 if (!this.scripts()?.testScript || !this.scripts().testScript.trim()) {
-                    const content = defaultScript.content && defaultScript.content.trim()
-                        ? defaultScript.content
-                        : this.scriptManagementService.getDefaultContentForScript('Test', defaultScript.name);
-                    this.updateScript('test', content);
+                    const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript('Test', defaultScript.name, defaultScript.isDefault, defaultScript.id);
+                    const content = isBuiltIn
+                        ? this.scriptManagementService.getDefaultContentForScript('Test', defaultScript.name)
+                        : (defaultScript.content && defaultScript.content.trim()
+                            ? defaultScript.content
+                            : this.scriptManagementService.getDefaultContentForScript('Test', defaultScript.name));
+                    this.updateScript('test', content, false);
                 }
             }
         }
@@ -175,7 +193,7 @@ export class PayloadTypesComponent {
             const newScript = await this.scriptManagementService.createScript('Encryption', scriptName, defaultContent);
             if (newScript) {
                 this.activeEncryptionScriptId.set(newScript.id);
-                this.setEncryptionField('script', newScript.content);
+                this.setEncryptionField('script', newScript.content, false);
             }
         }
         return;
@@ -183,13 +201,13 @@ export class PayloadTypesComponent {
     const s = this.encryptionScripts().find(x => x.name === name);
     if (s) {
         this.activeEncryptionScriptId.set(s.id);
-        const content = s.content && s.content.trim()
-            ? s.content
-            : this.scriptManagementService.getDefaultContentForScript(s.type, s.name);
-        this.setEncryptionField('script', '');
-        setTimeout(() => {
-            this.setEncryptionField('script', content);
-        }, 10);
+        const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript(s.type, s.name, s.isDefault, s.id);
+        const content = isBuiltIn
+            ? this.scriptManagementService.getDefaultContentForScript(s.type, s.name)
+            : (s.content && s.content.trim()
+                ? s.content
+                : this.scriptManagementService.getDefaultContentForScript(s.type, s.name));
+        this.setEncryptionField('script', content, false);
     }
   }
 
@@ -380,7 +398,7 @@ export class PayloadTypesComponent {
                 if (phase === 'preRequest') this.activePreRequestScriptId.set(newScript.id);
                 if (phase === 'postResponse') this.activePostRequestScriptId.set(newScript.id);
                 if (phase === 'test') this.activeTestScriptId.set(newScript.id);
-                this.updateScript(phase, newScript.content);
+                this.updateScript(phase, newScript.content, false);
             }
         }
         return;
@@ -389,28 +407,37 @@ export class PayloadTypesComponent {
         const s = this.preRequestScripts().find(x => x.name === name);
         if (s) {
             this.activePreRequestScriptId.set(s.id);
-            const content = s.content && s.content.trim()
-                ? s.content
-                : this.scriptManagementService.getDefaultContentForScript('PreRequest', s.name);
-            this.updateScript('preRequest', content);
+            const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript('PreRequest', s.name, s.isDefault, s.id);
+            const content = isBuiltIn
+                ? this.scriptManagementService.getDefaultContentForScript('PreRequest', s.name)
+                : (s.content && s.content.trim()
+                    ? s.content
+                    : this.scriptManagementService.getDefaultContentForScript('PreRequest', s.name));
+            this.updateScript('preRequest', content, false);
         }
     } else if (this.activeScriptTab() === 'postResponse') {
         const s = this.postRequestScripts().find(x => x.name === name);
         if (s) {
             this.activePostRequestScriptId.set(s.id);
-            const content = s.content && s.content.trim()
-                ? s.content
-                : this.scriptManagementService.getDefaultContentForScript('PostRequest', s.name);
-            this.updateScript('postResponse', content);
+            const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript('PostRequest', s.name, s.isDefault, s.id);
+            const content = isBuiltIn
+                ? this.scriptManagementService.getDefaultContentForScript('PostRequest', s.name)
+                : (s.content && s.content.trim()
+                    ? s.content
+                    : this.scriptManagementService.getDefaultContentForScript('PostRequest', s.name));
+            this.updateScript('postResponse', content, false);
         }
     } else if (this.activeScriptTab() === 'test') {
         const s = this.testScripts().find(x => x.name === name);
         if (s) {
             this.activeTestScriptId.set(s.id);
-            const content = s.content && s.content.trim()
-                ? s.content
-                : this.scriptManagementService.getDefaultContentForScript('Test', s.name);
-            this.updateScript('test', content);
+            const isBuiltIn = this.scriptManagementService.isBuiltInDefaultScript('Test', s.name, s.isDefault, s.id);
+            const content = isBuiltIn
+                ? this.scriptManagementService.getDefaultContentForScript('Test', s.name)
+                : (s.content && s.content.trim()
+                    ? s.content
+                    : this.scriptManagementService.getDefaultContentForScript('Test', s.name));
+            this.updateScript('test', content, false);
         }
     }
   }
@@ -740,19 +767,19 @@ export class PayloadTypesComponent {
   }
 
   // ── Scripts ──────────────────────────────────────────────────────────
-  updateScript(phase: 'preRequest' | 'postResponse' | 'test', code: string) {
+  updateScript(phase: 'preRequest' | 'postResponse' | 'test', code: string, persistToService = true) {
     const current = this.scripts();
     if (phase === 'test') {
       this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScript: code } });
       const activeId = this.activeTestScriptId();
-      if (activeId && this.activeTestScriptName !== 'Select Script...' && this.activeTestScriptName !== '+ Add New Script') {
+      if (persistToService && activeId && this.activeTestScriptName !== 'Select Script...' && this.activeTestScriptName !== '+ Add New Script') {
           this.saveScriptSubject.next({ id: activeId, name: this.activeTestScriptName, content: code });
       }
     } else {
       this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [phase]: code } });
       const activeId = phase === 'preRequest' ? this.activePreRequestScriptId() : this.activePostRequestScriptId();
       const activeName = phase === 'preRequest' ? this.activePreRequestScriptName : this.activePostRequestScriptName;
-      if (activeId && activeName !== 'Select Script...' && activeName !== '+ Add New Script') {
+      if (persistToService && activeId && activeName !== 'Select Script...' && activeName !== '+ Add New Script') {
           this.saveScriptSubject.next({ id: activeId, name: activeName, content: code });
       }
     }
@@ -842,12 +869,12 @@ export class PayloadTypesComponent {
     if (id) {
         const resetDto = await this.scriptManagementService.resetScript(id);
         if (resetDto) {
-            this.setEncryptionField('script', resetDto.content);
+            this.setEncryptionField('script', resetDto.content, false);
             return;
         }
     }
     const defaultScript = this.scriptManagementService.getDefaultContentForScript('Encryption', this.activeEncryptionScriptName);
-    this.setEncryptionField('script', defaultScript);
+    this.setEncryptionField('script', defaultScript, false);
   }
 
   get isDefaultEncryptionScript(): boolean {
@@ -921,12 +948,12 @@ export class PayloadTypesComponent {
   }
 
   // ── Encryption ───────────────────────────────────────────────────────
-  setEncryptionField(field: keyof EncryptionState, value: any) {
+  setEncryptionField(field: keyof EncryptionState, value: any, persistToService = true) {
     const current = this.encryption();
     this.tabStateService.updateState(this.tabId(), {
       encryption: { ...current, [field]: value }
     });
-    if (field === 'script') {
+    if (field === 'script' && persistToService) {
         const activeId = this.activeEncryptionScriptId();
         const activeName = this.activeEncryptionScriptName;
         if (activeId && activeName !== 'Select Script...' && activeName !== '+ Add New Script') {

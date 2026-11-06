@@ -1,8 +1,10 @@
 <div class="w-full h-full flex overflow-x-auto overflow-y-hidden workspace-container relative scroll-smooth">
     
     <!-- Secondary Sidebar (Capsule Tree) -->
-    <div class="h-full border-r border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) flex flex-col transition-all duration-300 overflow-y-auto overflow-x-hidden shrink-0"
-         [class.w-[220px]]="isSidebarOpen()" [class.md:w-[250px]]="isSidebarOpen()" [class.w-[40px]]="!isSidebarOpen()">
+    <div class="h-full border-r border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) flex flex-col overflow-y-auto overflow-x-hidden shrink-0"
+         [style.width.px]="isSidebarOpen() ? sidebarWidth() : 40"
+         [class.transition-[width]]="!isResizingSidebar()"
+         [class.duration-300]="!isResizingSidebar()">
 
         <!-- Header row — capsule selector (when open) + toggle button on the right -->
         <div class="border-b border-(--postonsteroids-border) flex items-center h-[38px] shrink-0 px-1 gap-x-1"
@@ -160,8 +162,16 @@
         </div>
     </div>
 
+    <!-- Sidebar Resize Handle -->
+    @if (isSidebarOpen()) {
+    <div (mousedown)="startResizingSidebar($event)"
+        class="w-[6px] h-full shrink-0 cursor-ew-resize hover:bg-(--postonsteroids-accent)/30 transition-colors duration-200 rounded-full z-20"
+        [class]="{ 'bg-(--postonsteroids-accent)/50': isResizingSidebar() }">
+    </div>
+    }
+
     <!-- Main Workspace Area -->
-    <div class="flex-1 h-full flex flex-col min-w-[700px] relative">
+    <div class="flex-1 h-full flex flex-col min-w-[400px] relative">
         <app-request-tabs-component />
 
         <div class="w-full flex-1 min-h-0 p-2 flex flex-col relative">

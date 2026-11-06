@@ -3174,10 +3174,10 @@ export class TabStateService {
             },
             scripts: {
                 ...base.scripts,
-                preRequest: dto.preRequestScript || '',
-                postResponse: dto.postResponseScript || '',
-                  testScript: dto.testScript || '',
-                  testScriptEnabled: dto.testScriptEnabled || false
+                preRequest: dto.preRequestScript || DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
+                postResponse: dto.postResponseScript || DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
+                testScript: dto.testScript || DEFAULT_TEST_SCRIPT_SKELETON,
+                testScriptEnabled: dto.testScriptEnabled || false
             },
             encryption: {
                 ...base.encryption,
