@@ -2,6 +2,7 @@ import { Component, signal, computed, inject, ViewChild, ElementRef, forwardRef,
 import { CommonModule } from '@angular/common';
 import { FormsModule, NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
 import { VariableService } from '../../services/variable.service';
+import { UTILITIES, generateUtilityValue, getUtilityDescription } from '../../utils/utility-variables';
 
 interface TextSegment {
     text: string;
@@ -9,31 +10,15 @@ interface TextSegment {
     key?: string;
 }
 
-const UTILITIES = [
-    '$guid', '$timestamp', '$randomInt', '$randomUUID', 
-    '$randomEmail', '$randomName', '$randomWord', '$randomColor', 
-    '$randomCity', '$randomStreetAddress', '$randomPhoneNumber',
-    '$randomBoolean', '$randomAlphaNumeric', '$randomIPv4'
-];
-
-function generateUtilityValue(utility: string): string {
-    switch (utility.toLowerCase()) {
-        case '$guid':
-        case '$randomuuid': return crypto.randomUUID();
-        case '$timestamp': return Date.now().toString();
-        case '$randomint': return Math.floor(Math.random() * 1000).toString();
-        case '$randomemail': return `test_${Math.floor(Math.random() * 10000)}@example.com`;
-        case '$randomname': return 'John Doe';
-        case '$randomword': return 'lorem';
-        case '$randomcolor': return '#' + Math.floor(Math.random()*16777215).toString(16);
-        case '$randomcity': return 'New York';
-        case '$randomstreetaddress': return '123 Main St';
-        case '$randomphonenumber': return '555-0100';
-        case '$randomboolean': return Math.random() > 0.5 ? 'true' : 'false';
-        case '$randomalphanumeric': return Math.random().toString(36).substring(2, 10);
-        case '$randomipv4': return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
-        default: return utility;
-    }
+export interface SuggestionItem {
+    id: string;
+    label: string;
+    insertText: string;
+    type: 'utility-dynamic' | 'utility-static' | 'global' | 'path';
+    badge: string;
+    badgeClass: string;
+    description?: string;
+    exampleValue?: string;
 }
 
 @Component({
@@ -83,6 +68,7 @@ export class VariableInputComponent implements ControlValueAccessor {
 
     @ViewChild('inputField') inputField!: ElementRef<HTMLInputElement>;
     @ViewChild('overlayDiv') overlayDiv!: ElementRef<HTMLDivElement>;
+    @ViewChild('suggestionContainer') suggestionContainer?: ElementRef<HTMLDivElement>;
 
     charWidth = 0;
     isMouseInPopup = false;
@@ -134,66 +120,124 @@ export class VariableInputComponent implements ControlValueAccessor {
         return segments;
     });
 
-    suggestionState = computed(() => {
+    suggestionState = computed<{ type: 'none' | 'global' | 'path' | 'utility'; list: SuggestionItem[] }>(() => {
         if (this.suppressSuggestions()) {
-            return { type: 'none', list: [] as string[] };
+            return { type: 'none', list: [] };
         }
         const val = this.value();
         const cursor = this.currentCursorIndex();
         const textBeforeCursor = val.substring(0, cursor);
         const allVars = this.variableService.variables();
         
+        // 1. Double bracket global variables {{
         const lastOpenBracket = textBeforeCursor.lastIndexOf('{{');
         const lastCloseBracket = textBeforeCursor.lastIndexOf('}}');
         if (lastOpenBracket !== -1 && lastOpenBracket >= lastCloseBracket) {
             const searchToken = textBeforeCursor.substring(lastOpenBracket + 2).toLowerCase();
-            const globalKeys = allVars.filter(v => v.type === 'global' || !v.type).map(v => v.key);
+            const globalVars = allVars.filter(v => v.type === 'global' || !v.type);
+            const matched = globalVars.filter(v => (v.key || '').toLowerCase().includes(searchToken));
             return {
                 type: 'global',
-                list: globalKeys.filter(k => k.toLowerCase().includes(searchToken))
+                list: matched.map(v => ({
+                    id: `global-${v.key}`,
+                    label: v.key,
+                    insertText: v.key,
+                    type: 'global' as const,
+                    badge: 'Variable',
+                    badgeClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+                    description: v.value ? `Value: ${v.value}` : '(empty)'
+                }))
             };
         }
         
+        // 2. Path parameter :
         const lastColon = textBeforeCursor.lastIndexOf(':');
         if (lastColon !== -1) {
             const textAfterColon = textBeforeCursor.substring(lastColon + 1);
             if (/^[a-zA-Z0-9_-]*$/.test(textAfterColon)) {
                 const charBeforeColon = lastColon > 0 ? textBeforeCursor[lastColon - 1] : '/';
                 if (['/', '?', '&', '='].includes(charBeforeColon)) {
-                    const pathKeys = allVars.filter(v => v.type === 'path').map(v => v.key);
+                    const pathVars = allVars.filter(v => v.type === 'path');
+                    const matched = pathVars.filter(v => (v.key || '').toLowerCase().includes(textAfterColon.toLowerCase()));
                     return {
                         type: 'path',
-                        list: pathKeys.filter(k => k.toLowerCase().includes(textAfterColon.toLowerCase()))
+                        list: matched.map(v => ({
+                            id: `path-${v.key}`,
+                            label: v.key,
+                            insertText: v.key,
+                            type: 'path' as const,
+                            badge: 'Path',
+                            badgeClass: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+                            description: v.value ? `Value: ${v.value}` : '(empty)'
+                        }))
                     };
                 }
             }
         }
         
+        // 3. Utility variables $
         const lastDollar = textBeforeCursor.lastIndexOf('$');
         if (lastDollar !== -1) {
             const textAfterDollar = textBeforeCursor.substring(lastDollar); // Keep $ for matching
             if (/^\$[a-zA-Z0-9_]*$/.test(textAfterDollar)) {
+                const matchedUtils = UTILITIES.filter(k => k.toLowerCase().includes(textAfterDollar.toLowerCase()));
+                const list: SuggestionItem[] = [];
+                for (const u of matchedUtils) {
+                    const example = generateUtilityValue(u);
+                    const desc = getUtilityDescription(u);
+                    // Dynamic option
+                    list.push({
+                        id: `dyn-${u}`,
+                        label: u,
+                        insertText: u,
+                        type: 'utility-dynamic' as const,
+                        badge: 'Dynamic',
+                        badgeClass: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
+                        description: `${desc} • Regenerates on each request`
+                    });
+                    // One-time static option
+                    list.push({
+                        id: `static-${u}`,
+                        label: `${u} (One-time)`,
+                        insertText: example,
+                        type: 'utility-static' as const,
+                        badge: 'One-Time',
+                        badgeClass: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+                        exampleValue: example,
+                        description: `Value: ${example}`
+                    });
+                }
                 return {
                     type: 'utility',
-                    list: UTILITIES.filter(k => k.toLowerCase().includes(textAfterDollar.toLowerCase()))
+                    list
                 };
             }
         }
 
+        // 4. Single bracket global variables {
         const lastOpenSingle = textBeforeCursor.lastIndexOf('{');
         const lastCloseSingle = textBeforeCursor.lastIndexOf('}');
         if (lastOpenSingle !== -1 && lastOpenSingle >= lastCloseSingle) {
             const searchToken = textBeforeCursor.substring(lastOpenSingle + 1);
             if (/^[a-zA-Z0-9_-]*$/.test(searchToken)) {
-                const globalKeys = allVars.filter(v => v.type === 'global' || !v.type).map(v => v.key);
+                const globalVars = allVars.filter(v => v.type === 'global' || !v.type);
+                const matched = globalVars.filter(v => (v.key || '').toLowerCase().includes(searchToken.toLowerCase()));
                 return {
                     type: 'global',
-                    list: globalKeys.filter(k => k.toLowerCase().includes(searchToken.toLowerCase()))
+                    list: matched.map(v => ({
+                        id: `global-${v.key}`,
+                        label: v.key,
+                        insertText: v.key,
+                        type: 'global' as const,
+                        badge: 'Variable',
+                        badgeClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+                        description: v.value ? `Value: ${v.value}` : '(empty)'
+                    }))
                 };
             }
         }
 
-        return { type: 'none', list: [] as string[] };
+        return { type: 'none', list: [] };
     });
 
     constructor() {
@@ -229,7 +273,7 @@ export class VariableInputComponent implements ControlValueAccessor {
             paddingLeft = parseFloat(computedStyle.paddingLeft) || 12;
         }
 
-        const modalWidth = 150;
+        const modalWidth = 280;
         const totalTextWidth = this.currentCursorIndex() * charWidth;
         const offset = paddingLeft + totalTextWidth - this.inputScrollLeft();
         
@@ -299,6 +343,10 @@ export class VariableInputComponent implements ControlValueAccessor {
                 event.preventDefault();
                 this.setSuggestion(state.list[this.selectedIndex()]);
                 return;
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                this.suppressSuggestions.set(true);
+                return;
             }
         }
 
@@ -309,16 +357,12 @@ export class VariableInputComponent implements ControlValueAccessor {
     
     private scrollToSuggestion(index: number) {
         requestAnimationFrame(() => {
-            const el = document.getElementById(`suggestion-item-${index}`);
-            const parent = el?.parentElement;
-            if (el && parent) {
-                const elTop = el.offsetTop;
-                const elBottom = elTop + el.offsetHeight;
-                if (elTop < parent.scrollTop) {
-                    parent.scrollTop = elTop;
-                } else if (elBottom > parent.scrollTop + parent.clientHeight) {
-                    parent.scrollTop = elBottom - parent.clientHeight;
-                }
+            const container = this.suggestionContainer?.nativeElement;
+            if (!container) return;
+            const items = container.querySelectorAll('li');
+            const targetItem = items[index];
+            if (targetItem) {
+                targetItem.scrollIntoView({ block: 'nearest' });
             }
         });
     }
@@ -339,7 +383,7 @@ export class VariableInputComponent implements ControlValueAccessor {
         }
     }
     
-    setSuggestion(suggestion: string) {
+    setSuggestion(item: SuggestionItem) {
         const val = this.value();
         const cursor = this.currentCursorIndex();
         const state = this.suggestionState();
@@ -363,11 +407,11 @@ export class VariableInputComponent implements ControlValueAccessor {
                     afterCursor = textAfterCursor.substring(1);
                 }
                 
-                const newVal = beforeVar + '{{' + suggestion + '}}' + afterCursor;
+                const newVal = beforeVar + '{{' + item.insertText + '}}' + afterCursor;
                 this.value.set(newVal);
                 this.onChange(newVal);
                 
-                const newCursorPos = beforeVar.length + 2 + suggestion.length + 2;
+                const newCursorPos = beforeVar.length + 2 + item.insertText.length + 2;
                 this.restoreFocus(newCursorPos);
             }
         } else if (state.type === 'path') {
@@ -378,11 +422,11 @@ export class VariableInputComponent implements ControlValueAccessor {
                 const replaceLen = matchRest ? matchRest[0].length : 0;
                 const afterReplaced = textAfterCursor.substring(replaceLen);
                 
-                const newVal = beforeVar + suggestion + afterReplaced;
+                const newVal = beforeVar + item.insertText + afterReplaced;
                 this.value.set(newVal);
                 this.onChange(newVal);
                 
-                const newCursorPos = lastColon + 1 + suggestion.length;
+                const newCursorPos = lastColon + 1 + item.insertText.length;
                 this.restoreFocus(newCursorPos);
             }
         } else if (state.type === 'utility') {
@@ -393,12 +437,12 @@ export class VariableInputComponent implements ControlValueAccessor {
                 const replaceLen = matchRest ? matchRest[0].length : 0;
                 const afterReplaced = textAfterCursor.substring(replaceLen);
                 
-                const generatedVal = generateUtilityValue(suggestion);
-                const newVal = beforeVar + generatedVal + afterReplaced;
+                const valToInsert = item.insertText;
+                const newVal = beforeVar + valToInsert + afterReplaced;
                 this.value.set(newVal);
                 this.onChange(newVal);
                 
-                const newCursorPos = lastDollar + generatedVal.length;
+                const newCursorPos = lastDollar + valToInsert.length;
                 this.restoreFocus(newCursorPos);
             }
         }

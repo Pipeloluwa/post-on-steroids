@@ -250,7 +250,6 @@ export class RequestExecutionService {
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 encryptionLogs = encResult.logs || '';
-                if (encResult.logs) preRequestLogs += 'Encryption Logs:\n' + encResult.logs + '\n\n';
 
 
                 if (encResult.success && encResult.context) {
@@ -267,7 +266,6 @@ export class RequestExecutionService {
                 } else if (encResult.error) {
                     if (!this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                     encryptionLogs = `Encryption Error: ${encResult.error}`;
-                    preRequestLogs += `\nEncryption Error: ${encResult.error}\n\n`;
                     console.error(' [Encryption] ERROR - Encryption script failed:', encResult.error);
 
                     const errorStr = `Encryption Script Error:\n${encResult.error}`;

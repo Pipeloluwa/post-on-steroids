@@ -29,14 +29,20 @@
         style="background: transparent; position: relative; z-index: 10;" />
 
     @if(suggestionState().list.length > 0) {
-    <div #suggestionContainer class="absolute top-full mt-1 left-0 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-md shadow-lg z-50 max-h-[250px] overflow-y-auto"
-        [style.left.px]="cursorOffset()" [style.width.px]="150">
+    <div #suggestionContainer class="absolute top-full mt-1 left-0 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-md shadow-xl z-50 max-h-[260px] overflow-y-auto min-w-[280px] max-w-[360px]"
+        [style.left.px]="cursorOffset()">
         <ul class="flex flex-col py-1">
-            @for(suggestion of suggestionState().list; track suggestion; let i = $index) {
-            <li [id]="'suggestion-item-' + i" (mousedown)="$event.preventDefault(); setSuggestion(suggestion)"
-                class="px-3 py-1.5 text-sm text-(--postonsteroids-text-primary) cursor-pointer font-mono truncate"
+            @for(item of suggestionState().list; track item.id; let i = $index) {
+            <li (mousedown)="$event.preventDefault(); setSuggestion(item)"
+                class="px-3 py-1.5 flex flex-col gap-0.5 cursor-pointer transition-colors border-b border-(--postonsteroids-border)/15 last:border-b-0"
                 [class.bg-(--postonsteroids-bg-hover)]="i === selectedIndex()">
-                {{suggestion}}
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-[12px] font-mono text-(--postonsteroids-text-primary) font-medium truncate">{{item.label}}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded border font-sans font-medium whitespace-nowrap shrink-0" [class]="item.badgeClass">{{item.badge}}</span>
+                </div>
+                @if (item.description) {
+                <span class="text-[11px] text-(--postonsteroids-text-muted) truncate font-mono">{{item.description}}</span>
+                }
             </li>
             }
         </ul>

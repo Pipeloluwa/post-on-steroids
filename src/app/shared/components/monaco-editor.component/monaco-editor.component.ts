@@ -6,6 +6,7 @@ import { ThemeService } from '../../services/theme.service';
 import { TabStateService } from '../../services/tab.state.service';
 import { VariableService } from '../../services/variable.service';
 import { MatIcon } from '@angular/material/icon';
+import { UTILITIES, generateUtilityValue, getUtilityDescription } from '../../utils/utility-variables';
 
 @Component({
   selector: 'app-monaco-editor',
@@ -366,21 +367,37 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
                       endColumn: position.column + replaceLenAfter
                     };
 
-                    const UTILITIES = [
-                      'guid', 'timestamp', 'randomInt', 'randomUUID', 
-                      'randomEmail', 'randomName', 'randomWord', 'randomColor', 
-                      'randomCity', 'randomStreetAddress', 'randomPhoneNumber',
-                      'randomBoolean', 'randomAlphaNumeric', 'randomIPv4'
-                    ];
-                    const suggestions = UTILITIES.map(u => ({
-                      label: `$${u}`,
-                      filterText: `$${u}`,
-                      kind: monacoGlobal.languages.CompletionItemKind.Function,
-                      insertText: `$${u}`,
-                      range: replaceRange,
-                      detail: 'Utility Variable',
-                      documentation: `Generates a dynamic ${u} at request execution time`
-                    }));
+                    const suggestions: any[] = [];
+                    for (const u of UTILITIES) {
+                      const cleanU = u.slice(1);
+                      const desc = getUtilityDescription(u);
+                      const exampleVal = generateUtilityValue(u);
+
+                      // 1. Dynamic option: autogenerates on each request
+                      suggestions.push({
+                        label: u,
+                        filterText: u,
+                        sortText: `0_${cleanU}`,
+                        kind: monacoGlobal.languages.CompletionItemKind.Function,
+                        insertText: u,
+                        range: replaceRange,
+                        detail: 'Dynamic (Autogenerates on each request)',
+                        documentation: `${desc}\n\nInserts ${u}. A fresh value will be generated dynamically every time you send this request.`
+                      });
+
+                      // 2. One-time static option: inserts one-off literal value
+                      const preview = exampleVal.length > 20 ? exampleVal.slice(0, 18) + '...' : exampleVal;
+                      suggestions.push({
+                        label: `${u} (one-time: ${preview})`,
+                        filterText: u,
+                        sortText: `1_${cleanU}`,
+                        kind: monacoGlobal.languages.CompletionItemKind.Value,
+                        insertText: exampleVal,
+                        range: replaceRange,
+                        detail: `One-time value: ${exampleVal}`,
+                        documentation: `Inserts the static value "${exampleVal}" immediately into the body.`
+                      });
+                    }
                     return { suggestions, incomplete: true };
                   }
                 }
