@@ -9,13 +9,14 @@ import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ChangeDetectionStrategy } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
+import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 
 import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle, parseJsonSafe } from '../../../shared/utils/format.utils';
 
 @Component({
   selector: 'app-body-types-component',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, MonacoEditorComponent],
+  imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, MonacoEditorComponent, VariableInputComponent],
   templateUrl: './body.types.component.html',
   styleUrl: './body.types.component.css',
   host: {
@@ -38,7 +39,7 @@ export class BodyTypesComponent {
       const saved = localStorage.getItem('onsteroids_body_wrap_style') as WrapStyle | null;
       if (saved && ['pretty', 'key-field', 'word-wrap', 'collapsed'].includes(saved)) return saved;
     }
-    return 'pretty';
+    return 'word-wrap';
   });
   isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
   wrapResponse = computed(() => this.isWordWrap());

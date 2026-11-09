@@ -128,9 +128,22 @@
                 <mat-icon class="text-[14px]! size-[14px]!">bookmark_add</mat-icon>
                 <span>Example</span>
             </button>
-            <button (click)="copyResponse()" title="Copy Response"
-                class="h-[28px] px-2.5 flex items-center justify-center rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                <mat-icon class="text-[16px]! size-[16px]!">content_copy</mat-icon>
+            <button (click)="copyResponse()" [title]="copiedButton() === 'response' ? 'Copied!' : 'Copy Response'"
+                class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border transition-all duration-200 cursor-pointer"
+                [class.bg-emerald-500/15]="copiedButton() === 'response'"
+                [class.border-emerald-500/50]="copiedButton() === 'response'"
+                [class.text-emerald-400]="copiedButton() === 'response'"
+                [class.bg-(--postonsteroids-bg-tertiary)/50]="copiedButton() !== 'response'"
+                [class.border-(--postonsteroids-border)/30]="copiedButton() !== 'response'"
+                [class.hover:bg-(--postonsteroids-bg-hover)]="copiedButton() !== 'response'"
+                [class.text-(--postonsteroids-text-muted)]="copiedButton() !== 'response'"
+                [class.hover:text-(--postonsteroids-text-primary)]="copiedButton() !== 'response'">
+                @if (copiedButton() === 'response') {
+                    <mat-icon class="text-[16px]! size-[16px]! text-emerald-400">check</mat-icon>
+                    <span class="text-[11px] font-medium text-emerald-400">Copied</span>
+                } @else {
+                    <mat-icon class="text-[16px]! size-[16px]!">content_copy</mat-icon>
+                }
             </button>
         </div>
     </div>
@@ -182,9 +195,19 @@
             @if (responseCookies().length > 0) {
             <!-- Actions Bar -->
             <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
-                <button (click)="copyCookies()" title="Copy Cookies"
-                    class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                    <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                <button (click)="copyCookies()" [title]="copiedButton() === 'cookies' ? 'Copied!' : 'Copy Cookies'"
+                    class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
+                    [class.text-emerald-400]="copiedButton() === 'cookies'"
+                    [class.bg-emerald-500/15]="copiedButton() === 'cookies'"
+                    [class.text-(--postonsteroids-text-muted)]="copiedButton() !== 'cookies'"
+                    [class.hover:text-(--postonsteroids-text-primary)]="copiedButton() !== 'cookies'"
+                    [class.hover:bg-(--postonsteroids-bg-hover)]="copiedButton() !== 'cookies'">
+                    @if (copiedButton() === 'cookies') {
+                        <mat-icon class="text-[18px]! size-[18px]! text-emerald-400">check</mat-icon>
+                        <span class="text-[11px] font-medium text-emerald-400">Copied</span>
+                    } @else {
+                        <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                    }
                 </button>
             </div>
             }
@@ -229,9 +252,19 @@
             @if (responseHeaders().length > 0) {
             <!-- Actions Bar -->
             <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
-                <button (click)="copyHeaders()" title="Copy Headers"
-                    class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                    <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                <button (click)="copyHeaders()" [title]="copiedButton() === 'headers' ? 'Copied!' : 'Copy Headers'"
+                    class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
+                    [class.text-emerald-400]="copiedButton() === 'headers'"
+                    [class.bg-emerald-500/15]="copiedButton() === 'headers'"
+                    [class.text-(--postonsteroids-text-muted)]="copiedButton() !== 'headers'"
+                    [class.hover:text-(--postonsteroids-text-primary)]="copiedButton() !== 'headers'"
+                    [class.hover:bg-(--postonsteroids-bg-hover)]="copiedButton() !== 'headers'">
+                    @if (copiedButton() === 'headers') {
+                        <mat-icon class="text-[18px]! size-[18px]! text-emerald-400">check</mat-icon>
+                        <span class="text-[11px] font-medium text-emerald-400">Copied</span>
+                    } @else {
+                        <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                    }
                 </button>
             </div>
             }
@@ -273,9 +306,19 @@
             @if (testResults().length > 0) {
             <!-- Actions Bar -->
             <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
-                <button (click)="copyTestResults()" title="Copy Test Results"
-                    class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                    <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                <button (click)="copyTestResults()" [title]="copiedButton() === 'test-results' ? 'Copied!' : 'Copy Test Results'"
+                    class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
+                    [class.text-emerald-400]="copiedButton() === 'test-results'"
+                    [class.bg-emerald-500/15]="copiedButton() === 'test-results'"
+                    [class.text-(--postonsteroids-text-muted)]="copiedButton() !== 'test-results'"
+                    [class.hover:text-(--postonsteroids-text-primary)]="copiedButton() !== 'test-results'"
+                    [class.hover:bg-(--postonsteroids-bg-hover)]="copiedButton() !== 'test-results'">
+                    @if (copiedButton() === 'test-results') {
+                        <mat-icon class="text-[18px]! size-[18px]! text-emerald-400">check</mat-icon>
+                        <span class="text-[11px] font-medium text-emerald-400">Copied</span>
+                    } @else {
+                        <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                    }
                 </button>
             </div>
             }
@@ -325,9 +368,19 @@
                         class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
                         <mat-icon class="text-[18px]! size-[18px]!">{{ wrapConsole() ? 'wrap_text' : 'text_fields' }}</mat-icon>
                     </button>
-                    <button (click)="copyEncryptionConsole()" title="Copy Console"
-                        class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                        <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                    <button (click)="copyEncryptionConsole()" [title]="copiedButton() === 'encryption-console' ? 'Copied!' : 'Copy Console'"
+                        class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
+                        [class.text-emerald-400]="copiedButton() === 'encryption-console'"
+                        [class.bg-emerald-500/15]="copiedButton() === 'encryption-console'"
+                        [class.text-(--postonsteroids-text-muted)]="copiedButton() !== 'encryption-console'"
+                        [class.hover:text-(--postonsteroids-text-primary)]="copiedButton() !== 'encryption-console'"
+                        [class.hover:bg-(--postonsteroids-bg-hover)]="copiedButton() !== 'encryption-console'">
+                        @if (copiedButton() === 'encryption-console') {
+                            <mat-icon class="text-[18px]! size-[18px]! text-emerald-400">check</mat-icon>
+                            <span class="text-[11px] font-medium text-emerald-400">Copied</span>
+                        } @else {
+                            <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                        }
                     </button>
                 </div>
             </div>
@@ -375,9 +428,19 @@
                         class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
                         <mat-icon class="text-[18px]! size-[18px]!">{{ wrapConsole() ? 'wrap_text' : 'text_fields' }}</mat-icon>
                     </button>
-                    <button (click)="copyScriptConsole()" title="Copy Console"
-                        class="p-1 px-3 hover:bg-(--postonsteroids-bg-hover) rounded transition-colors duration-200 cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                        <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                    <button (click)="copyScriptConsole()" [title]="copiedButton() === 'script-console' ? 'Copied!' : 'Copy Console'"
+                        class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
+                        [class.text-emerald-400]="copiedButton() === 'script-console'"
+                        [class.bg-emerald-500/15]="copiedButton() === 'script-console'"
+                        [class.text-(--postonsteroids-text-muted)]="copiedButton() !== 'script-console'"
+                        [class.hover:text-(--postonsteroids-text-primary)]="copiedButton() !== 'script-console'"
+                        [class.hover:bg-(--postonsteroids-bg-hover)]="copiedButton() !== 'script-console'">
+                        @if (copiedButton() === 'script-console') {
+                            <mat-icon class="text-[18px]! size-[18px]! text-emerald-400">check</mat-icon>
+                            <span class="text-[11px] font-medium text-emerald-400">Copied</span>
+                        } @else {
+                            <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
+                        }
                     </button>
                 </div>
                 }

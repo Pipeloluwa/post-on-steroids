@@ -1,4 +1,5 @@
 import { Component, signal, inject, effect, PLATFORM_ID, ViewChild } from '@angular/core';
+import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
@@ -27,7 +28,8 @@ import { RequestExecutionService } from '../../shared/services/request.execution
         PayloadTypesComponent,
         ResponseViewerComponent,
         CreateCapsuleModalComponent,
-        MatIcon
+        MatIcon,
+        DragDropModule
     ],
     templateUrl: './workspace.component.html',
     styleUrl: './workspace.component.css',
@@ -236,6 +238,10 @@ export class WorkspaceComponent {
             case 'DELETE': return '#FF5233';
             default: return 'var(--postonsteroids-text-primary)';
         }
+    }
+
+    onDropVerticalRequest(event: CdkDragDrop<any[]>) {
+        this.tabStateService.reorderCapsuleRequests(event.previousIndex, event.currentIndex);
     }
 
     openRequest(request: any) {

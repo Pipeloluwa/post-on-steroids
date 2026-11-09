@@ -666,6 +666,32 @@ export class TabStateService {
         return this.examplesLoadingMap().has(requestId);
     }
 
+    // Tab Navigation History
+    tabNavigationStack = signal<string[]>([]);
+    tabNavigationIndex = signal<number>(-1);
+    private isNavigatingHistory = false;
+
+    canNavigateBack = computed(() => this.tabNavigationIndex() > 0);
+    canNavigateForward = computed(() => {
+        const idx = this.tabNavigationIndex();
+        return idx >= 0 && idx < this.tabNavigationStack().length - 1;
+    });
+
+    // Custom order of requests per capsule (drives vertical sidebar list rearrangement)
+    capsuleRequestOrderMap = signal<Map<string, string[]>>(new Map());
+
+    private loadCapsuleRequestOrder(capId: string): string[] | null {
+        if (!this.isBrowser || !capId) return null;
+        try {
+            const raw = localStorage.getItem(`onsteroids_capsule_order_${capId}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        } catch { }
+        return null;
+    }
+
     private historyStack = new Map<string, { past: Partial<RequestState>[], future: Partial<RequestState>[] }>();
 
     // Shared capsule list (drives both workspace sidebar and Capsules page)
@@ -690,8 +716,52 @@ export class TabStateService {
         for (const req of inMemory) {
             map.set(req.id, req);
         }
-        return Array.from(map.values());
+        const all = Array.from(map.values());
+
+        const order = this.capsuleRequestOrderMap().get(capId) || this.loadCapsuleRequestOrder(capId);
+        if (order && order.length > 0) {
+            const orderIndexMap = new Map<string, number>();
+            order.forEach((id, idx) => orderIndexMap.set(id, idx));
+
+            all.sort((a, b) => {
+                const idxA = orderIndexMap.has(a.id) ? orderIndexMap.get(a.id)! : 999999;
+                const idxB = orderIndexMap.has(b.id) ? orderIndexMap.get(b.id)! : 999999;
+                return idxA - idxB;
+            });
+        }
+
+        return all;
     });
+
+    reorderCapsuleRequests(previousIndex: number, currentIndex: number) {
+        const capId = this.activeCapsuleId();
+        const currentList = this.allCapsuleRequests();
+        if (
+            previousIndex === currentIndex ||
+            previousIndex < 0 || currentIndex < 0 ||
+            previousIndex >= currentList.length || currentIndex >= currentList.length
+        ) {
+            return;
+        }
+
+        const nextIds = currentList.map(r => r.id);
+        const [movedId] = nextIds.splice(previousIndex, 1);
+        nextIds.splice(currentIndex, 0, movedId);
+
+        this.capsuleRequestOrderMap.update(m => {
+            const newMap = new Map(m);
+            newMap.set(capId, nextIds);
+            return newMap;
+        });
+
+        if (this.isBrowser) {
+            localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextIds));
+        }
+
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
+    }
 
     getCapsuleRequestsSync(capsuleId: string): RequestState[] {
         if (!capsuleId) return [];
@@ -957,7 +1027,7 @@ export class TabStateService {
         }, 0);
     }
 
-    setActiveTab(id: string) {
+    setActiveTab(id: string, isHistoryNavigation: boolean = false) {
         if (!this.states().has(id)) {
             this.states.update(map => {
                 map.set(id, this.getDefaultState(id));
@@ -971,7 +1041,53 @@ export class TabStateService {
 
         this.activeTabId.set(id);
 
+        if (!isHistoryNavigation && !this.isNavigatingHistory) {
+            const stack = this.tabNavigationStack();
+            const idx = this.tabNavigationIndex();
+            if (idx === -1 || stack[idx] !== id) {
+                const newStack = stack.slice(0, idx + 1);
+                newStack.push(id);
+                this.tabNavigationStack.set(newStack);
+                this.tabNavigationIndex.set(newStack.length - 1);
+            }
+        }
+
         this.syncActiveTabToBackend();
+    }
+
+    navigateBack(): string | null {
+        const idx = this.tabNavigationIndex();
+        if (idx > 0) {
+            this.isNavigatingHistory = true;
+            try {
+                const nextIdx = idx - 1;
+                this.tabNavigationIndex.set(nextIdx);
+                const targetId = this.tabNavigationStack()[nextIdx];
+                this.setActiveTab(targetId, true);
+                return targetId;
+            } finally {
+                this.isNavigatingHistory = false;
+            }
+        }
+        return null;
+    }
+
+    navigateForward(): string | null {
+        const idx = this.tabNavigationIndex();
+        const stack = this.tabNavigationStack();
+        if (idx >= 0 && idx < stack.length - 1) {
+            this.isNavigatingHistory = true;
+            try {
+                const nextIdx = idx + 1;
+                this.tabNavigationIndex.set(nextIdx);
+                const targetId = stack[nextIdx];
+                this.setActiveTab(targetId, true);
+                return targetId;
+            } finally {
+                this.isNavigatingHistory = false;
+            }
+        }
+        return null;
     }
 
     getAllOpenTabs(): RequestState[] {
@@ -3348,8 +3464,8 @@ export class TabStateService {
             responseHeaders: [],
             testResults: [],
             editorScrollPositions: {},
-            bodyWrapStyle: (this.isBrowser ? localStorage.getItem('onsteroids_body_wrap_style') as any : null) || 'pretty',
-            responseWrapStyle: (this.isBrowser ? localStorage.getItem('onsteroids_response_wrap_style') as any : null) || 'pretty',
+            bodyWrapStyle: (this.isBrowser ? localStorage.getItem('onsteroids_body_wrap_style') as any : null) || 'word-wrap',
+            responseWrapStyle: (this.isBrowser ? localStorage.getItem('onsteroids_response_wrap_style') as any : null) || 'word-wrap',
             responseActiveMode: (this.isBrowser ? localStorage.getItem('onsteroids_response_active_mode') as any : null) || 'Pretty',
             consoleWrap: this.isBrowser ? localStorage.getItem('onsteroids_console_wrap') === 'true' : false,
             executionToken: 0,

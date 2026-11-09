@@ -80,6 +80,14 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     wordWrap: this.wordWrap() ? 'on' : 'off',
     fontSize: 13,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+    quickSuggestions: {
+      other: true,
+      comments: 'on',
+      strings: 'on'
+    },
+    suggestOnTriggerCharacters: true,
+    acceptSuggestionOnEnter: 'on',
+    tabCompletion: 'on',
   }));
 
   private editorInstance = signal<any>(null);
@@ -132,6 +140,8 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
           overviewRulerBorder: false,
           hideCursorInOverviewRuler: true,
           scrollBeyondLastColumn: 4,
+          quickSuggestions: { other: true, comments: 'on', strings: 'on' },
+          suggestOnTriggerCharacters: true,
         });
 
         if (this.enableEncryptionToggles()) {
@@ -270,6 +280,15 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     this.editorInstance.set(editor);
     this.isEditorLoaded.set(true);
 
+    if (editor?.updateOptions) {
+      editor.updateOptions({
+        quickSuggestions: { other: true, comments: 'on', strings: 'on' },
+        suggestOnTriggerCharacters: true,
+        acceptSuggestionOnEnter: 'on',
+        tabCompletion: 'on'
+      });
+    }
+
     editor.onDidFocusEditorText?.(() => {
       MonacoEditorComponent.lastFocusedEditor = this;
     });
@@ -323,70 +342,91 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
           });
         }
 
-        const lang = this.language();
-        if (!MonacoEditorComponent.completionProvidersRegistered.has(lang)) {
-          monacoGlobal.languages.registerCompletionItemProvider(lang, {
-            triggerCharacters: ['{', '$'],
-            provideCompletionItems: (model: any, position: any) => {
-              const word = model.getWordUntilPosition(position);
-              const lineContent = model.getLineContent(position.lineNumber);
-              const textBeforeWord = lineContent.substring(0, word.startColumn - 1);
-              
-              const isDoubleOpen = textBeforeWord.endsWith('{{');
-              const isUtility = !isDoubleOpen && textBeforeWord.endsWith('$');
+        const targetLanguages = Array.from(new Set(['json', 'javascript', 'typescript', 'text', 'plaintext', 'html', 'xml', this.language()]));
+        for (const lang of targetLanguages) {
+          if (!MonacoEditorComponent.completionProvidersRegistered.has(lang)) {
+            monacoGlobal.languages.registerCompletionItemProvider(lang, {
+              triggerCharacters: ['{', '$'],
+              provideCompletionItems: (model: any, position: any) => {
+                const lineContent = model.getLineContent(position.lineNumber);
+                const textUntilCursor = lineContent.substring(0, position.column - 1);
+                const textAfterCursor = lineContent.substring(position.column - 1);
 
-              if (isDoubleOpen || isUtility) {
-                const textAfterWord = lineContent.substring(word.endColumn - 1);
-                let consumeClosing = 0;
-                if (!isUtility) {
-                  if (textAfterWord.startsWith('}}')) {
-                    consumeClosing = 2;
-                  } else if (textAfterWord.startsWith('}')) {
-                    consumeClosing = 1;
+                // 1. Utility variables ($guid, $timestamp, $randomUUID, etc.)
+                const lastDollar = textUntilCursor.lastIndexOf('$');
+                if (lastDollar !== -1) {
+                  const textAfterDollar = textUntilCursor.substring(lastDollar);
+                  if (/^\$[a-zA-Z0-9_]*$/.test(textAfterDollar)) {
+                    const matchAfter = textAfterCursor.match(/^[a-zA-Z0-9_]*/);
+                    const replaceLenAfter = matchAfter ? matchAfter[0].length : 0;
+                    const replaceRange = {
+                      startLineNumber: position.lineNumber,
+                      endLineNumber: position.lineNumber,
+                      startColumn: lastDollar + 1,
+                      endColumn: position.column + replaceLenAfter
+                    };
+
+                    const UTILITIES = [
+                      'guid', 'timestamp', 'randomInt', 'randomUUID', 
+                      'randomEmail', 'randomName', 'randomWord', 'randomColor', 
+                      'randomCity', 'randomStreetAddress', 'randomPhoneNumber',
+                      'randomBoolean', 'randomAlphaNumeric', 'randomIPv4'
+                    ];
+                    const suggestions = UTILITIES.map(u => ({
+                      label: `$${u}`,
+                      filterText: `$${u}`,
+                      kind: monacoGlobal.languages.CompletionItemKind.Function,
+                      insertText: `$${u}`,
+                      range: replaceRange,
+                      detail: 'Utility Variable',
+                      documentation: `Generates a dynamic ${u} at request execution time`
+                    }));
+                    return { suggestions, incomplete: true };
                   }
                 }
 
-                const replaceRange = {
-                  startLineNumber: position.lineNumber,
-                  endLineNumber: position.lineNumber,
-                  startColumn: word.startColumn,
-                  endColumn: word.endColumn + consumeClosing
-                };
+                // 2. Global variables ({{varName}})
+                const lastDoubleOpen = textUntilCursor.lastIndexOf('{{');
+                const lastDoubleClose = textUntilCursor.lastIndexOf('}}');
+                if (lastDoubleOpen !== -1 && lastDoubleOpen >= lastDoubleClose) {
+                  const textAfterOpen = textUntilCursor.substring(lastDoubleOpen + 2);
+                  if (/^[a-zA-Z0-9_\-\s]*$/.test(textAfterOpen)) {
+                    let consumeClosing = 0;
+                    if (textAfterCursor.startsWith('}}')) {
+                      consumeClosing = 2;
+                    } else if (textAfterCursor.startsWith('}')) {
+                      consumeClosing = 1;
+                    }
+                    const matchAfter = textAfterCursor.substring(consumeClosing).match(/^[a-zA-Z0-9_\-]*/);
+                    const replaceLenAfter = matchAfter ? matchAfter[0].length : 0;
 
-                if (isUtility) {
-                  const UTILITIES = [
-                    'guid', 'timestamp', 'randomInt', 'randomUUID', 
-                    'randomEmail', 'randomName', 'randomWord', 'randomColor', 
-                    'randomCity', 'randomStreetAddress', 'randomPhoneNumber',
-                    'randomBoolean', 'randomAlphaNumeric', 'randomIPv4'
-                  ];
-                  const suggestions = UTILITIES.map(u => ({
-                    label: `$${u}`,
-                    kind: monacoGlobal.languages.CompletionItemKind.Function,
-                    insertText: u,
-                    range: replaceRange,
-                    detail: 'Utility Variable',
-                    documentation: `Generates a random ${u}`
-                  }));
-                  return { suggestions, incomplete: true };
+                    const replaceRange = {
+                      startLineNumber: position.lineNumber,
+                      endLineNumber: position.lineNumber,
+                      startColumn: lastDoubleOpen + 1,
+                      endColumn: position.column + consumeClosing + replaceLenAfter
+                    };
+
+                    const varService = MonacoEditorComponent.variableServiceRef;
+                    const variables = varService ? varService.variables() : [];
+                    const suggestions = variables.map((v: any) => ({
+                      label: `{{${v.key}}}`,
+                      filterText: `{{${v.key}}}`,
+                      kind: monacoGlobal.languages.CompletionItemKind.Variable,
+                      insertText: `{{${v.key}}}`,
+                      range: replaceRange,
+                      detail: `Value: ${v.value || '(empty)'}`,
+                      documentation: `Variable: {{${v.key}}}`
+                    }));
+                    return { suggestions, incomplete: true };
+                  }
                 }
 
-                const varService = MonacoEditorComponent.variableServiceRef;
-                const variables = varService ? varService.variables() : [];
-                const suggestions = variables.map((v: any) => ({
-                  label: v.key,
-                  kind: monacoGlobal.languages.CompletionItemKind.Variable,
-                  insertText: `${v.key}}}`,
-                  range: replaceRange,
-                  detail: `Value: ${v.value || '(empty)'}`,
-                  documentation: `Variable: {{${v.key}}}`
-                }));
-                return { suggestions, incomplete: true };
+                return { suggestions: [] };
               }
-              return { suggestions: [] };
-            }
-          });
-          MonacoEditorComponent.completionProvidersRegistered.add(lang);
+            });
+            MonacoEditorComponent.completionProvidersRegistered.add(lang);
+          }
         }
       }
     }

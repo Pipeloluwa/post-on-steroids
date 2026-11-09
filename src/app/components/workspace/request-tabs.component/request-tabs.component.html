@@ -4,13 +4,15 @@
 
     <!-- History Navigation -->
     <div class="flex items-center h-full border-r border-(--postonsteroids-border)">
-        <button (click)="goBack()" [disabled]="historyIndex() === 0"
-            class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors">
+        <button (click)="goBack()" [disabled]="!canGoBack()"
+            class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors"
+            title="Go back (previous tab)">
             <mat-icon
                 class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_back</mat-icon>
         </button>
-        <button (click)="goForward()" [disabled]="historyIndex() === historyStack().length - 1"
-            class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors">
+        <button (click)="goForward()" [disabled]="!canGoForward()"
+            class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors"
+            title="Go forward (next tab)">
             <mat-icon
                 class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_forward</mat-icon>
         </button>

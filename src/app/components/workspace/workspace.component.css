@@ -2,3 +2,17 @@
     display: flex;
     height: 100%;
 }
+
+.cdk-drag-preview {
+    background: var(--postonsteroids-bg-secondary);
+    border: 1px solid var(--postonsteroids-border);
+    box-shadow: 0 10px 24px var(--postonsteroids-shadow);
+}
+
+.cdk-drag-placeholder {
+    opacity: 0.35;
+}
+
+.cdk-drop-list-dragging div:not(.cdk-drag-placeholder) {
+    transition: transform 160ms ease;
+}

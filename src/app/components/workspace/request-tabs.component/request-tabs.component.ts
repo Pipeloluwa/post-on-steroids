@@ -143,8 +143,8 @@ export class RequestTabsComponent {
         }, 0);
     }
 
-    historyStack = signal<string[]>([]);
-    historyIndex = signal<number>(-1);
+    canGoBack = this.tabStateService.canNavigateBack;
+    canGoForward = this.tabStateService.canNavigateForward;
 
     canScrollLeft = signal<boolean>(false);
     canScrollRight = signal<boolean>(true);
@@ -164,17 +164,7 @@ export class RequestTabsComponent {
     @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
 
     constructor() {
-        effect(() => {
-            const activeId = this.tabStateService.activeTabId();
-            if (activeId && !this.historyStack().includes(activeId)) {
-                const currentStack = this.historyStack().slice(0, this.historyIndex() + 1);
-                this.historyStack.set([...currentStack, activeId]);
-                this.historyIndex.set(this.historyStack().length - 1);
-            } else if (!activeId) {
-                this.historyStack.set([]);
-                this.historyIndex.set(-1);
-            }
-        });
+        
 
         effect(() => {
             const loading = this.isTabsLoading();
@@ -353,33 +343,22 @@ export class RequestTabsComponent {
         }
     }
 
-    setActiveTab(id: string, isHistoryNav: boolean = false) {
+    setActiveTab(id: string) {
         if (this.activeTabId() === id) return;
-
         this.tabStateService.setActiveTab(id);
-
-        if (!isHistoryNav) {
-            const currentStack = this.historyStack().slice(0, this.historyIndex() + 1);
-            this.historyStack.set([...currentStack, id]);
-            this.historyIndex.set(this.historyStack().length - 1);
-        }
     }
 
     goBack() {
-        if (this.historyIndex() > 0) {
-            this.historyIndex.update(i => i - 1);
-            const prevTabId = this.historyStack()[this.historyIndex()];
-            this.setActiveTab(prevTabId, true);
-            this.scrollToTab(prevTabId);
+        const targetId = this.tabStateService.navigateBack();
+        if (targetId) {
+            this.scrollToTab(targetId);
         }
     }
 
     goForward() {
-        if (this.historyIndex() < this.historyStack().length - 1) {
-            this.historyIndex.update(i => i + 1);
-            const nextTabId = this.historyStack()[this.historyIndex()];
-            this.setActiveTab(nextTabId, true);
-            this.scrollToTab(nextTabId);
+        const targetId = this.tabStateService.navigateForward();
+        if (targetId) {
+            this.scrollToTab(targetId);
         }
     }
 

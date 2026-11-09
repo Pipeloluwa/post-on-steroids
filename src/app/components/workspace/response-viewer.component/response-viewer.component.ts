@@ -45,7 +45,7 @@ export class ResponseViewerComponent {
             const saved = localStorage.getItem('onsteroids_response_wrap_style') as WrapStyle | null;
             if (saved && ['pretty', 'key-field', 'word-wrap', 'collapsed'].includes(saved)) return saved;
         }
-        return 'pretty';
+        return 'word-wrap';
     });
     isWordWrap = computed(() => this.wrapStyle() === 'word-wrap' || this.wrapStyle() === 'collapsed');
     wrapResponse = computed(() => this.isWordWrap());
@@ -312,39 +312,55 @@ export class ResponseViewerComponent {
         const formatted = this.formattedResponseBody();
         const raw = this.responseBody();
         const data = formatted || (raw !== null && raw !== undefined ? (typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2)) : '');
-        this.copyToClipboard(data, 'Response copied to clipboard');
+        this.copyToClipboard(data, 'Response copied to clipboard', 'response');
     }
 
     copyEncryptionConsole() {
-        this.copyToClipboard(this.encryptionConsole(), 'Encryption console copied to clipboard');
+        this.copyToClipboard(this.encryptionConsole(), 'Encryption console copied to clipboard', 'encryption-console');
     }
 
     copyScriptConsole() {
-        this.copyToClipboard(this.activeScriptConsoleOutput(), 'Script console copied to clipboard');
+        this.copyToClipboard(this.activeScriptConsoleOutput(), 'Script console copied to clipboard', 'script-console');
     }
 
     copyTestResults() {
         const results = this.testResults().map(t => `${t.passed ? '✓' : '✗'} ${t.name}`).join('\n');
-        this.copyToClipboard(results, 'Test results copied to clipboard');
+        this.copyToClipboard(results, 'Test results copied to clipboard', 'test-results');
     }
 
     copyHeaders() {
         const hdrs = this.responseHeaders().filter(h => h.enabled).map(h => `${h.key}: ${h.value}`).join('\n');
-        this.copyToClipboard(hdrs, 'Headers copied to clipboard');
+        this.copyToClipboard(hdrs, 'Headers copied to clipboard', 'headers');
     }
 
     copyCookies() {
         const cks = this.responseCookies().map(c => `${c.name}=${c.value}; Domain=${c.domain}; Path=${c.path}; Expires=${c.expires}`).join('\n');
-        this.copyToClipboard(cks, 'Cookies copied to clipboard');
+        this.copyToClipboard(cks, 'Cookies copied to clipboard', 'cookies');
     }
 
-    private copyToClipboard(text: string, message = 'Copied to clipboard') {
+    copiedButton = signal<string | null>(null);
+    private copiedTimeout: any = null;
+
+    private setCopiedButton(key?: string) {
+        if (!key) return;
+        if (this.copiedTimeout) {
+            clearTimeout(this.copiedTimeout);
+        }
+        this.copiedButton.set(key);
+        this.copiedTimeout = setTimeout(() => {
+            this.copiedButton.set(null);
+            this.copiedTimeout = null;
+        }, 2000);
+    }
+
+    private copyToClipboard(text: string, message = 'Copied to clipboard', key?: string) {
         if (!text) {
             this.notificationService.notify('Nothing to copy');
             return;
         }
         navigator.clipboard.writeText(text);
         this.notificationService.notify(message);
+        this.setCopiedButton(key);
     }
 
     toggleConsoleWrap() {
