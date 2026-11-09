@@ -43,10 +43,12 @@ export class ExportComponent {
                     ? this.variableService.variables()
                     : this.variableService.getCachedVariablesForCapsule(capsule.id);
 
+                const groups = this.tabStateService.getGroupsForCapsule(capsule.id);
                 exportedCapsules.push({
                     id: capsule.id,
                     name: capsule.name,
                     requests,
+                    groups,
                     variables: vars
                 });
             }
@@ -62,6 +64,7 @@ export class ExportComponent {
                     exportedAt: new Date().toISOString(),
                     capsules: [single],
                     requests: single.requests,
+                    groups: single.groups,
                     variables: single.variables
                 };
                 const safeName = single.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
@@ -103,10 +106,12 @@ export class ExportComponent {
                     ? this.variableService.variables()
                     : this.variableService.getCachedVariablesForCapsule(capsule.id);
 
+                const groups = this.tabStateService.getGroupsForCapsule(capsule.id);
                 exportedCapsules.push({
                     id: capsule.id,
                     name: capsule.name,
                     requests,
+                    groups,
                     variables: vars
                 });
             }

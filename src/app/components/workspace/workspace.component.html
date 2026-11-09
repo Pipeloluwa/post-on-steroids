@@ -64,6 +64,12 @@
                 </div>
                 <div class="flex items-center gap-x-1">
                     @if (selectedRequestIds().size > 0) {
+                        <button (click)="groupSelectedRequests($event)"
+                                title="Group selected requests into a folder"
+                                class="p-0.5 px-1.5 rounded bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 text-(--postonsteroids-accent) text-[10px] font-bold flex items-center gap-x-0.5 cursor-pointer transition-colors">
+                            <mat-icon class="text-[12px]! size-[12px]!">create_new_folder</mat-icon>
+                            <span>Group ({{ selectedRequestIds().size }})</span>
+                        </button>
                         <button (click)="batchDeleteSelectedRequests()"
                                 [disabled]="isDeletingRequests()"
                                 title="Delete selected requests"
@@ -72,6 +78,10 @@
                             <span>{{ selectedRequestIds().size }}</span>
                         </button>
                     }
+                    <button (click)="createNewFolder($event)" title="New Folder / Group"
+                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer flex items-center justify-center">
+                        <mat-icon class="text-[15px]! size-[15px]!">create_new_folder</mat-icon>
+                    </button>
                     <button (click)="addNewRequest()" title="New Request in Capsule"
                             class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
                         <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
@@ -79,91 +89,234 @@
                 </div>
             </div>
 
-            <div class="flex flex-col"
-                 cdkDropList
-                 cdkDropListOrientation="vertical"
-                 (cdkDropListDropped)="onDropVerticalRequest($event)">
-                @for (req of tabStateService.allCapsuleRequests(); track req.id) {
-                    <div cdkDrag
-                         [cdkDragData]="req"
-                         class="flex flex-col border-b border-(--postonsteroids-border)/10">
-                        <div class="flex items-center gap-x-1.5 pl-2 pr-1.5 py-2 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
-                             [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id"
-                             [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === req.id"
-                             [class.border-transparent]="tabStateService.activeTabId() !== req.id"
-                             [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)')"
-                             (click)="openRequest(req)">
+            <!-- Request Tree (Folders + Ungrouped Requests) -->
+            <div class="flex flex-col" cdkDropListGroup>
+                <!-- Folders Section -->
+                @for (groupItem of tabStateService.groupedCapsuleRequests(); track groupItem.group.id) {
+                    <div class="flex flex-col border-b border-(--postonsteroids-border)/20">
+                        <!-- Folder Header Row -->
+                        <div class="flex items-center gap-x-1.5 pl-2 pr-1.5 py-1.5 cursor-pointer select-none bg-(--postonsteroids-bg-primary)/30 hover:bg-(--postonsteroids-bg-hover) transition-colors group/folder"
+                             (click)="toggleGroupExpanded(groupItem.group.id, $event)"
+                             (dblclick)="startEditingGroup(groupItem.group, $event)">
                             
                             <input type="checkbox"
-                                   [checked]="selectedRequestIds().has(req.id)"
-                                   (click)="toggleSelectRequest(req.id, $event)"
+                                   [checked]="isGroupFullySelected(groupItem.requests)"
+                                   (click)="toggleSelectGroupRequests(groupItem.requests, $event)"
+                                   title="Select all requests in folder"
                                    class="accent-(--postonsteroids-accent) cursor-pointer shrink-0" />
 
-                            <button (click)="toggleExamples(req.id, $event)" title="Toggle Examples"
-                                    class="p-0.5 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0">
-                                <mat-icon class="text-[13px]! size-[13px]! transition-transform"
-                                          [class.rotate-90]="isRequestExpanded(req.id)">chevron_right</mat-icon>
-                            </button>
+                            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-secondary) transition-transform shrink-0"
+                                      [class.rotate-90]="groupItem.group.isExpanded !== false">chevron_right</mat-icon>
 
-                            <span class="text-[10px] font-bold min-w-[46px] shrink-0 mr-1 text-left" [style.color]="getMethodColor(req.method)">
-                                {{ req.method }}
-                            </span>
-                            <span class="text-[12px] font-normal text-(--postonsteroids-text-primary) truncate flex-1 min-w-0"
-                                  [class.font-medium]="tabStateService.activeTabId() === req.id">
-                                {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
-                            </span>
+                            <mat-icon class="text-[15px]! size-[15px]! text-amber-400/90 shrink-0">
+                                {{ groupItem.group.isExpanded !== false ? 'folder_open' : 'folder' }}
+                            </mat-icon>
 
-                            @if (req.isDirty) {
-                                <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"></div>
+                            @if (editingGroupId() === groupItem.group.id) {
+                                <input type="text"
+                                       class="flex-1 min-w-0 bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) text-[12px] font-medium px-1.5 py-0.5 rounded border border-(--postonsteroids-accent) outline-none"
+                                       [ngModel]="editingGroupName()"
+                                       (ngModelChange)="editingGroupName.set($event)"
+                                       (click)="$event.stopPropagation()"
+                                       (keydown.enter)="saveGroupName(groupItem.group.id, $event)"
+                                       (keydown.escape)="cancelEditingGroup($event)"
+                                       (blur)="saveGroupName(groupItem.group.id, $event)"
+                                       autofocus />
+                            } @else {
+                                <span class="text-[12px] font-semibold text-(--postonsteroids-text-primary) truncate flex-1 min-w-0"
+                                      [title]="groupItem.group.name + ' (' + groupItem.requests.length + ' requests)'">
+                                    {{ groupItem.group.name }}
+                                </span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-(--postonsteroids-border)/40 text-(--postonsteroids-text-muted) font-medium shrink-0">
+                                    {{ groupItem.requests.length }}
+                                </span>
                             }
 
-                            <!-- Delete request button -->
-                            <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-red-400 text-(--postonsteroids-text-muted) p-0.5"
-                                    title="Delete request"
-                                    (click)="deleteRequestFromSidebar(req, $event)">
-                                <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
-                            </button>
+                            <!-- Folder Hover Actions -->
+                            <div class="flex items-center gap-x-0.5 shrink-0 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                                 (click)="$event.stopPropagation()">
+                                <button (click)="addNewRequestInGroup(groupItem.group.id, $event)"
+                                        title="Add request in folder"
+                                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
+                                    <mat-icon class="text-[13px]! size-[13px]!">add</mat-icon>
+                                </button>
+                                <button (click)="startEditingGroup(groupItem.group, $event)"
+                                        title="Rename folder"
+                                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer flex items-center justify-center">
+                                    <mat-icon class="text-[13px]! size-[13px]!">edit</mat-icon>
+                                </button>
+                                <button (click)="ungroupFolder(groupItem.group, $event)"
+                                        title="Ungroup folder (keep requests)"
+                                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-amber-400 cursor-pointer flex items-center justify-center">
+                                    <mat-icon class="text-[13px]! size-[13px]!">folder_off</mat-icon>
+                                </button>
+                                <button (click)="deleteFolder(groupItem.group, groupItem.requests.length, $event)"
+                                        title="Delete folder"
+                                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-red-400 cursor-pointer flex items-center justify-center">
+                                    <mat-icon class="text-[13px]! size-[13px]!">delete</mat-icon>
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- Nested Examples list -->
-                        @if (isRequestExpanded(req.id)) {
-                            <div class="pl-6 pr-2 py-1 bg-(--postonsteroids-bg-primary)/40 border-t border-(--postonsteroids-border)/10 flex flex-col gap-y-1">
-                                @if (isExamplesLoading(req.id) && (!requestExamplesMap().get(req.id) || requestExamplesMap().get(req.id)!.length === 0)) {
-                                    <div class="flex items-center gap-x-1.5 py-1 px-1 text-[10px] text-(--postonsteroids-text-muted)">
-                                        <mat-icon class="text-[12px]! size-[12px]! animate-spin text-(--postonsteroids-accent)">progress_activity</mat-icon>
-                                        <span>Loading examples...</span>
-                                    </div>
-                                } @else {
-                                    @for (ex of requestExamplesMap().get(req.id) || []; track ex.id) {
-                                        <div (click)="loadExample(ex, $event)"
-                                             class="flex items-center justify-between py-0.5 px-1.5 rounded hover:bg-(--postonsteroids-bg-hover) cursor-pointer group/ex text-[10px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
-                                            <div class="flex items-center gap-x-1 truncate">
-                                                <mat-icon class="text-[12px]! size-[12px]! text-(--postonsteroids-accent)">bookmark</mat-icon>
-                                                <span class="truncate">{{ ex.name }}</span>
-                                            </div>
-                                            <button (click)="deleteExample(req.id, ex.id, $event)"
-                                                    class="opacity-0 group-hover/ex:opacity-100 hover:text-red-400 cursor-pointer">
-                                                <mat-icon class="text-[11px]! size-[11px]!">delete</mat-icon>
-                                            </button>
-                                        </div>
-                                    } @empty {
-                                        <span class="text-[10px] text-(--postonsteroids-text-muted) italic px-1">No examples saved yet</span>
-                                    }
-                                }
-                            </div>
-                        }
+                        <!-- Folder Requests Drop List -->
+                        <div cdkDropList
+                             cdkDropListOrientation="vertical"
+                             [cdkDropListData]="groupItem.requests"
+                             (cdkDropListDropped)="onDropRequest($event, groupItem.group.id)"
+                             class="flex flex-col pl-3 border-l border-(--postonsteroids-border)/30 ml-2.5"
+                             [class.hidden]="groupItem.group.isExpanded === false">
+                            @for (req of groupItem.requests; track req.id) {
+                                <div cdkDrag
+                                     [cdkDragData]="{ req: req, groupId: groupItem.group.id }"
+                                     class="flex flex-col border-b border-(--postonsteroids-border)/10 relative">
+                                    <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: req, groupId: groupItem.group.id }"></ng-container>
+                                </div>
+                            } @empty {
+                                <div class="py-2 px-2 text-[10px] text-(--postonsteroids-text-muted) italic select-none">
+                                    Empty folder — drag requests here or click +
+                                </div>
+                            }
+                        </div>
                     </div>
                 }
 
-                @if (tabStateService.allCapsuleRequests().length === 0 && !tabStateService.isCapsuleLoading() && !tabStateService.isLoadingBackendData()) {
+                <!-- Ungrouped Requests Drop List -->
+                <div class="flex flex-col min-h-[24px]"
+                     cdkDropList
+                     cdkDropListOrientation="vertical"
+                     [cdkDropListData]="tabStateService.ungroupedCapsuleRequests()"
+                     (cdkDropListDropped)="onDropRequest($event, null)">
+                    @for (req of tabStateService.ungroupedCapsuleRequests(); track req.id) {
+                        <div cdkDrag
+                             [cdkDragData]="{ req: req, groupId: null }"
+                             class="flex flex-col border-b border-(--postonsteroids-border)/10 relative">
+                            <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: req, groupId: null }"></ng-container>
+                        </div>
+                    }
+                </div>
+
+                @if (tabStateService.allCapsuleRequests().length === 0 && tabStateService.activeCapsuleGroups().length === 0 && !tabStateService.isCapsuleLoading() && !tabStateService.isLoadingBackendData()) {
                     <div class="pl-4 pr-3 py-3 text-[11px] text-(--postonsteroids-text-muted) italic flex flex-col items-start gap-y-2">
                         <span>No requests in capsule.</span>
-                        <button (click)="addNewRequest()" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer flex items-center gap-x-1">
-                            <mat-icon class="text-[13px]! size-[13px]!">add</mat-icon> Create Request
-                        </button>
+                        <div class="flex items-center gap-x-3">
+                            <button (click)="addNewRequest()" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer flex items-center gap-x-1">
+                                <mat-icon class="text-[13px]! size-[13px]!">add</mat-icon> Create Request
+                            </button>
+                            <button (click)="createNewFolder($event)" class="text-xs text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) hover:underline cursor-pointer flex items-center gap-x-1">
+                                <mat-icon class="text-[13px]! size-[13px]!">create_new_folder</mat-icon> New Folder
+                            </button>
+                        </div>
                     </div>
                 }
             </div>
+
+            <!-- Shared Request Item Template -->
+            <ng-template #requestRowTpl let-req let-groupId="groupId">
+                <div class="flex items-center gap-x-1.5 pl-2 pr-1.5 py-2 cursor-pointer select-none border-l-[2px] transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)"
+                     [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id"
+                     [class.border-(--postonsteroids-accent)]="tabStateService.activeTabId() === req.id"
+                     [class.border-transparent]="tabStateService.activeTabId() !== req.id"
+                     [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)')"
+                     (click)="openRequest(req)">
+                    
+                    <input type="checkbox"
+                           [checked]="selectedRequestIds().has(req.id)"
+                           (click)="toggleSelectRequest(req.id, $event)"
+                           class="accent-(--postonsteroids-accent) cursor-pointer shrink-0" />
+
+                    <button (click)="toggleExamples(req.id, $event)" title="Toggle Examples"
+                            class="p-0.5 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0">
+                        <mat-icon class="text-[13px]! size-[13px]! transition-transform"
+                                  [class.rotate-90]="isRequestExpanded(req.id)">chevron_right</mat-icon>
+                    </button>
+
+                    <span class="text-[10px] font-bold min-w-[46px] shrink-0 mr-1 text-left" [style.color]="getMethodColor(req.method)">
+                        {{ req.method }}
+                    </span>
+                    <span class="text-[12px] font-normal text-(--postonsteroids-text-primary) truncate flex-1 min-w-0"
+                          [class.font-medium]="tabStateService.activeTabId() === req.id">
+                        {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
+                    </span>
+
+                    @if (req.isDirty) {
+                        <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"></div>
+                    }
+
+                    <!-- Move to Folder button -->
+                    <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5"
+                            [class.opacity-100]="moveMenuRequestId() === req.id"
+                            title="Move to folder / group"
+                            (click)="toggleMoveMenu(req.id, $event)">
+                        <mat-icon class="text-[14px]! size-[14px]!">drive_file_move</mat-icon>
+                    </button>
+
+                    <!-- Delete request button -->
+                    <button class="shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity cursor-pointer hover:text-red-400 text-(--postonsteroids-text-muted) p-0.5"
+                            title="Delete request"
+                            (click)="deleteRequestFromSidebar(req, $event)">
+                        <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                    </button>
+                </div>
+
+                <!-- Quick Move-to-Folder Dropdown Menu -->
+                @if (moveMenuRequestId() === req.id) {
+                    <div class="mx-2 my-1 p-1.5 rounded-md bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) shadow-lg flex flex-col gap-y-0.5 z-30"
+                         (click)="$event.stopPropagation()">
+                        <span class="text-[9px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted) px-1.5 py-0.5">
+                            Move to Folder
+                        </span>
+                        @for (g of tabStateService.activeCapsuleGroups(); track g.id) {
+                            @if (g.id !== groupId) {
+                                <button (click)="moveRequestToGroupFromMenu(req.id, g.id, $event)"
+                                        class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer truncate">
+                                    <mat-icon class="text-[13px]! size-[13px]! text-amber-400/90 shrink-0">folder</mat-icon>
+                                    <span class="truncate">{{ g.name }}</span>
+                                </button>
+                            }
+                        }
+                        @if (groupId) {
+                            <button (click)="moveRequestToGroupFromMenu(req.id, null, $event)"
+                                    class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-amber-400 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
+                                <mat-icon class="text-[13px]! size-[13px]! shrink-0">folder_off</mat-icon>
+                                <span>Remove from folder (Ungroup)</span>
+                            </button>
+                        }
+                        <button (click)="moveRequestToNewGroupFromMenu(req.id, $event)"
+                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) cursor-pointer border-t border-(--postonsteroids-border)/40 mt-0.5 pt-1">
+                            <mat-icon class="text-[13px]! size-[13px]! shrink-0">create_new_folder</mat-icon>
+                            <span>+ New Folder with this request</span>
+                        </button>
+                    </div>
+                }
+
+                <!-- Nested Examples list -->
+                @if (isRequestExpanded(req.id)) {
+                    <div class="pl-6 pr-2 py-1 bg-(--postonsteroids-bg-primary)/40 border-t border-(--postonsteroids-border)/10 flex flex-col gap-y-1">
+                        @if (isExamplesLoading(req.id) && (!requestExamplesMap().get(req.id) || requestExamplesMap().get(req.id)!.length === 0)) {
+                            <div class="flex items-center gap-x-1.5 py-1 px-1 text-[10px] text-(--postonsteroids-text-muted)">
+                                <mat-icon class="text-[12px]! size-[12px]! animate-spin text-(--postonsteroids-accent)">progress_activity</mat-icon>
+                                <span>Loading examples...</span>
+                            </div>
+                        } @else {
+                            @for (ex of requestExamplesMap().get(req.id) || []; track ex.id) {
+                                <div (click)="loadExample(ex, $event)"
+                                     class="flex items-center justify-between py-0.5 px-1.5 rounded hover:bg-(--postonsteroids-bg-hover) cursor-pointer group/ex text-[10px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)">
+                                    <div class="flex items-center gap-x-1 truncate">
+                                        <mat-icon class="text-[12px]! size-[12px]! text-(--postonsteroids-accent)">bookmark</mat-icon>
+                                        <span class="truncate">{{ ex.name }}</span>
+                                    </div>
+                                    <button (click)="deleteExample(req.id, ex.id, $event)"
+                                            class="opacity-0 group-hover/ex:opacity-100 hover:text-red-400 cursor-pointer">
+                                        <mat-icon class="text-[11px]! size-[11px]!">delete</mat-icon>
+                                    </button>
+                                </div>
+                            } @empty {
+                                <span class="text-[10px] text-(--postonsteroids-text-muted) italic px-1">No examples saved yet</span>
+                            }
+                        }
+                    </div>
+                }
+            </ng-template>
         </div>
     </div>
 

@@ -256,6 +256,7 @@ export class VariableService {
 
     private hasPendingSync = false;
     private systemSourceVarIds = new Map<string, string>();
+    private systemGroupsVarIds = new Map<string, string>();
 
     async loadVariablesFromBackend(forceNoCapsuleFilter = false, targetCapId?: string): Promise<void> {
         if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
@@ -295,6 +296,23 @@ export class VariableService {
                             if (parsedBackendSources && typeof parsedBackendSources === 'object' && !Array.isArray(parsedBackendSources)) {
                                 sourceMap = { ...parsedBackendSources, ...sourceMap };
                                 this.saveSourceMapForCapsule(capId, sourceMap);
+                            }
+                        } catch {}
+                    }
+                }
+
+                // Extract backend-persisted __capsule_groups__ system variable if present
+                const sysGroupsEntry = res.data.find(v => (v.variableKey || v.key || '').trim() === '__capsule_groups__');
+                if (sysGroupsEntry) {
+                    if (sysGroupsEntry.id) {
+                        this.systemGroupsVarIds.set(capId, sysGroupsEntry.id);
+                    }
+                    const rawGroupsVal = sysGroupsEntry.variableValue ?? sysGroupsEntry.value;
+                    if (rawGroupsVal && typeof rawGroupsVal === 'string') {
+                        try {
+                            const parsedBackendGroups = JSON.parse(rawGroupsVal);
+                            if (parsedBackendGroups && typeof parsedBackendGroups === 'object') {
+                                this.tabStateService.applyBackendCapsuleGroups(capId, parsedBackendGroups);
                             }
                         } catch {}
                     }
@@ -418,6 +436,22 @@ export class VariableService {
                 });
             }
 
+            // Also persist the capsule's request groups and ordering as an internal system variable
+            const groupsPayload = this.tabStateService.getCapsuleGroupsSyncPayload(capsuleId);
+            if (groupsPayload && (groupsPayload.groups.length > 0 || groupsPayload.order.length > 0 || this.systemGroupsVarIds.has(capsuleId))) {
+                const groupsJson = JSON.stringify(groupsPayload);
+                const sysGrpId = this.systemGroupsVarIds.get(capsuleId) || null;
+                payloadVars.push({
+                    id: sysGrpId && sysGrpId.length > 8 ? sysGrpId : null,
+                    key: '__capsule_groups__',
+                    variableKey: '__capsule_groups__',
+                    value: groupsJson,
+                    variableValue: groupsJson,
+                    type: 'global',
+                    enabled: false
+                });
+            }
+
             const payload = { 
                 capsuleId: capsuleId,
                 variables: payloadVars 
@@ -433,6 +467,10 @@ export class VariableService {
                     const dbKey = (dbVar.variableKey || dbVar.key || '').trim();
                     if (dbKey === '__var_sources__' && dbVar.id && capsuleId) {
                         this.systemSourceVarIds.set(capsuleId, dbVar.id);
+                        continue;
+                    }
+                    if (dbKey === '__capsule_groups__' && dbVar.id && capsuleId) {
+                        this.systemGroupsVarIds.set(capsuleId, dbVar.id);
                         continue;
                     }
                     if (dbKey.startsWith('__')) continue;

@@ -13,7 +13,7 @@ import { MatIcon } from '@angular/material/icon';
 import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { LocalStorageService } from '../../shared/services/local.storage.service';
-import { TabStateService } from '../../shared/services/tab.state.service';
+import { TabStateService, RequestGroup } from '../../shared/services/tab.state.service';
 import { DialogService } from '../../shared/services/dialog.service';
 import { RequestExecutionService } from '../../shared/services/request.execution.service';
 
@@ -36,6 +36,7 @@ import { RequestExecutionService } from '../../shared/services/request.execution
     host: {
         '(document:mousemove)': 'onMouseMove($event)',
         '(document:mouseup)': 'onMouseUp()',
+        '(document:click)': 'onDocumentClick()',
         '(document:keydown)': 'handleKeyboardShortcuts($event)',
         '(window:beforeunload)': 'onBeforeUnload($event)',
         '(window:resize)': 'onWindowResize()'
@@ -240,8 +241,140 @@ export class WorkspaceComponent {
         }
     }
 
+    // Folder / Group state
+    editingGroupId = signal<string | null>(null);
+    editingGroupName = signal<string>('');
+    moveMenuRequestId = signal<string | null>(null);
+
+    onDocumentClick() {
+        if (this.moveMenuRequestId()) {
+            this.moveMenuRequestId.set(null);
+        }
+    }
+
     onDropVerticalRequest(event: CdkDragDrop<any[]>) {
         this.tabStateService.reorderCapsuleRequests(event.previousIndex, event.currentIndex);
+    }
+
+    onDropRequest(event: CdkDragDrop<any>, targetGroupId: string | null) {
+        const dragData = event.item.data;
+        const req = dragData?.req || dragData;
+        const sourceGroupId: string | null = dragData?.groupId !== undefined ? dragData.groupId : (req?.groupId ?? null);
+        if (!req?.id) return;
+        this.tabStateService.handleRequestDrop(
+            req.id,
+            sourceGroupId,
+            targetGroupId,
+            event.previousIndex,
+            event.currentIndex
+        );
+    }
+
+    createNewFolder(event?: Event) {
+        event?.stopPropagation();
+        const group = this.tabStateService.createRequestGroup('New Folder');
+        this.editingGroupId.set(group.id);
+        this.editingGroupName.set(group.name);
+    }
+
+    groupSelectedRequests(event?: Event) {
+        event?.stopPropagation();
+        const ids = Array.from(this.selectedRequestIds());
+        if (ids.length === 0) return;
+        const group = this.tabStateService.createRequestGroup('New Folder', ids);
+        this.selectedRequestIds.set(new Set());
+        this.editingGroupId.set(group.id);
+        this.editingGroupName.set(group.name);
+        this.notificationService.notify(`Grouped ${ids.length} request(s) into folder.`);
+    }
+
+    startEditingGroup(group: RequestGroup, event?: Event) {
+        event?.stopPropagation();
+        this.editingGroupId.set(group.id);
+        this.editingGroupName.set(group.name);
+    }
+
+    saveGroupName(groupId: string, event?: Event) {
+        event?.stopPropagation();
+        if (this.editingGroupId() !== groupId) return;
+        const trimmed = this.editingGroupName().trim();
+        if (trimmed) {
+            this.tabStateService.renameRequestGroup(groupId, trimmed);
+        }
+        this.editingGroupId.set(null);
+    }
+
+    cancelEditingGroup(event?: Event) {
+        event?.stopPropagation();
+        this.editingGroupId.set(null);
+    }
+
+    toggleGroupExpanded(groupId: string, event?: Event) {
+        event?.stopPropagation();
+        this.tabStateService.toggleGroupExpanded(groupId);
+    }
+
+    addNewRequestInGroup(groupId: string, event: Event) {
+        event.stopPropagation();
+        this.tabStateService.createAndOpenNewTab(undefined, groupId);
+    }
+
+    async ungroupFolder(group: RequestGroup, event: Event) {
+        event.stopPropagation();
+        await this.tabStateService.deleteRequestGroup(group.id, false);
+        this.notificationService.notify(`Ungrouped folder "${group.name}".`);
+    }
+
+    async deleteFolder(group: RequestGroup, requestCount: number, event: Event) {
+        event.stopPropagation();
+        if (requestCount > 0) {
+            const confirmed = await this.dialogService.confirm(
+                `Are you sure you want to delete folder "${group.name}" and its ${requestCount} request(s)? (Tip: Use the ungroup button to keep requests)`
+            );
+            if (!confirmed) return;
+            await this.tabStateService.deleteRequestGroup(group.id, true);
+            this.notificationService.notify(`Deleted folder "${group.name}" and ${requestCount} request(s).`);
+        } else {
+            await this.tabStateService.deleteRequestGroup(group.id, false);
+            this.notificationService.notify(`Deleted folder "${group.name}".`);
+        }
+    }
+
+    isGroupFullySelected(requests: any[]): boolean {
+        return requests.length > 0 && requests.every(r => this.selectedRequestIds().has(r.id));
+    }
+
+    toggleSelectGroupRequests(requests: any[], event: Event) {
+        event.stopPropagation();
+        const current = new Set(this.selectedRequestIds());
+        const allSelected = this.isGroupFullySelected(requests);
+        for (const r of requests) {
+            if (allSelected) {
+                current.delete(r.id);
+            } else {
+                current.add(r.id);
+            }
+        }
+        this.selectedRequestIds.set(current);
+    }
+
+    toggleMoveMenu(requestId: string, event: Event) {
+        event.stopPropagation();
+        this.moveMenuRequestId.update(cur => cur === requestId ? null : requestId);
+    }
+
+    moveRequestToGroupFromMenu(requestId: string, targetGroupId: string | null, event: Event) {
+        event.stopPropagation();
+        this.tabStateService.moveRequestsToGroup([requestId], targetGroupId);
+        this.moveMenuRequestId.set(null);
+    }
+
+    moveRequestToNewGroupFromMenu(requestId: string, event: Event) {
+        event.stopPropagation();
+        const group = this.tabStateService.createRequestGroup('New Folder', [requestId]);
+        this.moveMenuRequestId.set(null);
+        this.editingGroupId.set(group.id);
+        this.editingGroupName.set(group.name);
     }
 
     openRequest(request: any) {

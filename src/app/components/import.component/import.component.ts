@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
-import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
+import { TabStateService, RequestState, RequestGroup } from '../../shared/services/tab.state.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { SwaggerImportModalComponent } from '../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
@@ -11,7 +11,8 @@ import { extractPostmanVariables, extractRequestsVariables } from '../../shared/
 
 interface ParsedCapsuleGroup {
     name: string;
-    requests: Partial<RequestState>[];
+    requests: (Partial<RequestState> & { __folderName?: string })[];
+    groups?: any[];
     variables?: IGlobalVariable[];
 }
 
@@ -27,6 +28,7 @@ export interface PendingImport {
             name: string;
             variables: IGlobalVariable[];
             requests: RequestState[];
+            groups?: RequestGroup[];
         }[];
         variables: IGlobalVariable[];
     };
@@ -169,7 +171,10 @@ export class ImportComponent implements OnInit {
         if (data.info && Array.isArray(data.item)) {
             const collectionName = data.info.name || 'Imported Postman Collection';
             const postmanReqs = this.flattenPostmanItems(data.item);
-            const mapped = postmanReqs.map(it => this.mapPostmanRequest(it));
+            const mapped = postmanReqs.map(it => ({
+                ...this.mapPostmanRequest(it),
+                __folderName: it.folderName
+            }));
             const extractedVars = extractPostmanVariables(data);
             groups.push({
                 name: collectionName,
@@ -189,6 +194,7 @@ export class ImportComponent implements OnInit {
                 groups.push({
                     name: capName,
                     requests: reqs,
+                    groups: Array.isArray(cap.groups) ? cap.groups : undefined,
                     variables: extractedVars
                 });
             }
@@ -202,6 +208,7 @@ export class ImportComponent implements OnInit {
             groups.push({
                 name: typeof capName === 'string' ? capName : 'Imported Capsule',
                 requests: reqs,
+                groups: Array.isArray(data.groups) ? data.groups : undefined,
                 variables: extractedVars
             });
         }
@@ -215,6 +222,7 @@ export class ImportComponent implements OnInit {
             groups.push({
                 name: capName,
                 requests: reqs,
+                groups: Array.isArray(cap.groups) ? cap.groups : undefined,
                 variables: extractedVars
             });
         }
@@ -245,11 +253,52 @@ export class ImportComponent implements OnInit {
         const importPayload = {
             capsules: groups.map(group => {
                 const capId = this.tabStateService.createId();
+                const oldReqIdMap = new Map<string, string>();
+                const folderNameMap = new Map<string, RequestGroup>();
+
+                const normalizedRequests = group.requests.map(rawReq => {
+                    const norm = this.normalizeImportedRequest(rawReq, capId);
+                    if (rawReq?.id) {
+                        oldReqIdMap.set(String(rawReq.id), norm.id);
+                    }
+                    const folderName = (rawReq as any)?.__folderName;
+                    if (folderName) {
+                        let fGrp = folderNameMap.get(folderName);
+                        if (!fGrp) {
+                            fGrp = {
+                                id: 'grp_' + this.tabStateService.createId(),
+                                name: folderName,
+                                capsuleId: capId,
+                                isExpanded: true,
+                                requestIds: [],
+                                createdAt: Date.now()
+                            };
+                            folderNameMap.set(folderName, fGrp);
+                        }
+                        fGrp.requestIds.push(norm.id);
+                        norm.groupId = fGrp.id;
+                    }
+                    return norm;
+                });
+
+                let finalGroups: RequestGroup[] = Array.from(folderNameMap.values());
+                if (finalGroups.length === 0 && Array.isArray(group.groups) && group.groups.length > 0) {
+                    finalGroups = group.groups.map((g: any) => ({
+                        id: 'grp_' + this.tabStateService.createId(),
+                        name: g.name || 'Folder',
+                        capsuleId: capId,
+                        isExpanded: g.isExpanded ?? true,
+                        requestIds: (g.requestIds || []).map((oldId: string) => oldReqIdMap.get(oldId) || oldId),
+                        createdAt: Date.now()
+                    }));
+                }
+
                 return {
                     id: capId,
                     name: group.name,
                     variables: group.variables || [],
-                    requests: group.requests.map(rawReq => this.normalizeImportedRequest(rawReq, capId))
+                    requests: normalizedRequests,
+                    groups: finalGroups
                 };
             }),
             variables: allExtractedVars
@@ -369,18 +418,20 @@ export class ImportComponent implements OnInit {
         } as RequestState;
     }
 
-    private flattenPostmanItems(items: any[]): { name: string; request: any }[] {
-        const results: { name: string; request: any }[] = [];
+    private flattenPostmanItems(items: any[], parentFolder?: string): { name: string; request: any; folderName?: string }[] {
+        const results: { name: string; request: any; folderName?: string }[] = [];
 
         for (const item of items) {
             if (item.request) {
                 results.push({
                     name: item.name || 'Request',
-                    request: item.request
+                    request: item.request,
+                    folderName: parentFolder
                 });
             }
             if (Array.isArray(item.item) && item.item.length > 0) {
-                results.push(...this.flattenPostmanItems(item.item));
+                const folderLabel = item.name ? (parentFolder ? `${parentFolder} / ${item.name}` : item.name) : parentFolder;
+                results.push(...this.flattenPostmanItems(item.item, folderLabel));
             }
         }
 
