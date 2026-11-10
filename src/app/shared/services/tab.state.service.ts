@@ -163,11 +163,11 @@ export class TabStateService {
         }
     }
 
-    snapshotCurrentSession(userParam?: UserAuth | null, syncBackend: boolean = true) {
+    snapshotCurrentSession(userParam?: UserAuth | null, syncBackend: boolean = true, allowEmpty: boolean = false) {
         if (!this.isBrowser) return;
 
-        // CRITICAL GUARD: Never overwrite a valid saved session with an empty workspace!
-        if (this.openTabIds().length === 0 && this.states().size === 0) {
+        // CRITICAL GUARD: Never overwrite a valid saved session with an empty workspace unless explicitly deleting/clearing
+        if (!allowEmpty && this.openTabIds().length === 0 && this.states().size === 0) {
             return;
         }
 
@@ -196,8 +196,15 @@ export class TabStateService {
                 }
             }
 
-            storedResponses['__capsule_groups_map__'] = Object.fromEntries(this.capsuleGroupsMap());
-            storedResponses['__capsule_order_map__'] = Object.fromEntries(this.capsuleRequestOrderMap());
+            for (const delReqId of this.deletedRequestIds) {
+                delete storedResponses[delReqId];
+            }
+            const cleanGroupsEntries = Array.from(this.capsuleGroupsMap().entries())
+                .filter(([cId]) => !this.deletingCapsuleIds.has(cId));
+            const cleanOrderEntries = Array.from(this.capsuleRequestOrderMap().entries())
+                .filter(([cId]) => !this.deletingCapsuleIds.has(cId));
+            storedResponses['__capsule_groups_map__'] = Object.fromEntries(cleanGroupsEntries);
+            storedResponses['__capsule_order_map__'] = Object.fromEntries(cleanOrderEntries);
 
             const vs = this.getVariableService();
 
@@ -486,6 +493,9 @@ export class TabStateService {
             this.states.update(map => {
                 const next = new Map(map);
                 for (const [id, state] of session.states) {
+                    if (this.deletedRequestIds.has(id) || (state?.capsuleId && this.deletingCapsuleIds.has(state.capsuleId))) {
+                        continue;
+                    }
                     if (!next.has(id)) {
                         next.set(id, state);
                     } else {
@@ -506,16 +516,23 @@ export class TabStateService {
                 this.capsuleGroupsMap.update(map => {
                     const next = new Map(map);
                     for (const [cId, grps] of Object.entries(session.responses['__capsule_groups_map__'])) {
+                        if (this.deletingCapsuleIds.has(cId)) continue;
                         if (Array.isArray(grps)) {
                             const localTs = this.getLocalStructureTimestamp(cId);
                             const remoteTs = Number(backendTsMap[cId] || 0);
                             if (localTs > 0 && localTs > remoteTs && next.has(cId)) {
                                 continue;
                             }
-                            next.set(cId, grps as RequestGroup[]);
+                            const cleanedGrps = (grps as RequestGroup[])
+                                .filter(g => !this.deletedGroupIds.has(g.id))
+                                .map(g => ({
+                                    ...g,
+                                    requestIds: (g.requestIds || []).filter(rId => !this.deletedRequestIds.has(rId))
+                                }));
+                            next.set(cId, cleanedGrps);
                             if (this.isBrowser) {
                                 try {
-                                    localStorage.setItem(`onsteroids_capsule_groups_${cId}`, JSON.stringify(grps));
+                                    localStorage.setItem(`onsteroids_capsule_groups_${cId}`, JSON.stringify(cleanedGrps));
                                 } catch {}
                             }
                         }
@@ -532,16 +549,20 @@ export class TabStateService {
                 this.capsuleRequestOrderMap.update(map => {
                     const next = new Map(map);
                     for (const [cId, ord] of Object.entries(session.responses['__capsule_order_map__'])) {
+                        if (this.deletingCapsuleIds.has(cId)) continue;
                         if (Array.isArray(ord)) {
                             const localTs = this.getLocalStructureTimestamp(cId);
                             const remoteTs = Number(backendTsMap[cId] || 0);
                             if (localTs > 0 && localTs > remoteTs && next.has(cId)) {
                                 continue;
                             }
-                            next.set(cId, ord as string[]);
+                            const cleanedOrd = (ord as string[]).filter(
+                                id => !this.deletedGroupIds.has(id) && !this.deletedRequestIds.has(id)
+                            );
+                            next.set(cId, cleanedOrd);
                             if (this.isBrowser) {
                                 try {
-                                    localStorage.setItem(`onsteroids_capsule_order_${cId}`, JSON.stringify(ord));
+                                    localStorage.setItem(`onsteroids_capsule_order_${cId}`, JSON.stringify(cleanedOrd));
                                 } catch {}
                             }
                         }
@@ -580,9 +601,14 @@ export class TabStateService {
 
         if (!hasWork) {
             if (Array.isArray(session.openTabIds) && session.openTabIds.length > 0) {
-                this.openTabIds.set(session.openTabIds);
-            }
-            if (session.activeTabId) {
+                const filteredTabs = (session.openTabIds as string[]).filter(id => !this.deletedRequestIds.has(id));
+                this.openTabIds.set(filteredTabs);
+                if (session.activeTabId && filteredTabs.includes(session.activeTabId)) {
+                    this.activeTabId.set(session.activeTabId);
+                } else {
+                    this.activeTabId.set(filteredTabs[0] || null);
+                }
+            } else if (session.activeTabId && !this.deletedRequestIds.has(session.activeTabId)) {
                 this.activeTabId.set(session.activeTabId);
             }
         }
@@ -602,13 +628,14 @@ export class TabStateService {
     }
 
     /** Debounced (or immediate) sync of workspace state to backend for cross-device persistence */
-    private syncWorkspaceStateToBackend(immediate = false): Promise<void> {
+    private syncWorkspaceStateToBackend(immediate = false, forceSync = false): Promise<void> {
         if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) {
             return Promise.resolve();
         }
 
-        const currentCap = this.capsules().find(c => c.id === this.activeCapsuleId());
-        if (currentCap?.isLocalOnly) {
+        const capIdNow = this.activeCapsuleId();
+        const currentCap = this.capsules().find(c => c.id === capIdNow);
+        if (!forceSync && (currentCap?.isLocalOnly || (capIdNow && this.deletingCapsuleIds.has(capIdNow)))) {
             return Promise.resolve();
         }
 
@@ -616,15 +643,22 @@ export class TabStateService {
 
         const executeSync = async () => {
             try {
-                const activeCap = this.capsules().find(c => c.id === this.activeCapsuleId());
-                if (activeCap?.isLocalOnly) return;
+                const activeIdNow = this.activeCapsuleId();
+                const activeCap = this.capsules().find(c => c.id === activeIdNow);
+                if (!forceSync && (activeCap?.isLocalOnly || (activeIdNow && this.deletingCapsuleIds.has(activeIdNow)))) return;
 
-                const currentStates = Array.from(this.states().entries());
+                const currentStates = Array.from(this.states().entries()).filter(
+                    ([id, s]) => !this.deletedRequestIds.has(id) && !(s.capsuleId && this.deletingCapsuleIds.has(s.capsuleId))
+                );
                 let storedResponses: Record<string, unknown> = {};
                 try {
                     const rawResp = localStorage.getItem('onsteroids_responses');
                     if (rawResp) storedResponses = JSON.parse(rawResp);
                 } catch {}
+
+                for (const delReqId of this.deletedRequestIds) {
+                    delete storedResponses[delReqId];
+                }
 
                 // Capture live responses from tab states
                 for (const [id, s] of currentStates) {
@@ -643,12 +677,18 @@ export class TabStateService {
 
                 const tsMap: Record<string, number> = {};
                 for (const c of this.capsules()) {
+                    if (this.deletingCapsuleIds.has(c.id)) continue;
                     const ts = this.getLocalStructureTimestamp(c.id);
                     if (ts > 0) tsMap[c.id] = ts;
                 }
 
-                storedResponses['__capsule_groups_map__'] = Object.fromEntries(this.capsuleGroupsMap());
-                storedResponses['__capsule_order_map__'] = Object.fromEntries(this.capsuleRequestOrderMap());
+                const cleanGroupsEntries = Array.from(this.capsuleGroupsMap().entries())
+                    .filter(([cId]) => !this.deletingCapsuleIds.has(cId));
+                const cleanOrderEntries = Array.from(this.capsuleRequestOrderMap().entries())
+                    .filter(([cId]) => !this.deletingCapsuleIds.has(cId));
+
+                storedResponses['__capsule_groups_map__'] = Object.fromEntries(cleanGroupsEntries);
+                storedResponses['__capsule_order_map__'] = Object.fromEntries(cleanOrderEntries);
                 storedResponses['__capsule_structure_ts_map__'] = tsMap;
 
                 const payload = {
@@ -837,6 +877,34 @@ export class TabStateService {
     capsuleGroupsMap = signal<Map<string, RequestGroup[]>>(new Map());
     private groupsVarSyncTimeout: any = null;
     private hasPendingStructureSync = false;
+    private deletingCapsuleIds = new Set<string>();
+    private deletedRequestIds = new Set<string>();
+    private deletedGroupIds = new Set<string>();
+
+    public isCapsuleDeleting(capId: string): boolean {
+        return Boolean(capId && this.deletingCapsuleIds.has(capId));
+    }
+
+    private isValidGuid(id?: string | null): boolean {
+        return Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+    }
+
+    private expandResolvedIds(ids: string[]): string[] {
+        const expanded = new Set<string>();
+        for (const rawId of ids) {
+            if (!rawId) continue;
+            expanded.add(rawId);
+            const resolved = this.resolveTabId(rawId);
+            if (resolved) expanded.add(resolved);
+        }
+        for (const [oldId, newId] of this.idRedirects.entries()) {
+            if (expanded.has(oldId) || expanded.has(newId)) {
+                expanded.add(oldId);
+                expanded.add(newId);
+            }
+        }
+        return Array.from(expanded);
+    }
 
     private markLocalStructureTimestamp(capId: string): number {
         const now = Date.now();
@@ -895,7 +963,7 @@ export class TabStateService {
     }
 
     private notifyStructureOrOrderChanged(capId: string, syncBackend = true): void {
-        if (!capId) return;
+        if (!capId || this.deletingCapsuleIds.has(capId)) return;
         this.markLocalStructureTimestamp(capId);
         this.snapshotCurrentSession(undefined, false);
 
@@ -963,7 +1031,7 @@ export class TabStateService {
     }
 
     private scheduleGroupsVariableSync(capId: string): void {
-        if (!this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
+        if (!capId || this.deletingCapsuleIds.has(capId) || !this.isBrowser || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         clearTimeout(this.groupsVarSyncTimeout);
         this.groupsVarSyncTimeout = setTimeout(() => {
             const vs = this.getVariableService();
@@ -1038,7 +1106,7 @@ export class TabStateService {
         autoAuthEndpointId?: string | null;
         requestMeta?: Record<string, any>;
     }): void {
-        if (!capId || !payload || typeof payload !== 'object') return;
+        if (!capId || this.deletingCapsuleIds.has(capId) || !payload || typeof payload !== 'object') return;
 
         const localTs = this.getLocalStructureTimestamp(capId);
         const remoteTs = Number(payload.updatedAt || 0);
@@ -1051,14 +1119,18 @@ export class TabStateService {
 
         const reqToGroup = new Map<string, string>();
         if (Array.isArray(payload.groups)) {
-            const normalizedGroups: RequestGroup[] = payload.groups.map(g => ({
-                id: g.id || ('grp_' + this.createId()),
-                name: g.name || 'Folder',
-                capsuleId: capId,
-                isExpanded: g.isExpanded ?? true,
-                requestIds: Array.isArray(g.requestIds) ? g.requestIds : [],
-                createdAt: g.createdAt || Date.now()
-            }));
+            const normalizedGroups: RequestGroup[] = payload.groups
+                .filter(g => !g?.id || !this.deletedGroupIds.has(g.id))
+                .map(g => ({
+                    id: g.id || ('grp_' + this.createId()),
+                    name: g.name || 'Folder',
+                    capsuleId: capId,
+                    isExpanded: g.isExpanded ?? true,
+                    requestIds: Array.isArray(g.requestIds)
+                        ? g.requestIds.filter(rId => !this.deletedRequestIds.has(rId))
+                        : [],
+                    createdAt: g.createdAt || Date.now()
+                }));
             if (Array.isArray(payload.groupOrder) && payload.groupOrder.length > 0) {
                 const grpOrderIdx = new Map<string, number>();
                 payload.groupOrder.forEach((id, idx) => grpOrderIdx.set(id, idx));
@@ -1140,14 +1212,17 @@ export class TabStateService {
         }
 
         if (Array.isArray(payload.order) && payload.order.length > 0) {
+            const filteredOrder = payload.order.filter(
+                id => !this.deletedGroupIds.has(id) && !this.deletedRequestIds.has(id)
+            );
             this.capsuleRequestOrderMap.update(m => {
                 const next = new Map(m);
-                next.set(capId, payload.order!);
+                next.set(capId, filteredOrder);
                 return next;
             });
             if (this.isBrowser) {
                 try {
-                    localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(payload.order));
+                    localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(filteredOrder));
                 } catch {}
             }
         }
@@ -1386,33 +1461,245 @@ export class TabStateService {
         this.setGroupsForCapsule(capId, updated, true);
     }
 
+    private async deleteRequestsOnBackendResilient(reqIds: string[]): Promise<void> {
+        const guidIds = Array.from(new Set(reqIds.filter(id => this.isValidGuid(id))));
+        if (!this.isBrowser || !this.authService.isLoggedIn() || guidIds.length === 0) return;
+
+        try {
+            await firstValueFrom(
+                this.http.post(`${API_BASE_URL}/request/batch-delete`, { ids: guidIds })
+            );
+            return;
+        } catch (batchErr: any) {
+            if (batchErr?.status === 404) return;
+            console.warn('Batch delete requests failed, attempting individual delete fallback:', batchErr);
+        }
+
+        let firstRealError: any = null;
+        for (const gid of guidIds) {
+            try {
+                await firstValueFrom(
+                    this.http.delete(`${API_BASE_URL}/request/${gid}`)
+                );
+            } catch (err: any) {
+                if (err?.status !== 404 && !firstRealError) {
+                    firstRealError = err;
+                }
+            }
+        }
+        if (firstRealError) {
+            throw firstRealError;
+        }
+    }
+
     async deleteRequestGroup(groupId: string, deleteRequests: boolean = false, capsuleId?: string): Promise<void> {
         const capId = capsuleId || this.activeCapsuleId();
+        if (deleteRequests) {
+            await this.deleteRequestGroupsAndRequests([groupId], [], capId);
+            return;
+        }
+
         const currentGroups = this.getGroupsForCapsule(capId);
         const targetGroup = currentGroups.find(g => g.id === groupId);
         if (!targetGroup) return;
 
-        const memberIds = new Set<string>(targetGroup.requestIds || []);
+        const memberIds: string[] = [];
+        const seen = new Set<string>();
+        for (const rId of (targetGroup.requestIds || [])) {
+            if (rId && !seen.has(rId)) {
+                memberIds.push(rId);
+                seen.add(rId);
+            }
+        }
         for (const r of this.allCapsuleRequests()) {
-            if (r.groupId === groupId) memberIds.add(r.id);
+            if (r.groupId === groupId && !seen.has(r.id)) {
+                memberIds.push(r.id);
+                seen.add(r.id);
+            }
         }
 
+        const memberSet = new Set(memberIds);
         const remainingGroups = currentGroups.filter(g => g.id !== groupId);
 
         this.states.update(map => {
             const next = new Map(map);
-            for (const rId of memberIds) {
+            for (const rId of memberSet) {
                 const st = next.get(rId);
                 if (st) next.set(rId, { ...st, groupId: null });
             }
             return next;
         });
-        this.savedCapsules.update(col => col.map(r => memberIds.has(r.id) ? { ...r, groupId: null } : r));
+        this.savedCapsules.update(col => col.map(r => memberSet.has(r.id) ? { ...r, groupId: null } : r));
+
+        // Replace the group placeholder in root order with its ungrouped requests in-place
+        const existingOrder = this.getRequestOrderForCapsule(capId);
+        if (existingOrder.length > 0) {
+            const nextOrder: string[] = [];
+            let inserted = false;
+            for (const entryId of existingOrder) {
+                if (entryId === groupId) {
+                    nextOrder.push(...memberIds);
+                    inserted = true;
+                } else if (!memberSet.has(entryId)) {
+                    nextOrder.push(entryId);
+                }
+            }
+            if (!inserted) {
+                nextOrder.push(...memberIds);
+            }
+            this.capsuleRequestOrderMap.update(m => new Map(m).set(capId, nextOrder));
+            if (this.isBrowser) {
+                try {
+                    localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
+                } catch {}
+            }
+        }
 
         this.setGroupsForCapsule(capId, remainingGroups, true);
+    }
 
-        if (deleteRequests && memberIds.size > 0) {
-            await this.batchDeleteRequests(Array.from(memberIds));
+    /** Atomically delete marked group folder(s) and/or request(s) without popping requests outside folders first */
+    async deleteRequestGroupsAndRequests(groupIds: string[], requestIds: string[] = [], capsuleId?: string): Promise<void> {
+        const capId = capsuleId || this.activeCapsuleId();
+        const groupIdSet = new Set((groupIds || []).filter(Boolean));
+        const currentGroups = this.getGroupsForCapsule(capId);
+
+        const rawReqIds = new Set<string>((requestIds || []).filter(Boolean));
+        for (const g of currentGroups) {
+            if (groupIdSet.has(g.id)) {
+                for (const rId of (g.requestIds || [])) {
+                    if (rId) rawReqIds.add(rId);
+                }
+            }
+        }
+        for (const r of this.savedCapsules()) {
+            if (r.groupId && groupIdSet.has(r.groupId) && (r.capsuleId === capId || (!r.capsuleId && capId === '1'))) {
+                rawReqIds.add(r.id);
+            }
+        }
+        for (const s of this.states().values()) {
+            if (s.groupId && groupIdSet.has(s.groupId) && (s.capsuleId === capId || (!s.capsuleId && capId === '1'))) {
+                rawReqIds.add(s.id);
+            }
+        }
+
+        const allReqIds = this.expandResolvedIds(Array.from(rawReqIds));
+        if (groupIdSet.size === 0 && allReqIds.length === 0) return;
+
+        const reqIdSet = new Set(allReqIds);
+
+        // Cancel pending saves/syncs so in-flight autosave cannot race or resurrect deleted items
+        clearTimeout(this.autoSaveTimeout);
+        this.autoSaveTimeout = null;
+        clearTimeout(this.groupsVarSyncTimeout);
+        clearTimeout(this.workspaceStateSyncTimeout);
+        this.hasPendingStructureSync = false;
+
+        for (const gId of groupIdSet) this.deletedGroupIds.add(gId);
+        for (const rId of reqIdSet) this.deletedRequestIds.add(rId);
+
+        try {
+            if (this.isBrowser && this.authService.isLoggedIn() && allReqIds.length > 0) {
+                await this.deleteRequestsOnBackendResilient(allReqIds);
+            }
+        } catch (err) {
+            // Rollback tombstones if backend delete aborted before removing locally
+            for (const gId of groupIdSet) this.deletedGroupIds.delete(gId);
+            for (const rId of reqIdSet) this.deletedRequestIds.delete(rId);
+            throw err;
+        }
+
+        // Remove deleted requests BEFORE updating groups or snapshotting session
+        this.savedCapsules.update(col => col.filter(r => !reqIdSet.has(r.id)));
+        this.openTabIds.update(openIds => openIds.filter(tabId => !reqIdSet.has(tabId)));
+        this.tabNavigationStack.update(stack => {
+            const filtered = stack.filter(tabId => !reqIdSet.has(tabId));
+            return filtered;
+        });
+        if (this.tabNavigationIndex() >= this.tabNavigationStack().length) {
+            this.tabNavigationIndex.set(this.tabNavigationStack().length - 1);
+        }
+
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const rId of reqIdSet) {
+                next.delete(rId);
+                this.historyStack.delete(rId);
+                this.fetchedExamplesIds.delete(rId);
+            }
+            return next;
+        });
+
+        this.requestExamplesMap.update(m => {
+            const next = new Map(m);
+            for (const rId of reqIdSet) next.delete(rId);
+            return next;
+        });
+
+        if (this.isBrowser) {
+            try {
+                const stored = localStorage.getItem('onsteroids_responses');
+                if (stored) {
+                    const map = JSON.parse(stored);
+                    let changed = false;
+                    for (const rId of reqIdSet) {
+                        if (map[rId]) {
+                            delete map[rId];
+                            changed = true;
+                        }
+                    }
+                    if (changed) {
+                        localStorage.setItem('onsteroids_responses', JSON.stringify(map));
+                    }
+                }
+            } catch {}
+        }
+
+        if (this.activeTabId() && reqIdSet.has(this.activeTabId()!)) {
+            const remaining = this.openTabIds();
+            this.activeTabId.set(remaining.length > 0 ? remaining[0] : null);
+        }
+
+        // Clean custom sidebar order for deleted groups & deleted requests
+        const existingOrder = this.getRequestOrderForCapsule(capId);
+        if (existingOrder.length > 0) {
+            const cleanedOrder = existingOrder.filter(id => !groupIdSet.has(id) && !reqIdSet.has(id));
+            this.capsuleRequestOrderMap.update(m => new Map(m).set(capId, cleanedOrder));
+            if (this.isBrowser) {
+                try {
+                    localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(cleanedOrder));
+                } catch {}
+            }
+        }
+
+        // Remove deleted groups & strip deleted requestIds from any remaining groups (syncBackend = false so we flush cleanly right after)
+        const updatedGroups = currentGroups
+            .filter(g => !groupIdSet.has(g.id))
+            .map(g => ({
+                ...g,
+                requestIds: (g.requestIds || []).filter(rId => !reqIdSet.has(rId))
+            }));
+        this.setGroupsForCapsule(capId, updatedGroups, false);
+
+        if (capId) {
+            this.markLocalStructureTimestamp(capId);
+            if (this.isBrowser) {
+                try {
+                    localStorage.setItem(`onsteroids_open_tab_ids_${capId}`, JSON.stringify(this.openTabIds()));
+                    localStorage.setItem(`onsteroids_active_tab_${capId}`, this.activeTabId() || '');
+                } catch {}
+            }
+        }
+
+        this.snapshotCurrentSession(undefined, false, true);
+
+        const targetCap = this.capsules().find(c => c.id === capId);
+        if (this.isBrowser && this.authService.isLoggedIn() && capId && !targetCap?.isLocalOnly) {
+            const vs = this.getVariableService();
+            if (vs && this.isValidGuid(capId)) {
+                vs.syncVariablesToBackend(capId).catch(() => {});
+            }
+            this.syncWorkspaceStateToBackend(true);
         }
     }
 
@@ -1641,7 +1928,7 @@ export class TabStateService {
     }
 
     getCapsuleRequestsSync(capsuleId: string): RequestState[] {
-        if (!capsuleId) return [];
+        if (!capsuleId || this.deletingCapsuleIds.has(capsuleId)) return [];
 
         const map = new Map<string, RequestState>();
 
@@ -1684,7 +1971,7 @@ export class TabStateService {
             } catch {}
         }
 
-        return Array.from(map.values());
+        return Array.from(map.values()).filter(r => !this.deletedRequestIds.has(r.id));
     }
 
     async getCapsuleRequests(capsuleId: string): Promise<RequestState[]> {
@@ -1999,6 +2286,12 @@ export class TabStateService {
     clearWorkspace(userParam?: UserAuth | null) {
         clearTimeout(this.backendSyncTimeout);
         clearTimeout(this.workspaceStateSyncTimeout);
+        clearTimeout(this.groupsVarSyncTimeout);
+        clearTimeout(this.autoSaveTimeout);
+        this.deletingCapsuleIds.clear();
+        this.deletedRequestIds.clear();
+        this.deletedGroupIds.clear();
+        this.idRedirects.clear();
 
         this.openTabIds.set([]);
         this.activeTabId.set(null);
@@ -2148,7 +2441,7 @@ export class TabStateService {
         }
 
         // Save current capsule's tab layout and variables before switching
-        if (this.isBrowser && prevCapId && prevCapId !== capsule.id && !this.isCapsuleLoading()) {
+        if (this.isBrowser && prevCapId && prevCapId !== capsule.id && !this.isCapsuleLoading() && !this.deletingCapsuleIds.has(prevCapId)) {
             localStorage.setItem(`onsteroids_open_tab_ids_${prevCapId}`, JSON.stringify(this.openTabIds()));
             localStorage.setItem(`onsteroids_active_tab_${prevCapId}`, this.activeTabId() || '');
             const vs = this.getVariableService();
@@ -2545,97 +2838,189 @@ export class TabStateService {
         return newCap;
     }
 
-    async deleteCapsule(id: string): Promise<void> {
-        const currentCap = this.capsules().find(c => c.id === id);
-        if (this.isBrowser && this.authService.isLoggedIn() && !currentCap?.isLocalOnly && id !== '1' && id.length >= 8) {
+    private async deleteCapsuleOnBackendResilient(id: string): Promise<void> {
+        if (!this.isBrowser || !this.authService.isLoggedIn() || !this.isValidGuid(id) || id === '1') {
+            return;
+        }
+
+        const vs = this.getVariableService();
+        // Clear capsule variables (including __capsule_groups__ and __var_sources__) before deleting the capsule
+        // so hosted DBs with FK constraints or legacy spCapsule_Delete procedures do not throw 500.
+        if (vs) {
+            await vs.clearCapsuleVariablesOnBackend(id);
+        }
+
+        try {
+            await firstValueFrom(
+                this.http.delete(`${API_BASE_URL}/capsule/${id}`)
+            );
+            return;
+        } catch (err: any) {
+            if (err?.status === 404) return;
+            console.warn(`Direct capsule delete failed for ${id}, attempting child cleanup retry:`, err);
+
+            // Collect all requests in the capsule (local + backend) and delete them first before retrying capsule delete
+            const reqIdSet = new Set<string>(
+                this.getCapsuleRequestsSync(id).map(r => r.id).filter(rId => this.isValidGuid(rId))
+            );
+            try {
+                const reqRes = await firstValueFrom(
+                    this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${id}`)
+                );
+                if (reqRes?.data && Array.isArray(reqRes.data)) {
+                    for (const r of reqRes.data) {
+                        if (r?.id && this.isValidGuid(r.id)) reqIdSet.add(r.id);
+                    }
+                }
+            } catch {}
+
+            if (reqIdSet.size > 0) {
+                try {
+                    await this.deleteRequestsOnBackendResilient(Array.from(reqIdSet));
+                } catch {}
+            }
+
+            if (vs) {
+                await vs.clearCapsuleVariablesOnBackend(id);
+            }
+
             try {
                 await firstValueFrom(
                     this.http.delete(`${API_BASE_URL}/capsule/${id}`)
                 );
-            } catch (err) {
-                console.error('Failed to delete capsule on backend', err);
-                throw err;
-            }
-        }
-
-        this.capsules.update(list => list.filter(c => c.id !== id));
-
-        this.savedCapsules.update(col => col.filter(r => r.capsuleId !== id));
-        this.states.update(map => {
-            const next = new Map(map);
-            for (const [key, state] of next.entries()) {
-                if (state.capsuleId === id) {
-                    next.delete(key);
-                    this.historyStack.delete(key);
-                }
-            }
-            return next;
-        });
-
-        if (this.isBrowser) {
-            localStorage.removeItem(`onsteroids_open_tab_ids_${id}`);
-            localStorage.removeItem(`onsteroids_active_tab_${id}`);
-            localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
-        }
-
-        if (this.activeCapsuleId() === id) {
-            const remaining = this.capsules();
-            if (remaining.length > 0) {
-                await this.switchCapsule(remaining[0]);
-            } else {
-                this.activeCapsuleId.set('');
-                this.activeCapsuleName.set('');
-                this.savedCapsules.set([]);
-                this.states.set(new Map());
-                this.openTabIds.set([]);
-                this.activeTabId.set(null);
-                const vs = this.getVariableService();
-                if (vs) {
-                    vs.setVariables([]);
-                }
-                if (this.isBrowser) {
-                    localStorage.removeItem('onsteroids_active_capsule');
-                    localStorage.removeItem('onsteroids_active_tab');
-                    localStorage.removeItem('onsteroids_open_tab_ids');
-                }
+            } catch (retryErr: any) {
+                if (retryErr?.status === 404) return;
+                throw retryErr;
             }
         }
     }
 
-    async batchDeleteCapsules(ids: string[]): Promise<void> {
-        if (!ids || ids.length === 0) return;
+    private async finalizeDeletedCapsules(deletedIds: string[]): Promise<void> {
+        const idSet = new Set(deletedIds);
+        const vs = this.getVariableService();
 
-        if (this.isBrowser && this.authService.isLoggedIn()) {
-            try {
-                await firstValueFrom(
-                    this.http.post(`${API_BASE_URL}/capsule/batch-delete`, { ids })
-                );
-            } catch (err) {
-                console.error('Failed to batch delete capsules on backend', err);
-                throw err;
+        // Extract all request IDs and group IDs belonging to the deleted capsules
+        const deletedReqIds = new Set<string>();
+        const deletedGrpIds = new Set<string>();
+
+        for (const r of this.savedCapsules()) {
+            if (r.capsuleId && idSet.has(r.capsuleId)) {
+                deletedReqIds.add(r.id);
+            }
+        }
+        for (const [k, st] of this.states().entries()) {
+            if (st.capsuleId && idSet.has(st.capsuleId)) {
+                deletedReqIds.add(k);
+                deletedReqIds.add(st.id);
             }
         }
 
-        const idSet = new Set(ids);
-        this.capsules.update(list => list.filter(c => !idSet.has(c.id)));
+        const currentGroupsMap = this.capsuleGroupsMap();
+        for (const capId of idSet) {
+            const grps = currentGroupsMap.get(capId) || this.loadCapsuleGroupsFromStorage(capId) || [];
+            for (const g of grps) {
+                if (g.id) deletedGrpIds.add(g.id);
+                for (const rId of (g.requestIds || [])) {
+                    if (rId) deletedReqIds.add(rId);
+                }
+            }
+        }
 
+        for (const rId of deletedReqIds) this.deletedRequestIds.add(rId);
+        for (const gId of deletedGrpIds) this.deletedGroupIds.add(gId);
+
+        // Extract and remove affected groups for deleted capsules, and strip any orphaned refs from remaining groups
+        this.capsuleGroupsMap.update(map => {
+            const next = new Map<string, RequestGroup[]>();
+            for (const [cId, grps] of map.entries()) {
+                if (idSet.has(cId)) continue;
+                const cleaned = grps
+                    .filter(g => !deletedGrpIds.has(g.id))
+                    .map(g => ({
+                        ...g,
+                        requestIds: (g.requestIds || []).filter(rId => !deletedReqIds.has(rId))
+                    }));
+                next.set(cId, cleaned);
+            }
+            if (this.isBrowser) {
+                try {
+                    localStorage.setItem('onsteroids_all_capsule_groups', JSON.stringify(Object.fromEntries(next)));
+                } catch {}
+            }
+            return next;
+        });
+
+        // Remove deleted capsules' custom request/folder orders and strip any orphaned request refs
+        this.capsuleRequestOrderMap.update(map => {
+            const next = new Map<string, string[]>();
+            for (const [cId, ord] of map.entries()) {
+                if (idSet.has(cId)) continue;
+                next.set(cId, ord.filter(itemId => !deletedReqIds.has(itemId) && !deletedGrpIds.has(itemId)));
+            }
+            return next;
+        });
+
+        this.capsules.update(list => list.filter(c => !idSet.has(c.id)));
         this.savedCapsules.update(col => col.filter(r => !r.capsuleId || !idSet.has(r.capsuleId)));
+        this.openTabIds.update(openIds => openIds.filter(tabId => !deletedReqIds.has(tabId)));
+        this.tabNavigationStack.update(stack => stack.filter(tabId => !deletedReqIds.has(tabId)));
+        if (this.tabNavigationIndex() >= this.tabNavigationStack().length) {
+            this.tabNavigationIndex.set(this.tabNavigationStack().length - 1);
+        }
+
         this.states.update(map => {
             const next = new Map(map);
             for (const [key, state] of next.entries()) {
-                if (state.capsuleId && idSet.has(state.capsuleId)) {
+                if ((state.capsuleId && idSet.has(state.capsuleId)) || deletedReqIds.has(key)) {
                     next.delete(key);
                     this.historyStack.delete(key);
+                    this.fetchedExamplesIds.delete(key);
                 }
             }
             return next;
         });
 
-        if (this.isBrowser) {
-            for (const id of ids) {
-                localStorage.removeItem(`onsteroids_open_tab_ids_${id}`);
-                localStorage.removeItem(`onsteroids_active_tab_${id}`);
+        this.requestExamplesMap.update(m => {
+            const next = new Map(m);
+            for (const rId of deletedReqIds) next.delete(rId);
+            return next;
+        });
+
+        if (vs) {
+            for (const capId of idSet) {
+                vs.clearCapsuleLocalData(capId);
             }
+        }
+
+        if (this.isBrowser) {
+            for (const capId of idSet) {
+                localStorage.removeItem(`onsteroids_open_tab_ids_${capId}`);
+                localStorage.removeItem(`onsteroids_active_tab_${capId}`);
+                localStorage.removeItem(`onsteroids_capsule_groups_${capId}`);
+                localStorage.removeItem(`onsteroids_capsule_order_${capId}`);
+                localStorage.removeItem(`onsteroids_capsule_structure_ts_${capId}`);
+            }
+            try {
+                const storedResp = localStorage.getItem('onsteroids_responses');
+                if (storedResp) {
+                    const parsed = JSON.parse(storedResp);
+                    for (const rId of deletedReqIds) {
+                        delete parsed[rId];
+                    }
+                    for (const capId of idSet) {
+                        if (parsed['__capsule_groups_map__'] && typeof parsed['__capsule_groups_map__'] === 'object') {
+                            delete parsed['__capsule_groups_map__'][capId];
+                        }
+                        if (parsed['__capsule_order_map__'] && typeof parsed['__capsule_order_map__'] === 'object') {
+                            delete parsed['__capsule_order_map__'][capId];
+                        }
+                        if (parsed['__capsule_structure_ts_map__'] && typeof parsed['__capsule_structure_ts_map__'] === 'object') {
+                            delete parsed['__capsule_structure_ts_map__'][capId];
+                        }
+                    }
+                    localStorage.setItem('onsteroids_responses', JSON.stringify(parsed));
+                }
+            } catch {}
             localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
         }
 
@@ -2643,6 +3028,10 @@ export class TabStateService {
             const remaining = this.capsules();
             if (remaining.length > 0) {
                 await this.switchCapsule(remaining[0]);
+                this.snapshotCurrentSession(undefined, false, true);
+                if (this.authService.isLoggedIn()) {
+                    await this.syncWorkspaceStateToBackend(true, true);
+                }
             } else {
                 this.activeCapsuleId.set('');
                 this.activeCapsuleName.set('');
@@ -2650,143 +3039,129 @@ export class TabStateService {
                 this.states.set(new Map());
                 this.openTabIds.set([]);
                 this.activeTabId.set(null);
-                const vs = this.getVariableService();
                 if (vs) {
-                    vs.setVariables([]);
+                    vs.setVariables([], '', false);
                 }
+                if (this.isBrowser) {
+                    localStorage.removeItem('onsteroids_active_capsule');
+                    localStorage.removeItem('onsteroids_active_tab');
+                    localStorage.removeItem('onsteroids_open_tab_ids');
+                    localStorage.removeItem('onsteroids_states');
+                    localStorage.removeItem('onsteroids_last_session');
+                    const user = this.authService.currentUser();
+                    if (user?.id) localStorage.removeItem(`onsteroids_user_session_${user.id}`);
+                    if (user?.email) localStorage.removeItem(`onsteroids_user_session_${user.email}`);
+                }
+                if (this.authService.isLoggedIn()) {
+                    await this.syncWorkspaceStateToBackend(true, true);
+                }
+            }
+        } else {
+            this.snapshotCurrentSession(undefined, false, true);
+            if (this.authService.isLoggedIn()) {
+                await this.syncWorkspaceStateToBackend(true, true);
             }
         }
     }
 
-    async deleteRequest(id: string): Promise<void> {
-        let backendError: any = null;
-        if (this.isBrowser && this.authService.isLoggedIn()) {
+    async deleteCapsule(id: string): Promise<void> {
+        if (!id) return;
+
+        clearTimeout(this.groupsVarSyncTimeout);
+        clearTimeout(this.autoSaveTimeout);
+        this.autoSaveTimeout = null;
+        clearTimeout(this.workspaceStateSyncTimeout);
+        clearTimeout(this.backendSyncTimeout);
+        clearTimeout(this.activeTabSyncTimeout);
+        this.hasPendingStructureSync = false;
+
+        this.deletingCapsuleIds.add(id);
+        const vs = this.getVariableService();
+        if (vs) {
+            await vs.waitForActiveSync();
+        }
+
+        const currentCap = this.capsules().find(c => c.id === id);
+        if (this.isBrowser && this.authService.isLoggedIn() && !currentCap?.isLocalOnly && id !== '1' && this.isValidGuid(id)) {
+            try {
+                await this.deleteCapsuleOnBackendResilient(id);
+            } catch (err) {
+                this.deletingCapsuleIds.delete(id);
+                console.error('Failed to delete capsule on backend', err);
+                throw err;
+            }
+        }
+
+        await this.finalizeDeletedCapsules([id]);
+    }
+
+    async batchDeleteCapsules(ids: string[]): Promise<void> {
+        if (!ids || ids.length === 0) return;
+
+        clearTimeout(this.groupsVarSyncTimeout);
+        clearTimeout(this.autoSaveTimeout);
+        this.autoSaveTimeout = null;
+        clearTimeout(this.workspaceStateSyncTimeout);
+        clearTimeout(this.backendSyncTimeout);
+        clearTimeout(this.activeTabSyncTimeout);
+        this.hasPendingStructureSync = false;
+
+        for (const id of ids) this.deletingCapsuleIds.add(id);
+        const vs = this.getVariableService();
+        if (vs) {
+            await vs.waitForActiveSync();
+        }
+
+        const backendIds = ids.filter(id => {
+            const cap = this.capsules().find(c => c.id === id);
+            return !cap?.isLocalOnly && id !== '1' && this.isValidGuid(id);
+        });
+
+        if (this.isBrowser && this.authService.isLoggedIn() && backendIds.length > 0) {
+            if (vs) {
+                await Promise.allSettled(backendIds.map(bId => vs.clearCapsuleVariablesOnBackend(bId)));
+            }
+
             try {
                 await firstValueFrom(
-                    this.http.delete(`${API_BASE_URL}/request/${id}`)
+                    this.http.post(`${API_BASE_URL}/capsule/batch-delete`, { ids: backendIds })
                 );
-            } catch (err: any) {
-                console.warn(`Backend delete for request ${id} notice:`, err);
-                if (err?.status !== 404) {
-                    backendError = err;
+            } catch (batchErr: any) {
+                if (batchErr?.status !== 404) {
+                    console.warn('Batch capsule delete failed, falling back to resilient per-capsule delete:', batchErr);
+                    const succeededIds: string[] = [];
+                    let firstErr: any = null;
+                    for (const bId of backendIds) {
+                        try {
+                            await this.deleteCapsuleOnBackendResilient(bId);
+                            succeededIds.push(bId);
+                        } catch (err) {
+                            this.deletingCapsuleIds.delete(bId);
+                            if (!firstErr) firstErr = err;
+                        }
+                    }
+                    if (firstErr) {
+                        if (succeededIds.length > 0) {
+                            await this.finalizeDeletedCapsules(succeededIds);
+                        }
+                        console.error('Failed to batch delete capsules on backend', firstErr);
+                        throw firstErr;
+                    }
                 }
             }
         }
 
-        this.savedCapsules.update(col => col.filter(r => r.id !== id));
-        this.openTabIds.update(ids => ids.filter(tabId => tabId !== id));
-        const activeCapForDel = this.activeCapsuleId();
-        const existingGroupsForDel = this.getGroupsForCapsule(activeCapForDel);
-        if (existingGroupsForDel.some(g => (g.requestIds || []).includes(id))) {
-            this.setGroupsForCapsule(
-                activeCapForDel,
-                existingGroupsForDel.map(g => ({ ...g, requestIds: (g.requestIds || []).filter(rId => rId !== id) })),
-                true
-            );
-        }
-        this.states.update(map => {
-            const next = new Map(map);
-            next.delete(id);
-            return next;
-        });
-        this.historyStack.delete(id);
-        
-        if (this.isBrowser) {
-            try {
-                const stored = localStorage.getItem('onsteroids_responses');
-                if (stored) {
-                    const map = JSON.parse(stored);
-                    if (map[id]) {
-                        delete map[id];
-                        localStorage.setItem('onsteroids_responses', JSON.stringify(map));
-                    }
-                }
-            } catch (e) {}
-        }
+        await this.finalizeDeletedCapsules(ids);
+    }
 
-        if (this.activeTabId() === id) {
-            const remaining = this.openTabIds();
-            this.activeTabId.set(remaining.length > 0 ? remaining[0] : null);
-        }
-        
-        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            this.triggerAutoSave();
-        }
-
-        if (backendError) {
-            throw backendError;
-        }
+    async deleteRequest(id: string): Promise<void> {
+        if (!id) return;
+        await this.deleteRequestGroupsAndRequests([], [id]);
     }
 
     async batchDeleteRequests(ids: string[]): Promise<void> {
         if (!ids || ids.length === 0) return;
-
-        let backendError: any = null;
-        if (this.isBrowser && this.authService.isLoggedIn()) {
-            try {
-                await firstValueFrom(
-                    this.http.post(`${API_BASE_URL}/request/batch-delete`, { ids })
-                );
-            } catch (err: any) {
-                console.warn('Backend batch delete requests notice:', err);
-                if (err?.status !== 404) {
-                    backendError = err;
-                }
-            }
-        }
-
-        const idSet = new Set(ids);
-        this.savedCapsules.update(col => col.filter(r => !idSet.has(r.id)));
-        const activeCapForBatch = this.activeCapsuleId();
-        const existingGroupsForBatch = this.getGroupsForCapsule(activeCapForBatch);
-        if (existingGroupsForBatch.some(g => (g.requestIds || []).some(rId => idSet.has(rId)))) {
-            this.setGroupsForCapsule(
-                activeCapForBatch,
-                existingGroupsForBatch.map(g => ({ ...g, requestIds: (g.requestIds || []).filter(rId => !idSet.has(rId)) })),
-                true
-            );
-        }
-        this.openTabIds.update(openIds => openIds.filter(id => !idSet.has(id)));
-        this.states.update(map => {
-            const next = new Map(map);
-            for (const id of ids) {
-                next.delete(id);
-                this.historyStack.delete(id);
-            }
-            return next;
-        });
-
-        if (this.isBrowser) {
-            try {
-                const stored = localStorage.getItem('onsteroids_responses');
-                if (stored) {
-                    const map = JSON.parse(stored);
-                    let changed = false;
-                    for (const id of ids) {
-                        if (map[id]) {
-                            delete map[id];
-                            changed = true;
-                        }
-                    }
-                    if (changed) {
-                        localStorage.setItem('onsteroids_responses', JSON.stringify(map));
-                    }
-                }
-            } catch (e) {}
-        }
-
-        if (this.activeTabId() && idSet.has(this.activeTabId()!)) {
-            const remaining = this.openTabIds();
-            this.activeTabId.set(remaining.length > 0 ? remaining[0] : null);
-        }
-        
-        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
-            this.triggerAutoSave();
-        }
-
-        if (backendError) {
-            throw backendError;
-        }
+        await this.deleteRequestGroupsAndRequests([], ids);
     }
 
     closeOtherTabs(keepId: string) {
@@ -3954,7 +4329,7 @@ export class TabStateService {
         if (!this.autoSaveEnabled() || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
 
         const currentCap = this.capsules().find(c => c.id === this.activeCapsuleId());
-        if (currentCap?.isLocalOnly) return;
+        if (!currentCap || currentCap.isLocalOnly || this.deletingCapsuleIds.has(currentCap.id)) return;
 
         // Never run two saves concurrently — retry shortly after the current one finishes
         if (this.isSaving() || this.isAutoSaving()) {
@@ -4102,6 +4477,7 @@ export class TabStateService {
 
         try {
             const currentCapId = this.activeCapsuleId();
+            if (!currentCapId || this.deletingCapsuleIds.has(currentCapId)) return;
             const currentCapName = this.activeCapsuleName();
             const existing = this.capsules().find(c => c.id === currentCapId);
 
@@ -4121,7 +4497,7 @@ export class TabStateService {
             const seenIds = new Set<string>();
             const savedIdsSet = new Set(this.savedCapsules().map(r => r.id));
 
-            if (id) {
+            if (id && !this.deletedRequestIds.has(id)) {
                 const activeTabState = this.states().get(id);
                 if (activeTabState) {
                     tabsToSave.push(structuredClone(activeTabState));
@@ -4130,6 +4506,7 @@ export class TabStateService {
             }
 
             for (const s of this.states().values()) {
+                if (this.deletedRequestIds.has(s.id)) continue;
                 const belongsToCap = s.capsuleId === currentCapId || (!s.capsuleId && currentCapId === '1');
                 if (!belongsToCap || seenIds.has(s.id)) continue;
                 const isUnsavedGroupedRequest = Boolean(syncStructure && s.groupId && !savedIdsSet.has(s.id));
@@ -4140,7 +4517,7 @@ export class TabStateService {
 
             if (!onlyDirty) {
                 for (const s of this.savedCapsules()) {
-                    if (!seenIds.has(s.id) && (s.capsuleId === currentCapId || (!s.capsuleId && currentCapId === '1'))) {
+                    if (!seenIds.has(s.id) && !this.deletedRequestIds.has(s.id) && (s.capsuleId === currentCapId || (!s.capsuleId && currentCapId === '1'))) {
                         tabsToSave.push(structuredClone(s));
                         seenIds.add(s.id);
                     }
@@ -4338,6 +4715,7 @@ export class TabStateService {
                                 ...mappedSaved,
                                 id: savedId,
                                 capsuleId: effectiveCapId,
+                                groupId: tabState.groupId ?? null,
                                 isDirty: false,
                                 autoAuthEnabled: tabState.autoAuthEnabled,
                                 postTriggerTabId: tabState.postTriggerTabId,
@@ -4367,7 +4745,18 @@ export class TabStateService {
 
             const saveResults = await Promise.all(savePromises);
 
-            if (this.isSaveCancelled) return;
+            if (this.isSaveCancelled || this.deletingCapsuleIds.has(effectiveCapId) || this.deletingCapsuleIds.has(currentCapId)) {
+                return;
+            }
+
+            // Fence against requests/groups deleted while saveToCapsule was in flight
+            const validSaveResults = saveResults.filter(res => {
+                const isDeleted = this.deletedRequestIds.has(res.oldId) || this.deletedRequestIds.has(res.savedId);
+                if (isDeleted && res.persisted && this.isValidGuid(res.savedId) && this.authService.isLoggedIn()) {
+                    firstValueFrom(this.http.delete(`${API_BASE_URL}/request/${res.savedId}`)).catch(() => {});
+                }
+                return !isDeleted;
+            });
 
             // Batch update state in memory
             let idsChanged = false;
@@ -4375,7 +4764,7 @@ export class TabStateService {
 
             this.states.update(map => {
                 const next = new Map(map);
-                for (const res of saveResults) {
+                for (const res of validSaveResults) {
                     if (!res.persisted) continue;
                     const live = next.get(res.oldId) || next.get(res.savedId);
                     if (res.savedId !== res.oldId) {
@@ -4414,7 +4803,7 @@ export class TabStateService {
 
             this.savedCapsules.update(col => {
                 const nextCol = [...col];
-                for (const res of saveResults) {
+                for (const res of validSaveResults) {
                     if (!res.persisted) continue;
                     const finalState = res.finalState || res.tabState;
                     const itemToSave = { ...finalState, isDirty: false, capsuleId: effectiveCapId };
@@ -4428,7 +4817,7 @@ export class TabStateService {
                 return nextCol;
             });
 
-            for (const res of saveResults) {
+            for (const res of validSaveResults) {
                 if (!res.persisted) continue;
                 if (res.savedId !== res.oldId) {
                     idsChanged = true;
@@ -4643,8 +5032,11 @@ export class TabStateService {
                         otherCaps.map(c =>
                             firstValueFrom(this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${c.id}`))
                                 .then(res => {
+                                    if (this.deletingCapsuleIds.has(c.id)) return;
                                     if (res?.data && Array.isArray(res.data)) {
-                                        const mapped = res.data.map(dto => this.mapDtoToState({ ...dto, capsuleId: c.id }));
+                                        const mapped = res.data
+                                            .map(dto => this.mapDtoToState({ ...dto, capsuleId: c.id }))
+                                            .filter(req => !this.deletedRequestIds.has(req.id));
                                         this.states.update(map => {
                                             const next = new Map(map);
                                             for (const req of mapped) {
@@ -4684,12 +5076,14 @@ export class TabStateService {
             const reqRes = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${capsuleId}`)
             );
-            // If active capsule changed while request was in-flight, discard stale response
-            if (this.activeCapsuleId() !== capsuleId) {
+            // If active capsule changed or capsule is being deleted while request was in-flight, discard stale response
+            if (this.activeCapsuleId() !== capsuleId || this.deletingCapsuleIds.has(capsuleId)) {
                 return;
             }
             if (reqRes?.data) {
-                const sortedData = reqRes.data.sort((a, b) => {
+                const sortedData = reqRes.data
+                    .filter(dto => !dto?.id || !this.deletedRequestIds.has(dto.id))
+                    .sort((a, b) => {
                     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                     return timeA - timeB;

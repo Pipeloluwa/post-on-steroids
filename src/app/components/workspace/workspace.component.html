@@ -56,9 +56,9 @@
             <div class="flex items-center justify-between px-2 py-1.5 border-b border-(--postonsteroids-border)/40 mb-1">
                 <div class="flex items-center gap-x-1.5">
                     <input type="checkbox"
-                           [checked]="tabStateService.allCapsuleRequests().length > 0 && selectedRequestIds().size === tabStateService.allCapsuleRequests().length"
+                           [checked]="isAllSidebarSelected()"
                            (change)="toggleSelectAllRequests()"
-                           title="Select all requests"
+                           title="Select all folders and requests"
                            class="accent-(--postonsteroids-accent) cursor-pointer" />
                     <span class="text-[10px] font-bold text-(--postonsteroids-text-secondary) tracking-widest uppercase">Requests</span>
                 </div>
@@ -70,12 +70,14 @@
                             <mat-icon class="text-[12px]! size-[12px]!">create_new_folder</mat-icon>
                             <span>Group ({{ selectedRequestIds().size }})</span>
                         </button>
+                    }
+                    @if (selectedRequestIds().size > 0 || selectedGroupIds().size > 0) {
                         <button (click)="batchDeleteSelectedRequests()"
                                 [disabled]="isDeletingRequests()"
-                                title="Delete selected requests"
-                                class="p-0.5 px-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-bold flex items-center gap-x-0.5 cursor-pointer">
+                                title="Delete selected folder(s) and request(s)"
+                                class="p-0.5 px-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-bold flex items-center gap-x-0.5 cursor-pointer disabled:opacity-50">
                             <mat-icon class="text-[12px]! size-[12px]!">delete</mat-icon>
-                            <span>{{ selectedRequestIds().size }}</span>
+                            <span>{{ batchDeleteCountLabel() }}</span>
                         </button>
                     }
                     <button (click)="createNewFolder($event)" title="New Folder / Group"
@@ -125,13 +127,14 @@
                                      [class.ring-1]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
                                      [class.ring-(--postonsteroids-accent)]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
                                      [class.bg-(--postonsteroids-accent)/20]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
+                                     [class.bg-(--postonsteroids-accent)/15]="selectedGroupIds().has(item.group.id) && !(hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest())"
                                      (click)="toggleGroupExpanded(item.group.id, $event)"
                                      (dblclick)="startEditingGroup(item.group, $event)">
                                     
                                     <input type="checkbox"
-                                           [checked]="isGroupFullySelected(item.requests)"
-                                           (click)="toggleSelectGroupRequests(item.requests, $event)"
-                                           title="Select all requests in folder"
+                                           [checked]="isGroupSelected(item.group.id, item.requests)"
+                                           (click)="toggleSelectGroup(item.group.id, item.requests, $event)"
+                                           title="Select folder and all requests in folder"
                                            class="accent-(--postonsteroids-accent) cursor-pointer shrink-0" />
 
                                     <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-secondary) transition-transform shrink-0"

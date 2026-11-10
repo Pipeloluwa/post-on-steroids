@@ -81,6 +81,17 @@ export class WorkspaceComponent {
             }
         }
 
+        let prevCapId: string | null = this.tabStateService.activeCapsuleId();
+        effect(() => {
+            const currentCapId = this.tabStateService.activeCapsuleId();
+            if (prevCapId !== currentCapId) {
+                prevCapId = currentCapId;
+                this.selectedGroupIds.set(new Set());
+                this.selectedRequestIds.set(new Set());
+                this.lastSelectedRequestId.set(null);
+            }
+        });
+
         if (this.isBrowser) {
             const savedSidebarOpen = localStorage.getItem('onsteroids_workspace_sidebar_open');
             if (savedSidebarOpen !== null) {
@@ -394,6 +405,7 @@ export class WorkspaceComponent {
                 appendIndex
             );
             if (movingIds.length > 1) {
+                this.selectedGroupIds.set(new Set());
                 this.selectedRequestIds.set(new Set());
             }
             this.hoveredFolderIdDuringDrag.set(null);
@@ -428,6 +440,7 @@ export class WorkspaceComponent {
             event.currentIndex
         );
         if (movingIds.length > 1 && sourceGroupId !== targetGroupId) {
+            this.selectedGroupIds.set(new Set());
             this.selectedRequestIds.set(new Set());
         }
         this.hoveredFolderIdDuringDrag.set(null);
@@ -447,6 +460,7 @@ export class WorkspaceComponent {
         const ordered = this.getAllOrderedRequestIds().filter(id => selected.has(id));
         const ids = ordered.length > 0 ? ordered : Array.from(selected);
         const group = this.tabStateService.createRequestGroup('New Folder', ids);
+        this.selectedGroupIds.set(new Set());
         this.selectedRequestIds.set(new Set());
         this.editingGroupId.set(group.id);
         this.editingGroupName.set(group.name);
@@ -492,35 +506,83 @@ export class WorkspaceComponent {
 
     async deleteFolder(group: RequestGroup, requestCount: number, event: Event) {
         event.stopPropagation();
+        if (this.isDeletingRequests()) return;
+
         if (requestCount > 0) {
             const confirmed = await this.dialogService.confirm(
                 `Are you sure you want to delete folder "${group.name}" and its ${requestCount} request(s)? (Tip: Use the ungroup button to keep requests)`
             );
             if (!confirmed) return;
-            await this.tabStateService.deleteRequestGroup(group.id, true);
-            this.notificationService.notify(`Deleted folder "${group.name}" and ${requestCount} request(s).`);
-        } else {
-            await this.tabStateService.deleteRequestGroup(group.id, false);
-            this.notificationService.notify(`Deleted folder "${group.name}".`);
+        }
+
+        this.isDeletingRequests.set(true);
+        try {
+            const memberIds = new Set<string>(group.requestIds || []);
+            await this.tabStateService.deleteRequestGroup(group.id, requestCount > 0);
+            this.selectedGroupIds.update(set => {
+                const next = new Set(set);
+                next.delete(group.id);
+                return next;
+            });
+            if (memberIds.size > 0) {
+                this.selectedRequestIds.update(set => {
+                    const next = new Set(set);
+                    for (const rId of memberIds) next.delete(rId);
+                    return next;
+                });
+            }
+            this.notificationService.notify(
+                requestCount > 0
+                    ? `Deleted folder "${group.name}" and ${requestCount} request(s).`
+                    : `Deleted folder "${group.name}".`
+            );
+        } catch (e: any) {
+            this.notificationService.notify(`Failed to delete folder: ${e?.message || 'Error'}`);
+        } finally {
+            this.isDeletingRequests.set(false);
         }
     }
 
-    isGroupFullySelected(requests: any[]): boolean {
+    isGroupSelected(groupId: string, requests: any[]): boolean {
+        if (this.selectedGroupIds().has(groupId)) return true;
         return requests.length > 0 && requests.every(r => this.selectedRequestIds().has(r.id));
     }
 
-    toggleSelectGroupRequests(requests: any[], event: Event) {
+    toggleSelectGroup(groupId: string, requests: any[], event: Event) {
         event.stopPropagation();
-        const current = new Set(this.selectedRequestIds());
-        const allSelected = this.isGroupFullySelected(requests);
-        for (const r of requests) {
-            if (allSelected) {
-                current.delete(r.id);
-            } else {
-                current.add(r.id);
+        const nextGroups = new Set(this.selectedGroupIds());
+        const nextReqs = new Set(this.selectedRequestIds());
+        const currentlySelected = this.isGroupSelected(groupId, requests);
+
+        if (currentlySelected) {
+            nextGroups.delete(groupId);
+            for (const r of requests) {
+                nextReqs.delete(r.id);
+            }
+        } else {
+            nextGroups.add(groupId);
+            for (const r of requests) {
+                nextReqs.add(r.id);
             }
         }
-        this.selectedRequestIds.set(current);
+        this.selectedGroupIds.set(nextGroups);
+        this.selectedRequestIds.set(nextReqs);
+    }
+
+    private syncGroupSelectionAfterRequestChange(nextReqSet: Set<string>): void {
+        const currentGroups = this.selectedGroupIds();
+        if (currentGroups.size === 0) return;
+        const nextGroups = new Set(currentGroups);
+        const grouped = this.tabStateService.groupedCapsuleRequests();
+        for (const gId of currentGroups) {
+            const entry = grouped.find(item => item.group.id === gId);
+            if (entry && entry.requests.length > 0 && entry.requests.some(r => !nextReqSet.has(r.id))) {
+                nextGroups.delete(gId);
+            }
+        }
+        if (nextGroups.size !== currentGroups.size) {
+            this.selectedGroupIds.set(nextGroups);
+        }
     }
 
     toggleMoveMenu(requestId: string, event: Event) {
@@ -533,6 +595,7 @@ export class WorkspaceComponent {
         const ids = this.getEffectiveIdsForAction(requestId);
         this.tabStateService.moveRequestsToGroup(ids, targetGroupId);
         if (ids.length > 1) {
+            this.selectedGroupIds.set(new Set());
             this.selectedRequestIds.set(new Set());
         }
         this.moveMenuRequestId.set(null);
@@ -543,6 +606,7 @@ export class WorkspaceComponent {
         const ids = this.getEffectiveIdsForAction(requestId);
         const group = this.tabStateService.createRequestGroup('New Folder', ids);
         if (ids.length > 1) {
+            this.selectedGroupIds.set(new Set());
             this.selectedRequestIds.set(new Set());
         }
         this.moveMenuRequestId.set(null);
@@ -578,6 +642,7 @@ export class WorkspaceComponent {
                 next.add(req.id);
             }
             this.selectedRequestIds.set(next);
+            this.syncGroupSelectionAfterRequestChange(next);
             if (!this.lastSelectedRequestId()) {
                 this.lastSelectedRequestId.set(anchorId);
             }
@@ -598,6 +663,7 @@ export class WorkspaceComponent {
                 next.add(req.id);
             }
             this.selectedRequestIds.set(next);
+            this.syncGroupSelectionAfterRequestChange(next);
             this.lastSelectedRequestId.set(req.id);
             return;
         }
@@ -612,7 +678,25 @@ export class WorkspaceComponent {
 
     // Batch selection
     selectedRequestIds = signal<Set<string>>(new Set());
+    selectedGroupIds = signal<Set<string>>(new Set());
     isDeletingRequests = signal<boolean>(false);
+
+    isAllSidebarSelected = computed<boolean>(() => {
+        const reqs = this.tabStateService.allCapsuleRequests();
+        const groups = this.tabStateService.activeCapsuleGroups();
+        if (reqs.length === 0 && groups.length === 0) return false;
+        const allReqsSelected = reqs.every(r => this.selectedRequestIds().has(r.id));
+        const allGroupsSelected = groups.every(g => this.selectedGroupIds().has(g.id));
+        return allReqsSelected && allGroupsSelected;
+    });
+
+    batchDeleteCountLabel = computed<string>(() => {
+        const grpCount = this.selectedGroupIds().size;
+        const reqCount = this.selectedRequestIds().size;
+        if (grpCount > 0 && reqCount > 0) return `${grpCount}F·${reqCount}`;
+        if (grpCount > 0) return `${grpCount}F`;
+        return `${reqCount}`;
+    });
 
     toggleSelectRequest(id: string, event: MouseEvent) {
         event.stopPropagation();
@@ -629,6 +713,7 @@ export class WorkspaceComponent {
                     next.add(visibleIds[i]);
                 }
                 this.selectedRequestIds.set(next);
+                this.syncGroupSelectionAfterRequestChange(next);
                 return;
             }
         }
@@ -640,15 +725,19 @@ export class WorkspaceComponent {
             current.add(id);
         }
         this.selectedRequestIds.set(current);
+        this.syncGroupSelectionAfterRequestChange(current);
         this.lastSelectedRequestId.set(id);
     }
 
     toggleSelectAllRequests() {
         const allReqs = this.tabStateService.allCapsuleRequests();
-        if (this.selectedRequestIds().size === allReqs.length) {
+        const allGroups = this.tabStateService.activeCapsuleGroups();
+        if (this.isAllSidebarSelected()) {
             this.selectedRequestIds.set(new Set());
+            this.selectedGroupIds.set(new Set());
         } else {
             this.selectedRequestIds.set(new Set(allReqs.map(r => r.id)));
+            this.selectedGroupIds.set(new Set(allGroups.map(g => g.id)));
         }
     }
 
@@ -661,11 +750,10 @@ export class WorkspaceComponent {
 
         try {
             await this.tabStateService.deleteRequest(request.id);
-            this.selectedRequestIds.update(set => {
-                const next = new Set(set);
-                next.delete(request.id);
-                return next;
-            });
+            const next = new Set(this.selectedRequestIds());
+            next.delete(request.id);
+            this.selectedRequestIds.set(next);
+            this.syncGroupSelectionAfterRequestChange(next);
             this.notificationService.notify(`Request "${displayName}" deleted.`);
         } catch (e: any) {
             this.notificationService.notify(`Failed to delete request: ${e.message || 'Error'}`);
@@ -673,20 +761,44 @@ export class WorkspaceComponent {
     }
 
     async batchDeleteSelectedRequests() {
-        const ids = Array.from(this.selectedRequestIds());
-        if (ids.length === 0) return;
+        const groupIds = Array.from(this.selectedGroupIds());
+        const requestIds = Array.from(this.selectedRequestIds());
+        if ((groupIds.length === 0 && requestIds.length === 0) || this.isDeletingRequests()) return;
 
-        const confirmMsg = `Are you sure you want to delete ${ids.length} selected request(s)?`;
+        const groupIdSet = new Set(groupIds);
+        const totalReqIdSet = new Set<string>(requestIds);
+        for (const item of this.tabStateService.groupedCapsuleRequests()) {
+            if (groupIdSet.has(item.group.id)) {
+                for (const r of item.requests) totalReqIdSet.add(r.id);
+            }
+        }
+
+        let confirmMsg: string;
+        if (groupIds.length > 0 && totalReqIdSet.size > 0) {
+            confirmMsg = `Are you sure you want to delete ${groupIds.length} selected folder(s) and ${totalReqIdSet.size} request(s)?`;
+        } else if (groupIds.length > 0) {
+            confirmMsg = `Are you sure you want to delete ${groupIds.length} selected folder(s)?`;
+        } else {
+            confirmMsg = `Are you sure you want to delete ${totalReqIdSet.size} selected request(s)?`;
+        }
+
         const confirmed = await this.dialogService.confirm(confirmMsg);
         if (!confirmed) return;
 
         this.isDeletingRequests.set(true);
         try {
-            await this.tabStateService.batchDeleteRequests(ids);
+            await this.tabStateService.deleteRequestGroupsAndRequests(groupIds, requestIds);
+            this.selectedGroupIds.set(new Set());
             this.selectedRequestIds.set(new Set());
-            this.notificationService.notify(`Deleted ${ids.length} request(s) successfully.`);
+            if (groupIds.length > 0 && totalReqIdSet.size > 0) {
+                this.notificationService.notify(`Deleted ${groupIds.length} folder(s) and ${totalReqIdSet.size} request(s) successfully.`);
+            } else if (groupIds.length > 0) {
+                this.notificationService.notify(`Deleted ${groupIds.length} folder(s) successfully.`);
+            } else {
+                this.notificationService.notify(`Deleted ${totalReqIdSet.size} request(s) successfully.`);
+            }
         } catch (e: any) {
-            this.notificationService.notify(`Failed to delete requests: ${e.message || 'Error'}`);
+            this.notificationService.notify(`Failed to delete selected items: ${e.message || 'Error'}`);
         } finally {
             this.isDeletingRequests.set(false);
         }

@@ -185,7 +185,7 @@ export class VariableService {
         }
 
         // 3. When logged in, fetch latest from backend for this specific capsule (deduplicated)
-        if (this.authService.isLoggedIn() && !this.authService.isLoggingOut()) {
+        if (this.authService.isLoggedIn() && !this.authService.isLoggingOut() && !this.tabStateService.isCapsuleDeleting(capId)) {
             if (this.inFlightLoads.has(capId)) {
                 await this.inFlightLoads.get(capId);
                 return;
@@ -262,6 +262,7 @@ export class VariableService {
     async loadVariablesFromBackend(forceNoCapsuleFilter = false, targetCapId?: string): Promise<void> {
         if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         const capId = targetCapId || this.tabStateService.activeCapsuleId() || '1';
+        if (this.tabStateService.isCapsuleDeleting(capId)) return;
         const isGuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capId);
 
         // If not forced and not a valid GUID (e.g. offline '1'), don't query backend without a filter!
@@ -279,7 +280,7 @@ export class VariableService {
             const res = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
             );
-            if (res?.data && Array.isArray(res.data)) {
+            if (res?.data && Array.isArray(res.data) && !this.tabStateService.isCapsuleDeleting(capId)) {
                 const cachedVars = this.getCachedVariablesForCapsule(capId);
                 let sourceMap = this.getSourceMapForCapsule(capId);
                 const inMemVars = this.variables();
@@ -387,8 +388,63 @@ export class VariableService {
         }
     }
 
+    async waitForActiveSync(): Promise<void> {
+        if (this.activeSyncPromise) {
+            try {
+                await this.activeSyncPromise;
+            } catch {}
+        }
+    }
+
+    clearCapsuleLocalData(capsuleId: string): void {
+        if (!capsuleId) return;
+        this.systemSourceVarIds.delete(capsuleId);
+        this.systemGroupsVarIds.delete(capsuleId);
+        this.inFlightLoads.delete(capsuleId);
+        try {
+            this.localStorageService.removeItem(`onsteroids_vars_${capsuleId}`);
+            this.localStorageService.removeItem(`onsteroids_last_vars_${capsuleId}`);
+            this.localStorageService.removeItem(`onsteroids_var_sources_${capsuleId}`);
+            const u = this.authService.currentUser();
+            if (u?.id) {
+                this.localStorageService.removeItem(`onsteroids_user_vars_${capsuleId}_${u.id}`);
+                this.localStorageService.removeItem(`onsteroids_user_var_sources_${capsuleId}_${u.id}`);
+            }
+            if (u?.email) {
+                this.localStorageService.removeItem(`onsteroids_user_vars_${capsuleId}_${u.email}`);
+                this.localStorageService.removeItem(`onsteroids_user_var_sources_${capsuleId}_${u.email}`);
+            }
+        } catch {}
+    }
+
+    async clearCapsuleVariablesOnBackend(capsuleId: string): Promise<void> {
+        await this.waitForActiveSync();
+        this.hasPendingSync = false;
+        const isGuid = capsuleId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capsuleId);
+        if (!isGuid || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) {
+            this.systemSourceVarIds.delete(capsuleId);
+            this.systemGroupsVarIds.delete(capsuleId);
+            return;
+        }
+        try {
+            await firstValueFrom(
+                this.http.post(`${API_BASE_URL}/Variable/sync`, {
+                    capsuleId,
+                    variables: []
+                })
+            );
+        } catch (e) {
+            console.warn(`Failed to clear backend variables for capsule ${capsuleId}`, e);
+        } finally {
+            this.systemSourceVarIds.delete(capsuleId);
+            this.systemGroupsVarIds.delete(capsuleId);
+        }
+    }
+
     async syncVariablesToBackend(targetCapId?: string): Promise<void> {
         if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
+        const requestedCapId = targetCapId || this.tabStateService.activeCapsuleId();
+        if (!requestedCapId || this.tabStateService.isCapsuleDeleting(requestedCapId)) return;
         if (this.isSyncing()) {
             this.hasPendingSync = true;
             if (this.activeSyncPromise) {
@@ -400,17 +456,23 @@ export class VariableService {
         const runSync = async (): Promise<void> => {
         try {
             const capsuleId = targetCapId || this.tabStateService.activeCapsuleId();
+            if (!capsuleId || this.tabStateService.isCapsuleDeleting(capsuleId)) {
+                return;
+            }
             const isGuid = capsuleId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capsuleId);
             if (!isGuid) {
                 return;
             }
 
             const currentCap = this.tabStateService.capsules().find(c => c.id === capsuleId);
-            if (currentCap?.isLocalOnly) {
+            if (!currentCap || currentCap.isLocalOnly || this.tabStateService.isCapsuleDeleting(capsuleId)) {
                 return;
             }
 
-            const userVars = this.variables().filter(v => !(v.key || '').startsWith('__'));
+            const rawCapVars = capsuleId === this.tabStateService.activeCapsuleId()
+                ? this.variables()
+                : this.getCachedVariablesForCapsule(capsuleId);
+            const userVars = rawCapVars.filter(v => !(v.key || '').startsWith('__'));
             const payloadVars: any[] = userVars.map(v => ({
                 id: v.id && v.id.length > 8 ? v.id : null,
                 key: (v.key || '').trim(),
@@ -477,7 +539,7 @@ export class VariableService {
                 this.http.post<{ data: any[] }>(`${API_BASE_URL}/Variable/sync`, payload)
             );
 
-            if (res?.data && Array.isArray(res.data)) {
+            if (res?.data && Array.isArray(res.data) && !this.tabStateService.isCapsuleDeleting(capsuleId)) {
                 const idMap = new Map<string, string>();
                 for (const dbVar of res.data) {
                     const dbKey = (dbVar.variableKey || dbVar.key || '').trim();
@@ -497,7 +559,7 @@ export class VariableService {
                         idMap.set(matched.id, dbVar.id);
                     }
                 }
-                if (idMap.size > 0) {
+                if (idMap.size > 0 && capsuleId === this.tabStateService.activeCapsuleId()) {
                     this.variables.update(vars => vars.map(v => {
                         const newId = idMap.get(v.id);
                         return newId ? { ...v, id: newId } : v;
