@@ -38,19 +38,8 @@ export class ExportComponent {
         try {
             const exportedCapsules = [];
             for (const capsule of selectedData) {
-                const requests = await this.tabStateService.getCapsuleRequests(capsule.id);
-                const vars = capsule.id === this.tabStateService.activeCapsuleId()
-                    ? this.variableService.variables()
-                    : this.variableService.getCachedVariablesForCapsule(capsule.id);
-
-                const groups = this.tabStateService.getGroupsForCapsule(capsule.id);
-                exportedCapsules.push({
-                    id: capsule.id,
-                    name: capsule.name,
-                    requests,
-                    groups,
-                    variables: vars
-                });
+                const fullCapsule = await this.tabStateService.getFullCapsuleExportData(capsule.id);
+                exportedCapsules.push(fullCapsule);
             }
 
             const allExtractedVars = exportedCapsules.flatMap(c => c.variables || []);
@@ -61,11 +50,15 @@ export class ExportComponent {
                     version: "1.0.0",
                     collection: single.name,
                     capsule: single.name,
+                    autoAuthEnabled: single.autoAuthEnabled,
+                    autoAuthEndpointId: single.autoAuthEndpointId,
                     exportedAt: new Date().toISOString(),
                     capsules: [single],
                     requests: single.requests,
                     groups: single.groups,
-                    variables: single.variables
+                    requestOrder: single.requestOrder,
+                    variables: single.variables,
+                    variableSources: single.variableSources
                 };
                 const safeName = single.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
                 this.downloadJson(exportData, `${safeName}_export_${Date.now()}.json`);
@@ -101,19 +94,8 @@ export class ExportComponent {
         try {
             const exportedCapsules = [];
             for (const capsule of allCapsules) {
-                const requests = await this.tabStateService.getCapsuleRequests(capsule.id);
-                const vars = capsule.id === this.tabStateService.activeCapsuleId()
-                    ? this.variableService.variables()
-                    : this.variableService.getCachedVariablesForCapsule(capsule.id);
-
-                const groups = this.tabStateService.getGroupsForCapsule(capsule.id);
-                exportedCapsules.push({
-                    id: capsule.id,
-                    name: capsule.name,
-                    requests,
-                    groups,
-                    variables: vars
-                });
+                const fullCapsule = await this.tabStateService.getFullCapsuleExportData(capsule.id);
+                exportedCapsules.push(fullCapsule);
             }
 
             const allExtractedVars = exportedCapsules.flatMap(c => c.variables || []);

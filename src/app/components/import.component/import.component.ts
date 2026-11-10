@@ -11,9 +11,13 @@ import { extractPostmanVariables, extractRequestsVariables } from '../../shared/
 
 interface ParsedCapsuleGroup {
     name: string;
+    autoAuthEnabled?: string;
+    autoAuthEndpointId?: string | null;
     requests: (Partial<RequestState> & { __folderName?: string })[];
     groups?: any[];
+    requestOrder?: string[];
     variables?: IGlobalVariable[];
+    variableSources?: Record<string, any>;
 }
 
 export interface PendingImport {
@@ -26,9 +30,13 @@ export interface PendingImport {
         capsules: {
             id: string;
             name: string;
+            autoAuthEnabled?: string;
+            autoAuthEndpointId?: string | null;
             variables: IGlobalVariable[];
+            variableSources?: Record<string, any>;
             requests: RequestState[];
             groups?: RequestGroup[];
+            requestOrder?: string[];
         }[];
         variables: IGlobalVariable[];
     };
@@ -190,12 +198,17 @@ export class ImportComponent implements OnInit {
                 const capName = cap.name || cap.collection || cap.capsule || cap.title || 'Imported Capsule';
                 const reqs = Array.isArray(cap.requests) ? cap.requests : (Array.isArray(cap.items) ? cap.items : []);
                 const explicitVars = cap.variables || cap.variable || data.variables || data.variable;
-                const extractedVars = extractRequestsVariables(reqs, explicitVars);
+                const explicitSources = cap.variableSources || data.variableSources;
+                const extractedVars = extractRequestsVariables(reqs, explicitVars, explicitSources);
                 groups.push({
                     name: capName,
+                    autoAuthEnabled: cap.autoAuthEnabled || data.autoAuthEnabled || 'off',
+                    autoAuthEndpointId: cap.autoAuthEndpointId ?? data.autoAuthEndpointId ?? null,
                     requests: reqs,
-                    groups: Array.isArray(cap.groups) ? cap.groups : undefined,
-                    variables: extractedVars
+                    groups: Array.isArray(cap.groups) ? cap.groups : (Array.isArray(data.groups) ? data.groups : undefined),
+                    requestOrder: Array.isArray(cap.requestOrder) ? cap.requestOrder : (Array.isArray(data.requestOrder) ? data.requestOrder : undefined),
+                    variables: extractedVars,
+                    variableSources: explicitSources
                 });
             }
         }
@@ -204,12 +217,17 @@ export class ImportComponent implements OnInit {
             const reqs = Array.isArray(data.requests) ? data.requests : data.items;
             const capName = data.collection || data.capsule || data.capsuleName || data.collectionName || data.name || (data.capsule && data.capsule.name) || 'Imported Capsule';
             const explicitVars = data.variables || data.variable || (data.capsule && data.capsule.variables);
-            const extractedVars = extractRequestsVariables(reqs, explicitVars);
+            const explicitSources = data.variableSources || (data.capsule && data.capsule.variableSources);
+            const extractedVars = extractRequestsVariables(reqs, explicitVars, explicitSources);
             groups.push({
                 name: typeof capName === 'string' ? capName : 'Imported Capsule',
+                autoAuthEnabled: data.autoAuthEnabled || (data.capsule && data.capsule.autoAuthEnabled) || 'off',
+                autoAuthEndpointId: data.autoAuthEndpointId ?? (data.capsule && data.capsule.autoAuthEndpointId) ?? null,
                 requests: reqs,
                 groups: Array.isArray(data.groups) ? data.groups : undefined,
-                variables: extractedVars
+                requestOrder: Array.isArray(data.requestOrder) ? data.requestOrder : undefined,
+                variables: extractedVars,
+                variableSources: explicitSources
             });
         }
         // 4. Nested capsule object: { capsule: { name: "...", requests: [...] } }
@@ -218,12 +236,17 @@ export class ImportComponent implements OnInit {
             const capName = cap.name || cap.collection || 'Imported Capsule';
             const reqs = Array.isArray(cap.requests) ? cap.requests : (Array.isArray(cap.items) ? cap.items : []);
             const explicitVars = cap.variables || cap.variable || data.variables || data.variable;
-            const extractedVars = extractRequestsVariables(reqs, explicitVars);
+            const explicitSources = cap.variableSources || data.variableSources;
+            const extractedVars = extractRequestsVariables(reqs, explicitVars, explicitSources);
             groups.push({
                 name: capName,
+                autoAuthEnabled: cap.autoAuthEnabled || data.autoAuthEnabled || 'off',
+                autoAuthEndpointId: cap.autoAuthEndpointId ?? data.autoAuthEndpointId ?? null,
                 requests: reqs,
                 groups: Array.isArray(cap.groups) ? cap.groups : undefined,
-                variables: extractedVars
+                requestOrder: Array.isArray(cap.requestOrder) ? cap.requestOrder : undefined,
+                variables: extractedVars,
+                variableSources: explicitSources
             });
         }
         // 5. Raw Array of Requests
@@ -237,11 +260,12 @@ export class ImportComponent implements OnInit {
         }
         // 6. Single Endpoint / Request JSON (e.g. from "Export Endpoint")
         else if (data.url !== undefined && (data.method !== undefined || data.headers !== undefined)) {
-            const extractedVars = extractRequestsVariables([data], data.variables);
+            const extractedVars = extractRequestsVariables([data], data.variables, data.variableSources);
             groups.push({
                 name: data.name || 'Imported Endpoint',
                 requests: [data],
-                variables: extractedVars
+                variables: extractedVars,
+                variableSources: data.variableSources
             });
         }
         else {
@@ -281,6 +305,17 @@ export class ImportComponent implements OnInit {
                     return norm;
                 });
 
+                // Second pass: remap postTriggerTabId across normalized requests
+                for (const norm of normalizedRequests) {
+                    if (norm.postTriggerTabId) {
+                        norm.postTriggerTabId = oldReqIdMap.get(norm.postTriggerTabId) || norm.postTriggerTabId;
+                    }
+                }
+
+                const remappedAutoAuthEndpointId = group.autoAuthEndpointId
+                    ? (oldReqIdMap.get(group.autoAuthEndpointId) || group.autoAuthEndpointId)
+                    : null;
+
                 let finalGroups: RequestGroup[] = Array.from(folderNameMap.values());
                 if (finalGroups.length === 0 && Array.isArray(group.groups) && group.groups.length > 0) {
                     finalGroups = group.groups.map((g: any) => ({
@@ -293,12 +328,44 @@ export class ImportComponent implements OnInit {
                     }));
                 }
 
+                const finalRequestOrder = Array.isArray(group.requestOrder)
+                    ? group.requestOrder.map((oldId: string) => oldReqIdMap.get(oldId) || oldId)
+                    : undefined;
+
+                // Remap variable sources (tabId / requestId) using oldReqIdMap
+                const remappedVarSources: Record<string, any> = {};
+                if (group.variableSources && typeof group.variableSources === 'object') {
+                    for (const [k, src] of Object.entries(group.variableSources)) {
+                        if (src && typeof src === 'object') {
+                            const clonedSrc = { ...src, capsuleId: capId };
+                            if (clonedSrc.tabId) clonedSrc.tabId = oldReqIdMap.get(clonedSrc.tabId) || clonedSrc.tabId;
+                            if (clonedSrc.requestId) clonedSrc.requestId = oldReqIdMap.get(clonedSrc.requestId) || clonedSrc.requestId;
+                            remappedVarSources[k.toLowerCase()] = clonedSrc;
+                        }
+                    }
+                }
+
+                const remappedVars = (group.variables || []).map(v => {
+                    const kLower = (v.key || '').trim().toLowerCase();
+                    let src = v.source ? { ...v.source, capsuleId: capId } : remappedVarSources[kLower];
+                    if (src) {
+                        if (src.tabId) src.tabId = oldReqIdMap.get(src.tabId) || src.tabId;
+                        if (src.requestId) src.requestId = oldReqIdMap.get(src.requestId) || src.requestId;
+                        remappedVarSources[kLower] = src;
+                    }
+                    return { ...v, ...(src ? { source: src } : {}) };
+                });
+
                 return {
                     id: capId,
                     name: group.name,
-                    variables: group.variables || [],
+                    autoAuthEnabled: group.autoAuthEnabled || 'off',
+                    autoAuthEndpointId: remappedAutoAuthEndpointId,
+                    variables: remappedVars,
+                    variableSources: remappedVarSources,
                     requests: normalizedRequests,
-                    groups: finalGroups
+                    groups: finalGroups,
+                    requestOrder: finalRequestOrder
                 };
             }),
             variables: allExtractedVars
@@ -412,8 +479,18 @@ export class ImportComponent implements OnInit {
             },
             settings: {
                 ...baseState.settings,
-                ...(rawReq.settings || {})
+                ...(rawReq.settings || {}),
+                ...(rawReq.followRedirects !== undefined ? { followRedirects: !!rawReq.followRedirects } : {}),
+                ...(rawReq.verifySsl !== undefined ? { verifySsl: !!rawReq.verifySsl } : {}),
+                ...(rawReq.enableCookies !== undefined ? { enableCookies: !!rawReq.enableCookies } : {}),
+                ...(rawReq.bypassCors !== undefined ? { bypassCors: !!rawReq.bypassCors } : {})
             },
+            postTriggerTabId: rawReq.postTriggerTabId || null,
+            autoAuthEnabled: !!rawReq.autoAuthEnabled,
+            bodyWrapStyle: rawReq.bodyWrapStyle || baseState.bodyWrapStyle,
+            responseWrapStyle: rawReq.responseWrapStyle || baseState.responseWrapStyle,
+            responseActiveMode: rawReq.responseActiveMode || baseState.responseActiveMode,
+            consoleWrap: rawReq.consoleWrap ?? baseState.consoleWrap,
             isDirty: false
         } as RequestState;
     }

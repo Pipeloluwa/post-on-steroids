@@ -823,14 +823,65 @@ export class TabStateService {
         }, 600);
     }
 
-    getCapsuleGroupsSyncPayload(capId: string): { groups: RequestGroup[]; order: string[] } {
-        const groups = this.getGroupsForCapsule(capId);
-        const order = this.capsuleRequestOrderMap().get(capId) || this.loadCapsuleRequestOrder(capId) || [];
-        return { groups, order };
+    getRequestOrderForCapsule(capId: string): string[] {
+        if (!capId) return [];
+        return this.capsuleRequestOrderMap().get(capId) || this.loadCapsuleRequestOrder(capId) || [];
     }
 
-    applyBackendCapsuleGroups(capId: string, payload: { groups?: RequestGroup[]; order?: string[] }): void {
+    getCapsuleGroupsSyncPayload(capId: string): {
+        groups: RequestGroup[];
+        order: string[];
+        autoAuthEnabled?: string;
+        autoAuthEndpointId?: string | null;
+        requestMeta?: Record<string, any>;
+    } {
+        const groups = this.getGroupsForCapsule(capId);
+        const order = this.getRequestOrderForCapsule(capId);
+        const cap = this.capsules().find(c => c.id === capId);
+        const autoAuthEnabled = (capId === this.activeCapsuleId() ? this.autoAuthEnabled() : cap?.autoAuthEnabled) || 'off';
+        const autoAuthEndpointId = (capId === this.activeCapsuleId() ? this.autoAuthEndpointId() : cap?.autoAuthEndpointId) || null;
+
+        const reqs = this.getCapsuleRequestsSync(capId);
+        const requestMeta: Record<string, any> = {};
+        for (const r of reqs) {
+            if (!r?.id) continue;
+            requestMeta[r.id] = {
+                postTriggerTabId: r.postTriggerTabId || null,
+                autoAuthEnabled: !!r.autoAuthEnabled,
+                groupId: r.groupId || null,
+                settings: r.settings,
+                encryption: r.encryption,
+                scripts: r.scripts ? {
+                    preRequest: r.scripts.preRequest,
+                    postResponse: r.scripts.postResponse,
+                    testScript: r.scripts.testScript,
+                    testScriptEnabled: r.scripts.testScriptEnabled
+                } : undefined,
+                bodyWrapStyle: r.bodyWrapStyle,
+                responseWrapStyle: r.responseWrapStyle,
+                responseActiveMode: r.responseActiveMode,
+                consoleWrap: r.consoleWrap
+            };
+        }
+
+        return {
+            groups,
+            order,
+            autoAuthEnabled,
+            autoAuthEndpointId,
+            requestMeta
+        };
+    }
+
+    applyBackendCapsuleGroups(capId: string, payload: {
+        groups?: RequestGroup[];
+        order?: string[];
+        autoAuthEnabled?: string;
+        autoAuthEndpointId?: string | null;
+        requestMeta?: Record<string, any>;
+    }): void {
         if (!capId || !payload || typeof payload !== 'object') return;
+        const reqToGroup = new Map<string, string>();
         if (Array.isArray(payload.groups)) {
             const normalizedGroups: RequestGroup[] = payload.groups.map(g => ({
                 id: g.id || ('grp_' + this.createId()),
@@ -842,37 +893,75 @@ export class TabStateService {
             }));
             this.setGroupsForCapsule(capId, normalizedGroups, false);
 
-            // Sync groupId onto in-memory states and savedCapsules
-            const reqToGroup = new Map<string, string>();
             for (const g of normalizedGroups) {
                 for (const rId of g.requestIds) {
                     reqToGroup.set(rId, g.id);
                 }
             }
+        }
+
+        const reqMetaMap = (payload.requestMeta && typeof payload.requestMeta === 'object') ? payload.requestMeta : null;
+        if (Array.isArray(payload.groups) || reqMetaMap) {
+            const applyMetaToRequest = (st: RequestState): RequestState => {
+                const targetGId = Array.isArray(payload.groups)
+                    ? (reqToGroup.get(st.id) ?? null)
+                    : (st.groupId ?? null);
+                const meta = reqMetaMap ? reqMetaMap[st.id] : null;
+                return {
+                    ...st,
+                    groupId: targetGId,
+                    ...(meta ? {
+                        postTriggerTabId: st.postTriggerTabId ?? meta.postTriggerTabId ?? null,
+                        autoAuthEnabled: st.autoAuthEnabled ?? meta.autoAuthEnabled ?? false,
+                        settings: meta.settings ? { ...st.settings, ...meta.settings } : st.settings,
+                        encryption: meta.encryption ? { ...st.encryption, ...meta.encryption } : st.encryption,
+                        scripts: meta.scripts ? { ...st.scripts, ...meta.scripts } : st.scripts,
+                        bodyWrapStyle: st.bodyWrapStyle || meta.bodyWrapStyle,
+                        responseWrapStyle: st.responseWrapStyle || meta.responseWrapStyle,
+                        responseActiveMode: st.responseActiveMode || meta.responseActiveMode,
+                        consoleWrap: st.consoleWrap ?? meta.consoleWrap
+                    } : {})
+                };
+            };
+
             this.states.update(map => {
                 let changed = false;
                 const next = new Map(map);
                 for (const [rId, st] of next.entries()) {
                     if (st.capsuleId === capId || (!st.capsuleId && capId === '1')) {
-                        const targetGId = reqToGroup.get(rId) ?? null;
-                        if ((st.groupId ?? null) !== targetGId) {
-                            next.set(rId, { ...st, groupId: targetGId });
-                            changed = true;
-                        }
+                        next.set(rId, applyMetaToRequest(st));
+                        changed = true;
                     }
                 }
                 return changed ? next : map;
             });
             this.savedCapsules.update(col => col.map(r => {
                 if (r.capsuleId === capId || (!r.capsuleId && capId === '1')) {
-                    const targetGId = reqToGroup.get(r.id) ?? null;
-                    if ((r.groupId ?? null) !== targetGId) {
-                        return { ...r, groupId: targetGId };
-                    }
+                    return applyMetaToRequest(r);
                 }
                 return r;
             }));
         }
+
+        if (payload.autoAuthEnabled !== undefined || payload.autoAuthEndpointId !== undefined) {
+            this.capsules.update(list => list.map(c => {
+                if (c.id !== capId) return c;
+                return {
+                    ...c,
+                    autoAuthEnabled: (payload.autoAuthEnabled as any) || c.autoAuthEnabled || 'off',
+                    autoAuthEndpointId: payload.autoAuthEndpointId !== undefined ? payload.autoAuthEndpointId : (c.autoAuthEndpointId ?? null)
+                };
+            }));
+            if (capId === this.activeCapsuleId()) {
+                if (payload.autoAuthEnabled) {
+                    this.autoAuthEnabled.set(payload.autoAuthEnabled as any);
+                }
+                if (payload.autoAuthEndpointId !== undefined) {
+                    this.autoAuthEndpointId.set(payload.autoAuthEndpointId);
+                }
+            }
+        }
+
         if (Array.isArray(payload.order) && payload.order.length > 0) {
             this.capsuleRequestOrderMap.update(m => {
                 const next = new Map(m);
@@ -1952,6 +2041,8 @@ export class TabStateService {
                     autoAuthEndpointId: currentEndpoint
                 })
             ).catch(err => console.warn('Failed to persist capsule auto-auth settings to backend', err));
+            this.syncWorkspaceStateToBackend();
+            this.scheduleGroupsVariableSync(capId);
         }
     }
 
@@ -2035,6 +2126,7 @@ export class TabStateService {
         const newStates = new Map(this.states());
         const idMap = new Map<string, string>();
         
+        const clonedRequestsList: RequestState[] = [];
         for (const req of oldRequests) {
             const newReqId = this.createId();
             idMap.set(req.id, newReqId);
@@ -2050,7 +2142,31 @@ export class TabStateService {
             clonedReq.responseSize = 0;
             clonedReq.responseTime = 0;
             
-            newStates.set(newReqId, clonedReq);
+            clonedRequestsList.push(clonedReq);
+        }
+
+        // Second pass: remap postTriggerTabId across cloned requests
+        for (const clonedReq of clonedRequestsList) {
+            if (clonedReq.postTriggerTabId && idMap.has(clonedReq.postTriggerTabId)) {
+                clonedReq.postTriggerTabId = idMap.get(clonedReq.postTriggerTabId)!;
+            }
+            newStates.set(clonedReq.id, clonedReq);
+        }
+
+        // Remap capsule-level autoAuthEnabled & autoAuthEndpointId
+        const sourceAutoAuth = capsule.autoAuthEnabled || (capsule.id === this.activeCapsuleId() ? this.autoAuthEnabled() : 'off');
+        const sourceEndpoint = capsule.autoAuthEndpointId ?? (capsule.id === this.activeCapsuleId() ? this.autoAuthEndpointId() : null);
+        newCap.autoAuthEnabled = sourceAutoAuth;
+        newCap.autoAuthEndpointId = sourceEndpoint ? (idMap.get(sourceEndpoint) || sourceEndpoint) : null;
+
+        // Clone custom request order
+        const sourceOrder = this.getRequestOrderForCapsule(capsule.id);
+        if (sourceOrder.length > 0) {
+            const clonedOrder = sourceOrder.map(oldRId => idMap.get(oldRId)!).filter(Boolean);
+            this.capsuleRequestOrderMap.update(m => new Map(m).set(newCap.id, clonedOrder));
+            if (this.isBrowser) {
+                localStorage.setItem(`onsteroids_capsule_order_${newCap.id}`, JSON.stringify(clonedOrder));
+            }
         }
         
         this.states.set(newStates);
@@ -2428,9 +2544,116 @@ export class TabStateService {
         return null;
     }
 
+    getFullCapsuleExportDataSync(capsuleId: string): {
+        id: string;
+        name: string;
+        autoAuthEnabled: string;
+        autoAuthEndpointId: string | null;
+        requests: RequestState[];
+        groups: RequestGroup[];
+        requestOrder: string[];
+        variables: IGlobalVariable[];
+        variableSources: Record<string, any>;
+    } {
+        const cap = this.capsules().find(c => c.id === capsuleId);
+        const name = cap?.name || (capsuleId === this.activeCapsuleId() ? this.activeCapsuleName() : 'Capsule');
+        const autoAuthEnabled = (capsuleId === this.activeCapsuleId() ? this.autoAuthEnabled() : cap?.autoAuthEnabled) || 'off';
+        const autoAuthEndpointId = (capsuleId === this.activeCapsuleId() ? this.autoAuthEndpointId() : cap?.autoAuthEndpointId) || null;
+        const requests = this.getCapsuleRequestsSync(capsuleId);
+        const groups = this.getGroupsForCapsule(capsuleId);
+        const requestOrder = this.getRequestOrderForCapsule(capsuleId);
+
+        const vs = this.getVariableService();
+        const varSources = vs ? vs.getSourceMapForCapsule(capsuleId) : {};
+        const rawVars = vs
+            ? (capsuleId === this.activeCapsuleId() ? vs.variables() : vs.getCachedVariablesForCapsule(capsuleId))
+            : [];
+        const variables = rawVars.map(v => {
+            const kLower = (v.key || '').trim().toLowerCase();
+            return {
+                ...v,
+                source: v.source ?? varSources[kLower]
+            };
+        });
+
+        return {
+            id: capsuleId,
+            name,
+            autoAuthEnabled,
+            autoAuthEndpointId,
+            requests,
+            groups,
+            requestOrder,
+            variables,
+            variableSources: varSources
+        };
+    }
+
+    async getFullCapsuleExportData(capsuleId: string): Promise<{
+        id: string;
+        name: string;
+        autoAuthEnabled: string;
+        autoAuthEndpointId: string | null;
+        requests: RequestState[];
+        groups: RequestGroup[];
+        requestOrder: string[];
+        variables: IGlobalVariable[];
+        variableSources: Record<string, any>;
+    }> {
+        const requests = await this.getCapsuleRequests(capsuleId);
+        const vs = this.getVariableService();
+        const isGuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capsuleId);
+
+        // If exporting a non-active capsule while logged in and its variables/groups aren't cached yet, fetch from backend
+        if (this.isBrowser && this.authService.isLoggedIn() && isGuid && capsuleId !== this.activeCapsuleId()) {
+            const cachedVars = vs ? vs.getCachedVariablesForCapsule(capsuleId) : [];
+            const cachedGroups = this.getGroupsForCapsule(capsuleId);
+            if (cachedVars.length === 0 && cachedGroups.length === 0) {
+                try {
+                    const res = await firstValueFrom(
+                        this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable?capsuleId=${capsuleId}`)
+                    );
+                    if (res?.data && Array.isArray(res.data)) {
+                        const sysGroupsEntry = res.data.find(v => (v.variableKey || v.key || '').trim() === '__capsule_groups__');
+                        const rawGroupsVal = sysGroupsEntry?.variableValue ?? sysGroupsEntry?.value;
+                        if (rawGroupsVal && typeof rawGroupsVal === 'string') {
+                            try {
+                                this.applyBackendCapsuleGroups(capsuleId, JSON.parse(rawGroupsVal));
+                            } catch {}
+                        }
+                        const sysSourceEntry = res.data.find(v => (v.variableKey || v.key || '').trim() === '__var_sources__');
+                        const rawSourceVal = sysSourceEntry?.variableValue ?? sysSourceEntry?.value;
+                        if (rawSourceVal && typeof rawSourceVal === 'string' && vs) {
+                            try {
+                                const parsedSources = JSON.parse(rawSourceVal);
+                                if (parsedSources && typeof parsedSources === 'object') {
+                                    vs.saveSourceMapForCapsule(capsuleId, { ...parsedSources, ...vs.getSourceMapForCapsule(capsuleId) });
+                                }
+                            } catch {}
+                        }
+                    }
+                } catch {}
+            }
+        }
+
+        const syncData = this.getFullCapsuleExportDataSync(capsuleId);
+        return {
+            ...syncData,
+            requests: requests.length > 0 ? requests : syncData.requests
+        };
+    }
+
     async shareCapsule(capsuleId: string): Promise<string> {
         if (!this.isBrowser || !this.authService.isLoggedIn()) {
             throw new Error('Please sign in to share this capsule.');
+        }
+
+        // Flush capsule variables, __capsule_groups__, and __var_sources__ to backend before generating share snapshot
+        const vs = this.getVariableService();
+        if (vs) {
+            try {
+                await vs.syncVariablesToBackend(capsuleId);
+            } catch {}
         }
 
         const res = await firstValueFrom(
@@ -2504,7 +2727,9 @@ export class TabStateService {
             autoAuthEndpointId?: string | null;
             requests: RequestState[];
             groups?: RequestGroup[];
+            requestOrder?: string[];
             variables?: IGlobalVariable[];
+            variableSources?: Record<string, any>;
         }[];
         variables?: IGlobalVariable[];
     }, options?: { saveToBackend?: boolean }): Promise<{ capsulesCount: number; requestsCount: number }> {
@@ -2585,6 +2810,58 @@ export class TabStateService {
                         return st;
                     });
 
+                    // Second pass: preserve all inputReq settings, encryption, scripts, autoAuth, and remap postTriggerTabId
+                    const triggerUpdatePromises: Promise<any>[] = [];
+                    mappedRequests.forEach((mr, rIdx) => {
+                        const inputReq = capInput?.requests?.[rIdx];
+                        if (!inputReq) return;
+                        mr.autoAuthEnabled = inputReq.autoAuthEnabled ?? mr.autoAuthEnabled;
+                        const rawTrigger = inputReq.postTriggerTabId || mr.postTriggerTabId || null;
+                        const remappedTrigger = rawTrigger ? (reqIdMap.get(rawTrigger) || rawTrigger) : null;
+                        const triggerChanged = mr.postTriggerTabId !== remappedTrigger;
+                        mr.postTriggerTabId = remappedTrigger;
+
+                        if (inputReq.settings) mr.settings = { ...mr.settings, ...inputReq.settings };
+                        if (inputReq.encryption) mr.encryption = { ...mr.encryption, ...inputReq.encryption };
+                        if (inputReq.scripts) mr.scripts = { ...mr.scripts, ...inputReq.scripts };
+                        if (inputReq.bodyWrapStyle) mr.bodyWrapStyle = inputReq.bodyWrapStyle;
+                        if (inputReq.responseWrapStyle) mr.responseWrapStyle = inputReq.responseWrapStyle;
+                        if (inputReq.responseActiveMode) mr.responseActiveMode = inputReq.responseActiveMode;
+                        if (inputReq.consoleWrap !== undefined) mr.consoleWrap = inputReq.consoleWrap;
+
+                        if (triggerChanged && remappedTrigger) {
+                            const savePayload = this.mapStateToSaveRequest(mr, newCap.id, newCap.name);
+                            triggerUpdatePromises.push(
+                                firstValueFrom(this.http.post(`${API_BASE_URL}/request/save`, savePayload)).catch(() => {})
+                            );
+                        }
+                    });
+
+                    // Remap capsule-level autoAuthEnabled & autoAuthEndpointId
+                    const resolvedCapAutoAuth = (capInput?.autoAuthEnabled as any) || capData.autoAuthEnabled || 'off';
+                    const rawCapEndpoint = capInput?.autoAuthEndpointId || capData.autoAuthEndpointId || null;
+                    const resolvedCapEndpoint = rawCapEndpoint ? (reqIdMap.get(rawCapEndpoint) || rawCapEndpoint) : null;
+                    newCap.autoAuthEnabled = resolvedCapAutoAuth;
+                    newCap.autoAuthEndpointId = resolvedCapEndpoint;
+                    this.capsules.update(list => list.map(c => c.id === newCap.id ? newCap : c));
+
+                    if (resolvedCapEndpoint !== capData.autoAuthEndpointId || resolvedCapAutoAuth !== (capData.autoAuthEnabled || 'off')) {
+                        triggerUpdatePromises.push(
+                            firstValueFrom(
+                                this.http.put(`${API_BASE_URL}/capsule/${newCap.id}`, {
+                                    name: newCap.name,
+                                    autoAuthEnabled: resolvedCapAutoAuth,
+                                    autoAuthEndpointId: resolvedCapEndpoint
+                                })
+                            ).catch(() => {})
+                        );
+                    }
+
+                    if (triggerUpdatePromises.length > 0) {
+                        await Promise.allSettled(triggerUpdatePromises);
+                    }
+
+                    // Remap and persist request groups (folders)
                     if (capInput?.groups && Array.isArray(capInput.groups) && capInput.groups.length > 0) {
                         const importedGroups: RequestGroup[] = capInput.groups.map(g => ({
                             id: 'grp_' + this.createId(),
@@ -2601,7 +2878,16 @@ export class TabStateService {
                         for (const mr of mappedRequests) {
                             mr.groupId = reqToGroup.get(mr.id) || null;
                         }
-                        this.setGroupsForCapsule(newCap.id, importedGroups, true);
+                        this.setGroupsForCapsule(newCap.id, importedGroups, false);
+                    }
+
+                    // Remap and persist custom request order
+                    if (capInput?.requestOrder && Array.isArray(capInput.requestOrder) && capInput.requestOrder.length > 0) {
+                        const remappedOrder = capInput.requestOrder.map(oldId => reqIdMap.get(oldId) || oldId);
+                        this.capsuleRequestOrderMap.update(m => new Map(m).set(newCap.id, remappedOrder));
+                        if (this.isBrowser) {
+                            localStorage.setItem(`onsteroids_capsule_order_${newCap.id}`, JSON.stringify(remappedOrder));
+                        }
                     }
 
                     this.states.update(map => {
@@ -2612,18 +2898,57 @@ export class TabStateService {
                         return next;
                     });
 
+                    // Remap variable sources (tabId / requestId) to newly created backend request IDs
+                    const inputVars = capInput?.variables || data.variables || [];
+                    const inputVarByKey = new Map<string, IGlobalVariable>();
+                    const remappedVarSources: Record<string, any> = {};
 
+                    if (capInput?.variableSources && typeof capInput.variableSources === 'object') {
+                        for (const [k, src] of Object.entries(capInput.variableSources)) {
+                            if (src && typeof src === 'object') {
+                                const clonedSrc = { ...src, capsuleId: newCap.id };
+                                if (clonedSrc.tabId) clonedSrc.tabId = reqIdMap.get(clonedSrc.tabId) || clonedSrc.tabId;
+                                if (clonedSrc.requestId) clonedSrc.requestId = reqIdMap.get(clonedSrc.requestId) || clonedSrc.requestId;
+                                remappedVarSources[k.toLowerCase()] = clonedSrc;
+                            }
+                        }
+                    }
 
-                    // Store variables for this capsule
+                    for (const iv of inputVars) {
+                        const kLower = (iv.key || '').trim().toLowerCase();
+                        if (!kLower) continue;
+                        let remappedSrc = iv.source ? { ...iv.source, capsuleId: newCap.id } : remappedVarSources[kLower];
+                        if (remappedSrc) {
+                            if (remappedSrc.tabId) remappedSrc.tabId = reqIdMap.get(remappedSrc.tabId) || remappedSrc.tabId;
+                            if (remappedSrc.requestId) remappedSrc.requestId = reqIdMap.get(remappedSrc.requestId) || remappedSrc.requestId;
+                            remappedVarSources[kLower] = remappedSrc;
+                        }
+                        inputVarByKey.set(kLower, { ...iv, ...(remappedSrc ? { source: remappedSrc } : {}) });
+                    }
+
+                    const vsForImport = this.getVariableService();
+                    if (vsForImport && Object.keys(remappedVarSources).length > 0) {
+                        vsForImport.saveSourceMapForCapsule(newCap.id, remappedVarSources);
+                    }
+
+                    // Store variables for this capsule (preserving type, enabled, and remapped source)
                     const capVars: IGlobalVariable[] = (importedCap.variables && importedCap.variables.length > 0)
-                        ? importedCap.variables.map(v => ({
-                            id: v.id ? String(v.id) : this.createId(),
-                            key: v.variableKey || v.key || '',
-                            value: v.variableValue !== undefined ? v.variableValue : (v.value !== undefined ? v.value : ''),
-                            type: v.type || 'global',
-                            enabled: v.isEnabled !== undefined ? v.isEnabled : (v.enabled !== undefined ? v.enabled : true)
-                        }))
-                        : (capInput?.variables || data.variables || []);
+                        ? importedCap.variables
+                            .filter((v: any) => !(v.variableKey || v.key || '').trim().startsWith('__'))
+                            .map((v: any) => {
+                                const k = (v.variableKey || v.key || '').trim();
+                                const kLower = k.toLowerCase();
+                                const matchedInput = inputVarByKey.get(kLower);
+                                return {
+                                    id: v.id ? String(v.id) : this.createId(),
+                                    key: k,
+                                    value: v.variableValue !== undefined ? v.variableValue : (v.value !== undefined ? v.value : (matchedInput?.value ?? '')),
+                                    type: v.type || matchedInput?.type || 'global',
+                                    enabled: v.isEnabled !== undefined ? v.isEnabled : (v.enabled !== undefined ? v.enabled : (matchedInput?.enabled ?? true)),
+                                    ...(matchedInput?.source || remappedVarSources[kLower] ? { source: matchedInput?.source || remappedVarSources[kLower] } : {})
+                                };
+                            })
+                        : Array.from(inputVarByKey.values());
 
                     if (this.isBrowser && capVars.length > 0) {
                         const varsJson = JSON.stringify(capVars);
@@ -2672,6 +2997,17 @@ export class TabStateService {
                     };
                 });
 
+                // Second pass: remap postTriggerTabId & capsule autoAuthEndpointId
+                for (const mr of reqs) {
+                    if (mr.postTriggerTabId) {
+                        mr.postTriggerTabId = reqIdMap.get(mr.postTriggerTabId) || mr.postTriggerTabId;
+                    }
+                }
+                if (newCap.autoAuthEndpointId) {
+                    newCap.autoAuthEndpointId = reqIdMap.get(newCap.autoAuthEndpointId) || newCap.autoAuthEndpointId;
+                    this.capsules.update(list => list.map(item => item.id === newCap.id ? newCap : item));
+                }
+
                 if (c.groups && Array.isArray(c.groups) && c.groups.length > 0) {
                     const importedGroups: RequestGroup[] = c.groups.map(g => ({
                         id: 'grp_' + this.createId(),
@@ -2691,6 +3027,14 @@ export class TabStateService {
                     this.setGroupsForCapsule(capId, importedGroups, false);
                 }
 
+                if (c.requestOrder && Array.isArray(c.requestOrder) && c.requestOrder.length > 0) {
+                    const remappedOrder = c.requestOrder.map(oldId => reqIdMap.get(oldId) || oldId);
+                    this.capsuleRequestOrderMap.update(m => new Map(m).set(capId, remappedOrder));
+                    if (this.isBrowser) {
+                        localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(remappedOrder));
+                    }
+                }
+
                 this.states.update(map => {
                     const next = new Map(map);
                     for (const req of reqs) {
@@ -2699,7 +3043,34 @@ export class TabStateService {
                     return next;
                 });
 
-                const capVars = c.variables || data.variables || [];
+                const remappedLocalSources: Record<string, any> = {};
+                if (c.variableSources && typeof c.variableSources === 'object') {
+                    for (const [k, src] of Object.entries(c.variableSources)) {
+                        if (src && typeof src === 'object') {
+                            const clonedSrc = { ...src, capsuleId: capId };
+                            if (clonedSrc.tabId) clonedSrc.tabId = reqIdMap.get(clonedSrc.tabId) || clonedSrc.tabId;
+                            if (clonedSrc.requestId) clonedSrc.requestId = reqIdMap.get(clonedSrc.requestId) || clonedSrc.requestId;
+                            remappedLocalSources[k.toLowerCase()] = clonedSrc;
+                        }
+                    }
+                }
+
+                const capVars = (c.variables || data.variables || []).map(v => {
+                    const kLower = (v.key || '').trim().toLowerCase();
+                    let src = v.source ? { ...v.source, capsuleId: capId } : remappedLocalSources[kLower];
+                    if (src) {
+                        if (src.tabId) src.tabId = reqIdMap.get(src.tabId) || src.tabId;
+                        if (src.requestId) src.requestId = reqIdMap.get(src.requestId) || src.requestId;
+                        remappedLocalSources[kLower] = src;
+                    }
+                    return { ...v, ...(src ? { source: src } : {}) };
+                });
+
+                const vsLocal = this.getVariableService();
+                if (vsLocal && Object.keys(remappedLocalSources).length > 0) {
+                    vsLocal.saveSourceMapForCapsule(capId, remappedLocalSources);
+                }
+
                 if (this.isBrowser && capVars.length > 0) {
                     const varsJson = JSON.stringify(capVars);
                     localStorage.setItem(`onsteroids_vars_${capId}`, varsJson);
@@ -2727,7 +3098,10 @@ export class TabStateService {
 
             const vs = this.getVariableService();
             if (vs) {
-                vs.setVariables(lastCreatedCapVars || [], lastCreatedCap.id);
+                vs.setVariables(lastCreatedCapVars || [], lastCreatedCap.id, shouldSaveToBackend);
+                if (shouldSaveToBackend && this.authService.isLoggedIn()) {
+                    await vs.syncVariablesToBackend(lastCreatedCap.id);
+                }
             }
 
             if (lastCreatedRequests.length > 0) {
@@ -2793,17 +3167,24 @@ export class TabStateService {
         const capName = shared.name || shared.capsuleName || 'Imported Capsule';
 
         const sharedIdMap = new Map<string, string>();
+        const oldIdByIndex: (string | undefined)[] = [];
         const requestsToSave: RequestState[] = [];
         if (shared.requests && Array.isArray(shared.requests)) {
             for (const r of shared.requests) {
                 const newReqId = this.createId();
                 if (r.id) sharedIdMap.set(r.id, newReqId);
+                oldIdByIndex.push(r.id);
                 const reqState = this.mapDtoToState({ ...r, id: newReqId, capsuleId: capId });
                 requestsToSave.push(reqState);
             }
         }
 
         let sharedGroups: RequestGroup[] = [];
+        let sharedOrder: string[] = [];
+        let sharedAutoAuthEnabled: string = shared.autoAuthEnabled || 'off';
+        let sharedAutoAuthEndpointId: string | null = shared.autoAuthEndpointId || null;
+        const sharedVarSources: Record<string, any> = {};
+
         if (Array.isArray(shared.variables)) {
             const sysGrpVar = shared.variables.find((v: any) => (v.variableKey || v.key || '').trim() === '__capsule_groups__');
             const rawGrpVal = sysGrpVar?.variableValue ?? sysGrpVar?.value;
@@ -2820,22 +3201,89 @@ export class TabStateService {
                             createdAt: Date.now()
                         }));
                     }
+                    if (Array.isArray(parsedGrp?.order)) {
+                        sharedOrder = parsedGrp.order.map((oldId: string) => sharedIdMap.get(oldId) || oldId);
+                    }
+                    if (parsedGrp?.autoAuthEnabled) {
+                        sharedAutoAuthEnabled = parsedGrp.autoAuthEnabled;
+                    }
+                    if (parsedGrp?.autoAuthEndpointId) {
+                        sharedAutoAuthEndpointId = parsedGrp.autoAuthEndpointId;
+                    }
+                    if (parsedGrp?.requestMeta && typeof parsedGrp.requestMeta === 'object') {
+                        requestsToSave.forEach((reqState, idx) => {
+                            const origId = oldIdByIndex[idx];
+                            const meta = origId ? parsedGrp.requestMeta[origId] : null;
+                            if (!meta) return;
+                            if (meta.postTriggerTabId !== undefined && !reqState.postTriggerTabId) {
+                                reqState.postTriggerTabId = meta.postTriggerTabId;
+                            }
+                            if (meta.autoAuthEnabled !== undefined) {
+                                reqState.autoAuthEnabled = !!meta.autoAuthEnabled;
+                            }
+                            if (meta.settings) {
+                                reqState.settings = { ...reqState.settings, ...meta.settings };
+                            }
+                            if (meta.encryption) {
+                                reqState.encryption = { ...reqState.encryption, ...meta.encryption };
+                            }
+                            if (meta.scripts) {
+                                reqState.scripts = { ...reqState.scripts, ...meta.scripts };
+                            }
+                            if (meta.bodyWrapStyle) reqState.bodyWrapStyle = meta.bodyWrapStyle;
+                            if (meta.responseWrapStyle) reqState.responseWrapStyle = meta.responseWrapStyle;
+                            if (meta.responseActiveMode) reqState.responseActiveMode = meta.responseActiveMode;
+                            if (meta.consoleWrap !== undefined) reqState.consoleWrap = meta.consoleWrap;
+                        });
+                    }
                 } catch {}
             }
+
+            const sysSrcVar = shared.variables.find((v: any) => (v.variableKey || v.key || '').trim() === '__var_sources__');
+            const rawSrcVal = sysSrcVar?.variableValue ?? sysSrcVar?.value;
+            if (rawSrcVal && typeof rawSrcVal === 'string') {
+                try {
+                    const parsedSrc = JSON.parse(rawSrcVal);
+                    if (parsedSrc && typeof parsedSrc === 'object') {
+                        for (const [k, src] of Object.entries(parsedSrc as Record<string, any>)) {
+                            if (src && typeof src === 'object') {
+                                const clonedSrc = { ...src, capsuleId: capId };
+                                if (clonedSrc.tabId) clonedSrc.tabId = sharedIdMap.get(clonedSrc.tabId) || clonedSrc.tabId;
+                                if (clonedSrc.requestId) clonedSrc.requestId = sharedIdMap.get(clonedSrc.requestId) || clonedSrc.requestId;
+                                sharedVarSources[k.toLowerCase()] = clonedSrc;
+                            }
+                        }
+                    }
+                } catch {}
+            }
+        }
+
+        // Remap postTriggerTabId and autoAuthEndpointId using sharedIdMap
+        for (const reqState of requestsToSave) {
+            if (reqState.postTriggerTabId) {
+                reqState.postTriggerTabId = sharedIdMap.get(reqState.postTriggerTabId) || reqState.postTriggerTabId;
+            }
+        }
+        if (sharedAutoAuthEndpointId) {
+            sharedAutoAuthEndpointId = sharedIdMap.get(sharedAutoAuthEndpointId) || sharedAutoAuthEndpointId;
         }
 
         const filteredSharedVars = Array.isArray(shared.variables)
             ? shared.variables.filter((v: any) => !(v.variableKey || v.key || '').trim().startsWith('__'))
             : shared.variables;
-        const extractedVars = extractRequestsVariables(requestsToSave, filteredSharedVars);
+        const extractedVars = extractRequestsVariables(requestsToSave, filteredSharedVars, sharedVarSources);
 
         const importRes = await this.importData({
             capsules: [{
                 id: capId,
                 name: capName,
+                autoAuthEnabled: sharedAutoAuthEnabled,
+                autoAuthEndpointId: sharedAutoAuthEndpointId,
                 requests: requestsToSave,
                 groups: sharedGroups,
-                variables: extractedVars
+                requestOrder: sharedOrder,
+                variables: extractedVars,
+                variableSources: sharedVarSources
             }],
             variables: extractedVars
         });
@@ -3101,6 +3549,17 @@ export class TabStateService {
             if (updated) {
                 this.getVariableService()?.syncVariablesFromInputs(effectiveId, updated);
             }
+        }
+
+        if (
+            this.authService.isLoggedIn() &&
+            (partialState.postTriggerTabId !== undefined ||
+                partialState.autoAuthEnabled !== undefined ||
+                partialState.settings !== undefined ||
+                partialState.encryption !== undefined ||
+                partialState.scripts !== undefined)
+        ) {
+            this.scheduleGroupsVariableSync(this.activeCapsuleId());
         }
 
         if (becameDirty && this.autoSaveEnabled() && this.authService.isLoggedIn()) {

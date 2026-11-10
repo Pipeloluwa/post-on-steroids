@@ -170,21 +170,30 @@ export function extractPostmanVariables(collectionData: any): IGlobalVariable[] 
  * Extracts and consolidates variables from generic request lists (OnSteroids capsules,
  * OpenAPI/Swagger operations, raw request arrays), incorporating any explicit variables.
  */
-export function extractRequestsVariables(requests: any[], explicitVars?: any[]): IGlobalVariable[] {
+export function extractRequestsVariables(
+    requests: any[],
+    explicitVars?: any[],
+    explicitVarSources?: Record<string, any>
+): IGlobalVariable[] {
     const varMap = new Map<string, IGlobalVariable>();
 
     // 1. Register explicit variables
     if (Array.isArray(explicitVars)) {
         for (const v of explicitVars) {
-            const key = cleanVariableKey(v.key || v.variableKey);
+            const rawKeyName = v.key || v.variableKey || '';
+            if (String(rawKeyName).trim().startsWith('__')) continue;
+            const key = cleanVariableKey(rawKeyName);
             if (!key) continue;
+            const keyLower = key.toLowerCase();
             const val = cleanVariableValue(v.value !== undefined ? v.value : v.variableValue, key);
-            varMap.set(key.toLowerCase(), {
+            const resolvedSource = v.source ?? (explicitVarSources ? explicitVarSources[keyLower] : undefined);
+            varMap.set(keyLower, {
                 id: v.id ? String(v.id) : generateUUID().substring(0, 7),
                 key,
                 value: val,
                 type: v.type === 'path' ? 'path' : 'global',
-                enabled: v.enabled !== undefined ? !!v.enabled : (v.isEnabled !== undefined ? !!v.isEnabled : true)
+                enabled: v.enabled !== undefined ? !!v.enabled : (v.isEnabled !== undefined ? !!v.isEnabled : true),
+                ...(resolvedSource ? { source: structuredClone(resolvedSource) } : {})
             });
         }
     }

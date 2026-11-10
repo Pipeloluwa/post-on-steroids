@@ -74,12 +74,8 @@ export class RequestDetailsComponent {
 
         this.isSharing.set(true);
         try {
-            // Ensure any unsaved or dirty requests/capsules are saved to backend first
-            const cap = this.tabStateService.capsules().find(c => c.id === capsuleId);
-            const isDirty = this.tabStateService.openTabs().some(t => t.isDirty);
-            if (isDirty || cap?.isLocalOnly) {
-                await this.tabStateService.saveToCapsule();
-            }
+            // Always save/sync the capsule, its requests, groups, triggers, auto-auth, and variables before sharing
+            await this.tabStateService.saveToCapsule();
 
             const effectiveId = this.tabStateService.activeCapsuleId() || capsuleId;
             const shareUrl = await this.tabStateService.shareCapsule(effectiveId);
@@ -121,31 +117,40 @@ export class RequestDetailsComponent {
             if (option === 'Export Endpoint') {
                 const state = this.tabStateService.getState(this.tabId());
                 if (!state) return;
-                this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
+                const capId = state.capsuleId || this.tabStateService.activeCapsuleId();
+                const varSources = this.variableService.getSourceMapForCapsule(capId);
+                const vars = this.variableService.variables().map(v => {
+                    const kLower = (v.key || '').trim().toLowerCase();
+                    return { ...v, source: v.source ?? varSources[kLower] };
+                });
+                const endpointExport = {
+                    ...state,
+                    variables: vars,
+                    variableSources: varSources
+                };
+                this.downloadJson(endpointExport, `request_${state.name || 'untitled'}.json`);
                 this.onNotify.emit('Endpoint exported successfully.');
             } else if (option === 'Export Capsule') {
                 const capsuleId = this.tabStateService.activeCapsuleId();
-                const capsule = this.tabStateService.capsules().find(c => c.id === capsuleId);
-                const collectionName = capsule ? capsule.name : (this.tabStateService.activeCapsuleName() || 'My Capsule');
-                const collectionRequests = this.tabStateService.getCapsuleRequestsSync(capsuleId);
-                const vars = this.variableService.variables();
+                const fullCapsule = this.tabStateService.getFullCapsuleExportDataSync(capsuleId);
+                const collectionName = fullCapsule.name || 'My Capsule';
                 const exportData = {
                     version: "1.0.0",
                     collection: collectionName,
                     capsule: collectionName,
+                    autoAuthEnabled: fullCapsule.autoAuthEnabled,
+                    autoAuthEndpointId: fullCapsule.autoAuthEndpointId,
                     exportedAt: new Date().toISOString(),
-                    capsules: [{
-                        id: capsuleId,
-                        name: collectionName,
-                        requests: collectionRequests,
-                        variables: vars
-                    }],
-                    requests: collectionRequests,
-                    variables: vars
+                    capsules: [fullCapsule],
+                    requests: fullCapsule.requests,
+                    groups: fullCapsule.groups,
+                    requestOrder: fullCapsule.requestOrder,
+                    variables: fullCapsule.variables,
+                    variableSources: fullCapsule.variableSources
                 };
                 const safeName = collectionName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
                 this.downloadJson(exportData, `capsule_${safeName}.json`);
-                this.onNotify.emit(`Capsule "${collectionName}" exported successfully (${collectionRequests.length} request${collectionRequests.length !== 1 ? 's' : ''}).`);
+                this.onNotify.emit(`Capsule "${collectionName}" exported successfully (${fullCapsule.requests.length} request${fullCapsule.requests.length !== 1 ? 's' : ''}).`);
             }
         } finally {
             setTimeout(() => this.isExporting.set(false), 300);

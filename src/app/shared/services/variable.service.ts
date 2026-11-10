@@ -436,9 +436,18 @@ export class VariableService {
                 });
             }
 
-            // Also persist the capsule's request groups and ordering as an internal system variable
+            // Also persist the capsule's request groups, ordering, auto-auth, triggers, and request settings as an internal system variable
             const groupsPayload = this.tabStateService.getCapsuleGroupsSyncPayload(capsuleId);
-            if (groupsPayload && (groupsPayload.groups.length > 0 || groupsPayload.order.length > 0 || this.systemGroupsVarIds.has(capsuleId))) {
+            const hasMeta = Boolean(
+                groupsPayload &&
+                (groupsPayload.groups.length > 0 ||
+                    groupsPayload.order.length > 0 ||
+                    (groupsPayload.autoAuthEnabled && groupsPayload.autoAuthEnabled !== 'off') ||
+                    Boolean(groupsPayload.autoAuthEndpointId) ||
+                    (groupsPayload.requestMeta && Object.keys(groupsPayload.requestMeta).length > 0) ||
+                    this.systemGroupsVarIds.has(capsuleId))
+            );
+            if (groupsPayload && hasMeta) {
                 const groupsJson = JSON.stringify(groupsPayload);
                 const sysGrpId = this.systemGroupsVarIds.get(capsuleId) || null;
                 payloadVars.push({
