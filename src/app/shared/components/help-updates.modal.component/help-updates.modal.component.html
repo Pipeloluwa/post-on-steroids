@@ -42,8 +42,8 @@
                 [class.text-white]="activeTab() === 'updates'"
                 [class.text-(--postonsteroids-text-secondary)]="activeTab() !== 'updates'"
                 [class.hover:bg-(--postonsteroids-bg-hover)]="activeTab() !== 'updates'">
-                <mat-icon class="text-[16px]! size-[16px]!">system_update_alt</mat-icon>
-                App Updates
+                <mat-icon class="text-[16px]! size-[16px]!">new_releases</mat-icon>
+                <span>What's New & Updates</span>
             </button>
         </div>
 
@@ -55,15 +55,16 @@
                 class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                 <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
                     <mat-icon class="text-(--postonsteroids-accent) text-[18px]! size-[18px]!">folder_special</mat-icon>
-                    <span>Capsules, Multi-Select Request Folders & Tab Navigation</span>
+                    <span>Capsules, Multi-Select Request Folders, Auto-Save Order & Tab Navigation</span>
                 </div>
                 <p class="leading-relaxed">
                     Capsules let you isolate API workspaces while Postman-style <strong>Request Folders</strong> keep
                     endpoints organized inside each capsule. Multi-select requests using
                     <strong>Shift+Click</strong>, <strong>Ctrl+Click</strong>, or checkboxes and drag all selected
                     requests directly into any folder. Folders themselves can be dragged and repositioned in any order
-                    alongside individual requests, and you can navigate across your tab visit history using the
-                    <strong>Back / Forward</strong> buttons.
+                    alongside individual requests—every folder or request rearrangement and folder assignment
+                    <strong>auto-saves</strong> automatically. You can also navigate across your tab visit history using
+                    the <strong>Back / Forward</strong> buttons.
                 </p>
             </div>
 
@@ -192,17 +193,26 @@
 
             <!-- Release Notes & Changelog -->
             <div class="space-y-2">
-                <h4 class="text-xs font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">Latest Release
-                    Highlights</h4>
+                <h4 class="text-xs font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">What's New —
+                    Latest Release Highlights</h4>
 
                 <div
-                    class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-2">
+                    class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-accent)/30 space-y-2">
                     <div
                         class="flex items-center justify-between text-xs font-bold text-(--postonsteroids-text-primary)">
-                        <span>Release 1.0.4 — Blue & White Revamp, Multi-Select Drag & Free-Order Folders</span>
-                        <span class="text-(--postonsteroids-text-muted) font-normal">November 2026</span>
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="px-1.5 py-0.5 rounded bg-(--postonsteroids-accent) text-white text-[10px] font-extrabold uppercase tracking-wider">What's
+                                New</span>
+                            <span>Release 1.0.4 — Blue & White Revamp, Multi-Select Drag, Free-Order Folders & Structure Auto-Save</span>
+                        </div>
+                        <span class="text-(--postonsteroids-text-muted) font-normal shrink-0 ml-2">November 2026</span>
                     </div>
                     <ul class="list-disc list-inside space-y-1 text-[11px] leading-relaxed">
+                        <li><strong>Auto-Save on Request & Folder Rearrangement:</strong> Rearranging requests,
+                            repositioning group folders, creating/renaming/deleting folders, or moving requests into and
+                            out of folders now triggers instant local session snapshots and debounced cloud Auto-Save
+                            automatically—even for newly created tabs before their first manual save.</li>
                         <li><strong>Blue & White Visual Revamp:</strong> Refreshed brand identity from orange & white to
                             an electric Blue & White color system across Dark and Light themes, including the new
                             blue-and-white logo, desktop icons, and browser favicon.</li>
