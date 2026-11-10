@@ -55,12 +55,14 @@
                 class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                 <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
                     <mat-icon class="text-amber-500 text-[18px]! size-[18px]!">folder_special</mat-icon>
-                    <span>Capsules & Request Organization</span>
+                    <span>Capsules, Request Folders & Tab Navigation</span>
                 </div>
                 <p class="leading-relaxed">
-                    Capsules let you group related API requests together into isolated workspaces. You can create
-                    multiple capsules from the Capsules submenu or dropdown. Tabs remain open per capsule and are
-                    persisted even across application sessions.
+                    Capsules let you isolate API workspaces while Postman-style <strong>Request Folders</strong> keep
+                    endpoints organized inside each capsule. Create folders, batch-group selected requests, rename
+                    folders inline, or drag and drop requests between folders and the root list. You can also reorder
+                    requests in both the resizable vertical sidebar and horizontal tab bar, and navigate across your tab
+                    visit history using the <strong>Back / Forward</strong> buttons.
                 </p>
             </div>
 
@@ -69,15 +71,20 @@
                 class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                 <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
                     <mat-icon class="text-purple-500 text-[18px]! size-[18px]!">data_object</mat-icon>
-                    <span>Dynamic Variables (<code class="text-purple-400 font-mono">{{ '{{var}}' }}</code>) &
-                        +Var</span>
+                    <span>Dynamic Variables (<code class="text-purple-400 font-mono">{{ '{{var}}' }}</code>), +Var &
+                        <code class="text-amber-400 font-mono">$</code> Utilities</span>
                 </div>
                 <p class="leading-relaxed">
-                    Reference variables anywhere in URLs, headers, params, or request bodies with <code
-                        class="text-purple-400 font-mono">{{ '{{variableName}}' }}</code> syntax. Use the
-                    <strong>+Var</strong> button or highlight text in Monaco Editor to bind a variable directly to a
-                    response property, header, or param. When the source request executes, bound variables automatically
-                    sync with the latest values, preventing stale data or duplicate entries.
+                    Reference variables anywhere with <code
+                        class="text-purple-400 font-mono">{{ '{{variableName}}' }}</code> or bind live response fields
+                    using <strong>+Var</strong>. Type <code class="text-amber-400 font-mono">$</code> in the URL bar,
+                    Headers, Form-Data, or Request Body editor to open built-in utility generators (<code
+                        class="text-amber-400 font-mono">$guid</code>, <code
+                        class="text-amber-400 font-mono">$timestamp</code>, <code
+                        class="text-amber-400 font-mono">$randomEmail</code>, etc.)—choose between
+                    <strong>Dynamic</strong> tokens (<code class="text-amber-400 font-mono">{{ '{{$guid}}' }}</code>)
+                    that regenerate automatically before every request execution or <strong>One-Time</strong> static
+                    values.
                 </p>
             </div>
 
@@ -86,12 +93,15 @@
                 class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                 <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
                     <mat-icon class="text-cyan-500 text-[18px]! size-[18px]!">alt_route</mat-icon>
-                    <span>Chained Request Triggers</span>
+                    <span>Auto-Auth, Chained Triggers & Full Portability</span>
                 </div>
                 <p class="leading-relaxed">
-                    Chain multi-step API sequences with the <strong>Trigger</strong> dropdown located right next to
-                    Auto-Auth. Select any request in your capsule to be automatically fired once the current request
-                    returns a successful response.
+                    Chain multi-step API sequences with <strong>Auto-Auth</strong> and the <strong>Trigger</strong>
+                    selector so dependent requests fire automatically. When you <strong>Export</strong>,
+                    <strong>Share via Link</strong>, <strong>Import</strong>, or <strong>Duplicate</strong> a capsule,
+                    all request folders, custom ordering, Auto-Auth endpoints, Post-Response Triggers, request settings,
+                    encryption configs, and dynamic <code class="text-purple-400 font-mono">+Var</code> bindings are
+                    preserved and remapped automatically.
                 </p>
             </div>
 
@@ -100,13 +110,13 @@
                 class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                 <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
                     <mat-icon class="text-emerald-500 text-[18px]! size-[18px]!">fact_check</mat-icon>
-                    <span>Test Scripts & Standard Assertions</span>
+                    <span>Isolated Script Consoles & Cloud Default Scripts</span>
                 </div>
                 <p class="leading-relaxed">
-                    Verify API behavior with the built-in Sandbox. Choose from 19 standard assertions via the <em>Add
-                        Snippet...</em> dropdown covering status codes (200, 201, 204, 2xx, 4xx, 5xx), performance
-                    thresholds (&lt;200ms, &lt;500ms, &lt;1000ms), JSON body properties, nested token existence, array
-                    checks, and headers.
+                    Verify API behavior with 19 standard test assertions and custom Pre-Request, Post-Response, and
+                    Encryption/Decryption scripts. Each script stage logs exclusively to its own isolated
+                    <strong>Script Console</strong> view, and edited default script templates sync to the cloud for
+                    authenticated users.
                 </p>
             </div>
 
@@ -131,9 +141,9 @@
                     <span>Full Session & Response Persistence</span>
                 </div>
                 <p class="leading-relaxed">
-                    Your workspace state—including active capsules, open tabs, active tab focus, variables, and complete
-                    response viewer results (status, body, headers, timing, and test reports)—is automatically preserved
-                    across logout and restored upon sign-in.
+                    Your workspace state—including active capsules, request folders, open tabs, active tab focus,
+                    variables, and complete response viewer results (status, body, headers, timing, and test
+                    reports)—is automatically preserved across logout and restored upon sign-in across devices.
                 </p>
             </div>
         </div>
@@ -147,11 +157,12 @@
                 class="p-4 rounded-xl bg-linear-to-r from-blue-500/10 via-purple-500/10 to-(--postonsteroids-accent)/10 border border-blue-500/20 flex items-start gap-3">
                 <mat-icon class="text-blue-500 text-[24px]! size-[24px]! shrink-0 mt-0.5">cloud_sync</mat-icon>
                 <div class="space-y-1">
-                    <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">Progressive App Updates</h3>
+                    <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">Progressive Under-the-Hood
+                        Updates</h3>
                     <p class="leading-relaxed">
-                        Incoming updates are progressive and pushed continuously to your workspace. New features,
-                        enhancements, and performance optimizations deploy seamlessly without interrupting your active
-                        sessions or inflight requests.
+                        Incoming updates download silently in the background with cryptographic SHA-512 verification and
+                        launch the setup installer directly to overwrite the existing application—without opening an
+                        external browser or interrupting your active sessions.
                     </p>
                 </div>
             </div>
@@ -182,6 +193,43 @@
             <div class="space-y-2">
                 <h4 class="text-xs font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">Latest Release
                     Highlights</h4>
+
+                <div
+                    class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-2">
+                    <div
+                        class="flex items-center justify-between text-xs font-bold text-(--postonsteroids-text-primary)">
+                        <span>Release 1.0.3 — Request Grouping, Dynamic $ Utilities & Full Flow Portability</span>
+                        <span class="text-(--postonsteroids-text-muted) font-normal">November 2026</span>
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-[11px] leading-relaxed">
+                        <li><strong>Postman-Style Request Grouping (Folders):</strong> Create collapsible folders,
+                            batch-group multi-selected requests, rename folders inline, drag and drop requests across
+                            folders or root, and persist folder hierarchies to the cloud across devices.</li>
+                        <li><strong>Complete Capsule Export, Share, Import & Duplication:</strong> Exporting, sharing via
+                            link, importing, or duplicating capsules now preserves and automatically remaps folders,
+                            custom request ordering, Auto-Auth endpoints, Post-Response Triggers, encryption/request
+                            settings, and dynamic <code class="text-purple-400 font-mono">+Var</code> variable sources.
+                            Swagger/OpenAPI imports also auto-group endpoints by tags.</li>
+                        <li><strong>Dynamic vs. One-Time <code class="text-amber-400 font-mono">$</code> Utility
+                                Generators:</strong> Type <code class="text-amber-400 font-mono">$</code> in URLs,
+                            Headers, Form-Data, or Request Bodies to insert either Dynamic tokens (<code
+                                class="text-amber-400 font-mono">{{ '{{$guid}}' }}</code>, <code
+                                class="text-amber-400 font-mono">{{ '{{$timestamp}}' }}</code>, etc. that regenerate on
+                            every request execution) or One-Time generated values, with smooth keyboard arrow
+                            auto-scrolling.</li>
+                        <li><strong>Resizable Sidebar, Tab Reordering & Back/Forward History:</strong> Drag-to-resize the
+                            vertical request sidebar, reorder tabs via drag-and-drop in both vertical and horizontal
+                            tab lists, and navigate seamlessly with unified Back and Forward buttons.</li>
+                        <li><strong>Isolated Script Consoles & Cloud Default Scripts:</strong> Pre-Request,
+                            Post-Response, and Encryption/Decryption scripts log strictly to their own console streams,
+                            and customized default script templates sync to the cloud for authenticated users.</li>
+                        <li><strong>Soft-Wrap Default & Copy Confirmation:</strong> Editors now default to Soft Wrap
+                            mode, and the response copy button provides immediate color and notification feedback.</li>
+                        <li><strong>Under-the-Hood Auto-Installer:</strong> Desktop updates download silently in the
+                            background and launch the setup installer directly to overwrite the existing app without
+                            browser downloads or repeated post-install update prompts.</li>
+                    </ul>
+                </div>
 
                 <div
                     class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-2">

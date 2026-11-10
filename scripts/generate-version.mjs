@@ -17,6 +17,16 @@ const helpModalPath = path.join(
   'help-updates.modal.component.ts'
 );
 
+const aboutModalPath = path.join(
+  rootDir,
+  'src',
+  'app',
+  'shared',
+  'components',
+  'about.modal.component',
+  'about.modal.component.ts'
+);
+
 function parseSemver(ver) {
   return String(ver || '')
     .trim()
@@ -40,13 +50,14 @@ function compareSemver(a, b) {
 
 // Synchronize version between package.json and help-updates.modal.component.ts
 let version = pkg.version || '1.0.0';
+let suffix = '-steroids';
 if (fs.existsSync(helpModalPath)) {
   try {
     const modalContent = fs.readFileSync(helpModalPath, 'utf8');
     const match = modalContent.match(/appVersion\s*=\s*['"]v?(\d+\.\d+\.\d+)([^'"]*)['"]/i);
     if (match && match[1]) {
       const modalSemver = match[1];
-      const suffix = match[2] || '-steroids';
+      suffix = match[2] || '-steroids';
       const cmp = compareSemver(modalSemver, version);
       if (cmp > 0) {
         // Modal version was bumped -> sync into package.json
@@ -61,6 +72,22 @@ if (fs.existsSync(helpModalPath)) {
         );
         fs.writeFileSync(helpModalPath, updatedModal, 'utf8');
       }
+    }
+  } catch {
+    // Ignore sync errors
+  }
+}
+
+// Also keep about.modal.component.ts synchronized with the active appVersion
+if (fs.existsSync(aboutModalPath)) {
+  try {
+    const aboutContent = fs.readFileSync(aboutModalPath, 'utf8');
+    const updatedAbout = aboutContent.replace(
+      /appVersion\s*=\s*['"][^'"]+['"]/,
+      `appVersion = 'v${version}${suffix}'`
+    );
+    if (updatedAbout !== aboutContent) {
+      fs.writeFileSync(aboutModalPath, updatedAbout, 'utf8');
     }
   } catch {
     // Ignore sync errors
@@ -111,6 +138,20 @@ if (!fs.existsSync(publicDir)) {
 }
 const versionJsonPath = path.join(publicDir, 'version.json');
 fs.writeFileSync(versionJsonPath, JSON.stringify(versionData, null, 2) + '\n', 'utf8');
+
+// Also keep dist/post-on-steroids/browser/version.json synchronized if dist/ already exists
+const distBrowserDir = path.join(rootDir, 'dist', 'post-on-steroids', 'browser');
+if (fs.existsSync(distBrowserDir)) {
+  try {
+    fs.writeFileSync(
+      path.join(distBrowserDir, 'version.json'),
+      JSON.stringify(versionData, null, 2) + '\n',
+      'utf8'
+    );
+  } catch {
+    // Ignore if dist directory is locked or read-only
+  }
+}
 
 // 2. Write src/environments/version.ts for compiled bundle reference
 if (!fs.existsSync(envDir)) {

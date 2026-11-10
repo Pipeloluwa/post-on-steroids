@@ -1,6 +1,7 @@
 {
   "appId": "com.papicnation.onsteroid",
   "productName": "OnSteroid",
+  "afterAllArtifactBuild": "scripts/generate-update-manifests.mjs",
   "publish": [
     {
       "provider": "generic",
