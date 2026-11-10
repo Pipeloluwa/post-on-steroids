@@ -1,5 +1,5 @@
-import { Component, signal, inject, effect, PLATFORM_ID, ViewChild } from '@angular/core';
-import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
+import { Component, signal, computed, inject, effect, PLATFORM_ID, ViewChild } from '@angular/core';
+import { DragDropModule, CdkDragDrop, CdkDrag } from '@angular/cdk/drag-drop';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
@@ -142,7 +142,19 @@ export class WorkspaceComponent {
         this.isResizingSidebar.set(true);
     }
 
+    lastPointerX = 0;
+    lastPointerY = 0;
+
     onMouseMove(event: MouseEvent) {
+        this.lastPointerX = event.clientX;
+        this.lastPointerY = event.clientY;
+
+        if (this.isDraggingRequest() && this.isBrowser) {
+            const el = document.elementFromPoint(event.clientX, event.clientY);
+            const folderHeaderEl = el?.closest('[data-folder-header-id]') as HTMLElement | null;
+            this.hoveredFolderIdDuringDrag.set(folderHeaderEl?.getAttribute('data-folder-header-id') || null);
+        }
+
         if (!this.isResizing() && !this.isResizingSidebar()) return;
 
         const container = document.querySelector('.workspace-container');
@@ -241,10 +253,79 @@ export class WorkspaceComponent {
         }
     }
 
-    // Folder / Group state
+    // Folder / Group & Drag state
     editingGroupId = signal<string | null>(null);
     editingGroupName = signal<string>('');
     moveMenuRequestId = signal<string | null>(null);
+
+    lastSelectedRequestId = signal<string | null>(null);
+    isDraggingRequest = signal<boolean>(false);
+    isDraggingFolder = signal<boolean>(false);
+    draggedRequestIds = signal<string[]>([]);
+    hoveredFolderIdDuringDrag = signal<string | null>(null);
+
+    folderDropListIds = computed<string[]>(() =>
+        this.tabStateService.activeCapsuleGroups().map(g => 'folder-drop-' + g.id)
+    );
+
+    allRequestDropListIds = computed<string[]>(() => [
+        ...this.folderDropListIds(),
+        'sidebar-root-drop-list'
+    ]);
+
+    canEnterFolderDropList = (drag: CdkDrag): boolean => {
+        return drag.data?.type !== 'group';
+    };
+
+    canEnterRootDropList = (drag: CdkDrag): boolean => {
+        if (drag.data?.type === 'group') return true;
+        if (!this.isBrowser) return true;
+        const el = document.elementFromPoint(this.lastPointerX, this.lastPointerY);
+        if (el?.closest('.folder-drop-zone')) {
+            return false;
+        }
+        return true;
+    };
+
+    getVisibleOrderedRequestIds(): string[] {
+        const ids: string[] = [];
+        for (const item of this.tabStateService.sidebarRootItems()) {
+            if (item.type === 'group') {
+                if (item.group.isExpanded !== false) {
+                    for (const r of item.requests) {
+                        ids.push(r.id);
+                    }
+                }
+            } else {
+                ids.push(item.request.id);
+            }
+        }
+        return ids;
+    }
+
+    getAllOrderedRequestIds(): string[] {
+        const ids: string[] = [];
+        for (const item of this.tabStateService.sidebarRootItems()) {
+            if (item.type === 'group') {
+                for (const r of item.requests) {
+                    ids.push(r.id);
+                }
+            } else {
+                ids.push(item.request.id);
+            }
+        }
+        return ids;
+    }
+
+    getEffectiveIdsForAction(primaryReqId: string): string[] {
+        const selected = this.selectedRequestIds();
+        if (selected.has(primaryReqId) && selected.size > 1) {
+            const ordered = this.getAllOrderedRequestIds();
+            const orderedSelected = ordered.filter(id => selected.has(id));
+            return orderedSelected.length > 0 ? orderedSelected : Array.from(selected);
+        }
+        return [primaryReqId];
+    }
 
     onDocumentClick() {
         if (this.moveMenuRequestId()) {
@@ -252,22 +333,104 @@ export class WorkspaceComponent {
         }
     }
 
-    onDropVerticalRequest(event: CdkDragDrop<any[]>) {
-        this.tabStateService.reorderCapsuleRequests(event.previousIndex, event.currentIndex);
+    onFolderDragStarted() {
+        this.isDraggingFolder.set(true);
     }
 
-    onDropRequest(event: CdkDragDrop<any>, targetGroupId: string | null) {
-        const dragData = event.item.data;
-        const req = dragData?.req || dragData;
-        const sourceGroupId: string | null = dragData?.groupId !== undefined ? dragData.groupId : (req?.groupId ?? null);
+    onFolderDragEnded() {
+        this.isDraggingFolder.set(false);
+    }
+
+    onRequestDragStarted(req: any) {
         if (!req?.id) return;
+        const effectiveIds = this.getEffectiveIdsForAction(req.id);
+        this.draggedRequestIds.set(effectiveIds);
+        this.isDraggingRequest.set(true);
+        this.hoveredFolderIdDuringDrag.set(null);
+    }
+
+    onRequestDragEnded() {
+        this.isDraggingRequest.set(false);
+        this.draggedRequestIds.set([]);
+        this.hoveredFolderIdDuringDrag.set(null);
+    }
+
+    onDropInRoot(event: CdkDragDrop<any>) {
+        const dragData = event.item.data;
+        if (!dragData) return;
+
+        // Case 1: Repositioning a folder in any order in the root list
+        if (dragData.type === 'group') {
+            const groupId = dragData.groupId || dragData.group?.id;
+            if (!groupId) return;
+            this.tabStateService.reorderSidebarRootItem(groupId, event.previousIndex, event.currentIndex);
+            return;
+        }
+
+        // Case 2: Dropping 1 or more requests
+        const req = dragData.req || dragData;
+        if (!req?.id) return;
+        const movingIds = this.draggedRequestIds().length > 0
+            ? this.draggedRequestIds()
+            : this.getEffectiveIdsForAction(req.id);
+        const sourceGroupId: string | null = dragData.groupId !== undefined ? dragData.groupId : (req.groupId ?? null);
+
+        // If dropped directly onto a folder header, move request(s) into that folder
+        let hoveredFolderId = this.hoveredFolderIdDuringDrag();
+        if (!hoveredFolderId && this.isBrowser) {
+            const el = document.elementFromPoint(this.lastPointerX, this.lastPointerY);
+            const headerEl = el?.closest('[data-folder-header-id]') as HTMLElement | null;
+            hoveredFolderId = headerEl?.getAttribute('data-folder-header-id') || null;
+        }
+
+        if (hoveredFolderId) {
+            const targetGroupEntry = this.tabStateService.groupedCapsuleRequests().find(g => g.group.id === hoveredFolderId);
+            const appendIndex = targetGroupEntry ? targetGroupEntry.requests.length : 999999;
+            this.tabStateService.handleRequestDrop(
+                movingIds,
+                sourceGroupId,
+                hoveredFolderId,
+                event.previousIndex,
+                appendIndex
+            );
+            if (movingIds.length > 1) {
+                this.selectedRequestIds.set(new Set());
+            }
+            this.hoveredFolderIdDuringDrag.set(null);
+            return;
+        }
+
         this.tabStateService.handleRequestDrop(
-            req.id,
+            movingIds,
+            sourceGroupId,
+            null,
+            event.previousIndex,
+            event.currentIndex
+        );
+    }
+
+    onDropInFolder(event: CdkDragDrop<any>, targetGroupId: string) {
+        const dragData = event.item.data;
+        if (!dragData || dragData.type === 'group') return;
+
+        const req = dragData.req || dragData;
+        if (!req?.id) return;
+        const movingIds = this.draggedRequestIds().length > 0
+            ? this.draggedRequestIds()
+            : this.getEffectiveIdsForAction(req.id);
+        const sourceGroupId: string | null = dragData.groupId !== undefined ? dragData.groupId : (req.groupId ?? null);
+
+        this.tabStateService.handleRequestDrop(
+            movingIds,
             sourceGroupId,
             targetGroupId,
             event.previousIndex,
             event.currentIndex
         );
+        if (movingIds.length > 1 && sourceGroupId !== targetGroupId) {
+            this.selectedRequestIds.set(new Set());
+        }
+        this.hoveredFolderIdDuringDrag.set(null);
     }
 
     createNewFolder(event?: Event) {
@@ -279,8 +442,10 @@ export class WorkspaceComponent {
 
     groupSelectedRequests(event?: Event) {
         event?.stopPropagation();
-        const ids = Array.from(this.selectedRequestIds());
-        if (ids.length === 0) return;
+        const selected = this.selectedRequestIds();
+        if (selected.size === 0) return;
+        const ordered = this.getAllOrderedRequestIds().filter(id => selected.has(id));
+        const ids = ordered.length > 0 ? ordered : Array.from(selected);
         const group = this.tabStateService.createRequestGroup('New Folder', ids);
         this.selectedRequestIds.set(new Set());
         this.editingGroupId.set(group.id);
@@ -365,13 +530,21 @@ export class WorkspaceComponent {
 
     moveRequestToGroupFromMenu(requestId: string, targetGroupId: string | null, event: Event) {
         event.stopPropagation();
-        this.tabStateService.moveRequestsToGroup([requestId], targetGroupId);
+        const ids = this.getEffectiveIdsForAction(requestId);
+        this.tabStateService.moveRequestsToGroup(ids, targetGroupId);
+        if (ids.length > 1) {
+            this.selectedRequestIds.set(new Set());
+        }
         this.moveMenuRequestId.set(null);
     }
 
     moveRequestToNewGroupFromMenu(requestId: string, event: Event) {
         event.stopPropagation();
-        const group = this.tabStateService.createRequestGroup('New Folder', [requestId]);
+        const ids = this.getEffectiveIdsForAction(requestId);
+        const group = this.tabStateService.createRequestGroup('New Folder', ids);
+        if (ids.length > 1) {
+            this.selectedRequestIds.set(new Set());
+        }
         this.moveMenuRequestId.set(null);
         this.editingGroupId.set(group.id);
         this.editingGroupName.set(group.name);
@@ -382,6 +555,57 @@ export class WorkspaceComponent {
         this.tabStateService.setActiveTab(request.id);
     }
 
+    onRequestRowClick(req: any, event: MouseEvent) {
+        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+        const isShift = event.shiftKey;
+
+        if (isShift) {
+            event.preventDefault();
+            event.stopPropagation();
+            const visibleIds = this.getVisibleOrderedRequestIds();
+            const anchorId = this.lastSelectedRequestId() || this.tabStateService.activeTabId() || req.id;
+            const startIdx = visibleIds.indexOf(anchorId);
+            const endIdx = visibleIds.indexOf(req.id);
+
+            const next = new Set(isCtrlOrCmd ? this.selectedRequestIds() : []);
+            if (startIdx !== -1 && endIdx !== -1) {
+                const min = Math.min(startIdx, endIdx);
+                const max = Math.max(startIdx, endIdx);
+                for (let i = min; i <= max; i++) {
+                    next.add(visibleIds[i]);
+                }
+            } else {
+                next.add(req.id);
+            }
+            this.selectedRequestIds.set(next);
+            if (!this.lastSelectedRequestId()) {
+                this.lastSelectedRequestId.set(anchorId);
+            }
+            return;
+        }
+
+        if (isCtrlOrCmd) {
+            event.preventDefault();
+            event.stopPropagation();
+            const next = new Set(this.selectedRequestIds());
+            const anchorId = this.lastSelectedRequestId();
+            if (next.size === 0 && anchorId && anchorId !== req.id) {
+                next.add(anchorId);
+            }
+            if (next.has(req.id)) {
+                next.delete(req.id);
+            } else {
+                next.add(req.id);
+            }
+            this.selectedRequestIds.set(next);
+            this.lastSelectedRequestId.set(req.id);
+            return;
+        }
+
+        this.lastSelectedRequestId.set(req.id);
+        this.openRequest(req);
+    }
+
     addNewRequest() {
         this.tabStateService.createAndOpenNewTab();
     }
@@ -390,8 +614,25 @@ export class WorkspaceComponent {
     selectedRequestIds = signal<Set<string>>(new Set());
     isDeletingRequests = signal<boolean>(false);
 
-    toggleSelectRequest(id: string, event: Event) {
+    toggleSelectRequest(id: string, event: MouseEvent) {
         event.stopPropagation();
+        if (event.shiftKey) {
+            const visibleIds = this.getVisibleOrderedRequestIds();
+            const anchorId = this.lastSelectedRequestId() || this.tabStateService.activeTabId() || id;
+            const startIdx = visibleIds.indexOf(anchorId);
+            const endIdx = visibleIds.indexOf(id);
+            const next = new Set(this.selectedRequestIds());
+            if (startIdx !== -1 && endIdx !== -1) {
+                const min = Math.min(startIdx, endIdx);
+                const max = Math.max(startIdx, endIdx);
+                for (let i = min; i <= max; i++) {
+                    next.add(visibleIds[i]);
+                }
+                this.selectedRequestIds.set(next);
+                return;
+            }
+        }
+
         const current = new Set(this.selectedRequestIds());
         if (current.has(id)) {
             current.delete(id);
@@ -399,6 +640,7 @@ export class WorkspaceComponent {
             current.add(id);
         }
         this.selectedRequestIds.set(current);
+        this.lastSelectedRequestId.set(id);
     }
 
     toggleSelectAllRequests() {

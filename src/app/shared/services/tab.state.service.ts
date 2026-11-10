@@ -85,6 +85,10 @@ export interface RequestGroup {
     createdAt: number;
 }
 
+export type SidebarRootItem =
+    | { type: 'group'; id: string; group: RequestGroup; requests: RequestState[] }
+    | { type: 'request'; id: string; request: RequestState };
+
 export interface RequestState {
     id: string;
     capsuleId?: string;
@@ -830,12 +834,14 @@ export class TabStateService {
 
     getCapsuleGroupsSyncPayload(capId: string): {
         groups: RequestGroup[];
+        groupOrder: string[];
         order: string[];
         autoAuthEnabled?: string;
         autoAuthEndpointId?: string | null;
         requestMeta?: Record<string, any>;
     } {
         const groups = this.getGroupsForCapsule(capId);
+        const groupOrder = groups.map(g => g.id);
         const order = this.getRequestOrderForCapsule(capId);
         const cap = this.capsules().find(c => c.id === capId);
         const autoAuthEnabled = (capId === this.activeCapsuleId() ? this.autoAuthEnabled() : cap?.autoAuthEnabled) || 'off';
@@ -866,6 +872,7 @@ export class TabStateService {
 
         return {
             groups,
+            groupOrder,
             order,
             autoAuthEnabled,
             autoAuthEndpointId,
@@ -875,6 +882,7 @@ export class TabStateService {
 
     applyBackendCapsuleGroups(capId: string, payload: {
         groups?: RequestGroup[];
+        groupOrder?: string[];
         order?: string[];
         autoAuthEnabled?: string;
         autoAuthEndpointId?: string | null;
@@ -891,6 +899,15 @@ export class TabStateService {
                 requestIds: Array.isArray(g.requestIds) ? g.requestIds : [],
                 createdAt: g.createdAt || Date.now()
             }));
+            if (Array.isArray(payload.groupOrder) && payload.groupOrder.length > 0) {
+                const grpOrderIdx = new Map<string, number>();
+                payload.groupOrder.forEach((id, idx) => grpOrderIdx.set(id, idx));
+                normalizedGroups.sort((a, b) => {
+                    const ia = grpOrderIdx.has(a.id) ? grpOrderIdx.get(a.id)! : 999999;
+                    const ib = grpOrderIdx.has(b.id) ? grpOrderIdx.get(b.id)! : 999999;
+                    return ia - ib;
+                });
+            }
             this.setGroupsForCapsule(capId, normalizedGroups, false);
 
             for (const g of normalizedGroups) {
@@ -1020,6 +1037,39 @@ export class TabStateService {
         return this.allCapsuleRequests().filter(r => !assignedIds.has(r.id));
     });
 
+    sidebarRootItems = computed<SidebarRootItem[]>(() => {
+        const capId = this.activeCapsuleId();
+        const grouped = this.groupedCapsuleRequests();
+        const ungrouped = this.ungroupedCapsuleRequests();
+
+        const items: SidebarRootItem[] = [
+            ...grouped.map(g => ({
+                type: 'group' as const,
+                id: g.group.id,
+                group: g.group,
+                requests: g.requests
+            })),
+            ...ungrouped.map(r => ({
+                type: 'request' as const,
+                id: r.id,
+                request: r
+            }))
+        ];
+
+        const order = this.capsuleRequestOrderMap().get(capId) || this.loadCapsuleRequestOrder(capId);
+        if (order && order.length > 0 && order.some(id => id.startsWith('grp_'))) {
+            const orderIndexMap = new Map<string, number>();
+            order.forEach((id, idx) => orderIndexMap.set(id, idx));
+            items.sort((a, b) => {
+                const idxA = orderIndexMap.has(a.id) ? orderIndexMap.get(a.id)! : 999999;
+                const idxB = orderIndexMap.has(b.id) ? orderIndexMap.get(b.id)! : 999999;
+                return idxA - idxB;
+            });
+        }
+
+        return items;
+    });
+
     private historyStack = new Map<string, { past: Partial<RequestState>[], future: Partial<RequestState>[] }>();
 
     // Shared capsule list (drives both workspace sidebar and Capsules page)
@@ -1131,6 +1181,33 @@ export class TabStateService {
             this.savedCapsules.update(col => col.map(r => initSet.has(r.id) ? { ...r, groupId: newGroup.id } : r));
         }
 
+        const existingOrder = this.getRequestOrderForCapsule(capId);
+        if (existingOrder.length > 0 && existingOrder.some(id => id.startsWith('grp_'))) {
+            const nextOrder = [...existingOrder];
+            let insertIdx = -1;
+            if (uniqueReqIds.length > 0) {
+                for (const rId of uniqueReqIds) {
+                    const idx = nextOrder.indexOf(rId);
+                    if (idx !== -1 && (insertIdx === -1 || idx < insertIdx)) {
+                        insertIdx = idx;
+                    }
+                }
+            }
+            if (insertIdx !== -1) {
+                nextOrder.splice(insertIdx, 0, newGroup.id);
+            } else {
+                let lastGrpIdx = -1;
+                nextOrder.forEach((id, i) => {
+                    if (id.startsWith('grp_')) lastGrpIdx = i;
+                });
+                nextOrder.splice(lastGrpIdx + 1, 0, newGroup.id);
+            }
+            this.capsuleRequestOrderMap.update(m => new Map(m).set(capId, nextOrder));
+            if (this.isBrowser) {
+                localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
+            }
+        }
+
         this.setGroupsForCapsule(capId, updatedGroups, true);
         return newGroup;
     }
@@ -1219,8 +1296,75 @@ export class TabStateService {
         this.setGroupsForCapsule(capId, updatedGroups, true);
     }
 
+    reorderRequestGroups(previousIndex: number, currentIndex: number, capsuleId?: string): void {
+        const capId = capsuleId || this.activeCapsuleId();
+        const currentGroups = [...this.getGroupsForCapsule(capId)];
+        if (
+            previousIndex === currentIndex ||
+            previousIndex < 0 ||
+            currentIndex < 0 ||
+            previousIndex >= currentGroups.length ||
+            currentIndex >= currentGroups.length
+        ) {
+            return;
+        }
+        const [moved] = currentGroups.splice(previousIndex, 1);
+        currentGroups.splice(currentIndex, 0, moved);
+        this.setGroupsForCapsule(capId, currentGroups, true);
+    }
+
+    reorderSidebarRootItem(itemId: string, previousIndex: number, currentIndex: number, capsuleId?: string): void {
+        const capId = capsuleId || this.activeCapsuleId();
+        const rootItems = [...this.sidebarRootItems()];
+        const fromIdx = itemId ? rootItems.findIndex(it => it.id === itemId) : previousIndex;
+        const actualPrev = fromIdx !== -1 ? fromIdx : previousIndex;
+        if (
+            actualPrev === currentIndex ||
+            actualPrev < 0 ||
+            currentIndex < 0 ||
+            actualPrev >= rootItems.length ||
+            currentIndex >= rootItems.length
+        ) {
+            return;
+        }
+
+        const [moved] = rootItems.splice(actualPrev, 1);
+        rootItems.splice(currentIndex, 0, moved);
+
+        const currentGroups = this.getGroupsForCapsule(capId);
+        const groupMap = new Map<string, RequestGroup>();
+        for (const g of currentGroups) groupMap.set(g.id, g);
+
+        const reorderedGroups: RequestGroup[] = [];
+        for (const it of rootItems) {
+            if (it.type === 'group') {
+                const grp = groupMap.get(it.id);
+                if (grp) reorderedGroups.push(grp);
+            }
+        }
+        for (const g of currentGroups) {
+            if (!reorderedGroups.some(rg => rg.id === g.id)) {
+                reorderedGroups.push(g);
+            }
+        }
+
+        const groupedReqIds = this.groupedCapsuleRequests().flatMap(gi => gi.requests.map(r => r.id));
+        const rootOrderIds = rootItems.map(it => it.id);
+        const nextOrder = [...rootOrderIds, ...groupedReqIds];
+
+        this.capsuleRequestOrderMap.update(m => new Map(m).set(capId, nextOrder));
+        if (this.isBrowser) {
+            localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
+        }
+
+        this.setGroupsForCapsule(capId, reorderedGroups, true);
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.triggerAutoSave();
+        }
+    }
+
     handleRequestDrop(
-        requestId: string,
+        requestOrIds: string | string[],
         sourceGroupId: string | null,
         targetGroupId: string | null,
         previousIndex: number,
@@ -1228,66 +1372,41 @@ export class TabStateService {
         capsuleId?: string
     ): void {
         const capId = capsuleId || this.activeCapsuleId();
-        if (!requestId) return;
-
-        // Case 1: Reordering within root (ungrouped requests)
-        if (!sourceGroupId && !targetGroupId) {
-            const ungrouped = this.ungroupedCapsuleRequests().map(r => r.id);
-            const fromIdx = ungrouped.indexOf(requestId);
-            const actualPrev = fromIdx !== -1 ? fromIdx : previousIndex;
-            if (actualPrev === currentIndex || actualPrev < 0 || currentIndex < 0 || actualPrev >= ungrouped.length) {
-                return;
-            }
-            const [moved] = ungrouped.splice(actualPrev, 1);
-            ungrouped.splice(currentIndex, 0, moved);
-
-            // Preserve grouped request IDs and update root order
-            const groupedIds = this.groupedCapsuleRequests().flatMap(gi => gi.requests.map(r => r.id));
-            const nextOrder = [...groupedIds, ...ungrouped];
-
-            this.capsuleRequestOrderMap.update(m => {
-                const next = new Map(m);
-                next.set(capId, nextOrder);
-                return next;
-            });
-            if (this.isBrowser) {
-                localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
-            }
-            if (this.authService.isLoggedIn()) {
-                this.syncWorkspaceStateToBackend();
-                this.scheduleGroupsVariableSync(capId);
-            }
-            return;
-        }
+        const movingIds = Array.from(
+            new Set((Array.isArray(requestOrIds) ? requestOrIds : [requestOrIds]).filter(Boolean))
+        );
+        if (movingIds.length === 0) return;
+        const moveSet = new Set(movingIds);
 
         const currentGroups = this.getGroupsForCapsule(capId);
         const groupedView = this.groupedCapsuleRequests();
 
-        // Case 2: Reordering within the same group
-        if (sourceGroupId && sourceGroupId === targetGroupId) {
-            const groupEntry = groupedView.find(gi => gi.group.id === sourceGroupId);
-            const listIds = groupEntry ? groupEntry.requests.map(r => r.id) : [];
-            const fromIdx = listIds.indexOf(requestId);
-            const actualPrev = fromIdx !== -1 ? fromIdx : previousIndex;
-            if (actualPrev === currentIndex || actualPrev < 0 || currentIndex < 0 || actualPrev >= listIds.length) {
+        // Case 1: Dropping into a folder (reordering inside the same folder OR moving 1+ requests into targetGroupId)
+        if (targetGroupId) {
+            if (sourceGroupId === targetGroupId && movingIds.length === 1) {
+                const singleId = movingIds[0];
+                const groupEntry = groupedView.find(gi => gi.group.id === sourceGroupId);
+                const listIds = groupEntry ? groupEntry.requests.map(r => r.id) : [];
+                const fromIdx = listIds.indexOf(singleId);
+                const actualPrev = fromIdx !== -1 ? fromIdx : previousIndex;
+                if (actualPrev === currentIndex || actualPrev < 0 || currentIndex < 0 || actualPrev >= listIds.length) {
+                    return;
+                }
+                const [moved] = listIds.splice(actualPrev, 1);
+                listIds.splice(currentIndex, 0, moved);
+
+                const updatedGroups = currentGroups.map(g => g.id === sourceGroupId ? { ...g, requestIds: listIds } : g);
+                this.setGroupsForCapsule(capId, updatedGroups, true);
                 return;
             }
-            const [moved] = listIds.splice(actualPrev, 1);
-            listIds.splice(currentIndex, 0, moved);
 
-            const updatedGroups = currentGroups.map(g => g.id === sourceGroupId ? { ...g, requestIds: listIds } : g);
-            this.setGroupsForCapsule(capId, updatedGroups, true);
-            return;
-        }
-
-        // Case 3: Moving into a folder (from another folder or from root)
-        if (targetGroupId) {
             const updatedGroups = currentGroups.map(g => {
                 const groupEntry = groupedView.find(gi => gi.group.id === g.id);
-                const baseIds = (groupEntry ? groupEntry.requests.map(r => r.id) : (g.requestIds || [])).filter(id => id !== requestId);
+                const fullIds = groupEntry ? groupEntry.requests.map(r => r.id) : (g.requestIds || []);
+                const baseIds = fullIds.filter(id => !moveSet.has(id));
                 if (g.id === targetGroupId) {
                     const insertAt = Math.max(0, Math.min(currentIndex, baseIds.length));
-                    baseIds.splice(insertAt, 0, requestId);
+                    baseIds.splice(insertAt, 0, ...movingIds);
                     return { ...g, isExpanded: true, requestIds: baseIds };
                 }
                 return { ...g, requestIds: baseIds };
@@ -1295,49 +1414,68 @@ export class TabStateService {
 
             this.states.update(map => {
                 const next = new Map(map);
-                const st = next.get(requestId);
-                if (st) next.set(requestId, { ...st, groupId: targetGroupId });
+                for (const rId of moveSet) {
+                    const st = next.get(rId);
+                    if (st) next.set(rId, { ...st, groupId: targetGroupId });
+                }
                 return next;
             });
-            this.savedCapsules.update(col => col.map(r => r.id === requestId ? { ...r, groupId: targetGroupId } : r));
+            this.savedCapsules.update(col => col.map(r => moveSet.has(r.id) ? { ...r, groupId: targetGroupId } : r));
 
             this.setGroupsForCapsule(capId, updatedGroups, true);
             return;
         }
 
-        // Case 4: Moving from a folder out to root (ungrouped)
-        if (sourceGroupId && !targetGroupId) {
-            const updatedGroups = currentGroups.map(g => {
-                const groupEntry = groupedView.find(gi => gi.group.id === g.id);
-                const baseIds = (groupEntry ? groupEntry.requests.map(r => r.id) : (g.requestIds || [])).filter(id => id !== requestId);
-                return { ...g, requestIds: baseIds };
-            });
+        // Case 2: Dropping into root list (targetGroupId === null)
+        // Supports reordering ungrouped request(s) relative to folders & requests OR moving request(s) out of a folder into root
+        const currentRootIds = this.sidebarRootItems().map(it => it.id);
+        let nextRootIds: string[];
 
-            const ungrouped = this.ungroupedCapsuleRequests().map(r => r.id).filter(id => id !== requestId);
-            const insertAt = Math.max(0, Math.min(currentIndex, ungrouped.length));
-            ungrouped.splice(insertAt, 0, requestId);
-
-            const groupedIds = updatedGroups.flatMap(g => g.requestIds);
-            const nextOrder = [...groupedIds, ...ungrouped];
-
-            this.states.update(map => {
-                const next = new Map(map);
-                const st = next.get(requestId);
-                if (st) next.set(requestId, { ...st, groupId: null });
-                return next;
-            });
-            this.savedCapsules.update(col => col.map(r => r.id === requestId ? { ...r, groupId: null } : r));
-
-            this.capsuleRequestOrderMap.update(m => {
-                const next = new Map(m);
-                next.set(capId, nextOrder);
-                return next;
-            });
-            if (this.isBrowser) {
-                localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
+        if (!sourceGroupId && movingIds.length === 1) {
+            const singleId = movingIds[0];
+            nextRootIds = [...currentRootIds];
+            const fromIdx = nextRootIds.indexOf(singleId);
+            const actualPrev = fromIdx !== -1 ? fromIdx : previousIndex;
+            if (actualPrev === currentIndex || actualPrev < 0 || currentIndex < 0 || actualPrev >= nextRootIds.length) {
+                return;
             }
-            this.setGroupsForCapsule(capId, updatedGroups, true);
+            const [moved] = nextRootIds.splice(actualPrev, 1);
+            nextRootIds.splice(currentIndex, 0, moved);
+        } else {
+            nextRootIds = currentRootIds.filter(id => !moveSet.has(id));
+            const insertAt = Math.max(0, Math.min(currentIndex, nextRootIds.length));
+            nextRootIds.splice(insertAt, 0, ...movingIds);
         }
+
+        const updatedGroups = currentGroups.map(g => {
+            const groupEntry = groupedView.find(gi => gi.group.id === g.id);
+            const baseIds = (groupEntry ? groupEntry.requests.map(r => r.id) : (g.requestIds || [])).filter(id => !moveSet.has(id));
+            return { ...g, requestIds: baseIds };
+        });
+
+        const groupedIds = updatedGroups.flatMap(g => g.requestIds);
+        const nextOrder = [...nextRootIds, ...groupedIds];
+
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const rId of moveSet) {
+                const st = next.get(rId);
+                if (st) next.set(rId, { ...st, groupId: null });
+            }
+            return next;
+        });
+        this.savedCapsules.update(col => col.map(r => moveSet.has(r.id) ? { ...r, groupId: null } : r));
+
+        this.capsuleRequestOrderMap.update(m => {
+            const next = new Map(m);
+            next.set(capId, nextOrder);
+            return next;
+        });
+        if (this.isBrowser) {
+            localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
+        }
+
+        this.setGroupsForCapsule(capId, updatedGroups, true);
     }
 
     getCapsuleRequestsSync(capsuleId: string): RequestState[] {
@@ -2159,17 +2297,46 @@ export class TabStateService {
         newCap.autoAuthEnabled = sourceAutoAuth;
         newCap.autoAuthEndpointId = sourceEndpoint ? (idMap.get(sourceEndpoint) || sourceEndpoint) : null;
 
-        // Clone custom request order
+        this.states.set(newStates);
+
+        // Clone Request Groups for the duplicated capsule first so groupIdMap is available for order remapping
+        const sourceGroups = this.getGroupsForCapsule(capsule.id);
+        const groupIdMap = new Map<string, string>();
+        if (sourceGroups.length > 0) {
+            const clonedGroups: RequestGroup[] = sourceGroups.map(g => {
+                const newGId = 'grp_' + this.createId();
+                groupIdMap.set(g.id, newGId);
+                return {
+                    ...g,
+                    id: newGId,
+                    capsuleId: newCap.id,
+                    requestIds: (g.requestIds || []).map(oldRId => idMap.get(oldRId)!).filter(Boolean)
+                };
+            });
+            this.setGroupsForCapsule(newCap.id, clonedGroups, false);
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const [, newRId] of idMap.entries()) {
+                    const st = next.get(newRId);
+                    if (st && st.groupId && groupIdMap.has(st.groupId)) {
+                        next.set(newRId, { ...st, groupId: groupIdMap.get(st.groupId)! });
+                    }
+                }
+                return next;
+            });
+        }
+
+        // Clone custom request & folder order
         const sourceOrder = this.getRequestOrderForCapsule(capsule.id);
         if (sourceOrder.length > 0) {
-            const clonedOrder = sourceOrder.map(oldRId => idMap.get(oldRId)!).filter(Boolean);
+            const clonedOrder = sourceOrder
+                .map(oldId => idMap.get(oldId) || groupIdMap.get(oldId)!)
+                .filter(Boolean);
             this.capsuleRequestOrderMap.update(m => new Map(m).set(newCap.id, clonedOrder));
             if (this.isBrowser) {
                 localStorage.setItem(`onsteroids_capsule_order_${newCap.id}`, JSON.stringify(clonedOrder));
             }
         }
-        
-        this.states.set(newStates);
 
         // Clone and remap variable sources to the newly cloned requests
         if (this.isBrowser) {
@@ -2192,33 +2359,6 @@ export class TabStateService {
                     }
                 } catch {}
             }
-        }
-        
-        // Clone Request Groups for the duplicated capsule
-        const sourceGroups = this.getGroupsForCapsule(capsule.id);
-        if (sourceGroups.length > 0) {
-            const groupIdMap = new Map<string, string>();
-            const clonedGroups: RequestGroup[] = sourceGroups.map(g => {
-                const newGId = 'grp_' + this.createId();
-                groupIdMap.set(g.id, newGId);
-                return {
-                    ...g,
-                    id: newGId,
-                    capsuleId: newCap.id,
-                    requestIds: (g.requestIds || []).map(oldRId => idMap.get(oldRId)!).filter(Boolean)
-                };
-            });
-            this.setGroupsForCapsule(newCap.id, clonedGroups, false);
-            this.states.update(map => {
-                const next = new Map(map);
-                for (const [, newRId] of idMap.entries()) {
-                    const st = next.get(newRId);
-                    if (st && st.groupId && groupIdMap.has(st.groupId)) {
-                        next.set(newRId, { ...st, groupId: groupIdMap.get(st.groupId)! });
-                    }
-                }
-                return next;
-            });
         }
 
         // Persist the newly cloned tab IDs for the target capsule before switching
@@ -2551,6 +2691,7 @@ export class TabStateService {
         autoAuthEndpointId: string | null;
         requests: RequestState[];
         groups: RequestGroup[];
+        groupOrder: string[];
         requestOrder: string[];
         variables: IGlobalVariable[];
         variableSources: Record<string, any>;
@@ -2561,6 +2702,7 @@ export class TabStateService {
         const autoAuthEndpointId = (capsuleId === this.activeCapsuleId() ? this.autoAuthEndpointId() : cap?.autoAuthEndpointId) || null;
         const requests = this.getCapsuleRequestsSync(capsuleId);
         const groups = this.getGroupsForCapsule(capsuleId);
+        const groupOrder = groups.map(g => g.id);
         const requestOrder = this.getRequestOrderForCapsule(capsuleId);
 
         const vs = this.getVariableService();
@@ -2583,6 +2725,7 @@ export class TabStateService {
             autoAuthEndpointId,
             requests,
             groups,
+            groupOrder,
             requestOrder,
             variables,
             variableSources: varSources
@@ -2596,6 +2739,7 @@ export class TabStateService {
         autoAuthEndpointId: string | null;
         requests: RequestState[];
         groups: RequestGroup[];
+        groupOrder: string[];
         requestOrder: string[];
         variables: IGlobalVariable[];
         variableSources: Record<string, any>;
@@ -2863,14 +3007,18 @@ export class TabStateService {
 
                     // Remap and persist request groups (folders)
                     if (capInput?.groups && Array.isArray(capInput.groups) && capInput.groups.length > 0) {
-                        const importedGroups: RequestGroup[] = capInput.groups.map(g => ({
-                            id: 'grp_' + this.createId(),
-                            name: g.name || 'Folder',
-                            capsuleId: newCap.id,
-                            isExpanded: g.isExpanded ?? true,
-                            requestIds: (g.requestIds || []).map(oldId => reqIdMap.get(oldId) || oldId),
-                            createdAt: Date.now()
-                        }));
+                        const importedGroups: RequestGroup[] = capInput.groups.map(g => {
+                            const newGId = 'grp_' + this.createId();
+                            if (g.id) reqIdMap.set(g.id, newGId);
+                            return {
+                                id: newGId,
+                                name: g.name || 'Folder',
+                                capsuleId: newCap.id,
+                                isExpanded: g.isExpanded ?? true,
+                                requestIds: (g.requestIds || []).map(oldId => reqIdMap.get(oldId) || oldId),
+                                createdAt: Date.now()
+                            };
+                        });
                         const reqToGroup = new Map<string, string>();
                         for (const ig of importedGroups) {
                             for (const rId of ig.requestIds) reqToGroup.set(rId, ig.id);
@@ -3009,14 +3157,18 @@ export class TabStateService {
                 }
 
                 if (c.groups && Array.isArray(c.groups) && c.groups.length > 0) {
-                    const importedGroups: RequestGroup[] = c.groups.map(g => ({
-                        id: 'grp_' + this.createId(),
-                        name: g.name || 'Folder',
-                        capsuleId: capId,
-                        isExpanded: g.isExpanded ?? true,
-                        requestIds: (g.requestIds || []).map(oldId => reqIdMap.get(oldId) || oldId),
-                        createdAt: Date.now()
-                    }));
+                    const importedGroups: RequestGroup[] = c.groups.map(g => {
+                        const newGId = 'grp_' + this.createId();
+                        if (g.id) reqIdMap.set(g.id, newGId);
+                        return {
+                            id: newGId,
+                            name: g.name || 'Folder',
+                            capsuleId: capId,
+                            isExpanded: g.isExpanded ?? true,
+                            requestIds: (g.requestIds || []).map(oldId => reqIdMap.get(oldId) || oldId),
+                            createdAt: Date.now()
+                        };
+                    });
                     const reqToGroup = new Map<string, string>();
                     for (const ig of importedGroups) {
                         for (const rId of ig.requestIds) reqToGroup.set(rId, ig.id);
@@ -3192,14 +3344,18 @@ export class TabStateService {
                 try {
                     const parsedGrp = JSON.parse(rawGrpVal);
                     if (Array.isArray(parsedGrp?.groups)) {
-                        sharedGroups = parsedGrp.groups.map((g: any) => ({
-                            id: 'grp_' + this.createId(),
-                            name: g.name || 'Folder',
-                            capsuleId: capId,
-                            isExpanded: g.isExpanded ?? true,
-                            requestIds: (g.requestIds || []).map((oldId: string) => sharedIdMap.get(oldId) || oldId),
-                            createdAt: Date.now()
-                        }));
+                        sharedGroups = parsedGrp.groups.map((g: any) => {
+                            const newGId = 'grp_' + this.createId();
+                            if (g.id) sharedIdMap.set(String(g.id), newGId);
+                            return {
+                                id: newGId,
+                                name: g.name || 'Folder',
+                                capsuleId: capId,
+                                isExpanded: g.isExpanded ?? true,
+                                requestIds: (g.requestIds || []).map((oldId: string) => sharedIdMap.get(oldId) || oldId),
+                                createdAt: Date.now()
+                            };
+                        });
                     }
                     if (Array.isArray(parsedGrp?.order)) {
                         sharedOrder = parsedGrp.order.map((oldId: string) => sharedIdMap.get(oldId) || oldId);

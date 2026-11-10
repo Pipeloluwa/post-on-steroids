@@ -181,31 +181,31 @@ export class NavbarComponent {
         this.notificationService.notify('Endpoint exported successfully.');
     }
 
-    exportCapsule() {
+    async exportCapsule() {
         this.showFileMenu.set(false);
-        const colName = this.tabStateService.activeCapsuleName() || 'capsule';
         const activeCapId = this.tabStateService.activeCapsuleId();
-        const requests = this.tabStateService.getCapsuleRequestsSync(activeCapId);
-        const vars = this.variableService.variables();
+        const single = await this.tabStateService.getFullCapsuleExportData(activeCapId);
+        const colName = single.name || 'capsule';
 
         const exportData = {
             version: "1.0.0",
             collection: colName,
             capsule: colName,
+            autoAuthEnabled: single.autoAuthEnabled,
+            autoAuthEndpointId: single.autoAuthEndpointId,
             exportedAt: new Date().toISOString(),
-            capsules: [{
-                id: activeCapId,
-                name: colName,
-                requests,
-                variables: vars
-            }],
-            requests,
-            variables: vars
+            capsules: [single],
+            requests: single.requests,
+            groups: single.groups,
+            groupOrder: single.groupOrder,
+            requestOrder: single.requestOrder,
+            variables: single.variables,
+            variableSources: single.variableSources
         };
 
         const safeName = colName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
         this.downloadJson(exportData, `capsule_${safeName}.json`);
-        this.notificationService.notify(`Capsule "${colName}" exported successfully (${requests.length} request${requests.length !== 1 ? 's' : ''}).`);
+        this.notificationService.notify(`Capsule "${colName}" exported successfully (${single.requests.length} request${single.requests.length !== 1 ? 's' : ''}).`);
     }
 
     closeActiveTab() {

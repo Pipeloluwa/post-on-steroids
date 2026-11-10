@@ -318,14 +318,20 @@ export class ImportComponent implements OnInit {
 
                 let finalGroups: RequestGroup[] = Array.from(folderNameMap.values());
                 if (finalGroups.length === 0 && Array.isArray(group.groups) && group.groups.length > 0) {
-                    finalGroups = group.groups.map((g: any) => ({
-                        id: 'grp_' + this.tabStateService.createId(),
-                        name: g.name || 'Folder',
-                        capsuleId: capId,
-                        isExpanded: g.isExpanded ?? true,
-                        requestIds: (g.requestIds || []).map((oldId: string) => oldReqIdMap.get(oldId) || oldId),
-                        createdAt: Date.now()
-                    }));
+                    finalGroups = group.groups.map((g: any) => {
+                        const newGId = 'grp_' + this.tabStateService.createId();
+                        if (g.id) {
+                            oldReqIdMap.set(String(g.id), newGId);
+                        }
+                        return {
+                            id: newGId,
+                            name: g.name || 'Folder',
+                            capsuleId: capId,
+                            isExpanded: g.isExpanded ?? true,
+                            requestIds: (g.requestIds || []).map((oldId: string) => oldReqIdMap.get(oldId) || oldId),
+                            createdAt: Date.now()
+                        };
+                    });
                 }
 
                 const finalRequestOrder = Array.isArray(group.requestOrder)

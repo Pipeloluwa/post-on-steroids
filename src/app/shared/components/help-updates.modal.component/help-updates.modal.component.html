@@ -54,15 +54,16 @@
             <div
                 class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-1.5">
                 <div class="flex items-center gap-2 text-sm font-bold text-(--postonsteroids-text-primary)">
-                    <mat-icon class="text-amber-500 text-[18px]! size-[18px]!">folder_special</mat-icon>
-                    <span>Capsules, Request Folders & Tab Navigation</span>
+                    <mat-icon class="text-(--postonsteroids-accent) text-[18px]! size-[18px]!">folder_special</mat-icon>
+                    <span>Capsules, Multi-Select Request Folders & Tab Navigation</span>
                 </div>
                 <p class="leading-relaxed">
                     Capsules let you isolate API workspaces while Postman-style <strong>Request Folders</strong> keep
-                    endpoints organized inside each capsule. Create folders, batch-group selected requests, rename
-                    folders inline, or drag and drop requests between folders and the root list. You can also reorder
-                    requests in both the resizable vertical sidebar and horizontal tab bar, and navigate across your tab
-                    visit history using the <strong>Back / Forward</strong> buttons.
+                    endpoints organized inside each capsule. Multi-select requests using
+                    <strong>Shift+Click</strong>, <strong>Ctrl+Click</strong>, or checkboxes and drag all selected
+                    requests directly into any folder. Folders themselves can be dragged and repositioned in any order
+                    alongside individual requests, and you can navigate across your tab visit history using the
+                    <strong>Back / Forward</strong> buttons.
                 </p>
             </div>
 
@@ -193,6 +194,33 @@
             <div class="space-y-2">
                 <h4 class="text-xs font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">Latest Release
                     Highlights</h4>
+
+                <div
+                    class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-2">
+                    <div
+                        class="flex items-center justify-between text-xs font-bold text-(--postonsteroids-text-primary)">
+                        <span>Release 1.0.4 — Blue & White Revamp, Multi-Select Drag & Free-Order Folders</span>
+                        <span class="text-(--postonsteroids-text-muted) font-normal">November 2026</span>
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-[11px] leading-relaxed">
+                        <li><strong>Blue & White Visual Revamp:</strong> Refreshed brand identity from orange & white to
+                            an electric Blue & White color system across Dark and Light themes, including the new
+                            blue-and-white logo, desktop icons, and browser favicon.</li>
+                        <li><strong>Multi-Selection (<code class="text-(--postonsteroids-accent) font-mono">Shift+Click</code>
+                                / <code class="text-(--postonsteroids-accent) font-mono">Ctrl+Click</code> / Checkboxes) &
+                                Batch Drag into Folders:</strong> Select contiguous ranges with
+                            <strong>Shift+Click</strong>, toggle individual requests with <strong>Ctrl+Click</strong>
+                            (or checkboxes), and drag all selected requests together into any folder or root position.
+                        </li>
+                        <li><strong>Draggable Folder Repositioning in Any Order:</strong> Reposition folders freely by
+                            dragging their header to any spot in the sidebar—above, below, or interleaved between
+                            individual requests and other folders.</li>
+                        <li><strong>Complete Order & Settings Persistence:</strong> Custom folder ordering, interleaved
+                            root request/folder sequences, folder memberships, Auto-Auth, Post-Response Triggers, and
+                            variable bindings are saved and restored across Capsule Exports, Share Links, Imports, and
+                            Duplications.</li>
+                    </ul>
+                </div>
 
                 <div
                     class="p-3.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) space-y-2">

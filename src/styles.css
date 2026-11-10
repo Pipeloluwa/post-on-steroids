@@ -42,15 +42,15 @@ mat-icon {
   height: 1em;
 }
 
-/* Postman Dark Theme Color Variables */
+/* Blue & White Dark Theme Color Variables */
 :root[data-theme="dark"] {
   --postonsteroids-bg-primary: #212121;
   --postonsteroids-bg-secondary: #2D2D2D;
   --postonsteroids-bg-tertiary: #333333;
   --postonsteroids-bg-darker: #1A1A1A;
   --postonsteroids-bg-hover: #3A3A3A;
-  --postonsteroids-accent: #FF6C37;
-  --postonsteroids-accent-hover: #E85A28;
+  --postonsteroids-accent: #3B82F6;
+  --postonsteroids-accent-hover: #2563EB;
   --postonsteroids-text-primary: #F9FAFB;
   --postonsteroids-text-secondary: #D1D5DB;
   --postonsteroids-text-muted: #9CA3AF;
@@ -58,15 +58,15 @@ mat-icon {
   --postonsteroids-shadow: rgba(0, 0, 0, 0.3);
 }
 
-/* Postman Light Theme Color Variables */
+/* Blue & White Light Theme Color Variables */
 :root[data-theme="light"] {
   --postonsteroids-bg-primary: #FFFFFF;
   --postonsteroids-bg-secondary: #F8F9FA;
   --postonsteroids-bg-tertiary: #F1F3F5;
   --postonsteroids-bg-darker: #E9ECEF;
   --postonsteroids-bg-hover: #E5E7EB;
-  --postonsteroids-accent: #F05A28;
-  --postonsteroids-accent-hover: #D94E1F;
+  --postonsteroids-accent: #2563EB;
+  --postonsteroids-accent-hover: #1D4ED8;
   --postonsteroids-text-primary: #212529;
   --postonsteroids-text-secondary: #495057;
   --postonsteroids-text-muted: #6C757D;
@@ -81,8 +81,8 @@ mat-icon {
   --postonsteroids-bg-tertiary: #333333;
   --postonsteroids-bg-darker: #1A1A1A;
   --postonsteroids-bg-hover: #3A3A3A;
-  --postonsteroids-accent: #FF6C37;
-  --postonsteroids-accent-hover: #E85A28;
+  --postonsteroids-accent: #3B82F6;
+  --postonsteroids-accent-hover: #2563EB;
   --postonsteroids-text-primary: #F9FAFB;
   --postonsteroids-text-secondary: #D1D5DB;
   --postonsteroids-text-muted: #9CA3AF;

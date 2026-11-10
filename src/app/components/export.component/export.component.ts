@@ -56,6 +56,7 @@ export class ExportComponent {
                     capsules: [single],
                     requests: single.requests,
                     groups: single.groups,
+                    groupOrder: single.groupOrder,
                     requestOrder: single.requestOrder,
                     variables: single.variables,
                     variableSources: single.variableSources
