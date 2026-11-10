@@ -255,6 +255,7 @@ export class VariableService {
     }
 
     private hasPendingSync = false;
+    private activeSyncPromise: Promise<void> | null = null;
     private systemSourceVarIds = new Map<string, string>();
     private systemGroupsVarIds = new Map<string, string>();
 
@@ -283,8 +284,9 @@ export class VariableService {
                 let sourceMap = this.getSourceMapForCapsule(capId);
                 const inMemVars = this.variables();
 
-                // Extract backend-persisted __var_sources__ system variable if present
-                const sysSourceEntry = res.data.find(v => (v.variableKey || v.key || '').trim() === '__var_sources__');
+                // Extract backend-persisted __var_sources__ system variable if present (use latest entry if multiple)
+                const sysSourceEntries = res.data.filter(v => (v.variableKey || v.key || '').trim() === '__var_sources__');
+                const sysSourceEntry = sysSourceEntries.length > 0 ? sysSourceEntries[sysSourceEntries.length - 1] : null;
                 if (sysSourceEntry) {
                     if (sysSourceEntry.id) {
                         this.systemSourceVarIds.set(capId, sysSourceEntry.id);
@@ -301,8 +303,9 @@ export class VariableService {
                     }
                 }
 
-                // Extract backend-persisted __capsule_groups__ system variable if present
-                const sysGroupsEntry = res.data.find(v => (v.variableKey || v.key || '').trim() === '__capsule_groups__');
+                // Extract backend-persisted __capsule_groups__ system variable if present (use latest entry if multiple)
+                const sysGroupsEntries = res.data.filter(v => (v.variableKey || v.key || '').trim() === '__capsule_groups__');
+                const sysGroupsEntry = sysGroupsEntries.length > 0 ? sysGroupsEntries[sysGroupsEntries.length - 1] : null;
                 if (sysGroupsEntry) {
                     if (sysGroupsEntry.id) {
                         this.systemGroupsVarIds.set(capId, sysGroupsEntry.id);
@@ -388,9 +391,13 @@ export class VariableService {
         if (!this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
         if (this.isSyncing()) {
             this.hasPendingSync = true;
+            if (this.activeSyncPromise) {
+                await this.activeSyncPromise;
+            }
             return;
         }
         this.isSyncing.set(true);
+        const runSync = async (): Promise<void> => {
         try {
             const capsuleId = targetCapId || this.tabStateService.activeCapsuleId();
             const isGuid = capsuleId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(capsuleId);
@@ -504,11 +511,15 @@ export class VariableService {
             console.error('Failed to sync variables to backend', e);
         } finally {
             this.isSyncing.set(false);
+            this.activeSyncPromise = null;
             if (this.hasPendingSync) {
                 this.hasPendingSync = false;
-                this.syncVariablesToBackend(targetCapId);
+                await this.syncVariablesToBackend(targetCapId);
             }
         }
+        };
+        this.activeSyncPromise = runSync();
+        await this.activeSyncPromise;
     }
 
     saveVariables(syncBackend = true, targetCapId?: string) {
