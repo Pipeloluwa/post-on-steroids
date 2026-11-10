@@ -253,6 +253,13 @@ export class WorkspaceComponent {
         this.createCapsuleModal?.open();
     }
 
+    getShortMethod(method: string): string {
+        const upper = (method || 'GET').toUpperCase();
+        if (upper === 'DELETE') return 'DEL';
+        if (upper === 'OPTIONS') return 'OPT';
+        return upper;
+    }
+
     getMethodColor(method: string): string {
         switch (method.toUpperCase()) {
             case 'GET': return '#00BF8E';
