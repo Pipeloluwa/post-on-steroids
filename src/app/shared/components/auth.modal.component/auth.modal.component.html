@@ -31,7 +31,7 @@
 
             <!-- Error Banner -->
             @if (errorMessage()) {
-            <div class="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2 animate-in fade-in">
+            <div class="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-status-danger text-xs flex items-start gap-2 animate-in fade-in">
                 <mat-icon class="text-[16px]! size-4! shrink-0 mt-0.5">error_outline</mat-icon>
                 <span>{{ errorMessage() }}</span>
             </div>
@@ -39,7 +39,7 @@
 
             <!-- Success Banner -->
             @if (successMessage()) {
-            <div class="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-2 animate-in fade-in">
+            <div class="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-status-success text-xs flex items-start gap-2 animate-in fade-in">
                 <mat-icon class="text-[16px]! size-4! shrink-0 mt-0.5">check_circle_outline</mat-icon>
                 <span>{{ successMessage() }}</span>
             </div>
@@ -76,10 +76,10 @@
                     <div class="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-1.5 animate-in fade-in">
                         <div class="flex items-center justify-between text-[11px]">
                             <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
-                                <mat-icon class="text-[14px]! size-[14px]! text-amber-400">hourglass_top</mat-icon>
+                                <mat-icon class="text-[14px]! size-[14px]! text-status-warning">hourglass_top</mat-icon>
                                 <span>Next OTP request available in</span>
                             </span>
-                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-status-warning font-mono font-bold">
                                 {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
                             </span>
                         </div>
@@ -110,7 +110,7 @@
                         </div>
                         <div class="flex items-center justify-between mt-1.5 text-[11px] font-normal">
                             <span class="text-(--postonsteroids-text-muted)">Security code</span>
-                            <span [class.text-emerald-400]="otp().length === 6"
+                            <span [class.text-status-success]="otp().length === 6"
                                   [class.text-(--postonsteroids-text-muted)]="otp().length < 6"
                                   class="font-mono">
                                 {{ otp().length }}/6 digits
@@ -130,10 +130,10 @@
                          role="status" aria-live="polite">
                         <div class="flex items-center justify-between text-[11px]">
                             <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
-                                <mat-icon class="text-[15px]! size-[15px]! text-amber-400">hourglass_top</mat-icon>
+                                <mat-icon class="text-[15px]! size-[15px]! text-status-warning">hourglass_top</mat-icon>
                                 <span>New OTP available in</span>
                             </span>
-                            <span class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                            <span class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-status-warning font-mono font-bold">
                                 {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
                             </span>
                         </div>
@@ -159,7 +159,7 @@
                             class="text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer font-medium">
                             Back
                         </button>
-                        <span class="flex items-center gap-1 text-[11px] text-emerald-400">
+                        <span class="flex items-center gap-1 text-[11px] text-status-success">
                             <mat-icon class="text-[14px]! size-[14px]!">check_circle</mat-icon>
                             <span>Ready for new code</span>
                         </span>
@@ -213,10 +213,10 @@
                             <div class="flex items-center justify-between text-[11px]">
                                 <span class="text-(--postonsteroids-text-muted)">Strength</span>
                                 <span class="font-semibold"
-                                      [class.text-red-400]="pv.passedCount <= 2"
-                                      [class.text-amber-400]="pv.passedCount === 3"
-                                      [class.text-sky-400]="pv.passedCount === 4"
-                                      [class.text-emerald-400]="pv.passedCount === 5">
+                                      [class.text-status-danger]="pv.passedCount <= 2"
+                                      [class.text-status-warning]="pv.passedCount === 3"
+                                      [class.text-status-info]="pv.passedCount === 4"
+                                      [class.text-status-success]="pv.passedCount === 5">
                                     {{ pv.strengthLabel }}
                                 </span>
                             </div>
@@ -257,8 +257,8 @@
                         </div>
                         @if (authService.confirmPassword().length > 0) {
                         <div class="mt-1 flex items-center gap-1 text-[11px]"
-                             [class.text-emerald-400]="pv.passwordsMatch"
-                             [class.text-red-400]="!pv.passwordsMatch">
+                             [class.text-status-success]="pv.passwordsMatch"
+                             [class.text-status-danger]="!pv.passwordsMatch">
                             <mat-icon class="text-[13px]! size-[13px]!">{{ pv.passwordsMatch ? 'check_circle' : 'cancel' }}</mat-icon>
                             <span>{{ pv.passwordsMatch ? 'Passwords match' : 'Passwords do not match' }}</span>
                         </div>
@@ -268,23 +268,23 @@
                     <!-- Password Rules Checklist -->
                     <div class="p-2.5 rounded-xl bg-(--postonsteroids-bg-tertiary)/70 border border-(--postonsteroids-border)/70 text-[11px]">
                         <div class="grid grid-cols-2 gap-x-2 gap-y-1">
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.minLength" [class.text-(--postonsteroids-text-muted)]="!pv.minLength">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.minLength" [class.text-(--postonsteroids-text-muted)]="!pv.minLength">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.minLength ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>8+ characters</span>
                             </div>
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.hasUpper" [class.text-(--postonsteroids-text-muted)]="!pv.hasUpper">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.hasUpper" [class.text-(--postonsteroids-text-muted)]="!pv.hasUpper">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasUpper ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Uppercase (A-Z)</span>
                             </div>
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.hasLower" [class.text-(--postonsteroids-text-muted)]="!pv.hasLower">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.hasLower" [class.text-(--postonsteroids-text-muted)]="!pv.hasLower">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasLower ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Lowercase (a-z)</span>
                             </div>
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.hasNumber" [class.text-(--postonsteroids-text-muted)]="!pv.hasNumber">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.hasNumber" [class.text-(--postonsteroids-text-muted)]="!pv.hasNumber">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasNumber ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Number (0-9)</span>
                             </div>
-                            <div class="flex items-center gap-1 col-span-2" [class.text-emerald-400]="pv.hasSpecial" [class.text-(--postonsteroids-text-muted)]="!pv.hasSpecial">
+                            <div class="flex items-center gap-1 col-span-2" [class.text-status-success]="pv.hasSpecial" [class.text-(--postonsteroids-text-muted)]="!pv.hasSpecial">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasSpecial ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Special character (!&#64;#$%^&amp;*)</span>
                             </div>
@@ -322,10 +322,10 @@
                     <div class="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-1.5 animate-in fade-in">
                         <div class="flex items-center justify-between text-[11px]">
                             <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
-                                <mat-icon class="text-[14px]! size-[14px]! text-amber-400">hourglass_top</mat-icon>
+                                <mat-icon class="text-[14px]! size-[14px]! text-status-warning">hourglass_top</mat-icon>
                                 <span>Next OTP request available in</span>
                             </span>
-                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-status-warning font-mono font-bold">
                                 {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
                             </span>
                         </div>
@@ -380,10 +380,10 @@
                             <div class="flex items-center justify-between text-[11px]">
                                 <span class="text-(--postonsteroids-text-muted)">Strength</span>
                                 <span class="font-semibold"
-                                      [class.text-red-400]="pv.passedCount <= 2"
-                                      [class.text-amber-400]="pv.passedCount === 3"
-                                      [class.text-sky-400]="pv.passedCount === 4"
-                                      [class.text-emerald-400]="pv.passedCount === 5">
+                                      [class.text-status-danger]="pv.passedCount <= 2"
+                                      [class.text-status-warning]="pv.passedCount === 3"
+                                      [class.text-status-info]="pv.passedCount === 4"
+                                      [class.text-status-success]="pv.passedCount === 5">
                                     {{ pv.strengthLabel }}
                                 </span>
                             </div>
@@ -424,8 +424,8 @@
                         </div>
                         @if (authService.confirmPassword().length > 0) {
                         <div class="mt-1 flex items-center gap-1 text-[11px]"
-                             [class.text-emerald-400]="pv.passwordsMatch"
-                             [class.text-red-400]="!pv.passwordsMatch">
+                             [class.text-status-success]="pv.passwordsMatch"
+                             [class.text-status-danger]="!pv.passwordsMatch">
                             <mat-icon class="text-[13px]! size-[13px]!">{{ pv.passwordsMatch ? 'check_circle' : 'cancel' }}</mat-icon>
                             <span>{{ pv.passwordsMatch ? 'Passwords match' : 'Passwords do not match' }}</span>
                         </div>
@@ -435,28 +435,28 @@
                     <!-- Password Rules Checklist -->
                     <div class="p-2.5 rounded-xl bg-(--postonsteroids-bg-tertiary)/70 border border-(--postonsteroids-border)/70 text-[11px]">
                         <div class="grid grid-cols-2 gap-x-2 gap-y-1">
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.minLength" [class.text-(--postonsteroids-text-muted)]="!pv.minLength">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.minLength" [class.text-(--postonsteroids-text-muted)]="!pv.minLength">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.minLength ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>8+ characters</span>
                             </div>
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.hasUpper" [class.text-(--postonsteroids-text-muted)]="!pv.hasUpper">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.hasUpper" [class.text-(--postonsteroids-text-muted)]="!pv.hasUpper">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasUpper ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Uppercase (A-Z)</span>
                             </div>
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.hasLower" [class.text-(--postonsteroids-text-muted)]="!pv.hasLower">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.hasLower" [class.text-(--postonsteroids-text-muted)]="!pv.hasLower">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasLower ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Lowercase (a-z)</span>
                             </div>
-                            <div class="flex items-center gap-1" [class.text-emerald-400]="pv.hasNumber" [class.text-(--postonsteroids-text-muted)]="!pv.hasNumber">
+                            <div class="flex items-center gap-1" [class.text-status-success]="pv.hasNumber" [class.text-(--postonsteroids-text-muted)]="!pv.hasNumber">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasNumber ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Number (0-9)</span>
                             </div>
-                            <div class="flex items-center gap-1 col-span-2" [class.text-emerald-400]="pv.hasSpecial" [class.text-(--postonsteroids-text-muted)]="!pv.hasSpecial">
+                            <div class="flex items-center gap-1 col-span-2" [class.text-status-success]="pv.hasSpecial" [class.text-(--postonsteroids-text-muted)]="!pv.hasSpecial">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.hasSpecial ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                                 <span>Special character (!&#64;#$%^&amp;*)</span>
                             </div>
                             @if (authService.currentPassword() && authService.password()) {
-                            <div class="flex items-center gap-1 col-span-2" [class.text-emerald-400]="pv.differentFromCurrent" [class.text-red-400]="!pv.differentFromCurrent">
+                            <div class="flex items-center gap-1 col-span-2" [class.text-status-success]="pv.differentFromCurrent" [class.text-status-danger]="!pv.differentFromCurrent">
                                 <mat-icon class="text-[13px]! size-[13px]! shrink-0">{{ pv.differentFromCurrent ? 'check_circle' : 'cancel' }}</mat-icon>
                                 <span>Must differ from current password</span>
                             </div>
@@ -526,10 +526,10 @@
                     <div class="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-1.5 animate-in fade-in">
                         <div class="flex items-center justify-between text-[11px]">
                             <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
-                                <mat-icon class="text-[14px]! size-[14px]! text-amber-400">hourglass_top</mat-icon>
+                                <mat-icon class="text-[14px]! size-[14px]! text-status-warning">hourglass_top</mat-icon>
                                 <span>Next OTP request available in</span>
                             </span>
-                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold">
+                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-status-warning font-mono font-bold">
                                 {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
                             </span>
                         </div>

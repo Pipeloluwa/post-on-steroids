@@ -6,11 +6,11 @@
         <div style="transform: translateY(0.5px); display: inline-block; min-width: 100%; padding-right: 100px;">
         @for (seg of parsedSegments(); track $index) {
             @if (seg.type === 'global') {
-                <span class="text-green-500 bg-green-500/10 rounded-sm">{{seg.text}}</span>
+                <span class="rounded-sm" style="color: var(--postonsteroids-token-global); background-color: color-mix(in srgb, var(--postonsteroids-token-global) 12%, transparent);">{{seg.text}}</span>
             } @else if (seg.type === 'path') {
-                <span class="text-yellow-500 bg-yellow-500/10 rounded-sm">{{seg.text}}</span>
+                <span class="rounded-sm" style="color: var(--postonsteroids-token-path); background-color: color-mix(in srgb, var(--postonsteroids-token-path) 12%, transparent);">{{seg.text}}</span>
             } @else if (seg.type === 'utility') {
-                <span class="text-blue-500 bg-blue-500/10 rounded-sm">{{seg.text}}</span>
+                <span class="rounded-sm" style="color: var(--postonsteroids-token-utility); background-color: color-mix(in srgb, var(--postonsteroids-token-utility) 12%, transparent);">{{seg.text}}</span>
             } @else {
                 <span>{{seg.text}}</span>
             }

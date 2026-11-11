@@ -77,7 +77,7 @@
                         <button (click)="batchDeleteSelectedRequests()" type="button"
                                 [disabled]="isDeletingRequests()"
                                 title="Delete selected folder(s) and request(s)"
-                                class="py-0.5 px-1.5 rounded bg-red-500/12 hover:bg-red-500/22 text-red-400 text-[10.5px] font-semibold flex items-center gap-x-0.5 cursor-pointer disabled:opacity-50 transition-colors">
+                                class="py-0.5 px-1.5 rounded bg-status-danger/12 hover:bg-status-danger/22 text-status-danger text-[10.5px] font-semibold flex items-center gap-x-0.5 cursor-pointer disabled:opacity-50 transition-colors">
                             <mat-icon class="text-[12px]! size-[12px]!">delete</mat-icon>
                             <span>{{ batchDeleteCountLabel() }}</span>
                         </button>
@@ -225,7 +225,7 @@
                                         </button>
                                         <button (click)="deleteFolder(item.group, item.requests.length, $event)" type="button"
                                                 title="Delete folder" aria-label="Delete folder"
-                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-red-400 cursor-pointer flex items-center justify-center">
+                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-status-danger cursor-pointer flex items-center justify-center">
                                             <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
                                         </button>
                                     </div>
@@ -357,7 +357,7 @@
                             (pointerdown)="$event.stopPropagation()"
                             (touchstart)="$event.stopPropagation()"
                             type="button" title="Toggle Examples" aria-label="Toggle Examples"
-                            class="p-0.5 -ml-0.5 rounded text-(--postonsteroids-text-muted)/60 hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0 flex items-center justify-center">
+                            class="p-0.5 -ml-0.5 rounded text-(--postonsteroids-text-muted)/85 hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0 flex items-center justify-center">
                         <mat-icon class="text-[14px]! size-[14px]! transition-transform"
                                   [class.rotate-90]="isRequestExpanded(req.id)">chevron_right</mat-icon>
                     </button>
@@ -399,7 +399,7 @@
                             <mat-icon class="text-[14px]! size-[14px]!">drive_file_move</mat-icon>
                         </button>
 
-                        <button class="cursor-pointer hover:text-red-400 text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
+                        <button class="cursor-pointer hover:text-status-danger text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
                                 type="button"
                                 title="Delete request"
                                 aria-label="Delete request"
@@ -457,7 +457,7 @@
                                         <span class="truncate">{{ ex.name }}</span>
                                     </div>
                                     <button (click)="deleteExample(req.id, ex.id, $event)" type="button" aria-label="Delete example"
-                                            class="hidden group-hover/ex:flex hover:text-red-400 cursor-pointer items-center justify-center">
+                                            class="hidden group-hover/ex:flex hover:text-status-danger cursor-pointer items-center justify-center">
                                         <mat-icon class="text-[11px]! size-[11px]!">delete</mat-icon>
                                     </button>
                                 </div>

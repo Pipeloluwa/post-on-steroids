@@ -144,7 +144,7 @@ export class VariableInputComponent implements ControlValueAccessor {
                     insertText: v.key,
                     type: 'global' as const,
                     badge: 'Variable',
-                    badgeClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+                    badgeClass: 'text-status-success bg-status-success/10 border-status-success/30',
                     description: v.value ? `Value: ${v.value}` : '(empty)'
                 }))
             };
@@ -167,7 +167,7 @@ export class VariableInputComponent implements ControlValueAccessor {
                             insertText: v.key,
                             type: 'path' as const,
                             badge: 'Path',
-                            badgeClass: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+                            badgeClass: 'text-status-warning bg-status-warning/10 border-status-warning/30',
                             description: v.value ? `Value: ${v.value}` : '(empty)'
                         }))
                     };
@@ -192,7 +192,7 @@ export class VariableInputComponent implements ControlValueAccessor {
                         insertText: u,
                         type: 'utility-dynamic' as const,
                         badge: 'Dynamic',
-                        badgeClass: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
+                        badgeClass: 'text-status-info bg-status-info/10 border-status-info/30',
                         description: `${desc} • Regenerates on each request`
                     });
                     // One-time static option
@@ -202,7 +202,7 @@ export class VariableInputComponent implements ControlValueAccessor {
                         insertText: example,
                         type: 'utility-static' as const,
                         badge: 'One-Time',
-                        badgeClass: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+                        badgeClass: 'text-status-purple bg-status-purple/10 border-status-purple/30',
                         exampleValue: example,
                         description: `Value: ${example}`
                     });
@@ -230,7 +230,7 @@ export class VariableInputComponent implements ControlValueAccessor {
                         insertText: v.key,
                         type: 'global' as const,
                         badge: 'Variable',
-                        badgeClass: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+                        badgeClass: 'text-status-success bg-status-success/10 border-status-success/30',
                         description: v.value ? `Value: ${v.value}` : '(empty)'
                     }))
                 };

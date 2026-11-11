@@ -44,7 +44,7 @@
                         <input type="text" [(ngModel)]="v.key" (blur)="updateVar(v)" placeholder="Variable Name"
                             class="bg-transparent border-none outline-none text-sm text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
                         @if (v.source) {
-                            <span class="text-[9px] text-blue-400 font-mono flex items-center gap-0.5 truncate" [title]="'Dynamic: ' + v.source.type + ' -> ' + v.source.propertyKey">
+                            <span class="text-[9px] text-status-info font-mono flex items-center gap-0.5 truncate" [title]="'Dynamic: ' + v.source.type + ' -> ' + v.source.propertyKey">
                                 <mat-icon class="text-[10px]! size-[10px]!">link</mat-icon>
                                 {{ v.source.type }}: {{ v.source.propertyKey }}
                             </span>

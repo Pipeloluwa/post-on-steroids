@@ -195,7 +195,7 @@
                     aria-label="JWT input"></textarea>
 
                 @if (jwtError()) {
-                <p class="mt-3 text-sm font-medium text-red-400">{{ jwtError() }}</p>
+                <p class="mt-3 text-sm font-medium text-status-danger">{{ jwtError() }}</p>
                 }
 
                 @if (jwtHeader() || jwtPayload()) {
@@ -340,12 +340,12 @@
                         <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Current Pattern</span>
                         <div class="flex items-center gap-x-2">
                             @if (regexIsValid() === true) {
-                                <span class="text-[11px] font-semibold text-green-400 flex items-center gap-x-1">
+                                <span class="text-[11px] font-semibold text-status-success flex items-center gap-x-1">
                                     <mat-icon class="text-[14px]! size-[14px]!">check_circle</mat-icon> Valid
                                 </span>
                             }
                             @if (regexIsValid() === false) {
-                                <span class="text-[11px] font-semibold text-red-400 flex items-center gap-x-1">
+                                <span class="text-[11px] font-semibold text-status-danger flex items-center gap-x-1">
                                     <mat-icon class="text-[14px]! size-[14px]!">error</mat-icon> Invalid
                                 </span>
                             }
@@ -407,7 +407,7 @@
                                 </div>
                                 @if (regexComposition().length > 0) {
                                     <button (click)="clearComposition()"
-                                        class="inline-flex items-center gap-x-1 text-[11px] font-semibold text-red-400 hover:text-red-300 transition-colors cursor-pointer">
+                                        class="inline-flex items-center gap-x-1 text-[11px] font-semibold text-status-danger hover:opacity-80 transition-colors cursor-pointer">
                                         <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
                                         Clear All
                                     </button>
@@ -442,7 +442,7 @@
                                             }
                                             <!-- Remove -->
                                             <button (click)="removeCompositionSegment(segment.id)"
-                                                class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-red-500/20 transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-red-400 ml-0.5"
+                                                class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-red-500/20 transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-status-danger ml-0.5"
                                                 title="Remove segment" aria-label="Remove segment">
                                                 <mat-icon class="text-[12px]! size-[12px]!">close</mat-icon>
                                             </button>
@@ -507,7 +507,7 @@
                         }
 
                         @if (regexError()) {
-                            <p class="mt-3 text-sm font-medium text-red-400">{{ regexError() }}</p>
+                            <p class="mt-3 text-sm font-medium text-status-danger">{{ regexError() }}</p>
                         }
 
                         @if (regexMatches().length > 0) {

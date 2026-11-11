@@ -28,11 +28,11 @@
                 <div class="flex items-center gap-3">
                     <label class="flex items-center gap-1.5 cursor-pointer">
                         <input type="radio" name="varType" value="global" [ngModel]="variableService.modalType()" (ngModelChange)="variableService.modalType.set($event)" class="accent-(--postonsteroids-accent)" />
-                        <span class="text-(--postonsteroids-text-primary)">Global <code class="text-green-500 font-mono ml-1">{{'{{...}}'}}</code></span>
+                        <span class="text-(--postonsteroids-text-primary)">Global <code class="text-status-success font-mono ml-1">{{'{{...}}'}}</code></span>
                     </label>
                     <label class="flex items-center gap-1.5 cursor-pointer">
                         <input type="radio" name="varType" value="path" [ngModel]="variableService.modalType()" (ngModelChange)="variableService.modalType.set($event)" class="accent-(--postonsteroids-accent)" />
-                        <span class="text-(--postonsteroids-text-primary)">Path <code class="text-yellow-500 font-mono ml-1">:...</code></span>
+                        <span class="text-(--postonsteroids-text-primary)">Path <code class="text-status-warning font-mono ml-1">:...</code></span>
                     </label>
                 </div>
             </div>
@@ -66,7 +66,7 @@
 
             <!-- Duplicate Key Warning -->
             @if (isDuplicateKey()) {
-            <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-[11px] text-amber-400">
+            <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-[11px] text-status-warning">
                 <mat-icon class="text-[16px]! size-[16px]!">info</mat-icon>
                 <span>A variable named <strong>"{{ variableService.modalKey().trim() }}"</strong> already exists and will be updated.</span>
             </div>
@@ -75,11 +75,11 @@
             <!-- Dynamic Link Indicator -->
             @if (variableService.modalSource(); as src) {
             <div class="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between text-[11px]">
-                <div class="flex items-center gap-1.5 text-blue-400">
+                <div class="flex items-center gap-1.5 text-status-info">
                     <mat-icon class="text-[14px]! size-[14px]!">link</mat-icon>
-                    <span class="font-semibold">Dynamically linked to {{ src.type }} <span class="font-mono text-white">({{ src.propertyKey }})</span></span>
+                    <span class="font-semibold">Dynamically linked to {{ src.type }} <span class="font-mono text-(--postonsteroids-text-primary)">({{ src.propertyKey }})</span></span>
                 </div>
-                <span class="text-[10px] text-blue-300/80 italic">Auto-syncs live</span>
+                <span class="text-[10px] text-status-info opacity-85 italic">Auto-syncs live</span>
             </div>
             }
 

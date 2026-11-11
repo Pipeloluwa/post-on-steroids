@@ -11,6 +11,7 @@ import { AutoAuthModalComponent } from '../../../shared/components/auto-auth.mod
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ThemeService } from '../../../shared/services/theme.service';
+import { getHttpMethodColor } from '../../../shared/utils/http-method.util';
 import { input } from '@angular/core';
 
 @Component({
@@ -123,18 +124,7 @@ export class RequestUrlComponent {
         this.tabStateService.updateState(this.tabId(), { method });
     }
 
-    getMethodColor = (method: string): string => {
-        switch (method) {
-            case 'GET': return '#00BF8E';
-            case 'POST': return '#FFB400';
-            case 'PUT': return '#097BED';
-            case 'PATCH': return '#A97BFF';
-            case 'DELETE': return '#FF5233';
-            case 'HEAD': return '#00BF8E';
-            case 'OPTIONS': return '#FF60AD';
-            default: return 'var(--postonsteroids-text-primary)';
-        }
-    }
+    getMethodColor = (method: string): string => getHttpMethodColor(method);
 
     onSend() {
         const currentUrl = (this.url() || '').trim();

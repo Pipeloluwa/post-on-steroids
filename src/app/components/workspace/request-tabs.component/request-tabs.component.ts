@@ -8,6 +8,7 @@ import { SwaggerImportModalComponent } from '../../../shared/components/swagger-
 import { VariableService } from '../../../shared/services/variable.service';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { AuthService } from '../../../shared/services/auth.service';
+import { getHttpMethodColor } from '../../../shared/utils/http-method.util';
 import { effect } from '@angular/core';
 
 interface RequestTab {
@@ -333,14 +334,7 @@ export class RequestTabsComponent {
     }
 
     getMethodColor(method: string): string {
-        switch (method.toUpperCase()) {
-            case 'GET': return '#00BF8E';
-            case 'POST': return '#FFB400';
-            case 'PUT': return '#097BED';
-            case 'DEL':
-            case 'DELETE': return '#FF5233';
-            default: return 'var(--postonsteroids-text-primary)';
-        }
+        return getHttpMethodColor(method);
     }
 
     setActiveTab(id: string) {

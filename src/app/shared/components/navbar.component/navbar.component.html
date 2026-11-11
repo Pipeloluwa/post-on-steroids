@@ -50,7 +50,7 @@
                             <button (click)="newCapsule()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-amber-400 transition-colors">folder_special</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-status-warning transition-colors">folder_special</mat-icon>
                                     <span>New Capsule...</span>
                                 </div>
                             </button>
@@ -58,7 +58,7 @@
                             <button (click)="duplicateCurrentCapsule()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-amber-400 transition-colors">content_copy</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-status-warning transition-colors">content_copy</mat-icon>
                                     <span>Duplicate Capsule</span>
                                 </div>
                             </button>
@@ -68,7 +68,7 @@
                             <button (click)="saveCurrentRequest()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-emerald-400 transition-colors">save</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-status-success transition-colors">save</mat-icon>
                                     <span>Save Request</span>
                                 </div>
                                 <span class="text-[10px] text-(--postonsteroids-text-muted) font-mono">Ctrl+S</span>
@@ -77,7 +77,7 @@
                             <button (click)="importOpen()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-blue-400 transition-colors">file_upload</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-status-info transition-colors">file_upload</mat-icon>
                                     <span>Import / Open...</span>
                                 </div>
                                 <span class="text-[10px] text-(--postonsteroids-text-muted) font-mono">Ctrl+O</span>
@@ -88,7 +88,7 @@
                             <button (click)="exportEndpoint()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-purple-400 transition-colors">file_download</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-status-purple transition-colors">file_download</mat-icon>
                                     <span>Export Endpoint</span>
                                 </div>
                             </button>
@@ -96,7 +96,7 @@
                             <button (click)="exportCapsule()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-indigo-400 transition-colors">archive</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-status-indigo transition-colors">archive</mat-icon>
                                     <span>Export Capsule</span>
                                 </div>
                             </button>
@@ -106,7 +106,7 @@
                             <button (click)="closeActiveTab()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-primary) hover:text-red-500 transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-red-400 transition-colors">close</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-status-danger transition-colors">close</mat-icon>
                                     <span>Close Active Tab</span>
                                 </div>
                             </button>
@@ -114,7 +114,7 @@
                             <button (click)="closeAllTabs()"
                                 class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-primary) hover:text-red-500 transition-all cursor-pointer text-left w-full group">
                                 <div class="flex items-center gap-2">
-                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-red-400 transition-colors">clear_all</mat-icon>
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-status-danger transition-colors">clear_all</mat-icon>
                                     <span>Close All Tabs</span>
                                 </div>
                             </button>
@@ -145,12 +145,12 @@
             @if (!isElectron) {
                 <div class="flex items-center gap-x-2.5 shrink-0">
                     <span class="text-[10px] lg:text-[11px] text-(--postonsteroids-text-muted) italic whitespace-nowrap shrink-0 hidden md:inline-flex items-center gap-1">
-                        <mat-icon class="text-[13px]! size-[13px]! text-amber-500/80">info</mat-icon>
+                        <mat-icon class="text-[13px]! size-[13px]! text-status-warning">info</mat-icon>
                         <span>* Some features and API calls may not work on web. For full performance, download the Desktop App.</span>
                     </span>
                     <a [href]="downloadsConfig().homepageDownloadUrl" target="_blank" rel="noopener noreferrer"
                         title="Some features and API calls may not work on web due to browser sandbox limits. Download OnSteroid Desktop for full performance, zero CORS restrictions, and direct OS dispatch"
-                        class="inline-flex items-center gap-x-1.5 px-3 py-1 rounded-full bg-blue-500/10 hover:bg-blue-500/20 text-[12px] font-bold text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-500/50 transition-all shrink-0 shadow-xs no-underline cursor-pointer">
+                        class="inline-flex items-center gap-x-1.5 px-3 py-1 rounded-full bg-status-info/10 hover:bg-status-info/18 text-[12px] font-bold text-status-info border border-status-info/35 hover:border-status-info/55 transition-all shrink-0 shadow-xs no-underline cursor-pointer">
                         <mat-icon class="text-[16px]! size-4!">desktop_windows</mat-icon>
                         <span>Download Desktop</span>
                         <mat-icon class="text-[13px]! size-3.5! opacity-75">open_in_new</mat-icon>
@@ -203,8 +203,8 @@
 
                     <button type="button" (click)="showUserMenu.set(false); onLogout.emit()"
                         [disabled]="isLoggingOut()"
-                        class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-primary) hover:text-red-400 transition-all cursor-pointer text-left w-full group disabled:opacity-50">
-                        <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-red-400 transition-colors">logout</mat-icon>
+                        class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-red-500/10 text-(--postonsteroids-text-primary) hover:text-status-danger transition-all cursor-pointer text-left w-full group disabled:opacity-50">
+                        <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-status-danger transition-colors">logout</mat-icon>
                         <span>Sign Out</span>
                     </button>
                 </div>
@@ -216,7 +216,7 @@
                 </button>
                 <button (click)="onLogout.emit()" title="Sign out"
                     [disabled]="isLoggingOut()"
-                    class="flex items-center justify-center size-8 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-red-400 border border-(--postonsteroids-border) hover:border-red-500/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                    class="flex items-center justify-center size-8 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-red-500/10 text-(--postonsteroids-text-muted) hover:text-status-danger border border-(--postonsteroids-border) hover:border-red-500/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
                     @if (isLoggingOut()) {
                         <mat-icon class="text-[16px]! size-4! animate-spin">refresh</mat-icon>
                     } @else {

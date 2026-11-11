@@ -15,6 +15,7 @@ import { NotificationService } from '../../shared/services/notification.service'
 import { LocalStorageService } from '../../shared/services/local.storage.service';
 import { TabStateService, RequestGroup } from '../../shared/services/tab.state.service';
 import { DialogService } from '../../shared/services/dialog.service';
+import { getHttpMethodColor } from '../../shared/utils/http-method.util';
 import { RequestExecutionService } from '../../shared/services/request.execution.service';
 
 @Component({
@@ -269,14 +270,7 @@ export class WorkspaceComponent {
     }
 
     getMethodColor(method: string): string {
-        switch (method.toUpperCase()) {
-            case 'GET': return '#00BF8E';
-            case 'POST': return '#FFB400';
-            case 'PUT': return '#097BED';
-            case 'DEL':
-            case 'DELETE': return '#FF5233';
-            default: return 'var(--postonsteroids-text-primary)';
-        }
+        return getHttpMethodColor(method);
     }
 
     // Folder / Group & Drag state

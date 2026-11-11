@@ -9,6 +9,7 @@ import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { DialogService } from '../../shared/services/dialog.service';
 import { API_BASE_URL } from '../../shared/constants/api.constants';
+import { getHttpMethodColor } from '../../shared/utils/http-method.util';
 
 export interface HistoryItem {
     id: string;
@@ -96,15 +97,7 @@ export class HistoryComponent implements OnInit {
     }
 
     getMethodColor(method: string): string {
-        switch (method.toUpperCase()) {
-            case 'GET': return '#00BF8E';
-            case 'POST': return '#FFB400';
-            case 'PUT': return '#097BED';
-            case 'PATCH': return '#A855F7';
-            case 'DEL':
-            case 'DELETE': return '#FF5233';
-            default: return 'var(--postonsteroids-text-primary)';
-        }
+        return getHttpMethodColor(method);
     }
 
     formatTime(dateStr?: string): string {

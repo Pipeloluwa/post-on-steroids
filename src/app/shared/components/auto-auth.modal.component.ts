@@ -49,7 +49,7 @@ import { AutoAuthService } from '../services/auto-auth.service';
                         <mat-icon class="absolute right-3 top-1/2 -translate-y-1/2 text-(--postonsteroids-text-muted) text-[16px]! size-[16px]! pointer-events-none">expand_more</mat-icon>
                     </div>
                     @if (availableTabs().length === 0) {
-                        <p class="text-[11px] text-red-400 mt-1">No open tabs available to use for authentication.</p>
+                        <p class="text-[11px] text-status-danger mt-1">No open tabs available to use for authentication.</p>
                     }
                 </div>
             </div>

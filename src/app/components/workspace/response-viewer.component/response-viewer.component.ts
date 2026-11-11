@@ -122,10 +122,10 @@ export class ResponseViewerComponent {
     statusColor = computed(() => {
         const s = this.responseStatus();
         if (s === null) return '';
-        if (s >= 200 && s < 300) return 'text-green-500 bg-green-500/10';
-        if (s >= 300 && s < 400) return 'text-yellow-400 bg-yellow-400/10';
-        if (s >= 400 && s < 500) return 'text-orange-400 bg-orange-400/10';
-        return 'text-red-500 bg-red-500/10';
+        if (s >= 200 && s < 300) return 'text-status-success bg-status-success/12';
+        if (s >= 300 && s < 400) return 'text-status-warning bg-status-warning/12';
+        if (s >= 400 && s < 500) return 'text-status-orange bg-status-orange/12';
+        return 'text-status-danger bg-status-danger/12';
     });
 
     statusLabel = computed(() => {

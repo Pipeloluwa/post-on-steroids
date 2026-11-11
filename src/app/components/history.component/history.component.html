@@ -7,7 +7,7 @@
             </span>
         </div>
         <button (click)="clearHistory()" [disabled]="history().length === 0"
-            class="text-[12px] text-red-500 hover:text-red-400 font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+            class="text-[12px] text-status-danger hover:opacity-80 font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
             <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
             Clear All
         </button>
@@ -35,13 +35,13 @@
                     <div class="flex items-center gap-3 mt-0.5 text-[11px] text-(--postonsteroids-text-muted)">
                         @if (item.responseStatus) {
                             <span class="flex items-center gap-1 font-semibold"
-                                [class.text-emerald-500]="item.responseStatus >= 200 && item.responseStatus < 300"
-                                [class.text-amber-500]="item.responseStatus >= 300 && item.responseStatus < 400"
-                                [class.text-red-500]="item.responseStatus >= 400">
+                                [class.text-status-success]="item.responseStatus >= 200 && item.responseStatus < 300"
+                                [class.text-status-warning]="item.responseStatus >= 300 && item.responseStatus < 400"
+                                [class.text-status-danger]="item.responseStatus >= 400">
                                 <span class="size-1.5 rounded-full"
-                                    [class.bg-emerald-500]="item.responseStatus >= 200 && item.responseStatus < 300"
-                                    [class.bg-amber-500]="item.responseStatus >= 300 && item.responseStatus < 400"
-                                    [class.bg-red-500]="item.responseStatus >= 400"></span>
+                                    [class.bg-status-success]="item.responseStatus >= 200 && item.responseStatus < 300"
+                                    [class.bg-status-warning]="item.responseStatus >= 300 && item.responseStatus < 400"
+                                    [class.bg-status-danger]="item.responseStatus >= 400"></span>
                                 {{ item.responseStatus }}
                             </span>
                         }

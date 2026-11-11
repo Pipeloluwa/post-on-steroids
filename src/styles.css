@@ -1,6 +1,18 @@
 /* You can add global styles to this file, and also import other style files */
 /* In Angular, styles in a component's CSS file (even with ::ng-deep) are scoped to the component's tree */
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, :root:not([data-theme="light"]) *));
+
+@theme {
+  --color-status-success: var(--postonsteroids-status-success);
+  --color-status-warning: var(--postonsteroids-status-warning);
+  --color-status-danger: var(--postonsteroids-status-danger);
+  --color-status-info: var(--postonsteroids-status-info);
+  --color-status-purple: var(--postonsteroids-status-purple);
+  --color-status-orange: var(--postonsteroids-status-orange);
+  --color-status-cyan: var(--postonsteroids-status-cyan);
+  --color-status-indigo: var(--postonsteroids-status-indigo);
+}
 
 /* Local Material Icons font definition */
 @font-face {
@@ -56,22 +68,58 @@ mat-icon {
   --postonsteroids-text-muted: #9CA3AF;
   --postonsteroids-border: #3F3F3F;
   --postonsteroids-shadow: rgba(0, 0, 0, 0.3);
+  --postonsteroids-method-get: #00BF8E;
+  --postonsteroids-method-post: #FFB400;
+  --postonsteroids-method-put: #389BFF;
+  --postonsteroids-method-patch: #B68DFF;
+  --postonsteroids-method-delete: #FF6B52;
+  --postonsteroids-method-head: #00BF8E;
+  --postonsteroids-method-options: #FF77BC;
+  --postonsteroids-token-global: #22C55E;
+  --postonsteroids-token-path: #FBBF24;
+  --postonsteroids-token-utility: #60A5FA;
+  --postonsteroids-status-success: #34D399;
+  --postonsteroids-status-warning: #FBBF24;
+  --postonsteroids-status-danger: #F87171;
+  --postonsteroids-status-info: #60A5FA;
+  --postonsteroids-status-purple: #C084FC;
+  --postonsteroids-status-orange: #FB923C;
+  --postonsteroids-status-cyan: #22D3EE;
+  --postonsteroids-status-indigo: #818CF8;
 }
 
-/* Blue & White Light Theme Color Variables */
+/* Blue & White Light Theme Color Variables (WCAG AA contrast >= 4.5:1) */
 :root[data-theme="light"] {
   --postonsteroids-bg-primary: #FFFFFF;
   --postonsteroids-bg-secondary: #F8F9FA;
   --postonsteroids-bg-tertiary: #F1F3F5;
   --postonsteroids-bg-darker: #E9ECEF;
   --postonsteroids-bg-hover: #E5E7EB;
-  --postonsteroids-accent: #2563EB;
-  --postonsteroids-accent-hover: #1D4ED8;
-  --postonsteroids-text-primary: #212529;
-  --postonsteroids-text-secondary: #495057;
-  --postonsteroids-text-muted: #6C757D;
-  --postonsteroids-border: #E5E7EB;
+  --postonsteroids-accent: #1D4ED8;
+  --postonsteroids-accent-hover: #1E40AF;
+  --postonsteroids-text-primary: #111827;
+  --postonsteroids-text-secondary: #374151;
+  --postonsteroids-text-muted: #525B66;
+  --postonsteroids-border: #D5DBE3;
   --postonsteroids-shadow: rgba(0, 0, 0, 0.08);
+  --postonsteroids-method-get: #047857;
+  --postonsteroids-method-post: #A14607;
+  --postonsteroids-method-put: #1D4ED8;
+  --postonsteroids-method-patch: #7E22CE;
+  --postonsteroids-method-delete: #C81E1E;
+  --postonsteroids-method-head: #047857;
+  --postonsteroids-method-options: #BE185D;
+  --postonsteroids-token-global: #15803D;
+  --postonsteroids-token-path: #A14607;
+  --postonsteroids-token-utility: #1D4ED8;
+  --postonsteroids-status-success: #15803D;
+  --postonsteroids-status-warning: #A14607;
+  --postonsteroids-status-danger: #C81E1E;
+  --postonsteroids-status-info: #1D4ED8;
+  --postonsteroids-status-purple: #7E22CE;
+  --postonsteroids-status-orange: #C2410C;
+  --postonsteroids-status-cyan: #0E7490;
+  --postonsteroids-status-indigo: #4338CA;
 }
 
 /* Default to dark theme */
@@ -88,6 +136,24 @@ mat-icon {
   --postonsteroids-text-muted: #9CA3AF;
   --postonsteroids-border: #3F3F3F;
   --postonsteroids-shadow: rgba(0, 0, 0, 0.3);
+  --postonsteroids-method-get: #00BF8E;
+  --postonsteroids-method-post: #FFB400;
+  --postonsteroids-method-put: #389BFF;
+  --postonsteroids-method-patch: #B68DFF;
+  --postonsteroids-method-delete: #FF6B52;
+  --postonsteroids-method-head: #00BF8E;
+  --postonsteroids-method-options: #FF77BC;
+  --postonsteroids-token-global: #22C55E;
+  --postonsteroids-token-path: #FBBF24;
+  --postonsteroids-token-utility: #60A5FA;
+  --postonsteroids-status-success: #34D399;
+  --postonsteroids-status-warning: #FBBF24;
+  --postonsteroids-status-danger: #F87171;
+  --postonsteroids-status-info: #60A5FA;
+  --postonsteroids-status-purple: #C084FC;
+  --postonsteroids-status-orange: #FB923C;
+  --postonsteroids-status-cyan: #22D3EE;
+  --postonsteroids-status-indigo: #818CF8;
 }
 
 body {
