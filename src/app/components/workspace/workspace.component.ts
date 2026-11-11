@@ -598,6 +598,77 @@ export class WorkspaceComponent {
         this.editingGroupId.set(null);
     }
 
+    newRequestButtonTitle = computed<string>(() => {
+        const groupName = this.tabStateService.focusedDirectoryGroupName();
+        return groupName ? `New Request in "${groupName}"` : 'New Request in Capsule';
+    });
+
+    isGroupFocused(groupId: string): boolean {
+        const focused = this.tabStateService.focusedSidebarItem();
+        return focused?.type === 'group' && focused.id === groupId;
+    }
+
+    isRequestFocused(reqId: string): boolean {
+        const focused = this.tabStateService.focusedSidebarItem();
+        return focused?.type === 'request' && focused.id === reqId;
+    }
+
+    onFocusGroup(groupId: string): void {
+        this.tabStateService.setFocusedSidebarItem({
+            type: 'group',
+            id: groupId,
+            groupId
+        });
+    }
+
+    onFocusRequest(reqId: string, groupId: string | null = null): void {
+        this.tabStateService.setFocusedSidebarItem({
+            type: 'request',
+            id: reqId,
+            groupId: groupId ?? null
+        });
+    }
+
+    clearSidebarFocus(event?: Event): void {
+        event?.stopPropagation();
+        this.tabStateService.setFocusedSidebarItem(null);
+        if (this.isBrowser && document.activeElement instanceof HTMLElement && document.activeElement.closest('.sidebar-focus-trigger')) {
+            document.activeElement.blur();
+        }
+    }
+
+    onSidebarBackgroundClick(event: MouseEvent): void {
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+        if (target.closest('[data-folder-header-id], [data-request-row-id], button, input, select, a')) {
+            return;
+        }
+        this.tabStateService.setFocusedSidebarItem(null);
+    }
+
+    onFolderRowClick(groupId: string, event?: Event): void {
+        this.onFocusGroup(groupId);
+        (event?.currentTarget as HTMLElement | null)?.focus?.();
+        this.toggleGroupExpanded(groupId, event);
+    }
+
+    onFolderContainerClick(groupId: string, event: MouseEvent): void {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('button, input')) return;
+        this.onFocusGroup(groupId);
+        const trigger = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('.sidebar-focus-trigger');
+        trigger?.focus?.();
+        this.toggleGroupExpanded(groupId, event);
+    }
+
+    onRequestRowContainerClick(req: any, event: MouseEvent, groupId: string | null = null): void {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('button, input')) return;
+        const trigger = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('.sidebar-focus-trigger');
+        trigger?.focus?.();
+        this.onRequestRowClick(req, event, groupId);
+    }
+
     toggleGroupExpanded(groupId: string, event?: Event) {
         event?.stopPropagation();
         this.tabStateService.toggleGroupExpanded(groupId);
@@ -729,7 +800,11 @@ export class WorkspaceComponent {
         this.tabStateService.setActiveTab(request.id);
     }
 
-    onRequestRowClick(req: any, event: MouseEvent) {
+    onRequestRowClick(req: any, event: MouseEvent, groupId: string | null = null) {
+        const resolvedGroupId = groupId !== undefined && groupId !== null ? groupId : (req?.groupId ?? null);
+        this.onFocusRequest(req.id, resolvedGroupId);
+        (event.currentTarget as HTMLElement | null)?.focus?.();
+
         const isCtrlOrCmd = event.ctrlKey || event.metaKey;
         const isShift = event.shiftKey;
 

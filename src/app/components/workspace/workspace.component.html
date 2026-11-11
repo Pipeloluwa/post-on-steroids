@@ -53,7 +53,7 @@
         }
 
         <!-- Capsule Requests list (visible when expanded) -->
-        <div class="flex-1 overflow-y-auto overflow-x-hidden py-1 sidebar-scroll" [class.hidden]="!isSidebarOpen()">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden py-1 sidebar-scroll" [class.hidden]="!isSidebarOpen()" (click)="onSidebarBackgroundClick($event)">
             <div class="flex items-center justify-between px-2.5 py-1.5 border-b border-(--postonsteroids-border)/40 mb-0.5">
                 <div class="flex items-center gap-x-2">
                     <input type="checkbox"
@@ -86,7 +86,7 @@
                             class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer flex items-center justify-center">
                         <mat-icon class="text-[15px]! size-[15px]!">create_new_folder</mat-icon>
                     </button>
-                    <button (click)="addNewRequest()" type="button" title="New Request in Capsule" aria-label="New Request"
+                    <button (click)="addNewRequest()" type="button" [title]="newRequestButtonTitle()" aria-label="New Request"
                             class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
                         <mat-icon class="text-[15px]! size-[15px]!">add</mat-icon>
                     </button>
@@ -125,61 +125,89 @@
                                 </div>
                                 <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
 
-                                <!-- Folder Header Row (Drag Handle + Drop Target for Requests) -->
+                                <!-- Folder Header Row (Focusable Item + Drag Handle + Drop Target for Requests) -->
                                 <div cdkDragHandle
                                      [attr.data-folder-header-id]="item.group.id"
-                                     class="flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md cursor-grab active:cursor-grabbing select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
+                                     class="sidebar-tree-row flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
+                                     [class.cursor-grabbing!]="isDraggingFolder()"
                                      [class.ring-1]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
                                      [class.ring-(--postonsteroids-accent)]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
                                      [class.bg-(--postonsteroids-accent)/20]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
+                                     [class.border-(--postonsteroids-accent)/65!]="isGroupFocused(item.group.id) && !(hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest())"
+                                     [class.bg-(--postonsteroids-accent)/8]="isGroupFocused(item.group.id) && !selectedGroupIds().has(item.group.id) && !(hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest())"
                                      [class.bg-(--postonsteroids-accent)/12]="selectedGroupIds().has(item.group.id) && !(hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest())"
-                                     (click)="toggleGroupExpanded(item.group.id, $event)"
+                                     (click)="onFolderContainerClick(item.group.id, $event)"
                                      (dblclick)="startEditingGroup(item.group, $event)">
                                     
                                     <input type="checkbox"
                                            [checked]="isGroupSelected(item.group.id, item.requests)"
                                            (click)="toggleSelectGroup(item.group.id, item.requests, $event)"
+                                           (dblclick)="$event.stopPropagation()"
+                                           (mousedown)="$event.stopPropagation()"
+                                           (pointerdown)="$event.stopPropagation()"
+                                           (touchstart)="$event.stopPropagation()"
                                            title="Select folder and all requests in folder"
                                            [attr.aria-label]="'Select folder ' + item.group.name"
-                                           class="sidebar-checkbox shrink-0 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                                           class="sidebar-checkbox cursor-pointer! shrink-0 opacity-0 group-hover/folder:opacity-100 transition-opacity"
                                            [class.opacity-100!]="isGroupSelected(item.group.id, item.requests) || selectedGroupIds().size > 0 || selectedRequestIds().size > 0" />
 
-                                    <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted) transition-transform shrink-0"
-                                              [class.rotate-90]="item.group.isExpanded !== false">chevron_right</mat-icon>
-
-                                    <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)/90 shrink-0">
-                                        {{ item.group.isExpanded !== false ? 'folder_open' : 'folder' }}
-                                    </mat-icon>
-
                                     @if (editingGroupId() === item.group.id) {
+                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted) transition-transform shrink-0"
+                                                  [class.rotate-90]="item.group.isExpanded !== false">chevron_right</mat-icon>
+
+                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)/90 shrink-0">
+                                            {{ item.group.isExpanded !== false ? 'folder_open' : 'folder' }}
+                                        </mat-icon>
+
                                         <input type="text"
                                                class="flex-1 min-w-0 bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) text-[12.5px] font-medium px-1.5 py-[1px] rounded border border-(--postonsteroids-accent) outline-none"
                                                [ngModel]="editingGroupName()"
                                                (ngModelChange)="editingGroupName.set($event)"
                                                (click)="$event.stopPropagation()"
+                                               (mousedown)="$event.stopPropagation()"
+                                               (pointerdown)="$event.stopPropagation()"
                                                (keydown.enter)="saveGroupName(item.group.id, $event)"
                                                (keydown.escape)="cancelEditingGroup($event)"
                                                (blur)="saveGroupName(item.group.id, $event)"
                                                autofocus />
                                     } @else {
-                                        <span class="text-[12.5px] font-medium text-(--postonsteroids-text-primary) truncate flex-1 min-w-0"
-                                              [title]="item.group.name + ' (' + item.requests.length + ' requests) — Drag to reorder folder'">
-                                            {{ item.group.name }}
-                                        </span>
-                                        @if (hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()) {
-                                            <span class="text-[10px] font-semibold text-(--postonsteroids-accent) px-1.5 py-0.5 rounded bg-(--postonsteroids-accent)/15 shrink-0">
-                                                Drop inside
+                                        <button type="button"
+                                                class="sidebar-focus-trigger flex-1 min-w-0 flex items-center gap-x-1.5 text-left bg-transparent border-0 p-0 cursor-pointer outline-none"
+                                                [class.cursor-grabbing!]="isDraggingFolder()"
+                                                [attr.aria-expanded]="item.group.isExpanded !== false"
+                                                [attr.aria-label]="'Folder ' + item.group.name + ', ' + item.requests.length + ' requests'"
+                                                [title]="item.group.name + ' (' + item.requests.length + ' requests) — Click to focus/toggle, drag to reorder folder'"
+                                                (focus)="onFocusGroup(item.group.id)"
+                                                (click)="onFolderRowClick(item.group.id, $event)"
+                                                (keydown.escape)="clearSidebarFocus($event)">
+                                            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted) transition-transform shrink-0"
+                                                      [class.rotate-90]="item.group.isExpanded !== false">chevron_right</mat-icon>
+
+                                            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)/90 shrink-0">
+                                                {{ item.group.isExpanded !== false ? 'folder_open' : 'folder' }}
+                                            </mat-icon>
+
+                                            <span class="text-[12.5px] font-medium text-(--postonsteroids-text-primary) truncate flex-1 min-w-0">
+                                                {{ item.group.name }}
                                             </span>
-                                        } @else {
-                                            <span class="text-[10.5px] text-(--postonsteroids-text-muted)/75 font-medium tabular-nums pr-0.5 shrink-0 group-hover/folder:hidden">
-                                                {{ item.requests.length }}
-                                            </span>
-                                        }
+                                            @if (hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()) {
+                                                <span class="text-[10px] font-semibold text-(--postonsteroids-accent) px-1.5 py-0.5 rounded bg-(--postonsteroids-accent)/15 shrink-0">
+                                                    Drop inside
+                                                </span>
+                                            } @else {
+                                                <span class="text-[10.5px] text-(--postonsteroids-text-muted)/75 font-medium tabular-nums pr-0.5 shrink-0 group-hover/folder:hidden">
+                                                    {{ item.requests.length }}
+                                                </span>
+                                            }
+                                        </button>
                                     }
 
                                     <!-- Folder Hover Actions (only take layout space when hovered) -->
                                     <div class="hidden group-hover/folder:flex items-center gap-x-0.5 shrink-0"
-                                         (click)="$event.stopPropagation()">
+                                         (click)="$event.stopPropagation()"
+                                         (mousedown)="$event.stopPropagation()"
+                                         (pointerdown)="$event.stopPropagation()"
+                                         (touchstart)="$event.stopPropagation()">
                                         <button (click)="addNewRequestInGroup(item.group.id, $event)" type="button"
                                                 title="Add request in folder" aria-label="Add request in folder"
                                                 class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
@@ -301,11 +329,14 @@
 
             <!-- Shared Request Item Template -->
             <ng-template #requestRowTpl let-req let-groupId="groupId">
-                <div class="relative flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md cursor-pointer select-none transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)/75"
+                <div [attr.data-request-row-id]="req.id"
+                     class="sidebar-tree-row relative flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)/75"
+                     [class.border-(--postonsteroids-accent)/65!]="isRequestFocused(req.id)"
+                     [class.bg-(--postonsteroids-accent)/8]="isRequestFocused(req.id) && !selectedRequestIds().has(req.id) && tabStateService.activeTabId() !== req.id"
                      [class.bg-(--postonsteroids-accent)/12]="selectedRequestIds().has(req.id)"
                      [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id && !selectedRequestIds().has(req.id)"
                      [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)') + ' — Shift+Click or Ctrl+Click to multi-select'"
-                     (click)="onRequestRowClick(req, $event)">
+                     (click)="onRequestRowContainerClick(req, $event, groupId)">
 
                     @if (tabStateService.activeTabId() === req.id || selectedRequestIds().has(req.id)) {
                         <span class="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-full bg-(--postonsteroids-accent)"></span>
@@ -314,35 +345,52 @@
                     <input type="checkbox"
                            [checked]="selectedRequestIds().has(req.id)"
                            (click)="toggleSelectRequest(req.id, $event)"
+                           (mousedown)="$event.stopPropagation()"
+                           (pointerdown)="$event.stopPropagation()"
+                           (touchstart)="$event.stopPropagation()"
                            [attr.aria-label]="'Select request ' + tabStateService.resolveRequestTitle(req.name, req.url)"
-                           class="sidebar-checkbox shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity"
+                           class="sidebar-checkbox cursor-pointer! shrink-0 opacity-0 group-hover/tab:opacity-100 transition-opacity"
                            [class.opacity-100!]="selectedRequestIds().has(req.id) || selectedRequestIds().size > 0 || selectedGroupIds().size > 0" />
 
-                    <button (click)="toggleExamples(req.id, $event)" type="button" title="Toggle Examples" aria-label="Toggle Examples"
+                    <button (click)="toggleExamples(req.id, $event)"
+                            (mousedown)="$event.stopPropagation()"
+                            (pointerdown)="$event.stopPropagation()"
+                            (touchstart)="$event.stopPropagation()"
+                            type="button" title="Toggle Examples" aria-label="Toggle Examples"
                             class="p-0.5 -ml-0.5 rounded text-(--postonsteroids-text-muted)/60 hover:text-(--postonsteroids-text-primary) cursor-pointer shrink-0 flex items-center justify-center">
                         <mat-icon class="text-[14px]! size-[14px]! transition-transform"
                                   [class.rotate-90]="isRequestExpanded(req.id)">chevron_right</mat-icon>
                     </button>
 
-                    <span class="text-[10px] font-bold tracking-tight w-[36px] shrink-0 text-left tabular-nums" [style.color]="getMethodColor(req.method)">
-                        {{ getShortMethod(req.method) }}
-                    </span>
-                    <span class="text-[12.5px] leading-[1.3] truncate flex-1 min-w-0 group-hover/tab:text-(--postonsteroids-text-primary)"
-                          [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id"
-                          [class.text-(--postonsteroids-text-secondary)]="tabStateService.activeTabId() !== req.id"
-                          [class.font-medium]="tabStateService.activeTabId() === req.id">
-                        {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
-                    </span>
+                    <button type="button"
+                            class="sidebar-focus-trigger flex-1 min-w-0 flex items-center gap-x-1.5 text-left bg-transparent border-0 p-0 cursor-pointer outline-none"
+                            [attr.aria-label]="getShortMethod(req.method) + ' ' + tabStateService.resolveRequestTitle(req.name, req.url)"
+                            (focus)="onFocusRequest(req.id, groupId)"
+                            (click)="onRequestRowClick(req, $event, groupId)"
+                            (keydown.escape)="clearSidebarFocus($event)">
+                        <span class="text-[10px] font-bold tracking-tight w-[36px] shrink-0 text-left tabular-nums" [style.color]="getMethodColor(req.method)">
+                            {{ getShortMethod(req.method) }}
+                        </span>
+                        <span class="text-[12.5px] leading-[1.3] truncate flex-1 min-w-0 group-hover/tab:text-(--postonsteroids-text-primary)"
+                              [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id"
+                              [class.text-(--postonsteroids-text-secondary)]="tabStateService.activeTabId() !== req.id"
+                              [class.font-medium]="tabStateService.activeTabId() === req.id">
+                            {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
+                        </span>
 
-                    @if (req.isDirty) {
-                        <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"
-                             [class.hidden]="moveMenuRequestId() === req.id"></div>
-                    }
+                        @if (req.isDirty) {
+                            <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"
+                                 [class.hidden]="moveMenuRequestId() === req.id"></div>
+                        }
+                    </button>
 
                     <!-- Hover actions (only take layout space on row hover or when move menu is open) -->
                     <div class="hidden group-hover/tab:flex items-center gap-x-0.5 shrink-0"
                          [class.flex!]="moveMenuRequestId() === req.id"
-                         (click)="$event.stopPropagation()">
+                         (click)="$event.stopPropagation()"
+                         (mousedown)="$event.stopPropagation()"
+                         (pointerdown)="$event.stopPropagation()"
+                         (touchstart)="$event.stopPropagation()">
                         <button class="cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
                                 type="button"
                                 title="Move to folder / group"

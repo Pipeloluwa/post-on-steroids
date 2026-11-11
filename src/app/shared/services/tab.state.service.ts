@@ -89,6 +89,12 @@ export type SidebarRootItem =
     | { type: 'group'; id: string; group: RequestGroup; requests: RequestState[] }
     | { type: 'request'; id: string; request: RequestState };
 
+export type SidebarFocusedItem = {
+    type: 'group' | 'request';
+    id: string;
+    groupId: string | null;
+} | null;
+
 export interface RequestState {
     id: string;
     capsuleId?: string;
@@ -875,6 +881,13 @@ export class TabStateService {
 
     // Request groups (Postman-style folders) per capsule
     capsuleGroupsMap = signal<Map<string, RequestGroup[]>>(new Map());
+    focusedSidebarItem = signal<SidebarFocusedItem>(null);
+    focusedDirectoryGroupName = computed<string | null>(() => {
+        const capId = this.activeCapsuleId();
+        const groupId = this.resolveFocusedDirectoryGroupId(capId);
+        if (!groupId) return null;
+        return this.getGroupsForCapsule(capId).find(g => g.id === groupId)?.name || null;
+    });
     private groupsVarSyncTimeout: any = null;
     private hasPendingStructureSync = false;
     private deletingCapsuleIds = new Set<string>();
@@ -883,6 +896,32 @@ export class TabStateService {
 
     public isCapsuleDeleting(capId: string): boolean {
         return Boolean(capId && this.deletingCapsuleIds.has(capId));
+    }
+
+    setFocusedSidebarItem(item: SidebarFocusedItem): void {
+        this.focusedSidebarItem.set(item);
+    }
+
+    resolveFocusedDirectoryGroupId(capsuleId?: string): string | null {
+        const focused = this.focusedSidebarItem();
+        if (!focused) return null;
+        const capId = capsuleId || this.activeCapsuleId();
+        if (!capId) return null;
+        const groups = this.getGroupsForCapsule(capId);
+
+        if (focused.type === 'group') {
+            return groups.some(g => g.id === focused.id) ? focused.id : null;
+        }
+
+        const ownerByGroup = groups.find(g => (g.requestIds || []).includes(focused.id));
+        if (ownerByGroup) return ownerByGroup.id;
+
+        const reqState = this.states().get(focused.id) || this.savedCapsules().find(r => r.id === focused.id);
+        const candidateGroupId = reqState?.groupId ?? focused.groupId;
+        if (candidateGroupId && groups.some(g => g.id === candidateGroupId)) {
+            return candidateGroupId;
+        }
+        return null;
     }
 
     private isValidGuid(id?: string | null): boolean {
@@ -1461,7 +1500,130 @@ export class TabStateService {
         this.setGroupsForCapsule(capId, updated, true);
     }
 
-    private async deleteRequestsOnBackendResilient(reqIds: string[]): Promise<void> {
+    private serializeNonEmptyKvRows(rows?: KeyValue[]): { enabled: boolean; key: string; value: string }[] {
+        return (rows || [])
+            .filter(r => (r.key ?? '').trim() !== '' || (r.value ?? '').trim() !== '')
+            .map(r => ({ enabled: r.enabled ?? true, key: r.key || '', value: r.value || '' }));
+    }
+
+    private serializeNonEmptyFormDataRows(rows?: FormDataRow[]): { enabled: boolean; key: string; value: string; type: string }[] {
+        return (rows || [])
+            .filter(r => (r.key ?? '').trim() !== '' || (r.value ?? '').trim() !== '')
+            .map(r => ({ enabled: r.enabled ?? true, key: r.key || '', value: r.value || '', type: r.type || 'text' }));
+    }
+
+    private async clearRequestChildrenOnBackend(
+        gid: string,
+        fallbackDtoMap?: Map<string, RequestState>,
+        fallbackCapsuleId?: string
+    ): Promise<string | null> {
+        // 1. Delete any request examples linked to this request
+        try {
+            const exRes = await firstValueFrom(
+                this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/${gid}/example`)
+            );
+            const examples = Array.isArray(exRes?.data) ? exRes.data : [];
+            if (examples.length > 0) {
+                await Promise.allSettled(
+                    examples
+                        .filter(ex => ex?.id)
+                        .map(ex => firstValueFrom(this.http.delete(`${API_BASE_URL}/request/example/${ex.id}`)).catch(() => {}))
+                );
+            }
+        } catch {}
+
+        // 2. Resolve request state (or minimal metadata) so /request/save can purge RequestParam/Header/FormData rows
+        let baseState =
+            this.states().get(gid) ||
+            this.savedCapsules().find(r => r.id === gid) ||
+            fallbackDtoMap?.get(gid) ||
+            null;
+
+        const preferredCapId =
+            (baseState?.capsuleId && this.isValidGuid(baseState.capsuleId) ? baseState.capsuleId : null) ||
+            (fallbackCapsuleId && this.isValidGuid(fallbackCapsuleId) ? fallbackCapsuleId : null) ||
+            (this.isValidGuid(this.activeCapsuleId()) ? this.activeCapsuleId() : null);
+
+        if (!baseState && preferredCapId) {
+            try {
+                const capReqs = await firstValueFrom(
+                    this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${preferredCapId}`)
+                );
+                const found = (capReqs?.data || []).find(r => r?.id === gid);
+                if (found) {
+                    baseState = this.mapDtoToState(found);
+                }
+            } catch {}
+        }
+
+        const effectiveCapId =
+            (baseState?.capsuleId && this.isValidGuid(baseState.capsuleId) ? baseState.capsuleId : null) ||
+            preferredCapId;
+        if (!effectiveCapId) return null;
+
+        const capName =
+            this.capsules().find(c => c.id === effectiveCapId)?.name ||
+            this.activeCapsuleName() ||
+            'Capsule';
+
+        const stateForClear: RequestState = {
+            ...(baseState || this.getDefaultState(gid)),
+            id: gid,
+            capsuleId: effectiveCapId,
+            params: [],
+            headers: [],
+            formData: [],
+            postTriggerTabId: null,
+            autoAuthEnabled: false
+        };
+
+        try {
+            const saveRes = await firstValueFrom(
+                this.http.post<{ data: any }>(`${API_BASE_URL}/request/save`, this.mapStateToSaveRequest(stateForClear, effectiveCapId, capName))
+            );
+            const savedId = saveRes?.data?.id;
+            return savedId && savedId !== gid ? savedId : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private async deleteSingleRequestWithChildCleanup(
+        gid: string,
+        fallbackDtoMap?: Map<string, RequestState>,
+        fallbackCapsuleId?: string
+    ): Promise<void> {
+        try {
+            await firstValueFrom(
+                this.http.delete(`${API_BASE_URL}/request/${gid}`)
+            );
+            return;
+        } catch (err: any) {
+            if (err?.status === 404) return;
+            // Hosted SQL DBs with FK_RequestParam_Request without ON DELETE CASCADE fail 500 if RequestParam rows remain.
+            // Strip params/headers/formData/examples first via /request/save and retry DELETE.
+            const alternateSavedId = await this.clearRequestChildrenOnBackend(gid, fallbackDtoMap, fallbackCapsuleId);
+            if (alternateSavedId && this.isValidGuid(alternateSavedId)) {
+                await firstValueFrom(
+                    this.http.delete(`${API_BASE_URL}/request/${alternateSavedId}`)
+                ).catch(() => {});
+            }
+            try {
+                await firstValueFrom(
+                    this.http.delete(`${API_BASE_URL}/request/${gid}`)
+                );
+            } catch (retryErr: any) {
+                if (retryErr?.status === 404) return;
+                throw retryErr;
+            }
+        }
+    }
+
+    private async deleteRequestsOnBackendResilient(
+        reqIds: string[],
+        fallbackDtoMap?: Map<string, RequestState>,
+        fallbackCapsuleId?: string
+    ): Promise<void> {
         const guidIds = Array.from(new Set(reqIds.filter(id => this.isValidGuid(id))));
         if (!this.isBrowser || !this.authService.isLoggedIn() || guidIds.length === 0) return;
 
@@ -1472,15 +1634,13 @@ export class TabStateService {
             return;
         } catch (batchErr: any) {
             if (batchErr?.status === 404) return;
-            console.warn('Batch delete requests failed, attempting individual delete fallback:', batchErr);
+            console.warn('Batch delete requests failed, attempting resilient individual delete fallback:', batchErr);
         }
 
         let firstRealError: any = null;
         for (const gid of guidIds) {
             try {
-                await firstValueFrom(
-                    this.http.delete(`${API_BASE_URL}/request/${gid}`)
-                );
+                await this.deleteSingleRequestWithChildCleanup(gid, fallbackDtoMap, fallbackCapsuleId);
             } catch (err: any) {
                 if (err?.status !== 404 && !firstRealError) {
                     firstRealError = err;
@@ -1553,6 +1713,10 @@ export class TabStateService {
                     localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
                 } catch {}
             }
+        }
+
+        if (this.focusedSidebarItem()?.type === 'group' && this.focusedSidebarItem()?.id === groupId) {
+            this.focusedSidebarItem.set(null);
         }
 
         this.setGroupsForCapsule(capId, remainingGroups, true);
@@ -1679,6 +1843,11 @@ export class TabStateService {
                 ...g,
                 requestIds: (g.requestIds || []).filter(rId => !reqIdSet.has(rId))
             }));
+        const curFocused = this.focusedSidebarItem();
+        if (curFocused && ((curFocused.type === 'group' && groupIdSet.has(curFocused.id)) || (curFocused.type === 'request' && reqIdSet.has(curFocused.id)))) {
+            this.focusedSidebarItem.set(null);
+        }
+
         this.setGroupsForCapsule(capId, updatedGroups, false);
 
         if (capId) {
@@ -1737,6 +1906,11 @@ export class TabStateService {
             return next;
         });
         this.savedCapsules.update(col => col.map(r => moveSet.has(r.id) ? { ...r, groupId: targetGroupId } : r));
+
+        const curFocused = this.focusedSidebarItem();
+        if (curFocused?.type === 'request' && moveSet.has(curFocused.id)) {
+            this.focusedSidebarItem.set({ ...curFocused, groupId: targetGroupId });
+        }
 
         this.setGroupsForCapsule(capId, updatedGroups, true);
     }
@@ -2353,18 +2527,25 @@ export class TabStateService {
     createAndOpenNewTab(insertIndex?: number, groupId?: string | null): string {
         const newId = this.createId();
         const newState = this.getDefaultState(newId);
-        if (groupId) {
-            newState.groupId = groupId;
-        }
-        
+
         let capId = this.activeCapsuleId();
+        const focusedBeforeCreate = this.focusedSidebarItem();
+        const targetGroupId =
+            groupId !== undefined
+                ? groupId
+                : (capId ? this.resolveFocusedDirectoryGroupId(capId) : null);
+
+        if (targetGroupId) {
+            newState.groupId = targetGroupId;
+        }
+
         if (!capId) {
             capId = this.createId();
             const newCap = { id: capId, name: 'My Capsule', createdAt: Date.now() };
             this.capsules.update(list => [...list, newCap]);
             this.activeCapsuleId.set(capId);
             this.activeCapsuleName.set(newCap.name);
-            
+
             if (this.isBrowser && this.authService.isLoggedIn()) {
                 firstValueFrom(
                     this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, {
@@ -2389,9 +2570,9 @@ export class TabStateService {
                 }).catch(err => console.error('Failed to auto-create capsule', err));
             }
         }
-        
+
         newState.capsuleId = capId;
-        
+
         this.states.update(map => {
             const next = new Map(map);
             next.set(newId, newState);
@@ -2405,17 +2586,48 @@ export class TabStateService {
             }
             return [...ids, newId];
         });
-        if (groupId) {
+
+        const anchorReqId =
+            groupId === undefined && focusedBeforeCreate?.type === 'request'
+                ? focusedBeforeCreate.id
+                : null;
+
+        if (targetGroupId) {
             newState.isDirty = true;
             this.states.update(map => new Map(map).set(newId, { ...newState }));
             const currentGroups = this.getGroupsForCapsule(capId);
-            const updatedGroups = currentGroups.map(g =>
-                g.id === groupId
-                    ? { ...g, isExpanded: true, requestIds: [...(g.requestIds || []), newId] }
-                    : g
-            );
+            const updatedGroups = currentGroups.map(g => {
+                if (g.id !== targetGroupId) return g;
+                const nextReqIds = [...(g.requestIds || [])];
+                const anchorIdx = anchorReqId ? nextReqIds.indexOf(anchorReqId) : -1;
+                if (anchorIdx !== -1) {
+                    nextReqIds.splice(anchorIdx + 1, 0, newId);
+                } else {
+                    nextReqIds.push(newId);
+                }
+                return { ...g, isExpanded: true, requestIds: nextReqIds };
+            });
             this.setGroupsForCapsule(capId, updatedGroups, true);
+        } else if (anchorReqId) {
+            const existingOrder = this.getRequestOrderForCapsule(capId);
+            const anchorOrderIdx = existingOrder.indexOf(anchorReqId);
+            if (anchorOrderIdx !== -1 && !existingOrder.includes(newId)) {
+                const nextOrder = [...existingOrder];
+                nextOrder.splice(anchorOrderIdx + 1, 0, newId);
+                this.capsuleRequestOrderMap.update(m => new Map(m).set(capId, nextOrder));
+                if (this.isBrowser) {
+                    try {
+                        localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
+                    } catch {}
+                }
+            }
         }
+
+        this.focusedSidebarItem.set({
+            type: 'request',
+            id: newId,
+            groupId: targetGroupId ?? null
+        });
         this.activeTabId.set(newId);
         this.syncActiveTabToBackend();
         return newId;
@@ -2455,8 +2667,9 @@ export class TabStateService {
         try {
             this.activeCapsuleId.set(capsule.id);
             this.activeCapsuleName.set(capsule.name);
-            // Clear savedCapsules immediately to avoid showing stale requests from previous capsule
+            // Clear savedCapsules and sidebar focus immediately to avoid stale state from previous capsule
             this.savedCapsules.set([]);
+            this.focusedSidebarItem.set(null);
 
             // Read saved open tabs from local storage for this target capsule before clearing visible tabs
             let savedTargetOpenIds: string[] = [];
@@ -2859,7 +3072,20 @@ export class TabStateService {
             if (err?.status === 404) return;
             console.warn(`Direct capsule delete failed for ${id}, attempting child cleanup retry:`, err);
 
+            // Clear capsule autoAuthEndpointId first in case a DB FK blocks deleting referenced request or capsule
+            const capObj = this.capsules().find(c => c.id === id);
+            if (capObj?.autoAuthEndpointId) {
+                await firstValueFrom(
+                    this.http.put(`${API_BASE_URL}/capsule/${id}`, {
+                        name: capObj.name || 'Capsule',
+                        autoAuthEnabled: 'off',
+                        autoAuthEndpointId: null
+                    })
+                ).catch(() => {});
+            }
+
             // Collect all requests in the capsule (local + backend) and delete them first before retrying capsule delete
+            const dtoMap = new Map<string, RequestState>();
             const reqIdSet = new Set<string>(
                 this.getCapsuleRequestsSync(id).map(r => r.id).filter(rId => this.isValidGuid(rId))
             );
@@ -2869,15 +3095,16 @@ export class TabStateService {
                 );
                 if (reqRes?.data && Array.isArray(reqRes.data)) {
                     for (const r of reqRes.data) {
-                        if (r?.id && this.isValidGuid(r.id)) reqIdSet.add(r.id);
+                        if (r?.id && this.isValidGuid(r.id)) {
+                            reqIdSet.add(r.id);
+                            dtoMap.set(r.id, this.mapDtoToState(r));
+                        }
                     }
                 }
             } catch {}
 
             if (reqIdSet.size > 0) {
-                try {
-                    await this.deleteRequestsOnBackendResilient(Array.from(reqIdSet));
-                } catch {}
+                await this.deleteRequestsOnBackendResilient(Array.from(reqIdSet), dtoMap, id).catch(() => {});
             }
 
             if (vs) {
@@ -2928,6 +3155,15 @@ export class TabStateService {
 
         for (const rId of deletedReqIds) this.deletedRequestIds.add(rId);
         for (const gId of deletedGrpIds) this.deletedGroupIds.add(gId);
+
+        const curFocused = this.focusedSidebarItem();
+        if (curFocused && (
+            (curFocused.type === 'group' && deletedGrpIds.has(curFocused.id)) ||
+            (curFocused.type === 'request' && deletedReqIds.has(curFocused.id)) ||
+            idSet.has(this.activeCapsuleId())
+        )) {
+            this.focusedSidebarItem.set(null);
+        }
 
         // Extract and remove affected groups for deleted capsules, and strip any orphaned refs from remaining groups
         this.capsuleGroupsMap.update(map => {
@@ -3399,9 +3635,9 @@ export class TabStateService {
             },
             postTriggerTabId: state.postTriggerTabId || null,
             autoAuthEnabled: !!state.autoAuthEnabled,
-            params: (state.params || []).map(p => ({ enabled: p.enabled ?? true, key: p.key || '', value: p.value || '' })),
-            headers: (state.headers || []).map(h => ({ enabled: h.enabled ?? true, key: h.key || '', value: h.value || '' })),
-            formData: (state.formData || []).map(f => ({ enabled: f.enabled ?? true, key: f.key || '', value: f.value || '', type: f.type || 'text' }))
+            params: this.serializeNonEmptyKvRows(state.params),
+            headers: this.serializeNonEmptyKvRows(state.headers),
+            formData: this.serializeNonEmptyFormDataRows(state.formData)
         };
     }
 
@@ -4694,9 +4930,9 @@ export class TabStateService {
                             settings: tabState.settings,
                             postTriggerTabId: tabState.postTriggerTabId || null,
                             autoAuthEnabled: !!tabState.autoAuthEnabled,
-                            params: tabState.params.map(p => ({ enabled: p.enabled, key: p.key, value: p.value })),
-                            headers: tabState.headers.map(h => ({ enabled: h.enabled, key: h.key, value: h.value })),
-                            formData: tabState.formData.map(f => ({ enabled: f.enabled, key: f.key, value: f.value, type: f.type }))
+                            params: this.serializeNonEmptyKvRows(tabState.params),
+                            headers: this.serializeNonEmptyKvRows(tabState.headers),
+                            formData: this.serializeNonEmptyFormDataRows(tabState.formData)
                         };
 
                         const response = await firstValueFrom(
@@ -4753,7 +4989,7 @@ export class TabStateService {
             const validSaveResults = saveResults.filter(res => {
                 const isDeleted = this.deletedRequestIds.has(res.oldId) || this.deletedRequestIds.has(res.savedId);
                 if (isDeleted && res.persisted && this.isValidGuid(res.savedId) && this.authService.isLoggedIn()) {
-                    firstValueFrom(this.http.delete(`${API_BASE_URL}/request/${res.savedId}`)).catch(() => {});
+                    this.deleteRequestsOnBackendResilient([res.savedId]).catch(() => {});
                 }
                 return !isDeleted;
             });
@@ -5192,22 +5428,28 @@ export class TabStateService {
                 enableCookies: dto.enableCookies ?? true,
                 bypassCors: dto.bypassCors ?? true
             },
-            params: (dto.params || []).map((p: any) => ({
-                enabled: p.isEnabled ?? p.enabled ?? true,
-                key: p.paramKey ?? p.key ?? '',
-                value: p.paramValue ?? p.value ?? ''
-            })),
+            params: (() => {
+                const mapped = (dto.params || []).map((p: any) => ({
+                    enabled: p.isEnabled ?? p.enabled ?? true,
+                    key: p.paramKey ?? p.key ?? '',
+                    value: p.paramValue ?? p.value ?? ''
+                }));
+                return mapped.length > 0 ? mapped : base.params;
+            })(),
             headers: (dto.headers || []).map((h: any) => ({
                 enabled: h.isEnabled ?? h.enabled ?? true,
                 key: h.headerKey ?? h.key ?? '',
                 value: h.headerValue ?? h.value ?? ''
             })),
-            formData: (dto.formData || []).map((f: any) => ({
-                enabled: f.isEnabled ?? f.enabled ?? true,
-                key: f.fieldKey ?? f.key ?? '',
-                value: f.fieldValue ?? f.value ?? '',
-                type: (f.fieldType as any) || (f.type as any) || 'text'
-            })),
+            formData: (() => {
+                const mapped = (dto.formData || []).map((f: any) => ({
+                    enabled: f.isEnabled ?? f.enabled ?? true,
+                    key: f.fieldKey ?? f.key ?? '',
+                    value: f.fieldValue ?? f.value ?? '',
+                    type: (f.fieldType as any) || (f.type as any) || 'text'
+                }));
+                return mapped.length > 0 ? mapped : base.formData;
+            })(),
             responseBody: cached?.responseBody ?? base.responseBody,
             responseStatus: cached?.responseStatus ?? base.responseStatus,
             responseTime: cached?.responseTime ?? base.responseTime,

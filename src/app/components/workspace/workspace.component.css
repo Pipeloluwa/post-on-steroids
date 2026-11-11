@@ -35,9 +35,14 @@
     background-color: transparent;
     display: inline-grid;
     place-content: center;
-    cursor: pointer;
+    cursor: pointer !important;
     transition: background-color 0.14s ease, border-color 0.14s ease, opacity 0.14s ease, transform 0.1s ease;
     position: relative;
+}
+
+.sidebar-tree-row:has(> .sidebar-focus-trigger:focus-visible) {
+    border-color: var(--postonsteroids-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--postonsteroids-accent) 45%, transparent);
 }
 
 .sidebar-checkbox:hover {
