@@ -17,15 +17,20 @@
     transition: transform 160ms ease;
 }
 
-/* Sleek compact sidebar checkbox & scrollbar */
+/* Hide root reorder placeholder when actively aiming at a folder header */
+#sidebar-root-drop-list.folder-target-active > .cdk-drag-placeholder {
+    display: none !important;
+}
+
+/* Sleek, comfortable sidebar checkbox & scrollbar */
 .sidebar-checkbox {
     appearance: none;
     -webkit-appearance: none;
-    width: 11px;
-    height: 11px;
-    min-width: 11px;
-    min-height: 11px;
-    border-radius: 3px;
+    width: 13px;
+    height: 13px;
+    min-width: 13px;
+    min-height: 13px;
+    border-radius: 3.5px;
     border: 1.25px solid color-mix(in srgb, var(--postonsteroids-text-muted) 65%, transparent);
     background-color: transparent;
     display: inline-grid;
@@ -52,10 +57,10 @@
 
 .sidebar-checkbox:checked::after {
     content: '';
-    width: 6px;
-    height: 3.5px;
-    border-left: 1.5px solid #ffffff;
-    border-bottom: 1.5px solid #ffffff;
+    width: 7px;
+    height: 4px;
+    border-left: 1.6px solid #ffffff;
+    border-bottom: 1.6px solid #ffffff;
     transform: rotate(-45deg) translate(0.5px, -0.5px);
 }
 
@@ -69,7 +74,7 @@
 }
 
 .sidebar-scroll::-webkit-scrollbar {
-    width: 4px;
+    width: 5px;
 }
 
 .sidebar-scroll::-webkit-scrollbar-track {
