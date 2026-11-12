@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, output, computed, signal, inject, ViewChild } from '@angular/core';
+import { Component, ChangeDetectionStrategy, effect, input, output, computed, signal, inject, untracked, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
@@ -7,6 +7,7 @@ import { TabStateService } from '../../services/tab.state.service';
 import { NotificationService } from '../../services/notification.service';
 import { VariableService } from '../../services/variable.service';
 import { AuthService } from '../../services/auth.service';
+import { VersionCheckService } from '../../services/version-check.service';
 import { AboutModalComponent } from '../about.modal.component/about.modal.component';
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
@@ -46,6 +47,7 @@ export class NavbarComponent {
     tabStateService = inject(TabStateService);
     authService = inject(AuthService);
     private variableService = inject(VariableService);
+    private versionCheckService = inject(VersionCheckService);
     private router = inject(Router);
     private notificationService = inject(NotificationService);
 
@@ -56,6 +58,19 @@ export class NavbarComponent {
     showDownloadsMenu = signal<boolean>(false);
     showAboutModal = signal<boolean>(false);
     showHelpModal = signal<boolean>(false);
+    helpInitialTab = signal<'guide' | 'updates'>('guide');
+
+    constructor() {
+        effect(() => {
+            if (this.versionCheckService.whatsNewModalRequested()) {
+                untracked(() => {
+                    this.versionCheckService.consumeWhatsNewRequest();
+                    this.helpInitialTab.set('updates');
+                    this.showHelpModal.set(true);
+                });
+            }
+        });
+    }
 
     downloadsConfig = signal(DESKTOP_DOWNLOADS_CONFIG);
     packages = computed(() => this.downloadsConfig().packages);
@@ -115,6 +130,7 @@ export class NavbarComponent {
 
     openHelp() {
         this.showFileMenu.set(false);
+        this.helpInitialTab.set('guide');
         this.showHelpModal.set(true);
     }
 

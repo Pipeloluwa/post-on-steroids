@@ -1,7 +1,9 @@
-import { Injectable, inject, PLATFORM_ID, NgZone } from '@angular/core';
+import { Injectable, inject, PLATFORM_ID, NgZone, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { APP_VERSION_INFO } from '../../../environments/version';
 import { getAppBaseUrl } from '../utils/url.util';
+
+const LAST_SEEN_VERSION_STORAGE_KEY = 'onsteroids_last_seen_version_info';
 
 @Injectable({
   providedIn: 'root'
@@ -14,9 +16,24 @@ export class VersionCheckService {
     typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
 
   private isUpdating = false;
+  private initialized = false;
+
+  whatsNewModalRequested = signal<boolean>(false);
+
+  consumeWhatsNewRequest(): void {
+    this.whatsNewModalRequested.set(false);
+  }
 
   init(): void {
-    if (!this.isBrowser || this.isElectron) {
+    if (!this.isBrowser || this.initialized) {
+      return;
+    }
+    this.initialized = true;
+
+    // Detect newly installed updates (Electron updater, web installer overwrite, or web reload)
+    void this.checkPostUpdateWhatsNew();
+
+    if (this.isElectron) {
       return;
     }
 
@@ -30,8 +47,88 @@ export class VersionCheckService {
     this.setupLifecycleListeners();
   }
 
+  private compareSemver(a: string, b: string): number {
+    const parse = (v: string) =>
+      String(v || '')
+        .trim()
+        .replace(/^v/i, '')
+        .replace(/-.*$/, '')
+        .split('.')
+        .map((n) => Number(n) || 0);
+    const pa = parse(a);
+    const pb = parse(b);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = pa[i] || 0;
+      const nb = pb[i] || 0;
+      if (na > nb) return 1;
+      if (na < nb) return -1;
+    }
+    return 0;
+  }
+
+  private async checkPostUpdateWhatsNew(): Promise<void> {
+    if (!this.isBrowser) return;
+
+    let shouldOpenWhatsNew = false;
+
+    if (this.isElectron) {
+      try {
+        const electronApi = (window as any).electronAPI;
+        if (electronApi && typeof electronApi.consumePendingWhatsNew === 'function') {
+          const pending = await electronApi.consumePendingWhatsNew();
+          if (pending) {
+            shouldOpenWhatsNew = true;
+          }
+        }
+      } catch {
+        // Ignore IPC errors
+      }
+    }
+
+    try {
+      const hasReloadVersionParam =
+        !this.isElectron && new URLSearchParams(window.location.search).has('_v');
+      const rawPrev = localStorage.getItem(LAST_SEEN_VERSION_STORAGE_KEY);
+      if (rawPrev) {
+        const prev = JSON.parse(rawPrev) as { version?: string; buildTime?: number };
+        const prevVer = prev?.version || '';
+        const prevBuildTime = Number(prev?.buildTime || 0);
+        const currVer = APP_VERSION_INFO.version;
+        const currBuildTime = Number(APP_VERSION_INFO.buildTime || 0);
+
+        if (this.compareSemver(currVer, prevVer) > 0) {
+          shouldOpenWhatsNew = true;
+        } else if (
+          this.compareSemver(currVer, prevVer) === 0 &&
+          currBuildTime > 0 &&
+          prevBuildTime > 0 &&
+          currBuildTime > prevBuildTime &&
+          (this.isElectron || hasReloadVersionParam)
+        ) {
+          shouldOpenWhatsNew = true;
+        }
+      } else if (hasReloadVersionParam) {
+        shouldOpenWhatsNew = true;
+      }
+
+      localStorage.setItem(
+        LAST_SEEN_VERSION_STORAGE_KEY,
+        JSON.stringify({
+          version: APP_VERSION_INFO.version,
+          buildTime: APP_VERSION_INFO.buildTime
+        })
+      );
+    } catch {
+      // Ignore storage errors
+    }
+
+    if (shouldOpenWhatsNew) {
+      this.whatsNewModalRequested.set(true);
+    }
+  }
+
   /**
-   * Cleans up _cb or _t query parameters from browser address bar without triggering reload
+   * Cleans up _cb, _t, or _v query parameters from browser address bar without triggering reload
    */
   cleanUrlParams(): void {
     if (!this.isBrowser || this.isElectron) {
@@ -42,13 +139,11 @@ export class VersionCheckService {
       setTimeout(() => {
         const url = new URL(window.location.href);
         let modified = false;
-        if (url.searchParams.has('_cb')) {
-          url.searchParams.delete('_cb');
-          modified = true;
-        }
-        if (url.searchParams.has('_t')) {
-          url.searchParams.delete('_t');
-          modified = true;
+        for (const param of ['_cb', '_t', '_v']) {
+          if (url.searchParams.has(param)) {
+            url.searchParams.delete(param);
+            modified = true;
+          }
         }
         if (modified) {
           const query = url.searchParams.toString();

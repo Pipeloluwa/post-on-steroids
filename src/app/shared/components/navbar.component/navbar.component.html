@@ -244,5 +244,5 @@
 
 <!-- Modals (Safely outside the drag region) -->
 <app-about-modal-component [show]="showAboutModal()" (onClose)="showAboutModal.set(false)" />
-<app-help-updates-modal-component [show]="showHelpModal()" (onClose)="showHelpModal.set(false)" />
+<app-help-updates-modal-component [show]="showHelpModal()" [initialTab]="helpInitialTab()" (onClose)="showHelpModal.set(false)" />
 <app-create-capsule-modal #createCapsuleModal />

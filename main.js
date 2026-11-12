@@ -75,22 +75,24 @@ let isCheckingOrDownloadingUpdate = false;
 let promptedArchiveKey = null;
 let updateCheckInterval = null;
 let lastUpdateCheckTime = 0;
+let pendingWhatsNewForRenderer = null;
 
 /**
- * Reads and persists installed update metadata in userData so that once a specific
- * package (version + sha512/releaseDate) is installed, the update modal never loops.
+ * Reads and persists installed update & launch metadata in userData so that once a specific
+ * package (version + buildTime/sha512/releaseDate) is installed, the update modal never loops
+ * and What's New automatically opens once after an upgrade completes.
  */
-function getInstalledUpdateMetaPath() {
+function getUserDataMetaPath(fileName) {
   try {
-    return path.join(app.getPath('userData'), 'installed-update-meta.json');
+    return path.join(app.getPath('userData'), fileName);
   } catch {
-    return path.join(__dirname, 'installed-update-meta.json');
+    return path.join(__dirname, fileName);
   }
 }
 
-function readInstalledUpdateMeta() {
+function readJsonMeta(fileName) {
   try {
-    const metaPath = getInstalledUpdateMetaPath();
+    const metaPath = getUserDataMetaPath(fileName);
     if (fs.existsSync(metaPath)) {
       return JSON.parse(fs.readFileSync(metaPath, 'utf8'));
     }
@@ -100,9 +102,9 @@ function readInstalledUpdateMeta() {
   return null;
 }
 
-function writeInstalledUpdateMeta(meta) {
+function writeJsonMeta(fileName, meta) {
   try {
-    const metaPath = getInstalledUpdateMetaPath();
+    const metaPath = getUserDataMetaPath(fileName);
     const dir = path.dirname(metaPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -111,6 +113,22 @@ function writeInstalledUpdateMeta(meta) {
   } catch {
     // Ignore write errors
   }
+}
+
+function readInstalledUpdateMeta() {
+  return readJsonMeta('installed-update-meta.json');
+}
+
+function writeInstalledUpdateMeta(meta) {
+  writeJsonMeta('installed-update-meta.json', meta);
+}
+
+function readLastLaunchedMeta() {
+  return readJsonMeta('last-launched-meta.json');
+}
+
+function writeLastLaunchedMeta(meta) {
+  writeJsonMeta('last-launched-meta.json', meta);
 }
 
 function createWindow() {
@@ -198,10 +216,69 @@ function isNewerVersion(remoteVer, currentVer) {
 }
 
 /**
- * Determines whether the remote manifest represents a genuinely newer build than the running app.
- * Prevents false-positive update loops after installing an update.
+ * Detects whether a newer version or build just replaced a previous installation
+ * (via App Updater or Web Page installer) so What's New opens once on startup.
  */
-function isUpdateRequired(remoteVersion, remoteReleaseDateStr, remoteSha) {
+function evaluatePostUpdateWhatsNew() {
+  const currentVersion = normalizeVersion(app.getVersion());
+  const localBuildTime =
+    LOCAL_VERSION_META && typeof LOCAL_VERSION_META.buildTime === 'number'
+      ? LOCAL_VERSION_META.buildTime
+      : 0;
+
+  const installedMeta = readInstalledUpdateMeta();
+  const lastLaunched = readLastLaunchedMeta();
+  let triggeredPayload = null;
+
+  if (installedMeta && installedMeta.pendingWhatsNew) {
+    const p = installedMeta.pendingWhatsNew;
+    const versionChanged = p.fromVersion && currentVersion !== normalizeVersion(p.fromVersion);
+    const buildChanged = localBuildTime && p.fromBuildTime && Number(localBuildTime) !== Number(p.fromBuildTime);
+    if (versionChanged || buildChanged || isNewerVersion(currentVersion, p.fromVersion || '')) {
+      triggeredPayload = {
+        version: currentVersion,
+        buildTime: localBuildTime,
+        source: 'updater'
+      };
+      const cleaned = { ...installedMeta };
+      delete cleaned.pendingWhatsNew;
+      cleaned.version = currentVersion;
+      if (localBuildTime) cleaned.buildTime = localBuildTime;
+      writeInstalledUpdateMeta(cleaned);
+    }
+  }
+
+  if (!triggeredPayload && lastLaunched && lastLaunched.version) {
+    const prevVer = normalizeVersion(lastLaunched.version);
+    const prevBuild = Number(lastLaunched.buildTime || 0);
+    if (
+      isNewerVersion(currentVersion, prevVer) ||
+      (currentVersion === prevVer && localBuildTime > 0 && prevBuild > 0 && localBuildTime > prevBuild)
+    ) {
+      triggeredPayload = {
+        version: currentVersion,
+        buildTime: localBuildTime,
+        source: 'installer'
+      };
+    }
+  }
+
+  // Whenever an installer from the web page upgraded localBuildTime, ensure stale old sha/releaseDate
+  // doesn't trigger a false prompt against itself, and keep last-launched state current.
+  writeLastLaunchedMeta({
+    version: currentVersion,
+    buildTime: localBuildTime,
+    updatedAt: Date.now()
+  });
+
+  pendingWhatsNewForRenderer = triggeredPayload;
+}
+
+/**
+ * Determines whether the remote manifest represents a genuinely newer build than the running app.
+ * Prevents false-positive update loops after installing from either the app updater or web page.
+ */
+function isUpdateRequired(remoteVersion, remoteReleaseDateStr, remoteSha, remoteBuildTime = 0) {
   if (!remoteVersion) {
     return false;
   }
@@ -225,8 +302,27 @@ function isUpdateRequired(remoteVersion, remoteReleaseDateStr, remoteSha) {
     return false;
   }
 
-  // 3. Same semver version (normRemote === normCurrent):
-  // If we already recorded this exact SHA-512 or releaseDate as installed for this version, never re-prompt!
+  // 3. Exact buildTime comparison (covers both Web Page setup installs and App Updater installs)
+  const parsedRemoteBuildTime = Number(remoteBuildTime || 0);
+  if (parsedRemoteBuildTime > 0 && localBuildTime > 0) {
+    if (parsedRemoteBuildTime <= localBuildTime) {
+      if (remoteSha || remoteReleaseDateStr) {
+        const cleaned = installedMeta ? { ...installedMeta } : {};
+        delete cleaned.pendingWhatsNew;
+        writeInstalledUpdateMeta({
+          ...cleaned,
+          version: normCurrent,
+          sha512: remoteSha || cleaned.sha512 || '',
+          releaseDate: String(remoteReleaseDateStr || cleaned.releaseDate || ''),
+          buildTime: localBuildTime,
+          installedAt: cleaned.installedAt || Date.now()
+        });
+      }
+      return false;
+    }
+  }
+
+  // 4. Same semver version: if we already installed/recorded this exact SHA-512, releaseDate, or buildTime, never re-prompt!
   if (installedMeta && normalizeVersion(installedMeta.version) === normCurrent) {
     if (remoteSha && installedMeta.sha512 && installedMeta.sha512.trim() === remoteSha.trim()) {
       return false;
@@ -236,6 +332,9 @@ function isUpdateRequired(remoteVersion, remoteReleaseDateStr, remoteSha) {
       installedMeta.releaseDate &&
       String(installedMeta.releaseDate).trim() === String(remoteReleaseDateStr).trim()
     ) {
+      return false;
+    }
+    if (parsedRemoteBuildTime > 0 && installedMeta.buildTime && parsedRemoteBuildTime <= Number(installedMeta.buildTime)) {
       return false;
     }
   }
@@ -253,13 +352,15 @@ function isUpdateRequired(remoteVersion, remoteReleaseDateStr, remoteSha) {
     return false;
   }
 
-  // Allow a 3-minute build window buffer between prebuild (generate-version.mjs) and electron-builder completion
-  // so that the build's own manifest never triggers a false same-version update on itself.
-  const BUILD_WINDOW_TOLERANCE_MS = 3 * 60 * 1000;
+  // Allow a generous build window buffer between prebuild (generate-version.mjs) and electron-builder completion
+  // so that installing the latest build from the web page never triggers a self-update prompt on itself.
+  const BUILD_WINDOW_TOLERANCE_MS = 15 * 60 * 1000;
   if (remoteTime <= localBuildTime + BUILD_WINDOW_TOLERANCE_MS) {
-    // Record current running build in installed-update-meta.json so its SHA-512 is permanently recognized
     if (remoteSha || remoteReleaseDateStr) {
+      const cleaned = installedMeta ? { ...installedMeta } : {};
+      delete cleaned.pendingWhatsNew;
       writeInstalledUpdateMeta({
+        ...cleaned,
         version: normCurrent,
         sha512: remoteSha || '',
         releaseDate: String(remoteReleaseDateStr || ''),
@@ -500,18 +601,27 @@ function downloadFileUnderTheHood(targetUrl, destPath, expectedSha512, redirectC
 /**
  * Launches the downloaded installer directly to overwrite the existing app without opening any browser.
  */
-function launchDownloadedInstaller(filePath, remoteVersion, remoteReleaseDate, remoteSha) {
+function launchDownloadedInstaller(filePath, remoteVersion, remoteReleaseDate, remoteSha, remoteBuildTime = 0) {
   const localBuildTime =
     LOCAL_VERSION_META && typeof LOCAL_VERSION_META.buildTime === 'number'
       ? LOCAL_VERSION_META.buildTime
       : 0;
+  const currentVersion = normalizeVersion(app.getVersion());
 
   writeInstalledUpdateMeta({
     version: normalizeVersion(remoteVersion),
     sha512: remoteSha || '',
     releaseDate: String(remoteReleaseDate || ''),
+    buildTime: Number(remoteBuildTime || 0) || 0,
     previousBuildTime: localBuildTime,
-    installedAt: Date.now()
+    installedAt: Date.now(),
+    pendingWhatsNew: {
+      fromVersion: currentVersion,
+      fromBuildTime: localBuildTime,
+      targetVersion: normalizeVersion(remoteVersion),
+      targetBuildTime: Number(remoteBuildTime || 0) || 0,
+      requestedAt: Date.now()
+    }
   });
 
   if (updateCheckInterval) {
@@ -547,16 +657,16 @@ function launchDownloadedInstaller(filePath, remoteVersion, remoteReleaseDate, r
  * Downloads the update package silently under the hood, then prompts the user
  * to launch the installer modal and overwrite the existing app.
  */
-async function handleManifestUpdate(remoteVersion, packageFile, remoteReleaseDate, remoteSha) {
+async function handleManifestUpdate(remoteVersion, packageFile, remoteReleaseDate, remoteSha, remoteBuildTime = 0) {
   if (!remoteVersion || !packageFile) {
     return;
   }
 
-  if (!isUpdateRequired(remoteVersion, remoteReleaseDate, remoteSha)) {
+  if (!isUpdateRequired(remoteVersion, remoteReleaseDate, remoteSha, remoteBuildTime)) {
     return;
   }
 
-  const archiveKey = `${remoteVersion}:${remoteSha || remoteReleaseDate || ''}`;
+  const archiveKey = `${remoteVersion}:${remoteSha || remoteReleaseDate || remoteBuildTime || ''}`;
   if (promptedArchiveKey === archiveKey) {
     return;
   }
@@ -603,7 +713,7 @@ async function handleManifestUpdate(remoteVersion, packageFile, remoteReleaseDat
   });
 
   if (response === 0) {
-    launchDownloadedInstaller(finalPath, remoteVersion, remoteReleaseDate, remoteSha);
+    launchDownloadedInstaller(finalPath, remoteVersion, remoteReleaseDate, remoteSha, remoteBuildTime);
   }
 }
 
@@ -617,12 +727,14 @@ function checkLatestJsonFallback() {
 
     const platformReleaseDate =
       platformEntry.releaseDate || platformEntry.buildTime || data.buildTime || data.releaseDate;
+    const platformBuildTime = Number(platformEntry.buildTime || data.buildTime || 0) || 0;
 
     return handleManifestUpdate(
       String(data.version).trim(),
       String(platformEntry.path).trim(),
       platformReleaseDate,
-      platformEntry.sha512 || ''
+      platformEntry.sha512 || '',
+      platformBuildTime
     );
   });
 }
@@ -632,11 +744,13 @@ function parseManifestYaml(raw) {
   const pathMatch = raw.match(/^path:\s*['"]?([^\r\n'"]+)['"]?/m);
   const dateMatch = raw.match(/^releaseDate:\s*['"]?([^\r\n'"]+)['"]?/m);
   const shaMatch = raw.match(/^sha512:\s*['"]?([^\s'"]+)['"]?/m);
+  const buildTimeMatch = raw.match(/^buildTime:\s*['"]?(\d+)['"]?/m);
 
   const remoteVersion = verMatch ? verMatch[1].trim() : null;
   let packageFile = pathMatch ? pathMatch[1].trim() : null;
   const remoteReleaseDate = dateMatch ? dateMatch[1].trim() : null;
   let remoteSha = shaMatch ? shaMatch[1].trim() : '';
+  const remoteBuildTime = buildTimeMatch ? Number(buildTimeMatch[1]) : 0;
 
   // On Windows, always prefer the NSIS .exe setup installer over .zip if listed in files:
   if (process.platform === 'win32' && packageFile && /\.zip$/i.test(packageFile)) {
@@ -649,7 +763,7 @@ function parseManifestYaml(raw) {
     }
   }
 
-  return { remoteVersion, packageFile, remoteReleaseDate, remoteSha };
+  return { remoteVersion, packageFile, remoteReleaseDate, remoteSha, remoteBuildTime };
 }
 
 function checkForElectronUpdates() {
@@ -671,8 +785,8 @@ function checkForElectronUpdates() {
 
   fetchUrlText(manifestUrl)
     .then((raw) => {
-      const { remoteVersion, packageFile, remoteReleaseDate, remoteSha } = parseManifestYaml(raw);
-      return handleManifestUpdate(remoteVersion, packageFile, remoteReleaseDate, remoteSha);
+      const { remoteVersion, packageFile, remoteReleaseDate, remoteSha, remoteBuildTime } = parseManifestYaml(raw);
+      return handleManifestUpdate(remoteVersion, packageFile, remoteReleaseDate, remoteSha, remoteBuildTime);
     })
     .catch(() => {
       // If latest.yml returned 404 (e.g., blocked by IIS MIME rules) or download failed, fall back to latest.json
@@ -684,6 +798,20 @@ function checkForElectronUpdates() {
 }
 
 app.on('ready', () => {
+  evaluatePostUpdateWhatsNew();
+
+  ipcMain.handle('consume-pending-whats-new', () => {
+    const payload = pendingWhatsNewForRenderer;
+    pendingWhatsNewForRenderer = null;
+    const installedMeta = readInstalledUpdateMeta();
+    if (installedMeta && installedMeta.pendingWhatsNew) {
+      const cleaned = { ...installedMeta };
+      delete cleaned.pendingWhatsNew;
+      writeInstalledUpdateMeta(cleaned);
+    }
+    return payload;
+  });
+
   createWindow();
 
   // Check for updates shortly after app starts

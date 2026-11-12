@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, output, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, effect, input, output, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 
@@ -14,9 +14,24 @@ import { MatIcon } from '@angular/material/icon';
 })
 export class HelpUpdatesModalComponent {
     show = input<boolean>(false);
+    initialTab = input<'guide' | 'updates'>('guide');
     onClose = output<void>();
 
     activeTab = signal<'guide' | 'updates'>('guide');
 
     appVersion = 'v1.0.4-steroids';
+
+    private wasShown = false;
+
+    constructor() {
+        effect(() => {
+            const visible = this.show();
+            if (visible && !this.wasShown) {
+                this.wasShown = true;
+                untracked(() => this.activeTab.set(this.initialTab()));
+            } else if (!visible && this.wasShown) {
+                this.wasShown = false;
+            }
+        });
+    }
 }

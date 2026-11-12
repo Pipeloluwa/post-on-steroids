@@ -113,7 +113,7 @@ export default function generateUpdateManifests() {
     return { releaseDate: defaultReleaseDate, buildTime: defaultBuildTime };
   }
 
-  function formatYaml(primaryEntry, entries, platformReleaseDate) {
+  function formatYaml(primaryEntry, entries, platformMeta) {
     const filesBlock = entries
       .map(
         (e) =>
@@ -127,7 +127,8 @@ export default function generateUpdateManifests() {
       filesBlock,
       `path: ${primaryEntry.url}`,
       `sha512: ${primaryEntry.sha512}`,
-      `releaseDate: '${platformReleaseDate}'`,
+      `releaseDate: '${platformMeta.releaseDate}'`,
+      `buildTime: ${platformMeta.buildTime}`,
       ''
     ].join('\n');
   }
@@ -142,7 +143,7 @@ export default function generateUpdateManifests() {
   if (winEntries.length > 0 && primaryWinEntry) {
     fs.writeFileSync(
       winYamlPath,
-      formatYaml(primaryWinEntry, winEntries, winReleaseMeta.releaseDate),
+      formatYaml(primaryWinEntry, winEntries, winReleaseMeta),
       'utf8'
     );
     console.log(`Updated release/latest.yml (${winEntries.map((e) => e.url).join(', ')})`);
@@ -158,7 +159,7 @@ export default function generateUpdateManifests() {
   if (linuxEntries.length > 0 && primaryLinuxEntry) {
     fs.writeFileSync(
       linuxYamlPath,
-      formatYaml(primaryLinuxEntry, linuxEntries, linuxReleaseMeta.releaseDate),
+      formatYaml(primaryLinuxEntry, linuxEntries, linuxReleaseMeta),
       'utf8'
     );
     console.log(`Generated release/latest-linux.yml (${linuxEntries.map((e) => e.url).join(', ')})`);
@@ -174,7 +175,7 @@ export default function generateUpdateManifests() {
   if (macEntries.length > 0 && primaryMacEntry) {
     fs.writeFileSync(
       macYamlPath,
-      formatYaml(primaryMacEntry, macEntries, macReleaseMeta.releaseDate),
+      formatYaml(primaryMacEntry, macEntries, macReleaseMeta),
       'utf8'
     );
     console.log(`Generated release/latest-mac.yml (${macEntries.map((e) => e.url).join(', ')})`);
