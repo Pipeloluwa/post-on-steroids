@@ -7,13 +7,15 @@ import { RequestDetailsComponent } from './request-details.component/request-det
 import { RequestUrlComponent } from './request-url.component/request-url.component';
 import { PayloadTypesComponent } from './payload.types.component/payload.types.component';
 import { CreateCapsuleModalComponent } from '../../shared/components/create-capsule.modal.component/create-capsule.modal.component';
+import { TransferCapsuleModalComponent } from '../../shared/components/transfer-capsule.modal.component';
+import { CurlModalComponent } from '../../shared/components/curl-modal.component';
 
 import { ResponseViewerComponent } from './response-viewer.component/response-viewer.component';
 import { MatIcon } from '@angular/material/icon';
 import { AuthService } from '../../shared/services/auth.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { LocalStorageService } from '../../shared/services/local.storage.service';
-import { TabStateService, RequestGroup } from '../../shared/services/tab.state.service';
+import { TabStateService, RequestGroup, RequestState } from '../../shared/services/tab.state.service';
 import { DialogService } from '../../shared/services/dialog.service';
 import { getHttpMethodColor } from '../../shared/utils/http-method.util';
 import { RequestExecutionService } from '../../shared/services/request.execution.service';
@@ -29,6 +31,8 @@ import { RequestExecutionService } from '../../shared/services/request.execution
         PayloadTypesComponent,
         ResponseViewerComponent,
         CreateCapsuleModalComponent,
+        TransferCapsuleModalComponent,
+        CurlModalComponent,
         MatIcon,
         DragDropModule
     ],
@@ -277,6 +281,10 @@ export class WorkspaceComponent {
     editingGroupId = signal<string | null>(null);
     editingGroupName = signal<string>('');
     moveMenuRequestId = signal<string | null>(null);
+    isTransferModalOpen = signal<boolean>(false);
+    transferRequestIds = signal<string[]>([]);
+    transferInitialMode = signal<'copy' | 'move'>('copy');
+    curlModalRequest = signal<RequestState | null>(null);
 
     lastSelectedRequestId = signal<string | null>(null);
     isDraggingRequest = signal<boolean>(false);
@@ -787,6 +795,63 @@ export class WorkspaceComponent {
         this.moveMenuRequestId.set(null);
         this.editingGroupId.set(group.id);
         this.editingGroupName.set(group.name);
+    }
+
+    getSelectedRequestIdsIncludingFolders(): string[] {
+        const ids = new Set<string>(this.selectedRequestIds());
+        const groupSet = this.selectedGroupIds();
+        if (groupSet.size > 0) {
+            for (const entry of this.tabStateService.groupedCapsuleRequests()) {
+                if (groupSet.has(entry.group.id)) {
+                    for (const req of entry.requests) {
+                        if (req?.id) ids.add(req.id);
+                    }
+                }
+            }
+        }
+        const ordered = this.getAllOrderedRequestIds().filter(id => ids.has(id));
+        return ordered.length > 0 ? ordered : Array.from(ids);
+    }
+
+    openTransferModalForRequest(requestId: string, mode: 'copy' | 'move', event: Event): void {
+        event.stopPropagation();
+        this.moveMenuRequestId.set(null);
+        const ids = this.getEffectiveIdsForAction(requestId);
+        this.transferRequestIds.set(ids);
+        this.transferInitialMode.set(mode);
+        this.isTransferModalOpen.set(true);
+    }
+
+    openTransferModalFromSelection(mode: 'copy' | 'move' = 'copy', event?: Event): void {
+        event?.stopPropagation();
+        const ids = this.getSelectedRequestIdsIncludingFolders();
+        if (ids.length === 0) {
+            this.notificationService.notify('Select at least one non-empty folder or request.', 'warning');
+            return;
+        }
+        this.transferRequestIds.set(ids);
+        this.transferInitialMode.set(mode);
+        this.isTransferModalOpen.set(true);
+    }
+
+    onTransferCompleted(res: { mode: 'copy' | 'move'; switched: boolean }): void {
+        if (res.mode === 'move' || res.switched) {
+            this.selectedGroupIds.set(new Set());
+            this.selectedRequestIds.set(new Set());
+        }
+    }
+
+    async copyRequestCurlFromMenu(requestId: string, event: Event): Promise<void> {
+        event.stopPropagation();
+        this.moveMenuRequestId.set(null);
+        await this.tabStateService.copyRequestAsCurl(requestId);
+    }
+
+    openCurlModalFromMenu(req: RequestState, event: Event): void {
+        event.stopPropagation();
+        this.moveMenuRequestId.set(null);
+        const latest = this.tabStateService.getState(req.id) || req;
+        this.curlModalRequest.set(latest);
     }
 
     openRequest(request: any) {

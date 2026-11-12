@@ -167,6 +167,32 @@
                 class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
             <span>Duplicate Tab</span>
         </button>
+        <div class="h-px bg-(--postonsteroids-border)/50 my-1"></div>
+        <button (click)="onCopyCurlFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>Copy as cURL</span>
+        </button>
+        <button (click)="onViewCurlFromContext($event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>View cURL...</span>
+        </button>
+        <div class="h-px bg-(--postonsteroids-border)/50 my-1"></div>
+        <button (click)="onTransferCapsuleFromContext('copy', $event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>Copy to Capsule...</span>
+        </button>
+        <button (click)="onTransferCapsuleFromContext('move', $event)"
+                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between cursor-pointer">
+            <span>Move to Capsule...</span>
+        </button>
     </div>
 </div>
 }
+
+<app-transfer-capsule-modal [isOpen]="isTransferModalOpen()"
+                             [requestIds]="transferRequestIds()"
+                             [initialMode]="transferInitialMode()"
+                             (closed)="isTransferModalOpen.set(false)" />
+<app-curl-modal [isOpen]="curlModalRequest() !== null"
+                [request]="curlModalRequest()"
+                (closed)="curlModalRequest.set(null)" />

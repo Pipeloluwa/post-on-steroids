@@ -74,6 +74,12 @@
                         </button>
                     }
                     @if (selectedRequestIds().size > 0 || selectedGroupIds().size > 0) {
+                        <button (click)="openTransferModalFromSelection('copy', $event)" type="button"
+                                title="Copy or move selected request(s) to another capsule"
+                                class="py-0.5 px-1.5 rounded bg-(--postonsteroids-accent)/12 hover:bg-(--postonsteroids-accent)/22 text-(--postonsteroids-accent) text-[10.5px] font-semibold flex items-center gap-x-0.5 cursor-pointer transition-colors">
+                            <mat-icon class="text-[12px]! size-[12px]!">drive_file_move</mat-icon>
+                            <span>Capsule</span>
+                        </button>
                         <button (click)="batchDeleteSelectedRequests()" type="button"
                                 [disabled]="isDeletingRequests()"
                                 title="Delete selected folder(s) and request(s)"
@@ -437,6 +443,22 @@
                             <mat-icon class="text-[13px]! size-[13px]! shrink-0">create_new_folder</mat-icon>
                             <span>+ New Folder with this request</span>
                         </button>
+                        <div class="h-px bg-(--postonsteroids-border)/40 my-0.5"></div>
+                        <button (click)="openTransferModalForRequest(req.id, 'copy', $event)" type="button"
+                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
+                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">content_copy</mat-icon>
+                            <span>Copy to Capsule...</span>
+                        </button>
+                        <button (click)="openTransferModalForRequest(req.id, 'move', $event)" type="button"
+                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
+                            <mat-icon class="text-[13px]! size-[13px]! text-status-warning shrink-0">drive_file_move</mat-icon>
+                            <span>Move to Capsule...</span>
+                        </button>
+                        <button (click)="openCurlModalFromMenu(req, $event)" type="button"
+                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
+                            <mat-icon class="text-[13px]! size-[13px]! text-status-success shrink-0">terminal</mat-icon>
+                            <span>Copy / View as cURL</span>
+                        </button>
                     </div>
                 }
 
@@ -553,4 +575,12 @@
 
     <!-- Create Capsule Modal -->
     <app-create-capsule-modal #createCapsuleModal />
+<app-transfer-capsule-modal [isOpen]="isTransferModalOpen()"
+                             [requestIds]="transferRequestIds()"
+                             [initialMode]="transferInitialMode()"
+                             (closed)="isTransferModalOpen.set(false)"
+                             (completed)="onTransferCompleted($event)" />
+<app-curl-modal [isOpen]="curlModalRequest() !== null"
+                [request]="curlModalRequest()"
+                (closed)="curlModalRequest.set(null)" />
 </div>

@@ -13,8 +13,16 @@
             placeholder="Request Name" />
     </div>
 
-    <!-- Right Section: Share Button + Auto-Save Toggle + Save Button Group -->
+    <!-- Right Section: cURL + Share Button + Auto-Save Toggle + Save Button Group -->
     <div class="flex items-center gap-x-2.5 shrink-0">
+        <!-- Request as cURL Button -->
+        <button (click)="openCurlModal()" type="button"
+            class="h-[30px] px-2.5 flex items-center gap-x-1.5 rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-colors duration-200 cursor-pointer shrink-0"
+            title="Convert this request to a cURL command">
+            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">terminal</mat-icon>
+            <span class="text-[11px] font-medium">cURL</span>
+        </button>
+
         <!-- Share Capsule Button -->
         <button (click)="shareCapsule()" [disabled]="isSharing()" type="button"
             class="h-[30px] px-2.5 flex items-center gap-x-1.5 rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) transition-colors duration-200 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -65,7 +73,7 @@
             </button>
             }
 
-            <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="140"
+            <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="170"
                 [absoluteStartLeft]="false" (outputSelectedValue)="onSaveOptionSelected($event)">
                 <div
                     class="px-1.5 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center justify-center">
@@ -83,4 +91,11 @@
     <!-- Share Link Modal -->
     <app-share-modal-component [show]="showShareModal()" [link]="generatedLink()" (onClose)="showShareModal.set(false)"
         (onCopy)="copyLink()" />
+    <app-curl-modal [isOpen]="isCurlModalOpen()"
+        [request]="currentRequestState()"
+        (closed)="isCurlModalOpen.set(false)" />
+    <app-transfer-capsule-modal [isOpen]="isTransferModalOpen()"
+        [requestIds]="[tabId()]"
+        [initialMode]="transferMode()"
+        (closed)="isTransferModalOpen.set(false)" />
 </div>

@@ -5,8 +5,10 @@ import { CdkDragDrop, DragDropModule, CdkDragMove } from '@angular/cdk/drag-drop
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { VariableModalComponent } from '../../../shared/components/variable.modal.component/variable.modal.component';
 import { SwaggerImportModalComponent } from '../../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
+import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
+import { CurlModalComponent } from '../../../shared/components/curl-modal.component';
 import { VariableService } from '../../../shared/services/variable.service';
-import { TabStateService } from '../../../shared/services/tab.state.service';
+import { TabStateService, RequestState } from '../../../shared/services/tab.state.service';
 import { AuthService } from '../../../shared/services/auth.service';
 import { getHttpMethodColor } from '../../../shared/utils/http-method.util';
 import { effect } from '@angular/core';
@@ -20,7 +22,7 @@ interface RequestTab {
 
 @Component({
     selector: 'app-request-tabs-component',
-    imports: [CommonModule, MatIcon, DragDropModule, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent],
+    imports: [CommonModule, MatIcon, DragDropModule, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent, TransferCapsuleModalComponent, CurlModalComponent],
     templateUrl: './request-tabs.component.html',
     styleUrl: './request-tabs.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -99,6 +101,11 @@ export class RequestTabsComponent {
         this.closeContextMenu();
     }
 
+    isTransferModalOpen = signal<boolean>(false);
+    transferRequestIds = signal<string[]>([]);
+    transferInitialMode = signal<'copy' | 'move'>('copy');
+    curlModalRequest = signal<RequestState | null>(null);
+
     onDuplicateTabFromContext(event: Event) {
         event.stopPropagation();
         const tabId = this.contextMenu().tabId;
@@ -106,6 +113,36 @@ export class RequestTabsComponent {
             this.duplicateTab(tabId, event);
         }
         this.closeContextMenu();
+    }
+
+    async onCopyCurlFromContext(event: Event): Promise<void> {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        this.closeContextMenu();
+        if (tabId) {
+            await this.tabStateService.copyRequestAsCurl(tabId);
+        }
+    }
+
+    onViewCurlFromContext(event: Event): void {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        this.closeContextMenu();
+        if (tabId) {
+            const st = this.tabStateService.getState(tabId);
+            if (st) this.curlModalRequest.set(st);
+        }
+    }
+
+    onTransferCapsuleFromContext(mode: 'copy' | 'move', event: Event): void {
+        event.stopPropagation();
+        const tabId = this.contextMenu().tabId;
+        this.closeContextMenu();
+        if (tabId) {
+            this.transferRequestIds.set([tabId]);
+            this.transferInitialMode.set(mode);
+            this.isTransferModalOpen.set(true);
+        }
     }
 
     onNewTabLeftFromContext(event: Event) {

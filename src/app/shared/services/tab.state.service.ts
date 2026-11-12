@@ -7,9 +7,12 @@ import { AuthService, UserAuth } from './auth.service';
 import { NotificationService } from './notification.service';
 import { API_BASE_URL } from '../constants/api.constants';
 import { VariableService } from './variable.service';
+import { AutoAuthService } from './auto-auth.service';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractRequestsVariables } from '../utils/import-variable.util';
 import { getAppBaseUrl } from '../utils/url.util';
+import { buildCurlCommand, CurlBuildOptions } from '../utils/curl-generator.util';
+import { copyTextToClipboard } from '../utils/clipboard.util';
 import {
     DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
     DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
@@ -164,6 +167,14 @@ export class TabStateService {
     private getVariableService(): VariableService | null {
         try {
             return this.injector.get(VariableService);
+        } catch {
+            return null;
+        }
+    }
+
+    private getAutoAuthService(): AutoAuthService | null {
+        try {
+            return this.injector.get(AutoAuthService);
         } catch {
             return null;
         }
@@ -3329,6 +3340,303 @@ export class TabStateService {
         }
 
         await this.finalizeDeletedCapsules([id]);
+    }
+
+    buildCurlFromState(
+        state: RequestState,
+        options: Pick<CurlBuildOptions, 'resolveVariables' | 'multiline' | 'includeInsecureFlag'> = {}
+    ): string {
+        const vs = this.getVariableService();
+        const aas = this.getAutoAuthService();
+        const cachedToken = aas && aas.isAutoAuthEnabled(state.id) ? aas.getCachedToken() : null;
+        return buildCurlCommand(state, {
+            resolveVariables: options.resolveVariables ?? true,
+            multiline: options.multiline ?? true,
+            includeInsecureFlag: options.includeInsecureFlag ?? false,
+            resolveText: vs ? (s: string) => vs.resolve(s) : (s: string) => s,
+            resolveJson: vs ? (s: string) => vs.resolveJson(s) : (s: string) => s,
+            autoAuthToken: cachedToken
+        });
+    }
+
+    buildCurlForRequest(
+        requestId: string,
+        options: Pick<CurlBuildOptions, 'resolveVariables' | 'multiline' | 'includeInsecureFlag'> = {}
+    ): string {
+        const resolvedId = this.resolveTabId(requestId);
+        const state = this.states().get(resolvedId) || this.savedCapsules().find(r => r.id === resolvedId);
+        if (!state) return '';
+        return this.buildCurlFromState(state, options);
+    }
+
+    async copyRequestAsCurl(
+        requestId: string,
+        options: Pick<CurlBuildOptions, 'resolveVariables' | 'multiline' | 'includeInsecureFlag'> = {}
+    ): Promise<boolean> {
+        const cmd = this.buildCurlForRequest(requestId, options);
+        if (!cmd) return false;
+        const ok = await copyTextToClipboard(cmd);
+        if (ok) {
+            this.notificationService.notify('cURL command copied to clipboard!', 'success');
+        } else {
+            this.notificationService.notify('Failed to copy cURL command.', 'error');
+        }
+        return ok;
+    }
+
+    async loadGroupsForCapsule(capsuleId: string): Promise<RequestGroup[]> {
+        if (!capsuleId) return [];
+        const existing = this.getGroupsForCapsule(capsuleId);
+        if (existing.length > 0) return existing;
+
+        const targetCap = this.capsules().find(c => c.id === capsuleId);
+        const vs = this.getVariableService();
+        if (
+            this.isBrowser &&
+            this.authService.isLoggedIn() &&
+            vs &&
+            this.isValidGuid(capsuleId) &&
+            !targetCap?.isLocalOnly
+        ) {
+            try {
+                await vs.loadVariablesFromBackend(false, capsuleId);
+            } catch {}
+        }
+        return this.getGroupsForCapsule(capsuleId);
+    }
+
+    async transferRequestsToCapsule(
+        requestIds: string[],
+        targetCapsuleId: string,
+        mode: 'copy' | 'move',
+        targetGroupId: string | null = null
+    ): Promise<{ transferredCount: number; targetCapsuleId: string; targetCapsuleName: string; savedIds: string[] }> {
+        const sourceCapId = this.activeCapsuleId();
+        const uniqueInputIds = Array.from(new Set((requestIds || []).map(id => this.resolveTabId(id)).filter(Boolean)));
+        if (uniqueInputIds.length === 0) {
+            throw new Error('No requests selected to transfer.');
+        }
+
+        const sourceRequests: RequestState[] = [];
+        for (const rId of uniqueInputIds) {
+            const st = this.states().get(rId) || this.savedCapsules().find(r => r.id === rId);
+            if (st) sourceRequests.push(structuredClone(st));
+        }
+        if (sourceRequests.length === 0) {
+            throw new Error('Could not find the selected request(s).');
+        }
+
+        let targetCap = this.capsules().find(c => c.id === targetCapsuleId);
+        if (!targetCap) {
+            throw new Error('Destination capsule was not found.');
+        }
+
+        let effectiveTargetCapId = targetCap.id;
+        if (effectiveTargetCapId === sourceCapId) {
+            throw new Error('Destination capsule must be different from the current capsule.');
+        }
+
+        const vs = this.getVariableService();
+        if (vs) {
+            await vs.waitForActiveSync();
+        }
+
+        const isOnline = this.isBrowser && this.authService.isLoggedIn();
+
+        // Ensure target capsule exists on backend if logged in and currently local-only
+        if (isOnline && (targetCap.isLocalOnly || effectiveTargetCapId === '1' || !this.isValidGuid(effectiveTargetCapId))) {
+            const createPayload: any = {
+                name: targetCap.name,
+                autoAuthEnabled: targetCap.autoAuthEnabled || 'off',
+                autoAuthEndpointId: null
+            };
+            if (this.isValidGuid(effectiveTargetCapId) && effectiveTargetCapId !== '1') {
+                createPayload.id = effectiveTargetCapId;
+            }
+            const capRes = await firstValueFrom(
+                this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, createPayload)
+            );
+            const promotedId = capRes?.data?.id || effectiveTargetCapId;
+            const oldTargetId = effectiveTargetCapId;
+            effectiveTargetCapId = promotedId;
+            targetCap = {
+                ...targetCap,
+                id: effectiveTargetCapId,
+                isLocalOnly: false
+            };
+            this.capsules.update(list => list.map(c => c.id === oldTargetId ? targetCap! : c));
+            if (oldTargetId !== effectiveTargetCapId && this.isBrowser) {
+                const oldGroups = this.getGroupsForCapsule(oldTargetId);
+                if (oldGroups.length > 0) {
+                    this.setGroupsForCapsule(
+                        effectiveTargetCapId,
+                        oldGroups.map(g => ({ ...g, capsuleId: effectiveTargetCapId })),
+                        false
+                    );
+                }
+            }
+        }
+
+        const targetIsBackend = isOnline && !targetCap.isLocalOnly && this.isValidGuid(effectiveTargetCapId);
+
+        // Hydrate destination capsule variables + __capsule_groups__ beforehand so syncing groups never clobbers target vars
+        if (targetIsBackend && vs) {
+            await vs.loadVariablesFromBackend(false, effectiveTargetCapId).catch(() => {});
+        }
+
+        const savedIds: string[] = [];
+        const createdStates: RequestState[] = [];
+
+        for (const src of sourceRequests) {
+            const newId = this.createId();
+            const cloned: RequestState = {
+                ...structuredClone(src),
+                id: newId,
+                capsuleId: effectiveTargetCapId,
+                groupId: targetGroupId ?? null,
+                postTriggerTabId: null,
+                isDirty: true,
+                isLoading: false
+            };
+
+            // Gather source examples (local cache or backend) so they move/copy alongside the request
+            let examplesToCopy = [...(this.requestExamplesMap().get(src.id) || this.getLocalExamples(src.id))];
+            if (examplesToCopy.length === 0 && isOnline && this.isValidGuid(src.id)) {
+                try {
+                    const exRes = await firstValueFrom(
+                        this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/${src.id}/example`)
+                    );
+                    if (Array.isArray(exRes?.data)) {
+                        examplesToCopy = exRes.data;
+                    }
+                } catch {}
+            }
+
+            let finalId = newId;
+            if (targetIsBackend) {
+                const payload = this.mapStateToSaveRequest(cloned, effectiveTargetCapId, targetCap.name);
+                const saveRes = await firstValueFrom(
+                    this.http.post<{ data: any }>(`${API_BASE_URL}/request/save`, payload)
+                );
+                if (saveRes?.data?.id) {
+                    finalId = saveRes.data.id;
+                }
+                cloned.id = finalId;
+                cloned.isDirty = false;
+
+                if (examplesToCopy.length > 0 && this.isValidGuid(finalId)) {
+                    const savedExamples: any[] = [];
+                    for (const ex of examplesToCopy) {
+                        try {
+                            const exRes = await firstValueFrom(
+                                this.http.post<{ data: any }>(`${API_BASE_URL}/request/${finalId}/example`, {
+                                    name: ex.name || 'Example',
+                                    requestSnapshot: typeof ex.requestSnapshot === 'string'
+                                        ? ex.requestSnapshot
+                                        : JSON.stringify(ex.requestSnapshot || {})
+                                })
+                            );
+                            savedExamples.push(exRes?.data || { ...ex, id: this.createId(), requestId: finalId });
+                        } catch {
+                            savedExamples.push({ ...ex, id: this.createId(), requestId: finalId });
+                        }
+                    }
+                    this.saveLocalExamples(finalId, savedExamples);
+                }
+            } else if (examplesToCopy.length > 0) {
+                const clonedExamples = examplesToCopy.map(ex => ({ ...ex, id: this.createId(), requestId: finalId }));
+                this.saveLocalExamples(finalId, clonedExamples);
+            }
+
+            // Copy cached response preview if present
+            if (this.isBrowser) {
+                try {
+                    const stored = localStorage.getItem('onsteroids_responses');
+                    if (stored) {
+                        const respMap = JSON.parse(stored);
+                        if (respMap[src.id]) {
+                            respMap[finalId] = structuredClone(respMap[src.id]);
+                            localStorage.setItem('onsteroids_responses', JSON.stringify(respMap));
+                        }
+                    }
+                } catch {}
+            }
+
+            savedIds.push(finalId);
+            createdStates.push(cloned);
+        }
+
+        // Register transferred requests in memory & target capsule caches
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const st of createdStates) {
+                next.set(st.id, st);
+            }
+            return next;
+        });
+
+        if (this.isBrowser) {
+            try {
+                const targetOpenKey = `onsteroids_open_tab_ids_${effectiveTargetCapId}`;
+                const rawOpen = localStorage.getItem(targetOpenKey);
+                if (rawOpen) {
+                    const parsed = JSON.parse(rawOpen);
+                    if (Array.isArray(parsed)) {
+                        const updatedOpen = [...parsed];
+                        for (const sId of savedIds) {
+                            if (!updatedOpen.includes(sId)) updatedOpen.push(sId);
+                        }
+                        localStorage.setItem(targetOpenKey, JSON.stringify(updatedOpen));
+                    }
+                }
+            } catch {}
+        }
+
+        // Update destination folder assignment or custom root order
+        if (targetGroupId) {
+            const targetGroups = this.getGroupsForCapsule(effectiveTargetCapId);
+            const updatedTargetGroups = targetGroups.map(g => {
+                if (g.id !== targetGroupId) return g;
+                const merged = [...(g.requestIds || [])];
+                for (const sId of savedIds) {
+                    if (!merged.includes(sId)) merged.push(sId);
+                }
+                return { ...g, isExpanded: true, requestIds: merged };
+            });
+            this.setGroupsForCapsule(effectiveTargetCapId, updatedTargetGroups, false);
+            this.markLocalStructureTimestamp(effectiveTargetCapId);
+            if (targetIsBackend && vs) {
+                await vs.syncVariablesToBackend(effectiveTargetCapId).catch(() => {});
+            }
+        } else {
+            const targetOrder = this.getRequestOrderForCapsule(effectiveTargetCapId);
+            if (targetOrder.length > 0) {
+                const nextOrder = [...targetOrder];
+                for (const sId of savedIds) {
+                    if (!nextOrder.includes(sId)) nextOrder.push(sId);
+                }
+                this.capsuleRequestOrderMap.update(m => new Map(m).set(effectiveTargetCapId, nextOrder));
+                if (this.isBrowser) {
+                    try {
+                        localStorage.setItem(`onsteroids_capsule_order_${effectiveTargetCapId}`, JSON.stringify(nextOrder));
+                    } catch {}
+                }
+            }
+        }
+
+        // If moving, safely delete originals AFTER destination requests succeeded
+        if (mode === 'move') {
+            await this.deleteRequestGroupsAndRequests([], sourceRequests.map(r => r.id), sourceCapId);
+        } else {
+            this.snapshotCurrentSession(undefined, false, true);
+        }
+
+        return {
+            transferredCount: createdStates.length,
+            targetCapsuleId: effectiveTargetCapId,
+            targetCapsuleName: targetCap.name,
+            savedIds
+        };
     }
 
     async batchDeleteCapsules(ids: string[]): Promise<void> {

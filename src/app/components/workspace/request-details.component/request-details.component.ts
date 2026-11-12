@@ -4,14 +4,17 @@ import { ScrollableSelectComponent } from '../../../shared/components/scrollable
 import { MatIcon } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
-import { TabStateService } from '../../../shared/services/tab.state.service';
+import { CurlModalComponent } from '../../../shared/components/curl-modal.component';
+import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
+import { TabStateService, RequestState } from '../../../shared/services/tab.state.service';
+import { copyTextToClipboard } from '../../../shared/utils/clipboard.util';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { VariableService } from '../../../shared/services/variable.service';
 import { inject } from '@angular/core';
 
 @Component({
     selector: 'app-request-details-component',
-    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent],
+    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, TransferCapsuleModalComponent],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -52,10 +55,23 @@ export class RequestDetailsComponent {
     onNameChange(newName: string) {
         this.tabStateService.updateState(this.tabId(), { name: newName });
     }
-    saveOptions = ['Export Endpoint', 'Export Capsule'];
+    saveOptions = ['Copy as cURL', 'View cURL...', 'Copy to Capsule...', 'Move to Capsule...', 'Export Endpoint', 'Export Capsule'];
 
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
+    isCurlModalOpen = signal<boolean>(false);
+    isTransferModalOpen = signal<boolean>(false);
+    transferMode = signal<'copy' | 'move'>('copy');
+
+    currentRequestState = computed<RequestState | null>(() => {
+        const id = this.tabId();
+        return this.tabStateService.getState(id) || null;
+    });
+
+    openCurlModal(): void {
+        if (!this.currentRequestState()) return;
+        this.isCurlModalOpen.set(true);
+    }
 
     async shareCapsule() {
         if (!this.isLoggedIn()) {
@@ -90,31 +106,25 @@ export class RequestDetailsComponent {
 
     async copyLink() {
         const link = this.generatedLink();
-        try {
-            if (navigator?.clipboard?.writeText) {
-                await navigator.clipboard.writeText(link);
-            } else {
-                const ta = document.createElement('textarea');
-                ta.value = link;
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-            }
-            this.showShareModal.set(false);
-            this.onNotify.emit('Capsule link copied to clipboard!');
-        } catch {
-            this.showShareModal.set(false);
-            this.onNotify.emit('Capsule link copied to clipboard!');
-        }
+        await copyTextToClipboard(link);
+        this.showShareModal.set(false);
+        this.onNotify.emit('Capsule link copied to clipboard!');
     }
 
     async onSaveOptionSelected(option: string) {
         this.isExporting.set(true);
         try {
-            if (option === 'Export Endpoint') {
+            if (option === 'Copy as cURL') {
+                await this.tabStateService.copyRequestAsCurl(this.tabId());
+                return;
+            } else if (option === 'View cURL...') {
+                this.openCurlModal();
+                return;
+            } else if (option === 'Copy to Capsule...' || option === 'Move to Capsule...') {
+                this.transferMode.set(option.startsWith('Move') ? 'move' : 'copy');
+                this.isTransferModalOpen.set(true);
+                return;
+            } else if (option === 'Export Endpoint') {
                 const state = this.tabStateService.getState(this.tabId());
                 if (!state) return;
                 const capId = state.capsuleId || this.tabStateService.activeCapsuleId();
