@@ -26,7 +26,7 @@ import { copyTextToClipboard } from '../utils/clipboard.util';
                     <div class="px-5 py-3.5 border-b border-(--postonsteroids-border) flex items-center justify-between bg-(--postonsteroids-bg-tertiary)/50 shrink-0">
                         <div class="flex items-center gap-x-2.5 min-w-0">
                             <div class="size-7 rounded-lg bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent) flex items-center justify-center shrink-0">
-                                <mat-icon class="text-[17px]! size-[17px]!">terminal</mat-icon>
+                                <mat-icon class="text-[17px]! size-[17px]!">code</mat-icon>
                             </div>
                             <div class="min-w-0">
                                 <h3 id="curl-modal-title" class="text-[14px] font-bold text-(--postonsteroids-text-primary) leading-tight">

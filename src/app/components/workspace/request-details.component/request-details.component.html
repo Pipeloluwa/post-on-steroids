@@ -17,10 +17,9 @@
     <div class="flex items-center gap-x-2.5 shrink-0">
         <!-- Request as cURL Button -->
         <button (click)="openCurlModal()" type="button"
-            class="h-[30px] px-2.5 flex items-center gap-x-1.5 rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-colors duration-200 cursor-pointer shrink-0"
+            class="h-[30px] px-2.5 flex items-center rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-colors duration-200 cursor-pointer shrink-0"
             title="Convert this request to a cURL command">
-            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">terminal</mat-icon>
-            <span class="text-[11px] font-medium">cURL</span>
+            <span class="text-[11px] font-semibold tracking-tight">cURL</span>
         </button>
 
         <!-- Share Capsule Button -->
@@ -88,14 +87,15 @@
         </div>
     </div>
 
-    <!-- Share Link Modal -->
-    <app-share-modal-component [show]="showShareModal()" [link]="generatedLink()" (onClose)="showShareModal.set(false)"
-        (onCopy)="copyLink()" />
-    <app-curl-modal [isOpen]="isCurlModalOpen()"
-        [request]="currentRequestState()"
-        (closed)="isCurlModalOpen.set(false)" />
-    <app-transfer-capsule-modal [isOpen]="isTransferModalOpen()"
-        [requestIds]="[tabId()]"
-        [initialMode]="transferMode()"
-        (closed)="isTransferModalOpen.set(false)" />
 </div>
+
+<!-- Share Link, cURL, & Transfer Modals (placed outside header flex row so Save aligns flush right) -->
+<app-share-modal-component [show]="showShareModal()" [link]="generatedLink()" (onClose)="showShareModal.set(false)"
+    (onCopy)="copyLink()" />
+<app-curl-modal [isOpen]="isCurlModalOpen()"
+    [request]="currentRequestState()"
+    (closed)="isCurlModalOpen.set(false)" />
+<app-transfer-capsule-modal [isOpen]="isTransferModalOpen()"
+    [requestIds]="[tabId()]"
+    [initialMode]="transferMode()"
+    (closed)="isTransferModalOpen.set(false)" />
