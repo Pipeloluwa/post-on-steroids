@@ -27,22 +27,31 @@
     </button>
     }
 
-    <!-- Stored Variable Hover Modal -->
+    <!-- Stored Variable Hover Modal (anchored tightly with hover bridge so moving into it stays locked) -->
     @if (hoveredVariable(); as hover) {
-    <div class="fixed z-[100] -translate-x-1/2 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded shadow-lg p-3 flex flex-col gap-2 min-w-[220px]"
-        [style.left.px]="hover.x" [style.top.px]="hover.y + 15"
-        (mouseenter)="isMouseInPopup = true" (mouseleave)="isMouseInPopup = false; hoveredVariable.set(null)">
-        <div class="flex justify-between items-center text-[11px] font-bold">
-            <span class="text-(--postonsteroids-text-muted)">Global Variable</span>
+    <div class="fixed z-[100] -translate-x-1/2"
+        [class.-mt-1.5]="hover.placement === 'below'"
+        [class.pt-2]="hover.placement === 'below'"
+        [class.-mb-1.5]="hover.placement === 'above'"
+        [class.pb-2]="hover.placement === 'above'"
+        [style.left.px]="hover.x"
+        [style.top.px]="hover.placement === 'below' ? hover.y : null"
+        [style.bottom.px]="hover.placement === 'above' ? hover.y : null"
+        (mouseenter)="onPopupMouseEnter()"
+        (mouseleave)="onPopupMouseLeave()">
+        <div class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-xl p-2.5 flex flex-col gap-1.5 min-w-[220px]">
+            <div class="flex justify-between items-center text-[11px] font-bold">
+                <span class="text-(--postonsteroids-text-muted)">Global Variable</span>
+            </div>
+            <div class="text-[12px] font-mono font-semibold text-(--postonsteroids-text-primary) truncate">
+                {{ hover.key }}
+            </div>
+            <input type="text"
+                [value]="hover.val"
+                (input)="updateVariableValue(hover.key, $any($event.target).value)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) w-full"
+                placeholder="Enter value" />
         </div>
-        <div class="text-[12px] font-mono font-bold text-(--postonsteroids-text-primary) truncate">
-            {{ hover.key }}
-        </div>
-        <input type="text"
-            [value]="hover.val"
-            (input)="updateVariableValue(hover.key, $any($event.target).value)"
-            class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none w-full"
-            placeholder="Enter value" />
     </div>
     }
 </div>

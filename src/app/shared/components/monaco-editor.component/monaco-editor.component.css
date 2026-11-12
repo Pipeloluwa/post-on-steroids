@@ -90,13 +90,14 @@
     background-color: color-mix(in srgb, var(--postonsteroids-token-global, #22c55e) 14%, transparent) !important;
     border-radius: 4px !important;
     padding: 1px 3px !important;
-    font-weight: 600 !important;
+    font-weight: normal !important;
     cursor: pointer !important;
 }
 
 ::ng-deep .monaco-global-var-token span,
 ::ng-deep .monaco-global-var-token * {
     color: var(--postonsteroids-token-global, #22c55e) !important;
+    font-weight: normal !important;
 }
 
 /* Stored utility variable token highlighting */
@@ -105,12 +106,13 @@
     background-color: color-mix(in srgb, var(--postonsteroids-token-utility, #3b82f6) 14%, transparent) !important;
     border-radius: 4px !important;
     padding: 1px 3px !important;
-    font-weight: 600 !important;
+    font-weight: normal !important;
 }
 
 ::ng-deep .monaco-utility-var-token span,
 ::ng-deep .monaco-utility-var-token * {
     color: var(--postonsteroids-token-utility, #3b82f6) !important;
+    font-weight: normal !important;
 }
 
 /* Suppress any squiggly error under global/utility variables */

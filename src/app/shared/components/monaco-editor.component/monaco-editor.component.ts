@@ -51,9 +51,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private isMouseDownOnFloatingVar = false;
   private selectionDisposables: any[] = [];
 
-  hoveredVariable = signal<{ key: string; val: string; type: string; x: number; y: number } | null>(null);
+  hoveredVariable = signal<{ key: string; val: string; type: string; x: number; y: number; placement: 'above' | 'below'; tokenId: string } | null>(null);
   isMouseInPopup = false;
   private hoverClearTimeout: any = null;
+  private hoverSwitchTimeout: any = null;
+  private pendingSwitchTokenId: string | null = null;
   private variableDecorations: string[] = [];
 
   value = signal<string>('');
@@ -509,17 +511,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
     // Variable hover detection and popup trigger
     editor.onMouseMove?.((e: any) => {
-      if (!this.isBrowser) return;
+      if (!this.isBrowser || this.isMouseInPopup) return;
       const pos = e.target?.position;
       if (!pos) {
-        if (!this.isMouseInPopup) {
-          if (!this.hoverClearTimeout) {
-            this.hoverClearTimeout = setTimeout(() => {
-              if (!this.isMouseInPopup) this.hoveredVariable.set(null);
-              this.hoverClearTimeout = null;
-            }, 300);
-          }
-        }
+        this.clearPendingHoverSwitch();
+        this.scheduleHoverClear();
         return;
       }
 
@@ -541,53 +537,84 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
             clearTimeout(this.hoverClearTimeout);
             this.hoverClearTimeout = null;
           }
+
+          const tokenId = `${pos.lineNumber}:${startCol}`;
+          const current = this.hoveredVariable();
+
+          // Keep existing popup stably anchored while cursor stays inside the same token
+          if (current && current.tokenId === tokenId) {
+            this.clearPendingHoverSwitch();
+            break;
+          }
+
           const rawKey = m[1].trim();
           const cleanKey = rawKey.replace(/^[:{]+/, '').replace(/[}]+$/, '').trim();
-          const v = this.variableService.variables().find(
-            x => (x.key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase() === cleanKey.toLowerCase()
-          );
-
           const clientX = e.event?.browserEvent?.clientX ?? 0;
           const clientY = e.event?.browserEvent?.clientY ?? 0;
 
-          const x = Math.max(120, Math.min(clientX, (window?.innerWidth || 1000) - 130));
-          const y = clientY + 15 > (window?.innerHeight || 800) - 120 ? clientY - 110 : clientY;
+          // Anchor directly to the hovered token bounds so cursor reaches the modal without hitting lines below
+          let anchorX = clientX;
+          let tokenTop = clientY - 9;
+          let tokenBottom = clientY + 6;
+          try {
+            const domNode = editor.getDomNode?.();
+            const startVis = editor.getScrolledVisiblePosition?.({ lineNumber: pos.lineNumber, column: startCol });
+            const endVis = editor.getScrolledVisiblePosition?.({ lineNumber: pos.lineNumber, column: endCol });
+            if (domNode && startVis) {
+              const rect = domNode.getBoundingClientRect();
+              tokenTop = rect.top + startVis.top;
+              tokenBottom = tokenTop + (startVis.height || 19);
+              anchorX = endVis
+                ? rect.left + ((startVis.left + endVis.left) / 2)
+                : rect.left + startVis.left;
+            }
+          } catch {
+            // Keep mouse coordinates fallback
+          }
 
-          this.hoveredVariable.set({
-            key: cleanKey,
-            val: v ? (v.value || '') : '',
-            type: 'global',
-            x,
-            y
-          });
+          const viewportWidth = window?.innerWidth || 1000;
+          const viewportHeight = window?.innerHeight || 800;
+          const x = Math.max(120, Math.min(anchorX, viewportWidth - 130));
+          const placeAbove = tokenBottom + 130 > viewportHeight;
+          const placement: 'above' | 'below' = placeAbove ? 'above' : 'below';
+          const y = placeAbove ? Math.max(8, viewportHeight - tokenTop) : tokenBottom;
+
+          if (current) {
+            // Grace period so brushing across a variable below on the way to the popup never steals focus
+            if (this.pendingSwitchTokenId !== tokenId) {
+              this.clearPendingHoverSwitch();
+              this.pendingSwitchTokenId = tokenId;
+              this.hoverSwitchTimeout = setTimeout(() => {
+                this.hoverSwitchTimeout = null;
+                this.pendingSwitchTokenId = null;
+                if (!this.isMouseInPopup) {
+                  this.applyHoveredVariable(cleanKey, x, y, placement, tokenId);
+                }
+              }, 200);
+            }
+          } else {
+            this.clearPendingHoverSwitch();
+            this.applyHoveredVariable(cleanKey, x, y, placement, tokenId);
+          }
           break;
         }
       }
 
-      if (!found && !this.isMouseInPopup) {
-        if (!this.hoverClearTimeout) {
-          this.hoverClearTimeout = setTimeout(() => {
-            if (!this.isMouseInPopup) this.hoveredVariable.set(null);
-            this.hoverClearTimeout = null;
-          }, 300);
-        }
+      if (!found) {
+        this.clearPendingHoverSwitch();
+        this.scheduleHoverClear();
       }
     });
 
     editor.onMouseLeave?.(() => {
+      this.clearPendingHoverSwitch();
       if (!this.isMouseInPopup) {
-        if (this.hoverClearTimeout) {
-          clearTimeout(this.hoverClearTimeout);
-          this.hoverClearTimeout = null;
-        }
-        this.hoverClearTimeout = setTimeout(() => {
-          if (!this.isMouseInPopup) this.hoveredVariable.set(null);
-          this.hoverClearTimeout = null;
-        }, 300);
+        this.scheduleHoverClear(true);
       }
     });
 
     editor.onMouseDown?.(() => {
+      this.clearPendingHoverSwitch();
       if (!this.isMouseInPopup) {
         this.hoveredVariable.set(null);
       }
@@ -737,7 +764,67 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     return path.join('.');
   }
 
+  private applyHoveredVariable(
+    cleanKey: string,
+    x: number,
+    y: number,
+    placement: 'above' | 'below',
+    tokenId: string
+  ): void {
+    const v = this.variableService.variables().find(
+      item => (item.key || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase() === cleanKey.toLowerCase()
+    );
+    this.hoveredVariable.set({
+      key: cleanKey,
+      val: v ? (v.value || '') : '',
+      type: 'global',
+      x,
+      y,
+      placement,
+      tokenId
+    });
+  }
+
+  private scheduleHoverClear(resetExisting = false): void {
+    if (resetExisting && this.hoverClearTimeout) {
+      clearTimeout(this.hoverClearTimeout);
+      this.hoverClearTimeout = null;
+    }
+    if (!this.hoverClearTimeout) {
+      this.hoverClearTimeout = setTimeout(() => {
+        if (!this.isMouseInPopup) {
+          this.hoveredVariable.set(null);
+        }
+        this.hoverClearTimeout = null;
+      }, 300);
+    }
+  }
+
+  private clearPendingHoverSwitch(): void {
+    if (this.hoverSwitchTimeout) {
+      clearTimeout(this.hoverSwitchTimeout);
+      this.hoverSwitchTimeout = null;
+    }
+    this.pendingSwitchTokenId = null;
+  }
+
+  onPopupMouseEnter(): void {
+    this.isMouseInPopup = true;
+    this.clearPendingHoverSwitch();
+    if (this.hoverClearTimeout) {
+      clearTimeout(this.hoverClearTimeout);
+      this.hoverClearTimeout = null;
+    }
+  }
+
+  onPopupMouseLeave(): void {
+    this.isMouseInPopup = false;
+    this.clearPendingHoverSwitch();
+    this.hoveredVariable.set(null);
+  }
+
   ngOnDestroy() {
+    this.clearPendingHoverSwitch();
     if (this.hoverClearTimeout) {
       clearTimeout(this.hoverClearTimeout);
       this.hoverClearTimeout = null;
