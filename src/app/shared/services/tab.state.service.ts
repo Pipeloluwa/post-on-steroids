@@ -901,6 +901,8 @@ export class TabStateService {
     });
     private groupsVarSyncTimeout: any = null;
     private hasPendingStructureSync = false;
+    private checkedGroupCapsules = new Set<string>();
+    private inFlightGroupLoads = new Map<string, Promise<RequestGroup[]>>();
     private deletingCapsuleIds = new Set<string>();
     private deletedRequestIds = new Set<string>();
     private deletedGroupIds = new Set<string>();
@@ -1061,6 +1063,11 @@ export class TabStateService {
 
     private setGroupsForCapsule(capId: string, groups: RequestGroup[], syncBackend = true): void {
         if (!capId) return;
+        this.checkedGroupCapsules.add(capId);
+        const currentInMem = this.capsuleGroupsMap().get(capId);
+        if (!syncBackend && currentInMem && currentInMem.length === 0 && groups.length === 0) {
+            return;
+        }
         this.capsuleGroupsMap.update(m => {
             const next = new Map(m);
             next.set(capId, groups);
@@ -2476,6 +2483,8 @@ export class TabStateService {
         this.deletingCapsuleIds.clear();
         this.deletedRequestIds.clear();
         this.deletedGroupIds.clear();
+        this.checkedGroupCapsules.clear();
+        this.inFlightGroupLoads.clear();
         this.idRedirects.clear();
 
         this.openTabIds.set([]);
@@ -3384,25 +3393,42 @@ export class TabStateService {
         return ok;
     }
 
-    async loadGroupsForCapsule(capsuleId: string): Promise<RequestGroup[]> {
+    async loadGroupsForCapsule(capsuleId: string, forceRefresh = false): Promise<RequestGroup[]> {
         if (!capsuleId) return [];
         const existing = this.getGroupsForCapsule(capsuleId);
-        if (existing.length > 0) return existing;
-
-        const targetCap = this.capsules().find(c => c.id === capsuleId);
-        const vs = this.getVariableService();
-        if (
-            this.isBrowser &&
-            this.authService.isLoggedIn() &&
-            vs &&
-            this.isValidGuid(capsuleId) &&
-            !targetCap?.isLocalOnly
-        ) {
-            try {
-                await vs.loadVariablesFromBackend(false, capsuleId);
-            } catch {}
+        if (!forceRefresh && (existing.length > 0 || this.checkedGroupCapsules.has(capsuleId))) {
+            return existing;
         }
-        return this.getGroupsForCapsule(capsuleId);
+
+        const inFlight = this.inFlightGroupLoads.get(capsuleId);
+        if (inFlight) return inFlight;
+
+        const loadPromise = (async () => {
+            const targetCap = this.capsules().find(c => c.id === capsuleId);
+            const vs = this.getVariableService();
+            if (
+                this.isBrowser &&
+                this.authService.isLoggedIn() &&
+                vs &&
+                this.isValidGuid(capsuleId) &&
+                !targetCap?.isLocalOnly
+            ) {
+                try {
+                    await vs.loadVariablesFromBackend(false, capsuleId);
+                } catch {}
+            }
+            this.checkedGroupCapsules.add(capsuleId);
+            return this.getGroupsForCapsule(capsuleId);
+        })();
+
+        this.inFlightGroupLoads.set(capsuleId, loadPromise);
+        try {
+            return await loadPromise;
+        } finally {
+            if (this.inFlightGroupLoads.get(capsuleId) === loadPromise) {
+                this.inFlightGroupLoads.delete(capsuleId);
+            }
+        }
     }
 
     async transferRequestsToCapsule(
