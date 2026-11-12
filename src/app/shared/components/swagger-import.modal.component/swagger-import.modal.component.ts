@@ -1,4 +1,4 @@
-import { Component, signal, inject, ChangeDetectionStrategy, output, ViewChild, ElementRef, HostListener } from '@angular/core';
+import { Component, signal, computed, inject, ChangeDetectionStrategy, output, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { generateUUID } from '../../utils/uuid.util';
@@ -29,6 +29,9 @@ export class SwaggerImportModalComponent {
     hasError = signal(false);
     isImporting = signal(false);
     saveToBackend = signal(true);
+    importIntoActiveCapsule = signal(false);
+    hasActiveCapsule = computed(() => Boolean(this.tabStateService.activeCapsuleId()));
+    activeCapsuleName = computed(() => this.tabStateService.activeCapsuleName() || 'Current Capsule');
 
     open() {
         this.isOpen.set(true);
@@ -36,6 +39,7 @@ export class SwaggerImportModalComponent {
         this.statusMessage.set('');
         this.hasError.set(false);
         this.saveToBackend.set(true);
+        this.importIntoActiveCapsule.set(false);
         setTimeout(() => this.inputRef?.nativeElement?.focus(), 150);
     }
 
@@ -75,7 +79,8 @@ export class SwaggerImportModalComponent {
                 return;
             }
 
-            const capId = this.tabStateService.createId();
+            const activeCapId = this.importIntoActiveCapsule() ? (this.tabStateService.activeCapsuleId() || null) : null;
+            const capId = activeCapId || this.tabStateService.createId();
             result.requests.forEach(req => req.capsuleId = capId);
 
             await this.tabStateService.importData({
@@ -87,9 +92,13 @@ export class SwaggerImportModalComponent {
                     variables: result.variables
                 }],
                 variables: result.variables
-            }, { saveToBackend: this.saveToBackend() });
+            }, {
+                saveToBackend: this.saveToBackend(),
+                targetCapsuleId: activeCapId
+            });
 
-            const successMessage = `Imported ${result.requests.length} requests from ${result.collectionName}.`;
+            const destinationLabel = activeCapId ? this.activeCapsuleName() : result.collectionName;
+            const successMessage = `Imported ${result.requests.length} requests into "${destinationLabel}".`;
             this.onImportStatus.emit({ message: successMessage, isError: false });
             this.setStatus(successMessage, false);
             setTimeout(() => this.close(), 800);

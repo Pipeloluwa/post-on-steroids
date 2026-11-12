@@ -3443,38 +3443,9 @@ export class TabStateService {
 
         const isOnline = this.isBrowser && this.authService.isLoggedIn();
 
-        // Ensure target capsule exists on backend if logged in and currently local-only
-        if (isOnline && (targetCap.isLocalOnly || effectiveTargetCapId === '1' || !this.isValidGuid(effectiveTargetCapId))) {
-            const createPayload: any = {
-                name: targetCap.name,
-                autoAuthEnabled: targetCap.autoAuthEnabled || 'off',
-                autoAuthEndpointId: null
-            };
-            if (this.isValidGuid(effectiveTargetCapId) && effectiveTargetCapId !== '1') {
-                createPayload.id = effectiveTargetCapId;
-            }
-            const capRes = await firstValueFrom(
-                this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, createPayload)
-            );
-            const promotedId = capRes?.data?.id || effectiveTargetCapId;
-            const oldTargetId = effectiveTargetCapId;
-            effectiveTargetCapId = promotedId;
-            targetCap = {
-                ...targetCap,
-                id: effectiveTargetCapId,
-                isLocalOnly: false
-            };
-            this.capsules.update(list => list.map(c => c.id === oldTargetId ? targetCap! : c));
-            if (oldTargetId !== effectiveTargetCapId && this.isBrowser) {
-                const oldGroups = this.getGroupsForCapsule(oldTargetId);
-                if (oldGroups.length > 0) {
-                    this.setGroupsForCapsule(
-                        effectiveTargetCapId,
-                        oldGroups.map(g => ({ ...g, capsuleId: effectiveTargetCapId })),
-                        false
-                    );
-                }
-            }
+        if (isOnline) {
+            targetCap = await this.ensureCapsuleOnBackend(targetCap);
+            effectiveTargetCapId = targetCap.id;
         }
 
         const targetIsBackend = isOnline && !targetCap.isLocalOnly && this.isValidGuid(effectiveTargetCapId);
@@ -3949,6 +3920,367 @@ export class TabStateService {
         };
     }
 
+    private async ensureCapsuleOnBackend(targetCap: Capsule): Promise<Capsule> {
+        if (!this.isBrowser || !this.authService.isLoggedIn()) return targetCap;
+        const oldId = targetCap.id;
+        if (!targetCap.isLocalOnly && oldId !== '1' && this.isValidGuid(oldId)) {
+            return targetCap;
+        }
+
+        const createPayload: any = {
+            name: targetCap.name,
+            autoAuthEnabled: targetCap.autoAuthEnabled || 'off',
+            autoAuthEndpointId: null
+        };
+        if (this.isValidGuid(oldId) && oldId !== '1') {
+            createPayload.id = oldId;
+        }
+
+        const capRes = await firstValueFrom(
+            this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, createPayload)
+        );
+        const promotedId = capRes?.data?.id || oldId;
+        const promoted: Capsule = {
+            ...targetCap,
+            id: promotedId,
+            isLocalOnly: false
+        };
+
+        this.capsules.update(list => list.map(c => c.id === oldId ? promoted : c));
+        if (this.activeCapsuleId() === oldId) {
+            this.activeCapsuleId.set(promotedId);
+            if (this.isBrowser) {
+                localStorage.setItem('onsteroids_active_capsule', promotedId);
+            }
+        }
+
+        if (oldId !== promotedId) {
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const [k, st] of next.entries()) {
+                    if (st.capsuleId === oldId) next.set(k, { ...st, capsuleId: promotedId });
+                }
+                return next;
+            });
+            this.savedCapsules.update(col => col.map(r => r.capsuleId === oldId ? { ...r, capsuleId: promotedId } : r));
+            const oldGroups = this.getGroupsForCapsule(oldId);
+            if (oldGroups.length > 0) {
+                this.setGroupsForCapsule(
+                    promotedId,
+                    oldGroups.map(g => ({ ...g, capsuleId: promotedId })),
+                    false
+                );
+            }
+            const oldOrder = this.getRequestOrderForCapsule(oldId);
+            if (oldOrder.length > 0) {
+                this.capsuleRequestOrderMap.update(m => new Map(m).set(promotedId, oldOrder));
+                if (this.isBrowser) {
+                    try {
+                        localStorage.setItem(`onsteroids_capsule_order_${promotedId}`, JSON.stringify(oldOrder));
+                    } catch {}
+                }
+            }
+        }
+        return promoted;
+    }
+
+    private async importIntoExistingCapsule(
+        targetCapInput: Capsule,
+        data: {
+            capsules: {
+                id?: string;
+                name: string;
+                autoAuthEnabled?: string;
+                autoAuthEndpointId?: string | null;
+                requests: RequestState[];
+                groups?: RequestGroup[];
+                requestOrder?: string[];
+                variables?: IGlobalVariable[];
+                variableSources?: Record<string, any>;
+            }[];
+            variables?: IGlobalVariable[];
+        },
+        shouldSaveToBackend: boolean
+    ): Promise<{ capsulesCount: number; requestsCount: number }> {
+        const vs = this.getVariableService();
+        if (vs) {
+            await vs.waitForActiveSync();
+        }
+
+        const isOnline = this.isBrowser && this.authService.isLoggedIn();
+        let targetCap = (shouldSaveToBackend && isOnline)
+            ? await this.ensureCapsuleOnBackend(targetCapInput)
+            : targetCapInput;
+        const targetCapId = targetCap.id;
+        const canPersistBackend = shouldSaveToBackend && isOnline && !targetCap.isLocalOnly && this.isValidGuid(targetCapId);
+
+        if (canPersistBackend && vs && targetCapId !== this.activeCapsuleId()) {
+            await vs.loadVariablesFromBackend(false, targetCapId).catch(() => {});
+        }
+
+        const existingGroups = [...this.getGroupsForCapsule(targetCapId)];
+        const existingOrder = [...this.getRequestOrderForCapsule(targetCapId)];
+        const mergedGroups: RequestGroup[] = [...existingGroups];
+        const addedRootOrderIds: string[] = [];
+        const allNewRequests: RequestState[] = [];
+        const mergedVarMap = new Map<string, IGlobalVariable>();
+
+        const existingVars = vs
+            ? (targetCapId === this.activeCapsuleId() ? vs.variables() : vs.getCachedVariablesForCapsule(targetCapId))
+            : [];
+        for (const ev of existingVars) {
+            const kLower = (ev.key || '').trim().toLowerCase();
+            if (kLower) mergedVarMap.set(kLower, { ...ev });
+        }
+        const mergedVarSources: Record<string, any> = vs ? { ...vs.getSourceMapForCapsule(targetCapId) } : {};
+
+        for (const capInput of data.capsules) {
+            const reqIdMap = new Map<string, string>();
+            const stagedRequests: RequestState[] = [];
+
+            for (const rawReq of (capInput.requests || [])) {
+                const newId = this.createId();
+                if (rawReq.id) reqIdMap.set(rawReq.id, newId);
+                const cloned: RequestState = {
+                    ...structuredClone(rawReq),
+                    id: newId,
+                    capsuleId: targetCapId,
+                    isDirty: !canPersistBackend,
+                    isLoading: false
+                };
+                stagedRequests.push(cloned);
+            }
+
+            // Remap postTriggerTabId using local reqIdMap first
+            for (const sr of stagedRequests) {
+                if (sr.postTriggerTabId) {
+                    sr.postTriggerTabId = reqIdMap.get(sr.postTriggerTabId) || sr.postTriggerTabId;
+                }
+            }
+
+            let finalRequests: RequestState[] = stagedRequests;
+            if (canPersistBackend && stagedRequests.length > 0) {
+                const savedList: RequestState[] = [];
+                for (let idx = 0; idx < stagedRequests.length; idx++) {
+                    const sr = stagedRequests[idx];
+                    const origOldId = capInput.requests[idx]?.id;
+                    const payload = this.mapStateToSaveRequest(sr, targetCapId, targetCap.name);
+                    const res = await firstValueFrom(
+                        this.http.post<{ data: any }>(`${API_BASE_URL}/request/save`, payload)
+                    );
+                    const savedDto = res?.data;
+                    const mapped = savedDto ? this.mapDtoToState({ ...savedDto, capsuleId: targetCapId }) : sr;
+                    if (origOldId) reqIdMap.set(origOldId, mapped.id);
+                    reqIdMap.set(sr.id, mapped.id);
+
+                    mapped.capsuleId = targetCapId;
+                    mapped.groupId = sr.groupId ?? null;
+                    mapped.autoAuthEnabled = sr.autoAuthEnabled;
+                    mapped.postTriggerTabId = sr.postTriggerTabId ?? mapped.postTriggerTabId ?? null;
+                    if (sr.settings) mapped.settings = { ...mapped.settings, ...sr.settings };
+                    if (sr.encryption) mapped.encryption = { ...mapped.encryption, ...sr.encryption };
+                    if (sr.scripts) mapped.scripts = { ...mapped.scripts, ...sr.scripts };
+                    if (sr.bodyWrapStyle) mapped.bodyWrapStyle = sr.bodyWrapStyle;
+                    if (sr.responseWrapStyle) mapped.responseWrapStyle = sr.responseWrapStyle;
+                    if (sr.responseActiveMode) mapped.responseActiveMode = sr.responseActiveMode;
+                    if (sr.consoleWrap !== undefined) mapped.consoleWrap = sr.consoleWrap;
+                    mapped.isDirty = false;
+                    savedList.push(mapped);
+                }
+
+                // Second pass if postTriggerTabId changed after server ID assignment
+                const triggerFixPromises: Promise<any>[] = [];
+                for (const mr of savedList) {
+                    if (mr.postTriggerTabId) {
+                        const remapped = reqIdMap.get(mr.postTriggerTabId) || mr.postTriggerTabId;
+                        if (remapped !== mr.postTriggerTabId) {
+                            mr.postTriggerTabId = remapped;
+                            triggerFixPromises.push(
+                                firstValueFrom(
+                                    this.http.post(`${API_BASE_URL}/request/save`, this.mapStateToSaveRequest(mr, targetCapId, targetCap.name))
+                                ).catch(() => {})
+                            );
+                        }
+                    }
+                }
+                if (triggerFixPromises.length > 0) {
+                    await Promise.allSettled(triggerFixPromises);
+                }
+                finalRequests = savedList;
+            }
+
+            // Remap groups (folders) and assign requests into them
+            const newGroupsMap = new Map<string, RequestGroup>();
+            if (Array.isArray(capInput.groups) && capInput.groups.length > 0) {
+                for (const g of capInput.groups) {
+                    const newGId = 'grp_' + this.createId();
+                    if (g.id) reqIdMap.set(g.id, newGId);
+                    const mappedGroup: RequestGroup = {
+                        id: newGId,
+                        name: g.name || 'Folder',
+                        capsuleId: targetCapId,
+                        isExpanded: g.isExpanded ?? true,
+                        requestIds: (g.requestIds || []).map(oldId => reqIdMap.get(oldId) || oldId),
+                        createdAt: Date.now()
+                    };
+                    mergedGroups.push(mappedGroup);
+                    newGroupsMap.set(newGId, mappedGroup);
+                }
+
+                const reqToNewGroup = new Map<string, string>();
+                for (const ng of newGroupsMap.values()) {
+                    for (const rId of ng.requestIds) reqToNewGroup.set(rId, ng.id);
+                }
+                for (const fr of finalRequests) {
+                    const mappedGId = reqToNewGroup.get(fr.id) || (fr.groupId ? reqIdMap.get(fr.groupId) : undefined);
+                    fr.groupId = mappedGId ?? null;
+                }
+            } else {
+                for (const fr of finalRequests) {
+                    fr.groupId = null;
+                }
+            }
+
+            if (Array.isArray(capInput.requestOrder) && capInput.requestOrder.length > 0) {
+                for (const oldEntryId of capInput.requestOrder) {
+                    const remappedEntryId = reqIdMap.get(oldEntryId) || oldEntryId;
+                    if (!addedRootOrderIds.includes(remappedEntryId)) {
+                        addedRootOrderIds.push(remappedEntryId);
+                    }
+                }
+            } else {
+                for (const ng of newGroupsMap.values()) {
+                    addedRootOrderIds.push(ng.id);
+                }
+                for (const fr of finalRequests) {
+                    if (!fr.groupId) addedRootOrderIds.push(fr.id);
+                }
+            }
+
+            // Merge variables and remapped variableSources cleanly into destination capsule
+            if (capInput.variableSources && typeof capInput.variableSources === 'object') {
+                for (const [k, src] of Object.entries(capInput.variableSources)) {
+                    if (src && typeof src === 'object') {
+                        const clonedSrc = { ...src, capsuleId: targetCapId };
+                        if (clonedSrc.tabId) clonedSrc.tabId = reqIdMap.get(clonedSrc.tabId) || clonedSrc.tabId;
+                        if (clonedSrc.requestId) clonedSrc.requestId = reqIdMap.get(clonedSrc.requestId) || clonedSrc.requestId;
+                        mergedVarSources[k.toLowerCase()] = clonedSrc;
+                    }
+                }
+            }
+
+            for (const iv of (capInput.variables || data.variables || [])) {
+                const keyTrimmed = (iv.key || '').trim();
+                const kLower = keyTrimmed.toLowerCase();
+                if (!kLower || keyTrimmed.startsWith('__')) continue;
+                let remappedSrc = iv.source ? { ...iv.source, capsuleId: targetCapId } : mergedVarSources[kLower];
+                if (remappedSrc) {
+                    if (remappedSrc.tabId) remappedSrc.tabId = reqIdMap.get(remappedSrc.tabId) || remappedSrc.tabId;
+                    if (remappedSrc.requestId) remappedSrc.requestId = reqIdMap.get(remappedSrc.requestId) || remappedSrc.requestId;
+                    mergedVarSources[kLower] = remappedSrc;
+                }
+                if (!mergedVarMap.has(kLower)) {
+                    mergedVarMap.set(kLower, {
+                        ...iv,
+                        id: iv.id && iv.id.length > 8 ? iv.id : this.createId(),
+                        ...(remappedSrc ? { source: remappedSrc } : {})
+                    });
+                }
+            }
+
+            allNewRequests.push(...finalRequests);
+        }
+
+        // Apply merged state into memory
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const req of allNewRequests) {
+                next.set(req.id, req);
+            }
+            return next;
+        });
+
+        this.setGroupsForCapsule(targetCapId, mergedGroups, false);
+        this.markLocalStructureTimestamp(targetCapId);
+
+        if (existingOrder.length > 0 && addedRootOrderIds.length > 0) {
+            const nextOrder = [...existingOrder];
+            for (const entryId of addedRootOrderIds) {
+                if (!nextOrder.includes(entryId)) nextOrder.push(entryId);
+            }
+            this.capsuleRequestOrderMap.update(m => new Map(m).set(targetCapId, nextOrder));
+            if (this.isBrowser) {
+                try {
+                    localStorage.setItem(`onsteroids_capsule_order_${targetCapId}`, JSON.stringify(nextOrder));
+                } catch {}
+            }
+        }
+
+        const mergedVars = Array.from(mergedVarMap.values());
+        if (vs) {
+            if (Object.keys(mergedVarSources).length > 0) {
+                vs.saveSourceMapForCapsule(targetCapId, mergedVarSources);
+            }
+            if (targetCapId === this.activeCapsuleId()) {
+                vs.setVariables(mergedVars, targetCapId, false);
+                vs.reanchorVariableSources(targetCapId);
+            } else if (this.isBrowser && mergedVars.length > 0) {
+                localStorage.setItem(`onsteroids_vars_${targetCapId}`, JSON.stringify(mergedVars));
+            }
+            if (canPersistBackend) {
+                await vs.syncVariablesToBackend(targetCapId).catch(() => {});
+            }
+        }
+
+        if (targetCapId === this.activeCapsuleId()) {
+            const existingSavedIds = new Set(this.savedCapsules().map(r => r.id));
+            const additions = allNewRequests.filter(r => !existingSavedIds.has(r.id));
+            if (additions.length > 0) {
+                this.savedCapsules.update(col => [...col, ...additions]);
+            }
+
+            const newIds = allNewRequests.map(r => r.id);
+            if (newIds.length > 0) {
+                this.openTabIds.update(ids => {
+                    const next = [...ids];
+                    for (const nId of newIds) {
+                        if (!next.includes(nId)) next.push(nId);
+                    }
+                    return next;
+                });
+                this.activeTabId.set(newIds[0]);
+                if (this.isBrowser) {
+                    localStorage.setItem(`onsteroids_open_tab_ids_${targetCapId}`, JSON.stringify(this.openTabIds()));
+                    localStorage.setItem(`onsteroids_active_tab_${targetCapId}`, newIds[0]);
+                    localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(this.openTabIds()));
+                    localStorage.setItem('onsteroids_active_tab', newIds[0]);
+                }
+            }
+        } else {
+            await this.switchCapsule({ id: targetCapId, name: targetCap.name });
+            if (allNewRequests.length > 0) {
+                this.openTabIds.update(ids => {
+                    const next = [...ids];
+                    for (const r of allNewRequests) {
+                        if (!next.includes(r.id)) next.push(r.id);
+                    }
+                    return next;
+                });
+                this.activeTabId.set(allNewRequests[0].id);
+            }
+        }
+
+        this.snapshotCurrentSession(undefined, false, true);
+        if (canPersistBackend) {
+            this.syncWorkspaceStateToBackend(true);
+        }
+
+        return {
+            capsulesCount: 1,
+            requestsCount: allNewRequests.length
+        };
+    }
+
     async importData(data: {
         capsules: {
             id?: string;
@@ -3962,7 +4294,7 @@ export class TabStateService {
             variableSources?: Record<string, any>;
         }[];
         variables?: IGlobalVariable[];
-    }, options?: { saveToBackend?: boolean }): Promise<{ capsulesCount: number; requestsCount: number }> {
+    }, options?: { saveToBackend?: boolean; targetCapsuleId?: string | null }): Promise<{ capsulesCount: number; requestsCount: number }> {
         if (!data || !data.capsules || data.capsules.length === 0) {
             return { capsulesCount: 0, requestsCount: 0 };
         }
@@ -3970,6 +4302,13 @@ export class TabStateService {
         const shouldSaveToBackend = options?.saveToBackend !== undefined
             ? options.saveToBackend
             : (this.isBrowser && this.authService.isLoggedIn());
+
+        if (options?.targetCapsuleId) {
+            const targetCap = this.capsules().find(c => c.id === options.targetCapsuleId);
+            if (targetCap) {
+                return this.importIntoExistingCapsule(targetCap, data, shouldSaveToBackend);
+            }
+        }
 
         let totalRequests = 0;
         let lastCreatedCap: Capsule | null = null;
@@ -4368,7 +4707,7 @@ export class TabStateService {
         };
     }
 
-    async importCapsuleFromUrl(urlOrToken: string): Promise<{ capsuleName: string; requestsCount: number }> {
+    async importCapsuleFromUrl(urlOrToken: string, targetCapsuleId?: string | null): Promise<{ capsuleName: string; requestsCount: number }> {
         let token = urlOrToken.trim();
         if (token.includes('share=')) {
             try {
@@ -4528,9 +4867,13 @@ export class TabStateService {
                 variableSources: sharedVarSources
             }],
             variables: extractedVars
-        });
+        }, targetCapsuleId ? { targetCapsuleId } : undefined);
 
-        return { capsuleName: capName, requestsCount: importRes.requestsCount };
+        const resolvedName = targetCapsuleId
+            ? (this.capsules().find(c => c.id === targetCapsuleId)?.name || capName)
+            : capName;
+
+        return { capsuleName: resolvedName, requestsCount: importRes.requestsCount };
     }
 
     async createExample(requestId: string, name: string, exampleData: any): Promise<any> {

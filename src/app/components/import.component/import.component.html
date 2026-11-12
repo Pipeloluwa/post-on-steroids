@@ -73,10 +73,19 @@
                     Enter the shared capsule URL or the share token you received to import all its requests into a new capsule in your workspace.
                 </p>
 
-                <div class="flex flex-col gap-2">
+                <div class="flex flex-col gap-3">
                     <input type="text" [(ngModel)]="shareUrlInput" (keydown.enter)="importFromShareLink()"
                         placeholder="e.g. https://onsteroids.app/import?share=token or raw token"
                         class="w-full px-4 py-2.5 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-sm outline-none focus:border-(--postonsteroids-accent)">
+                    @if (hasActiveCapsule()) {
+                        <label class="flex items-center gap-2 text-xs text-(--postonsteroids-text-primary) cursor-pointer select-none">
+                            <input type="checkbox"
+                                   [checked]="importShareIntoActive()"
+                                   (change)="importShareIntoActive.set($any($event.target).checked)"
+                                   class="accent-(--postonsteroids-accent) cursor-pointer" />
+                            <span>Import into current active capsule (<strong class="text-(--postonsteroids-accent)">{{ activeCapsuleName() }}</strong>)</span>
+                        </label>
+                    }
                 </div>
 
                 <div class="flex justify-end gap-3 pt-2">
@@ -150,6 +159,32 @@
                             </div>
                         }
                     </div>
+
+                    @if (hasActiveCapsule()) {
+                        <div class="p-3 rounded-xl bg-(--postonsteroids-bg-tertiary)/70 border border-(--postonsteroids-border) flex flex-col gap-2">
+                            <span class="text-[11px] font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                                Import Destination
+                            </span>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button type="button"
+                                        (click)="importFileIntoActive.set(false)"
+                                        [class.border-(--postonsteroids-accent)]=" !importFileIntoActive()"
+                                        [class.bg-(--postonsteroids-accent)/10]="!importFileIntoActive()"
+                                        class="px-3 py-2 rounded-lg border border-(--postonsteroids-border) text-left text-[11.5px] transition-colors cursor-pointer">
+                                    <div class="font-semibold text-(--postonsteroids-text-primary)">Create New Capsule(s)</div>
+                                    <div class="text-[10.5px] text-(--postonsteroids-text-muted)">Keep separate from current capsule</div>
+                                </button>
+                                <button type="button"
+                                        (click)="importFileIntoActive.set(true)"
+                                        [class.border-(--postonsteroids-accent)]="importFileIntoActive()"
+                                        [class.bg-(--postonsteroids-accent)/10]="importFileIntoActive()"
+                                        class="px-3 py-2 rounded-lg border border-(--postonsteroids-border) text-left text-[11.5px] transition-colors cursor-pointer">
+                                    <div class="font-semibold text-(--postonsteroids-accent) truncate">Merge into "{{ activeCapsuleName() }}"</div>
+                                    <div class="text-[10.5px] text-(--postonsteroids-text-muted)">Add into current active capsule</div>
+                                </button>
+                            </div>
+                        </div>
+                    }
 
                     <!-- Prompt Text -->
                     <p class="text-xs text-(--postonsteroids-text-secondary) leading-relaxed">

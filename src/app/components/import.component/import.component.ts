@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, OnInit, signal, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -62,9 +62,13 @@ export class ImportComponent implements OnInit {
 
     showShareUrlModal = signal<boolean>(false);
     shareUrlInput = signal<string>('');
+    importShareIntoActive = signal<boolean>(false);
 
     showSavePrompt = signal<boolean>(false);
     pendingImport = signal<PendingImport | null>(null);
+    importFileIntoActive = signal<boolean>(false);
+    hasActiveCapsule = computed(() => Boolean(this.tabStateService.activeCapsuleId()));
+    activeCapsuleName = computed(() => this.tabStateService.activeCapsuleName() || 'Current Capsule');
 
     ngOnInit() {
         this.route.queryParams.subscribe(params => {
@@ -81,10 +85,13 @@ export class ImportComponent implements OnInit {
 
         this.isImporting.set(true);
         try {
-            const res = await this.tabStateService.importCapsuleFromUrl(input);
-            this.showStatus(`Successfully imported capsule "${res.capsuleName}" with ${res.requestsCount} request(s)!`, false);
+            const targetCapId = this.importShareIntoActive() ? (this.tabStateService.activeCapsuleId() || null) : null;
+            const res = await this.tabStateService.importCapsuleFromUrl(input, targetCapId);
+            const actionLabel = targetCapId ? `into active capsule "${res.capsuleName}"` : `capsule "${res.capsuleName}"`;
+            this.showStatus(`Successfully imported ${res.requestsCount} request(s) (${actionLabel})!`, false);
             this.showShareUrlModal.set(false);
             this.shareUrlInput.set('');
+            this.importShareIntoActive.set(false);
         } catch (err: any) {
             console.error('Import from share link failed:', err);
             this.showStatus(err?.message || 'Failed to import shared capsule. Link may be invalid or expired.', true);
@@ -107,6 +114,7 @@ export class ImportComponent implements OnInit {
                 const pending = this.prepareImportData(data, file.name);
                 
                 this.pendingImport.set(pending);
+                this.importFileIntoActive.set(false);
                 this.showSavePrompt.set(true);
             } catch (err: any) {
                 console.error('Import validation failed:', err);
@@ -133,9 +141,16 @@ export class ImportComponent implements OnInit {
         this.isImporting.set(true);
 
         try {
-            const count = await this.tabStateService.importData(pending.payload, { saveToBackend });
-            const destination = saveToBackend ? 'and saved to cloud database' : 'into local workspace (not saved to cloud)';
-            this.showStatus(`Import successful! Imported ${count.capsulesCount} capsule(s) and ${count.requestsCount} request(s) ${destination}.`, false);
+            const targetCapId = this.importFileIntoActive() ? (this.tabStateService.activeCapsuleId() || null) : null;
+            const count = await this.tabStateService.importData(pending.payload, {
+                saveToBackend,
+                targetCapsuleId: targetCapId
+            });
+            const storageNote = saveToBackend ? 'and saved to cloud database' : 'into local workspace (not saved to cloud)';
+            const summary = targetCapId
+                ? `Import successful! Added ${count.requestsCount} request(s) into "${this.activeCapsuleName()}" ${storageNote}.`
+                : `Import successful! Imported ${count.capsulesCount} capsule(s) and ${count.requestsCount} request(s) ${storageNote}.`;
+            this.showStatus(summary, false);
         } catch (err: any) {
             console.error('Import failed:', err);
             const msg = err?.message || 'Failed to complete import.';

@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
 
@@ -18,6 +19,13 @@ import { inject } from '@angular/core';
 export class CollectionsComponent {
     tabStateService = inject(TabStateService);
     private notificationService = inject(NotificationService);
+    private router = inject(Router);
+
+    async openCapsule(item: Capsule): Promise<void> {
+        const switchTask = this.tabStateService.switchCapsule(item);
+        await this.router.navigate(['/']);
+        await switchTask;
+    }
 
     sortedCapsules = computed(() => {
         return [...this.tabStateService.capsules()].sort((a, b) => b.createdAt - a.createdAt);

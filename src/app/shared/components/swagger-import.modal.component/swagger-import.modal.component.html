@@ -17,10 +17,18 @@
             class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30"
             aria-label="Swagger URL input" />
 
-        <label class="mt-3 flex items-center gap-2 cursor-pointer select-none text-xs text-(--postonsteroids-text-secondary)">
+        @if (hasActiveCapsule()) {
+        <label class="mt-3 flex items-center gap-2 cursor-pointer select-none text-xs text-(--postonsteroids-text-primary)">
+            <input type="checkbox" [checked]="importIntoActiveCapsule()" (change)="importIntoActiveCapsule.set($any($event.target).checked)"
+                class="cursor-pointer rounded border-(--postonsteroids-border) text-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30" />
+            <span class="cursor-pointer">Import into current active capsule (<strong class="text-(--postonsteroids-accent)">{{ activeCapsuleName() }}</strong>)</span>
+        </label>
+        }
+
+        <label class="mt-2.5 flex items-center gap-2 cursor-pointer select-none text-xs text-(--postonsteroids-text-secondary)">
             <input type="checkbox" [checked]="saveToBackend()" (change)="saveToBackend.set($any($event.target).checked)"
                 class="cursor-pointer rounded border-(--postonsteroids-border) text-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30" />
-            <span class="cursor-pointer">Save imported Swagger capsule to backend database</span>
+            <span class="cursor-pointer">Save imported Swagger data to backend database</span>
         </label>
 
         @if (statusMessage()) {
