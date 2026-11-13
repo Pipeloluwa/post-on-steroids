@@ -1,5 +1,17 @@
 import { environment } from "../../../environments/environment";
 
+/**
+ * Detects whether the code is running inside the Electron desktop application.
+ */
+export function isElectronApp(): boolean {
+    if (typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent)) {
+        return true;
+    }
+    if (typeof window !== 'undefined' && (!!(window as any).electronAPI || window.location?.protocol === 'file:')) {
+        return true;
+    }
+    return false;
+}
 
 /**
  * Determines whether a given URL points to localhost or a 127.x.x.x loopback address.

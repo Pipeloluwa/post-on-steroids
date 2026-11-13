@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
 import { generateUUID } from '../utils/uuid.util';
-import { isLocalhostOrLoopbackUrl } from '../utils/url.util';
+import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 import { environment } from '../../../environments/environment';
 import { TabStateService, FormDataRow } from './tab.state.service';
 import { VariableService } from './variable.service';
@@ -394,19 +394,23 @@ export class RequestExecutionService {
                 headers: httpHeaders,
                 params: httpParams,
                 observe: 'response' as const,
-                responseType: 'text' as const
+                responseType: 'text' as const,
+                withCredentials: freshState.settings?.enableCookies ?? true
             };
 
-            // Making the Call
-            let finalUrl = resolvedUrl;
+            // Making the Call: ensure protocol so relative URLs do not resolve against file:/// in Electron
+            let finalUrl = resolvedUrl.trim();
+            const isLoopback = isLocalhostOrLoopbackUrl(finalUrl);
+            if (!/^https?:\/\//i.test(finalUrl)) {
+                finalUrl = (isLoopback ? 'http://' : 'https://') + finalUrl;
+            }
 
             // Check if running inside Electron wrapper
-            const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
-            const isLoopback = isLocalhostOrLoopbackUrl(resolvedUrl);
+            const isElectron = isElectronApp();
 
-            // In the browser version, route every URL call through proxy to avoid CORS issues,
-            // EXCEPT localhost or 127.* which must be called directly.
-            let isUsingProxy = !isLoopback && (!isElectron || !!freshState.settings?.bypassCors);
+            // Only browser uses proxy to bypass CORS restrictions on remote endpoints.
+            // Desktop / Electron executes all requests directly from the client without proxy.
+            const isUsingProxy = !isElectron && !isLoopback && (freshState.settings?.bypassCors !== false);
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
             let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;
@@ -522,7 +526,11 @@ export class RequestExecutionService {
                             reqObservable = this.http.post(finalUrl, finalBody, reqOptions); break;
                         case 'PUT':
                             reqObservable = this.http.put(finalUrl, finalBody, reqOptions); break;
-                        case 'DELETE': reqObservable = this.http.delete(finalUrl, reqOptions); break;
+                        case 'DELETE':
+                            reqObservable = (finalBody !== null && finalBody !== undefined)
+                                ? this.http.request('DELETE', finalUrl, { ...reqOptions, body: finalBody })
+                                : this.http.delete(finalUrl, reqOptions);
+                            break;
                         case 'PATCH': reqObservable = this.http.patch(finalUrl, finalBody, reqOptions); break;
                         case 'HEAD': reqObservable = this.http.head(finalUrl, reqOptions); break;
                         case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
@@ -590,7 +598,9 @@ export class RequestExecutionService {
                                 ? 'Failed to connect to OnSteroid proxy (proxy.onsteroid.com). Please check your internet connection or verify the endpoint.'
                                 : `Failed to connect to local proxy (OnSteroidApi at ${environment.proxyUrl}). Please ensure OnSteroidApi is running.`;
                         } else {
-                            rawResponseBody = (httpResponse as any)?.message || 'Network Error / CORS Issue. Ensure the endpoint is reachable.';
+                            rawResponseBody = isElectron
+                                ? ((httpResponse as any)?.message || 'Could not connect to the server. Please check the URL, SSL certificate, or network.')
+                                : ((httpResponse as any)?.message || 'Network Error / CORS Issue. Ensure the endpoint is reachable.');
                         }
                     }
                 }

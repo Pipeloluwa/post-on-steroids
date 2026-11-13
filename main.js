@@ -69,6 +69,11 @@ if (app && app.commandLine) {
   app.commandLine.appendSwitch('ignore-certificate-errors');
 }
 
+app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+  event.preventDefault();
+  callback(true);
+});
+
 let mainWindow;
 let isUpdateDownloaded = false;
 let isCheckingOrDownloadingUpdate = false;

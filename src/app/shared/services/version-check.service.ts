@@ -1,7 +1,7 @@
 import { Injectable, inject, PLATFORM_ID, NgZone, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { APP_VERSION_INFO } from '../../../environments/version';
-import { getAppBaseUrl } from '../utils/url.util';
+import { getAppBaseUrl, isElectronApp } from '../utils/url.util';
 
 const LAST_SEEN_VERSION_STORAGE_KEY = 'onsteroids_last_seen_version_info';
 
@@ -12,8 +12,7 @@ export class VersionCheckService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly ngZone = inject(NgZone);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
-  private readonly isElectron =
-    typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+  private readonly isElectron = isElectronApp();
 
   private isUpdating = false;
   private initialized = false;

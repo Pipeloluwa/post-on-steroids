@@ -12,6 +12,7 @@ import { AboutModalComponent } from '../about.modal.component/about.modal.compon
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
 import { DESKTOP_DOWNLOADS_CONFIG, DesktopPackage, buildDownloadLink } from '../../constants/desktop-downloads.constants';
+import { isElectronApp } from '../../utils/url.util';
 
 @Component({
     selector: 'app-navbar-component',
@@ -34,7 +35,7 @@ import { DESKTOP_DOWNLOADS_CONFIG, DesktopPackage, buildDownloadLink } from '../
     }
 })
 export class NavbarComponent {
-    isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+    isElectron = isElectronApp();
     title = input.required<string>();
     isLoggedIn = input.required<boolean>();
     userEmail = input.required<string>();

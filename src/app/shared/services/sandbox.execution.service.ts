@@ -3,7 +3,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { generateUUID } from '../utils/uuid.util';
-import { isLocalhostOrLoopbackUrl } from '../utils/url.util';
+import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
 import { environment } from '../../../environments/environment';
 
@@ -412,7 +412,7 @@ window.addEventListener("message", async (event) => {
   private async handleSandboxFetch(req: SandboxFetchRequest): Promise<void> {
     let outcome: FetchOutcome;
     try {
-      const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent);
+      const isElectron = isElectronApp();
       const useDirect = isElectron || isLocalhostOrLoopbackUrl(req.url);
       outcome = useDirect ? await this.directFetch(req) : await this.proxyFetch(req);
     } catch (err) {

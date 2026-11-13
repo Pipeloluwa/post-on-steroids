@@ -18,6 +18,7 @@ import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/t
 import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet, DEFAULT_ENCRYPTION_SCRIPT_SKELETON, DEFAULT_DECRYPTION_SCRIPT_SKELETON, DEFAULT_PRE_REQUEST_SCRIPT_SKELETON, DEFAULT_POST_RESPONSE_SCRIPT_SKELETON, DEFAULT_TEST_SCRIPT_SKELETON } from '../../../shared/constants/script.snippets.constants';
 import { DialogService } from '../../../shared/services/dialog.service';
 import { sanitizeJsonBodyForScripts } from '../../../shared/utils/format.utils';
+import { isElectronApp } from '../../../shared/utils/url.util';
 
 @Component({
   selector: 'app-payload-types-component',
@@ -36,6 +37,7 @@ export class PayloadTypesComponent {
   scriptManagementService = inject(ScriptManagementService);
   sandboxService = inject(SandboxExecutionService);
   dialogService = inject(DialogService);
+  isElectron = isElectronApp();
 
   private saveScriptSubject = new Subject<{ id: string, name: string, content: string }>();
 

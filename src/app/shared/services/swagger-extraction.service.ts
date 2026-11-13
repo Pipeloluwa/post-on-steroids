@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { isLocalhostOrLoopbackUrl } from '../utils/url.util';
+import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 
 /**
  * Service for extracting OpenAPI/Swagger specifications from various sources
@@ -75,7 +75,7 @@ export class SwaggerExtractionService {
      * Falls back to direct HTTP get if proxy is unavailable.
      */
     private async fetchWithProxy(targetUrl: string, accept = 'application/json'): Promise<{ ok: boolean; status: number; text: string; json: any }> {
-        const isElectron = /electron/i.test(navigator.userAgent);
+        const isElectron = isElectronApp();
         const isLoopback = isLocalhostOrLoopbackUrl(targetUrl);
 
         // Direct fetch for localhost or 127.* since cloud/remote proxy cannot reach local machine
