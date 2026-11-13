@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, effect, inject } from '@angular/core';
+import { Injectable, signal, computed, effect, inject, untracked } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { generateUUID } from '../utils/uuid.util';
 import { firstValueFrom } from 'rxjs';
@@ -42,12 +42,16 @@ export class VariableService {
     }
 
     private inFlightLoads = new Map<string, Promise<void>>();
+    private lastLoadedCapId: string | null = null;
 
     constructor() {
         effect(() => {
             const capId = this.tabStateService.activeCapsuleId();
-            if (capId) {
-                this.loadVariables(capId);
+            if (capId && capId !== this.lastLoadedCapId) {
+                this.lastLoadedCapId = capId;
+                untracked(() => {
+                    this.loadVariables(capId);
+                });
             }
         }, { allowSignalWrites: true });
 
@@ -56,6 +60,7 @@ export class VariableService {
         // Note: TabStateService.loadBackendData() orchestrates variable loading after
         // capsules, requests, and active capsule are fully restored.
         this.authService.onLogout.subscribe(() => {
+            this.lastLoadedCapId = null;
             this.resetVariables();
         });
     }
@@ -155,6 +160,7 @@ export class VariableService {
     public async loadVariables(capsuleId?: string): Promise<void> {
         const user = this.authService.currentUser();
         const capId = capsuleId || this.tabStateService.activeCapsuleId() || '1';
+        this.lastLoadedCapId = capId;
         const sourceMap = this.getSourceMapForCapsule(capId);
 
         let localVars: IGlobalVariable[] | null = null;
@@ -186,17 +192,7 @@ export class VariableService {
 
         // 3. When logged in, fetch latest from backend for this specific capsule (deduplicated)
         if (this.authService.isLoggedIn() && !this.authService.isLoggingOut() && !this.tabStateService.isCapsuleDeleting(capId)) {
-            if (this.inFlightLoads.has(capId)) {
-                await this.inFlightLoads.get(capId);
-                return;
-            }
-            const loadPromise = this.loadVariablesFromBackend(false, capId);
-            this.inFlightLoads.set(capId, loadPromise);
-            try {
-                await loadPromise;
-            } finally {
-                this.inFlightLoads.delete(capId);
-            }
+            await this.loadVariablesFromBackend(false, capId);
         }
     }
 
@@ -275,7 +271,13 @@ export class VariableService {
             return;
         }
 
-        try {
+        if (this.inFlightLoads.has(capId)) {
+            await this.inFlightLoads.get(capId);
+            return;
+        }
+
+        const runLoad = async (): Promise<void> => {
+            try {
             const qs = (!forceNoCapsuleFilter && isGuid) ? `?capsuleId=${capId}` : '';
             const res = await firstValueFrom(
                 this.http.get<{ data: any[] }>(`${API_BASE_URL}/Variable${qs}`)
@@ -386,6 +388,15 @@ export class VariableService {
         } catch (e) {
             console.error('Failed to load variables from backend', e);
         }
+        };
+
+        const loadPromise = runLoad();
+        this.inFlightLoads.set(capId, loadPromise);
+        try {
+            await loadPromise;
+        } finally {
+            this.inFlightLoads.delete(capId);
+        }
     }
 
     async waitForActiveSync(): Promise<void> {
@@ -398,6 +409,9 @@ export class VariableService {
 
     clearCapsuleLocalData(capsuleId: string): void {
         if (!capsuleId) return;
+        if (this.lastLoadedCapId === capsuleId) {
+            this.lastLoadedCapId = null;
+        }
         this.systemSourceVarIds.delete(capsuleId);
         this.systemGroupsVarIds.delete(capsuleId);
         this.inFlightLoads.delete(capsuleId);
@@ -597,6 +611,7 @@ export class VariableService {
     }
 
     resetVariables() {
+        this.lastLoadedCapId = null;
         this.variables.set([
             { id: '1', key: 'baseUrl', value: 'http://acegeld.runasp.net/api/v1', enabled: true }
         ]);

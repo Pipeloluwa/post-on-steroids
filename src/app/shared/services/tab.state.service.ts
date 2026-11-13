@@ -191,7 +191,10 @@ export class TabStateService {
         const user = userParam || this.authService.currentUser();
         const effectiveId = user?.id || user?.email || 'default';
         try {
-            const currentStates = Array.from(this.states().entries());
+            const currentStates: [string, RequestState][] = Array.from(this.states().entries()).map(([id, s]) => [
+                id,
+                s && s.isLoading ? { ...s, isLoading: false } : s
+            ]);
             let storedResponses: Record<string, any> = {};
             try {
                 const rawResp = localStorage.getItem('onsteroids_responses');
@@ -513,10 +516,11 @@ export class TabStateService {
                     if (this.deletedRequestIds.has(id) || (state?.capsuleId && this.deletingCapsuleIds.has(state.capsuleId))) {
                         continue;
                     }
+                    const safeState = state ? { ...state, isLoading: false } : state;
                     if (!next.has(id)) {
-                        next.set(id, state);
+                        next.set(id, safeState);
                     } else {
-                        next.set(id, { ...next.get(id), ...state });
+                        next.set(id, { ...next.get(id), ...safeState, isLoading: false });
                     }
                 }
                 return next;
@@ -2256,7 +2260,10 @@ export class TabStateService {
                 }
                 this.statesSaveTimeout = setTimeout(() => {
                     try {
-                        const currentStates = Array.from(statesMap.entries());
+                        const currentStates: [string, RequestState][] = Array.from(statesMap.entries()).map(([id, st]) => [
+                            id,
+                            st && st.isLoading ? { ...st, isLoading: false } : st
+                        ]);
                         localStorage.setItem('onsteroids_states', JSON.stringify(currentStates));
                     } catch (e) {
                         console.warn('Could not persist all states to localStorage:', e);
@@ -2342,7 +2349,13 @@ export class TabStateService {
         if (savedStates) {
             try {
                 const parsed = JSON.parse(savedStates);
-                this.states.set(new Map(parsed));
+                if (Array.isArray(parsed)) {
+                    const cleanedStates: [string, RequestState][] = parsed.map(([id, state]: [string, any]) => [
+                        id,
+                        state ? { ...state, isLoading: false } : state
+                    ]);
+                    this.states.set(new Map(cleanedStates));
+                }
             } catch (e) {
                 console.error('Failed to load states from storage', e);
             }
@@ -2746,6 +2759,7 @@ export class TabStateService {
                                 ...req,
                                 capsuleId: capsule.id,
                                 groupId: req.groupId ?? existing.groupId ?? null,
+                                isLoading: false,
                                 responseBody: existing.responseBody ?? req.responseBody,
                                 responseStatus: existing.responseStatus ?? req.responseStatus,
                                 responseTime: existing.responseTime ?? req.responseTime,
@@ -6032,7 +6046,7 @@ export class TabStateService {
                             next.set(req.id, {
                                 ...req,
                                 groupId: req.groupId ?? existing.groupId ?? null,
-                                isLoading: existing.isLoading,
+                                isLoading: false,
                                 responseBody: existing.responseBody ?? req.responseBody,
                                 responseStatus: existing.responseStatus ?? req.responseStatus,
                                 responseTime: existing.responseTime ?? req.responseTime,
