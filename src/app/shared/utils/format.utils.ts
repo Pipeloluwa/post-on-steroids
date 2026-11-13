@@ -15,7 +15,8 @@ export const WRAP_STYLE_OPTIONS: WrapStyleOption[] = [
 
 export function formatBodyByStyle(content: any, style: WrapStyle, type: 'JSON' | 'XML' | string): string {
   if (content === null || content === undefined) return '';
-  const isXml = (type || '').toUpperCase() === 'XML';
+  const upper = (type || '').toUpperCase();
+  const isXml = upper === 'XML' || upper.includes('XML') || upper.includes('SOAP');
   const str = typeof content === 'string' ? content : JSON.stringify(content);
 
   if (style === 'collapsed') {
@@ -188,50 +189,144 @@ export function formatJsonCollapsed(content: any): string {
 }
 
 export function formatXmlPretty(xml: string): string {
-  try {
-    const PADDING = '  ';
-    const reg = /(>)(<)(\/*)/g;
-    const formatted = xml.replace(reg, '$1\r\n$2$3');
-    let pad = 0;
-    return formatted.split('\r\n').map((node) => {
-      let indent = 0;
-      if (node.match(/.+<\/\w[^>]*>$/)) {
-        indent = 0;
-      } else if (node.match(/^<\/\w/) && pad > 0) {
-        pad -= 1;
-      } else if (node.match(/^<\w[^>]*[^\/]>.*$/)) {
-        indent = 1;
-      } else {
-        indent = 0;
-      }
-      const padding = PADDING.repeat(pad);
-      pad += indent;
-      return padding + node;
-    }).join('\n');
-  } catch {
-    return xml;
-  }
-}
+  if (!xml || typeof xml !== 'string') return '';
+  const trimmed = xml.trim();
+  if (!trimmed) return '';
 
-export function formatXmlByField(xml: string): string {
   try {
-    const clean = xml.replace(/>\s*</g, '><').trim();
-    const rootMatch = clean.match(/^<([a-zA-Z0-9_\-:]+)([^>]*)>(.*)<\/\1>$/s);
-    if (rootMatch) {
-      const rootOpen = `<${rootMatch[1]}${rootMatch[2]}>`;
-      const rootClose = `</${rootMatch[1]}>`;
-      const inner = rootMatch[3];
-      const childMatches = inner.match(/<([a-zA-Z0-9_\-:]+)[^>]*>.*?<\/\1>|<[^>]+\/>/g);
-      if (childMatches && childMatches.length > 0) {
-        return `${rootOpen}\n  ${childMatches.join('\n  ')}\n${rootClose}`;
+    const tokens = trimmed.match(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[^>]*\?>|<[^>]+>|[^<]+/g) || [];
+    const PADDING = '  ';
+    let pad = 0;
+    const lines: string[] = [];
+
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i].trim();
+      if (!token) continue;
+
+      // XML Declaration <?xml ... ?> or comment <!-- ... --> or DOCTYPE
+      if (token.startsWith('<?') || token.startsWith('<!')) {
+        lines.push(PADDING.repeat(pad) + token);
+        continue;
       }
+
+      // Closing tag </tag>
+      if (token.startsWith('</')) {
+        if (pad > 0) pad--;
+        lines.push(PADDING.repeat(pad) + token);
+        continue;
+      }
+
+      // Self-closing tag <tag ... />
+      if (token.startsWith('<') && (token.endsWith('/>') || token.endsWith('/ >'))) {
+        lines.push(PADDING.repeat(pad) + token);
+        continue;
+      }
+
+      // Opening tag <tag ...>
+      if (token.startsWith('<')) {
+        const next1 = i + 1 < tokens.length ? tokens[i + 1].trim() : '';
+        const next2 = i + 2 < tokens.length ? tokens[i + 2].trim() : '';
+
+        const tagNameMatch = token.match(/^<([a-zA-Z0-9_\-:]+)/);
+        const tagName = tagNameMatch ? tagNameMatch[1] : '';
+
+        if (tagName && next1 && !next1.startsWith('<') && next2 === `</${tagName}>`) {
+          // Compact single-line leaf node: <tag>text</tag>
+          lines.push(PADDING.repeat(pad) + token + next1 + next2);
+          i += 2;
+          continue;
+        }
+
+        if (tagName && next1 === `</${tagName}>`) {
+          lines.push(PADDING.repeat(pad) + token + next1);
+          i += 1;
+          continue;
+        }
+
+        // Parent opening tag
+        lines.push(PADDING.repeat(pad) + token);
+        pad++;
+        continue;
+      }
+
+      // Bare text content
+      lines.push(PADDING.repeat(pad) + token);
     }
-    return clean;
+
+    return lines.join('\n');
   } catch {
     return xml;
   }
 }
 
 export function formatXmlCollapsed(xml: string): string {
-  return xml.replace(/>\s*</g, '><').replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!xml || typeof xml !== 'string') return '';
+  return xml.replace(/>\s+</g, '><').replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function formatXmlByField(xml: string): string {
+  if (!xml || typeof xml !== 'string') return '';
+  const trimmed = xml.trim();
+  if (!trimmed) return '';
+
+  try {
+    // Extract XML declaration if present
+    let decl = '';
+    let bodyContent = trimmed;
+    const declMatch = bodyContent.match(/^<\?[^>]*\?>\s*/);
+    if (declMatch) {
+      decl = declMatch[0].trim() + '\n';
+      bodyContent = bodyContent.slice(declMatch[0].length).trim();
+    }
+
+    // Parse root tag
+    const rootOpenMatch = bodyContent.match(/^<([a-zA-Z0-9_\-:]+)([^>]*)>/);
+    if (!rootOpenMatch) return formatXmlPretty(xml);
+
+    const rootTag = rootOpenMatch[1];
+    const rootCloseTag = `</${rootTag}>`;
+    if (!bodyContent.endsWith(rootCloseTag)) return formatXmlPretty(xml);
+
+    const rootOpen = rootOpenMatch[0];
+    const innerContent = bodyContent.slice(rootOpen.length, bodyContent.length - rootCloseTag.length).trim();
+
+    const children: string[] = [];
+    let depth = 0;
+    let currentChild = '';
+
+    for (let i = 0; i < innerContent.length; i++) {
+      const ch = innerContent[i];
+      currentChild += ch;
+
+      if (ch === '<') {
+        if (innerContent[i + 1] === '/') {
+          depth--;
+        } else if (innerContent.slice(i, i + 4) === '<!--') {
+          // comment
+        } else if (innerContent[i + 1] !== '!' && innerContent[i + 1] !== '?') {
+          depth++;
+        }
+      } else if (ch === '>') {
+        if (innerContent[i - 1] === '/') {
+          depth--;
+        }
+        if (depth === 0 && currentChild.trim()) {
+          children.push(formatXmlCollapsed(currentChild.trim()));
+          currentChild = '';
+        }
+      }
+    }
+
+    if (currentChild.trim()) {
+      children.push(formatXmlCollapsed(currentChild.trim()));
+    }
+
+    if (children.length > 0) {
+      return `${decl}${rootOpen}\n  ${children.join('\n  ')}\n${rootCloseTag}`;
+    }
+
+    return formatXmlPretty(xml);
+  } catch {
+    return xml;
+  }
 }

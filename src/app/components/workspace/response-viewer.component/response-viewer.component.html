@@ -145,6 +145,11 @@
                     <mat-icon class="text-[16px]! size-[16px]!">content_copy</mat-icon>
                 }
             </button>
+            <button (click)="clearResponseBody()" title="Clear Response Body"
+                class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border border-(--postonsteroids-border)/30 bg-(--postonsteroids-bg-tertiary)/50 hover:bg-status-danger/10 hover:border-status-danger/30 text-(--postonsteroids-text-muted) hover:text-status-danger transition-all duration-200 cursor-pointer">
+                <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
+                <span class="text-[11px] font-medium">Clear</span>
+            </button>
         </div>
     </div>
     }
@@ -194,7 +199,7 @@
         <div class="w-full h-full flex flex-col relative overflow-hidden">
             @if (responseCookies().length > 0) {
             <!-- Actions Bar -->
-            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0 gap-x-2">
                 <button (click)="copyCookies()" [title]="copiedButton() === 'cookies' ? 'Copied!' : 'Copy Cookies'"
                     class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
                     [class.text-status-success]="copiedButton() === 'cookies'"
@@ -208,6 +213,11 @@
                     } @else {
                         <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
                     }
+                </button>
+                <button (click)="clearCookies()" title="Clear Cookies"
+                    class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border border-(--postonsteroids-border)/30 bg-(--postonsteroids-bg-tertiary)/50 hover:bg-status-danger/10 hover:border-status-danger/30 text-(--postonsteroids-text-muted) hover:text-status-danger transition-all duration-200 cursor-pointer">
+                    <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
+                    <span class="text-[11px] font-medium">Clear</span>
                 </button>
             </div>
             }
@@ -251,7 +261,7 @@
         <div class="w-full h-full flex flex-col relative overflow-hidden">
             @if (responseHeaders().length > 0) {
             <!-- Actions Bar -->
-            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0 gap-x-2">
                 <button (click)="copyHeaders()" [title]="copiedButton() === 'headers' ? 'Copied!' : 'Copy Headers'"
                     class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
                     [class.text-status-success]="copiedButton() === 'headers'"
@@ -265,6 +275,11 @@
                     } @else {
                         <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
                     }
+                </button>
+                <button (click)="clearHeaders()" title="Clear Headers"
+                    class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border border-(--postonsteroids-border)/30 bg-(--postonsteroids-bg-tertiary)/50 hover:bg-status-danger/10 hover:border-status-danger/30 text-(--postonsteroids-text-muted) hover:text-status-danger transition-all duration-200 cursor-pointer">
+                    <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
+                    <span class="text-[11px] font-medium">Clear</span>
                 </button>
             </div>
             }
@@ -305,7 +320,7 @@
         <div class="w-full h-full flex flex-col relative overflow-hidden">
             @if (testResults().length > 0) {
             <!-- Actions Bar -->
-            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0">
+            <div class="flex items-center justify-end px-2 py-2 border-b border-(--postonsteroids-border)/50 shrink-0 gap-x-2">
                 <button (click)="copyTestResults()" [title]="copiedButton() === 'test-results' ? 'Copied!' : 'Copy Test Results'"
                     class="p-1 px-3 rounded transition-colors duration-200 cursor-pointer flex items-center gap-x-1"
                     [class.text-status-success]="copiedButton() === 'test-results'"
@@ -319,6 +334,11 @@
                     } @else {
                         <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
                     }
+                </button>
+                <button (click)="clearTestResults()" title="Clear Test Results"
+                    class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border border-(--postonsteroids-border)/30 bg-(--postonsteroids-bg-tertiary)/50 hover:bg-status-danger/10 hover:border-status-danger/30 text-(--postonsteroids-text-muted) hover:text-status-danger transition-all duration-200 cursor-pointer">
+                    <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
+                    <span class="text-[11px] font-medium">Clear</span>
                 </button>
             </div>
             }
@@ -382,6 +402,11 @@
                             <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
                         }
                     </button>
+                    <button (click)="clearEncryptionConsole()" title="Clear Console"
+                        class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border border-(--postonsteroids-border)/30 bg-(--postonsteroids-bg-tertiary)/50 hover:bg-status-danger/10 hover:border-status-danger/30 text-(--postonsteroids-text-muted) hover:text-status-danger transition-all duration-200 cursor-pointer">
+                        <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
+                        <span class="text-[11px] font-medium">Clear</span>
+                    </button>
                 </div>
             </div>
             }
@@ -441,6 +466,11 @@
                         } @else {
                             <mat-icon class="text-[18px]! size-[18px]!">content_copy</mat-icon>
                         }
+                    </button>
+                    <button (click)="clearScriptConsole()" title="Clear Console"
+                        class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border border-(--postonsteroids-border)/30 bg-(--postonsteroids-bg-tertiary)/50 hover:bg-status-danger/10 hover:border-status-danger/30 text-(--postonsteroids-text-muted) hover:text-status-danger transition-all duration-200 cursor-pointer">
+                        <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
+                        <span class="text-[11px] font-medium">Clear</span>
                     </button>
                 </div>
                 }

@@ -645,7 +645,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
           const model = editor.getModel();
           if (model) {
             const lines = model.getValue().split('\n');
-            const path = this.getJsonPathAtLine(lines, lineNumber - 1);
+            const path = this.getPathAtLine(lines, lineNumber - 1);
             if (path) {
               this.toggleEncryption.emit(path);
             }
@@ -715,9 +715,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     const autoEnc = this.autoEncrypt();
 
     for (let i = 0; i < lines.length; i++) {
-      const path = this.getJsonPathAtLine(lines, i);
+      const path = this.getPathAtLine(lines, i);
       if (path) {
-        const isEncrypted = autoEnc || paths.includes(path);
+        const lastPart = path.includes('.') ? path.split('.').pop()! : path;
+        const isEncrypted = autoEnc || paths.includes(path) || paths.includes(lastPart);
         decorations.push({
           range: new monacoGlobal.Range(i + 1, 1, i + 1, 1),
           options: {
@@ -736,6 +737,54 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     } else {
       this.decorationsCollection = editor.createDecorationsCollection(decorations);
     }
+  }
+
+  private getPathAtLine(lines: string[], targetLineIndex: number): string | null {
+    const lang = (this.language() || '').toLowerCase();
+    if (lang === 'xml') {
+      return this.getXmlPathAtLine(lines, targetLineIndex);
+    }
+    return this.getJsonPathAtLine(lines, targetLineIndex);
+  }
+
+  private getXmlPathAtLine(lines: string[], targetLineIndex: number): string | null {
+    const targetLine = lines[targetLineIndex];
+    if (!targetLine) return null;
+    const openMatch = targetLine.match(/<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(?:\/?>|>)/);
+    if (!openMatch) return null;
+    const targetTag = openMatch[1];
+    if (targetTag.startsWith('?') || targetTag.startsWith('!')) return null;
+
+    const stack: string[] = [];
+    for (let i = 0; i <= targetLineIndex; i++) {
+      const l = lines[i].trim();
+      if (!l || l.startsWith('<!--') || l.startsWith('<?')) continue;
+      const tagMatches = Array.from(l.matchAll(/<\/?([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(\/?)>/g));
+      for (const match of tagMatches) {
+        const isClosing = match[0].startsWith('</');
+        const isSelfClosing = match[2] === '/' || match[0].endsWith('/>') || match[0].endsWith('/ >');
+        const tagName = match[1];
+
+        if (isClosing) {
+          if (stack.length > 0 && stack[stack.length - 1] === tagName) {
+            stack.pop();
+          }
+        } else if (!isSelfClosing) {
+          if (i === targetLineIndex && tagName === targetTag) {
+            return [...stack, tagName].join('.');
+          }
+          const closeOnSameLine = l.includes(`</${tagName}>`);
+          if (!closeOnSameLine) {
+            stack.push(tagName);
+          }
+        } else {
+          if (i === targetLineIndex && tagName === targetTag) {
+            return [...stack, tagName].join('.');
+          }
+        }
+      }
+    }
+    return targetTag;
   }
 
   private getJsonPathAtLine(lines: string[], targetLineIndex: number): string | null {

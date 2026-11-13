@@ -211,13 +211,23 @@ export class PayloadTypesComponent {
         try {
       const code = this.variableService.resolveScript(this.encryption().script || '');
       const state = this.tabState();
+      const currentScriptsBefore = state?.scripts || {} as any;
+      // Immediately clear encryption console output before running
+      this.tabStateService.updateState(this.tabId(), {
+          scripts: {
+              ...currentScriptsBefore,
+              encryptionConsole: ''
+          }
+      });
+
       let requestBody = '';
+      const isXmlType = state?.rawType === 'XML' || state?.rawType === 'XML (SOAP)' || state?.rawType === 'SOAP';
       
       if (state?.bodyType === 'raw') {
-          const rawBodyContent = state.rawType === 'XML'
+          const rawBodyContent = isXmlType
               ? (state.rawBodyXml || state.rawBody || '')
               : (state.rawBodyJson || state.rawBody || '{}');
-          requestBody = state.rawType === 'XML'
+          requestBody = isXmlType
               ? this.variableService.resolve(rawBodyContent)
               : this.variableService.resolveJson(rawBodyContent);
       } else if (state?.bodyType === 'form-data') {
@@ -229,7 +239,7 @@ export class PayloadTypesComponent {
       }
       
       // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
-      const cleanBody = state?.rawType === 'XML' ? requestBody.trim() : sanitizeJsonBodyForScripts(requestBody);
+      const cleanBody = isXmlType ? requestBody.trim() : sanitizeJsonBodyForScripts(requestBody);
 
       const rawEncryptedHeaders = state?.encryption?.encryptedHeaders || [];
       const autoEncryptHeaders = !!state?.encryption?.autoEncryptHeaders;

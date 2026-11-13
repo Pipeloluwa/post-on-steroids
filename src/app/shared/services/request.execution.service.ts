@@ -66,7 +66,7 @@ export class RequestExecutionService {
         // Generate a new execution token for fencing against race conditions
         const executionToken = this.tabStateService.nextExecutionToken(effectiveTabId);
 
-        // Reset Tab to Loading and clear previous response immediately so stale example/live response won't linger
+        // Reset Tab to Loading and clear previous response and consoles immediately so stale output won't linger
         this.tabStateService.updateState(effectiveTabId, {
             isLoading: true,
             responseBody: null,
@@ -75,7 +75,13 @@ export class RequestExecutionService {
             responseSize: null,
             responseHeaders: [],
             responseCookies: [],
-            testResults: []
+            testResults: [],
+            scripts: {
+                ...(state.scripts || {}),
+                preRequestConsole: '',
+                postResponseConsole: '',
+                encryptionConsole: ''
+            }
         });
 
         // Yield to the event loop to allow Angular to paint the "Cancel" button before heavy synchronous work
@@ -170,13 +176,14 @@ export class RequestExecutionService {
                 if (freshState.bodyType === 'raw') {
                     // Read from the type-specific field to ensure the latest editor content is used.
                     // The shared `rawBody` can be stale if the user corrected the payload after a failed request.
-                    const rawBodyContent = freshState.rawType === 'XML'
+                    const isXmlType = freshState.rawType === 'XML' || freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP';
+                    const rawBodyContent = isXmlType
                         ? (freshState.rawBodyXml || '')
                         : (freshState.rawBodyJson || '{}');
 
-                    let resolvedRaw = freshState.rawType === 'JSON'
-                        ? this.variableService.resolveJson(rawBodyContent)
-                        : this.variableService.resolve(rawBodyContent);
+                    let resolvedRaw = isXmlType
+                        ? this.variableService.resolve(rawBodyContent)
+                        : this.variableService.resolveJson(rawBodyContent);
 
                     // Safely strip comments and sanitize JSON payload so encrypted values with '/', '//', '/*' parse cleanly
                     if (freshState.rawType === 'JSON') {
@@ -209,10 +216,11 @@ export class RequestExecutionService {
                 : '';
             let encryptionLogs = '';
             if (encryptionScriptCode && encryptionScriptCode.trim()) {
-                // Serialize body to JSON string for encryption script
+                // Serialize body to string for encryption script
                 const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
+                const isXmlTypeEnc = freshState.rawType === 'XML' || freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP';
                 // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
-                const cleanBodyStr = freshState.rawType === 'XML' ? bodyStr.trim() : sanitizeJsonBodyForScripts(bodyStr);
+                const cleanBodyStr = isXmlTypeEnc ? bodyStr.trim() : sanitizeJsonBodyForScripts(bodyStr);
 
                 const rawEncHeaders = freshState.encryption?.encryptedHeaders || [];
                 const autoEncHeaders = !!freshState.encryption?.autoEncryptHeaders;
@@ -254,13 +262,17 @@ export class RequestExecutionService {
 
                 if (encResult.success && encResult.context) {
                     headers = encResult.context.headers || headers;
-                    // Parse body back to object if it was originally an object
+                    // Keep body as string for XML/SOAP or parse back to object for JSON
                     const encryptedBodyStr = encResult.context.body != null ? encResult.context.body : bodyStr;
 
-                    try {
-                        body = JSON.parse(encryptedBodyStr);
-                    } catch (parseErr) {
+                    if (isXmlTypeEnc) {
                         body = encryptedBodyStr;
+                    } else {
+                        try {
+                            body = JSON.parse(encryptedBodyStr);
+                        } catch (parseErr) {
+                            body = encryptedBodyStr;
+                        }
                     }
                     params = encResult.context.params || params;
                 } else if (encResult.error) {
@@ -349,12 +361,21 @@ export class RequestExecutionService {
                 httpHeaders = httpHeaders.set('Expires', '0');
             }
 
-            // XML Support: ensure Content-Type is set if raw type is XML
-            if (freshState.bodyType === 'raw' && freshState.rawType === 'XML' && !httpHeaders.has('Content-Type')) {
-                httpHeaders = httpHeaders.set('Content-Type', 'application/xml');
-            }
-
             let finalBody: any = body;
+
+            // XML & SOAP Support: ensure Content-Type and SOAPAction are set if raw type is XML/SOAP
+            const isXmlReq = freshState.rawType === 'XML' || freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP';
+            if (freshState.bodyType === 'raw' && isXmlReq) {
+                const isSoap = freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP' || (typeof finalBody === 'string' && (finalBody.includes('soap:Envelope') || finalBody.includes('soap12:Envelope') || finalBody.includes('schemas.xmlsoap.org')));
+                const isSoap12 = isSoap && typeof finalBody === 'string' && finalBody.includes('2003/05/soap-envelope');
+                if (!httpHeaders.has('Content-Type')) {
+                    const ct = isSoap ? (isSoap12 ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8') : 'application/xml';
+                    httpHeaders = httpHeaders.set('Content-Type', ct);
+                }
+                if (isSoap && !isSoap12 && !httpHeaders.has('SOAPAction')) {
+                    httpHeaders = httpHeaders.set('SOAPAction', '""');
+                }
+            }
             
             // Build real FormData if needed
             if (freshState.bodyType === 'form-data' && Array.isArray(body)) {
@@ -430,14 +451,29 @@ export class RequestExecutionService {
                         }
                     });
 
-                    // Ensure Content-Type is present for raw JSON/XML if not already set
+                    let bodyPayload: string | null = null;
+                    if (body !== undefined && body !== null) {
+                        bodyPayload = typeof body === 'string' ? body : JSON.stringify(body);
+                    }
+
+                    // Ensure Content-Type is present for raw JSON/XML/SOAP if not already set
                     if (!Object.keys(headersObj).some(k => k.toLowerCase() === 'content-type')) {
-                        if (freshState.bodyType === 'raw' && freshState.rawType === 'XML') {
-                            headersObj['Content-Type'] = 'application/xml';
+                        if (freshState.bodyType === 'raw' && isXmlReq) {
+                            const isSoap = freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP' || (bodyPayload && (bodyPayload.includes('soap:Envelope') || bodyPayload.includes('soap12:Envelope') || bodyPayload.includes('schemas.xmlsoap.org')));
+                            const isSoap12 = isSoap && bodyPayload && bodyPayload.includes('2003/05/soap-envelope');
+                            headersObj['Content-Type'] = isSoap ? (isSoap12 ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8') : 'application/xml';
                         } else if (freshState.bodyType === 'raw' && freshState.rawType === 'JSON') {
                             headersObj['Content-Type'] = 'application/json';
                         } else if (finalBody && (typeof finalBody === 'object' || (typeof finalBody === 'string' && finalBody.trim().startsWith('{')))) {
                             headersObj['Content-Type'] = 'application/json';
+                        }
+                    }
+
+                    if (freshState.bodyType === 'raw' && isXmlReq) {
+                        const isSoap = freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP' || (bodyPayload && bodyPayload.includes('schemas.xmlsoap.org/soap/envelope/'));
+                        const isSoap12 = isSoap && bodyPayload && bodyPayload.includes('2003/05/soap-envelope');
+                        if (isSoap && !isSoap12 && !Object.keys(headersObj).some(k => k.toLowerCase() === 'soapaction')) {
+                            headersObj['SOAPAction'] = '""';
                         }
                     }
 
@@ -450,11 +486,6 @@ export class RequestExecutionService {
                     const queryString = httpParams.toString();
                     if (queryString) {
                         targetUrl += (targetUrl.includes('?') ? '&' : '?') + queryString;
-                    }
-
-                    let bodyPayload: string | null = null;
-                    if (body !== undefined && body !== null) {
-                        bodyPayload = typeof body === 'string' ? body : JSON.stringify(body);
                     }
 
                     const proxyEndpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));

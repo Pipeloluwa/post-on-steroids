@@ -34,8 +34,33 @@ export class ResponseViewerComponent {
         }
         return 'Pretty';
     });
-    responseType = signal('JSON');
+    manualResponseType = signal<string | null>(null);
     responseTypes = signal(['JSON', 'XML']);
+    responseType = computed(() => {
+        const manual = this.manualResponseType();
+        if (manual) return manual;
+
+        const body = this.responseBody();
+        if (typeof body === 'string') {
+            const trimmed = body.trim();
+            if (trimmed.startsWith('<?xml') || (trimmed.startsWith('<') && !trimmed.toLowerCase().startsWith('<!doctype'))) {
+                return 'XML';
+            }
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                return 'JSON';
+            }
+        }
+
+        const headers = this.responseHeaders();
+        const ctHeader = headers.find(h => h.key.toLowerCase() === 'content-type');
+        if (ctHeader) {
+            const val = ctHeader.value.toLowerCase();
+            if (val.includes('xml') || val.includes('soap')) return 'XML';
+            if (val.includes('json')) return 'JSON';
+        }
+
+        return 'JSON';
+    });
     
     wrapStyles = WRAP_STYLE_OPTIONS;
     wrapStyle = computed<WrapStyle>(() => {
@@ -158,7 +183,85 @@ export class ResponseViewerComponent {
             this.tabStateService.updateState(id, { responseActiveMode: mode }, false);
         }
     }
-    setResponseType(type: string) { this.responseType.set(type); }
+    setResponseType(type: string) { this.manualResponseType.set(type); }
+
+    clearResponseBody() {
+        const id = this.tabId();
+        if (!id) return;
+        this.manualResponseType.set(null);
+        this.tabStateService.updateState(id, {
+            responseBody: null,
+            responseStatus: null,
+            responseTime: null,
+            responseSize: null
+        });
+    }
+
+    clearCookies() {
+        const id = this.tabId();
+        if (!id) return;
+        this.tabStateService.updateState(id, {
+            responseCookies: []
+        });
+    }
+
+    clearHeaders() {
+        const id = this.tabId();
+        if (!id) return;
+        this.tabStateService.updateState(id, {
+            responseHeaders: []
+        });
+    }
+
+    clearTestResults() {
+        const id = this.tabId();
+        if (!id) return;
+        this.tabStateService.updateState(id, {
+            testResults: []
+        });
+    }
+
+    clearEncryptionConsole() {
+        const id = this.tabId();
+        if (!id) return;
+        const current = this.tabState()?.scripts ?? {
+            preRequest: '',
+            postResponse: '',
+            preRequestConsole: '',
+            postResponseConsole: '',
+            encryptionConsole: '',
+            testScript: '',
+            testScriptEnabled: false
+        };
+        this.tabStateService.updateState(id, {
+            scripts: {
+                ...current,
+                encryptionConsole: ''
+            }
+        });
+    }
+
+    clearScriptConsole() {
+        const id = this.tabId();
+        if (!id) return;
+        const current = this.tabState()?.scripts ?? {
+            preRequest: '',
+            postResponse: '',
+            preRequestConsole: '',
+            postResponseConsole: '',
+            encryptionConsole: '',
+            testScript: '',
+            testScriptEnabled: false
+        };
+        const isPre = this.activeScriptConsoleTab() === 'preRequest';
+        this.tabStateService.updateState(id, {
+            scripts: {
+                ...current,
+                ...(isPre ? { preRequestConsole: '' } : { postResponseConsole: '' })
+            }
+        });
+    }
+
 
     @ViewChild(MonacoEditorComponent) monacoEditor?: MonacoEditorComponent;
 

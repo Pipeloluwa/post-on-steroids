@@ -46,7 +46,9 @@ export class BodyTypesComponent {
   
   rawBodyContent = computed(() => {
     const state = this.tabStateService.getState(this.tabId());
-    return this.rawType() === 'JSON' ? (state?.rawBodyJson || '{}') : (state?.rawBodyXml || '');
+    const rt = this.rawType();
+    const isXml = rt === 'XML' || rt === 'XML (SOAP)' || rt === 'SOAP';
+    return isXml ? (state?.rawBodyXml || '') : (state?.rawBodyJson || '{}');
   });
 
   onRawBodyChange(content: string) {
@@ -54,16 +56,17 @@ export class BodyTypesComponent {
     if (!id) return;
     
     this.originalPrettyContent = null; // Clear cached source truth on user edit
+    const isXml = this.rawType() === 'XML' || this.rawType() === 'XML (SOAP)' || this.rawType() === 'SOAP';
     
-    if (this.rawType() === 'JSON') {
-       this.tabStateService.updateState(id, { rawBodyJson: content, rawBody: content });
-    } else {
+    if (isXml) {
        this.tabStateService.updateState(id, { rawBodyXml: content, rawBody: content });
+    } else {
+       this.tabStateService.updateState(id, { rawBodyJson: content, rawBody: content });
     }
   }
 
   bodyTypes = ['none', 'form-data', 'raw'];
-  rawTypes = ['JSON', 'XML'];
+  rawTypes = ['JSON', 'XML', 'XML (SOAP)'];
   rowTypes = ['text', 'file'];
 
   bodyType = computed(() => this.tabStateService.getState(this.tabId())?.bodyType ?? 'none');
@@ -101,8 +104,70 @@ export class BodyTypesComponent {
       }
   }
 
+  private extractXmlBodyPaths(xml: string): string[] {
+    if (!xml || typeof xml !== 'string') return [];
+    const lines = xml.split(/\r?\n/);
+    const paths: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i].trim();
+      const leafMatch = l.match(/<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?>([^<]*)<\/\1>|<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?\/>/);
+      if (leafMatch) {
+        const p = this.getXmlPathAtLine(lines, i);
+        if (p && !paths.includes(p)) {
+          paths.push(p);
+        }
+      }
+    }
+    return paths;
+  }
+
+  private getXmlPathAtLine(lines: string[], targetLineIndex: number): string | null {
+    const targetLine = lines[targetLineIndex];
+    if (!targetLine) return null;
+    const openMatch = targetLine.match(/<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(?:\/?>|>)/);
+    if (!openMatch) return null;
+    const targetTag = openMatch[1];
+    if (targetTag.startsWith('?') || targetTag.startsWith('!')) return null;
+
+    const stack: string[] = [];
+    for (let i = 0; i <= targetLineIndex; i++) {
+      const l = lines[i].trim();
+      if (!l || l.startsWith('<!--') || l.startsWith('<?')) continue;
+      const tagMatches = Array.from(l.matchAll(/<\/?([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(\/?)>/g));
+      for (const match of tagMatches) {
+        const isClosing = match[0].startsWith('</');
+        const isSelfClosing = match[2] === '/' || match[0].endsWith('/>') || match[0].endsWith('/ >');
+        const tagName = match[1];
+
+        if (isClosing) {
+          if (stack.length > 0 && stack[stack.length - 1] === tagName) {
+            stack.pop();
+          }
+        } else if (!isSelfClosing) {
+          if (i === targetLineIndex && tagName === targetTag) {
+            return [...stack, tagName].join('.');
+          }
+          const closeOnSameLine = l.includes(`</${tagName}>`);
+          if (!closeOnSameLine) {
+            stack.push(tagName);
+          }
+        } else {
+          if (i === targetLineIndex && tagName === targetTag) {
+            return [...stack, tagName].join('.');
+          }
+        }
+      }
+    }
+    return targetTag;
+  }
+
   private extractBodyPaths(bodyStr: string): string[] {
       if (!bodyStr || !bodyStr.trim()) return [];
+      const isXml = this.rawType() === 'XML' || this.rawType() === 'XML (SOAP)' || this.rawType() === 'SOAP';
+      if (isXml) {
+          return this.extractXmlBodyPaths(bodyStr);
+      }
       try {
           const bodyObj = parseJsonSafe(bodyStr);
           if (bodyObj && typeof bodyObj === 'object') {
@@ -185,10 +250,22 @@ export class BodyTypesComponent {
     const id = this.tabId();
     if (id) {
       const state = this.tabStateService.getState(id);
-      const newRawBody = type === 'JSON' ? state?.rawBodyJson : state?.rawBodyXml;
+      const isXml = type === 'XML' || type === 'XML (SOAP)' || type === 'SOAP';
+      let newRawBody = isXml ? state?.rawBodyXml : state?.rawBodyJson;
+
+      if (type === 'XML (SOAP)' && (!newRawBody || !newRawBody.trim() || newRawBody.trim() === '{}')) {
+        newRawBody = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    
+  </soap:Body>
+</soap:Envelope>`;
+      }
+
       this.tabStateService.updateState(id, { 
         rawType: type,
-        rawBody: newRawBody
+        rawBody: newRawBody,
+        ...(isXml ? { rawBodyXml: newRawBody } : { rawBodyJson: newRawBody })
       });
     }
   }
@@ -282,8 +359,8 @@ export class BodyTypesComponent {
       }
     }
 
-    const isXml = this.rawType() === 'XML';
-    const transformed = formatBodyByStyle(content, style, this.rawType());
+    const isXml = this.rawType() === 'XML' || this.rawType() === 'XML (SOAP)' || this.rawType() === 'SOAP';
+    const transformed = formatBodyByStyle(content, style, isXml ? 'XML' : this.rawType());
     
     if (editor) {
       editor.setEditorValue(transformed);
