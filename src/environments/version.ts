@@ -1,6 +1,6 @@
 // Auto-generated during build. Do not edit manually.
 export const APP_VERSION_INFO = {
-  version: '1.0.4',
-  buildTime: 1794306627258,
-  buildDate: '2026-11-10T10:30:27.258Z'
+  version: '3.0.0',
+  buildTime: 1794560515743,
+  buildDate: '2026-11-13T09:01:55.743Z'
 } as const;

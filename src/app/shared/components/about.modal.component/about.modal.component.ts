@@ -16,7 +16,7 @@ export class AboutModalComponent {
     show = input<boolean>(false);
     onClose = output<void>();
 
-    appVersion = 'v1.0.4-steroids';
+    appVersion = 'v3.0.0-steroids';
     engineerName = 'Pipeloluwa';
     engineerTitle = 'Software Engineer';
 }
