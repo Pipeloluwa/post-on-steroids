@@ -1,4 +1,5 @@
 import { RequestState } from '../services/tab.state.service';
+import { extractSoapActionFromXml } from './format.utils';
 
 export interface CurlBuildOptions {
     resolveVariables?: boolean;
@@ -103,8 +104,18 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
                 const isSoap = state.rawType === 'XML (SOAP)' || state.rawType === 'SOAP' || (resolvedBody && (resolvedBody.includes('soap:Envelope') || resolvedBody.includes('soap12:Envelope') || resolvedBody.includes('schemas.xmlsoap.org')));
                 const isSoap12 = isSoap && resolvedBody && resolvedBody.includes('2003/05/soap-envelope');
                 headers.push({ key: 'Content-Type', value: isSoap ? (isSoap12 ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8') : 'application/xml' });
-                if (isSoap && !isSoap12 && !hasHeader('soapaction')) {
-                    headers.push({ key: 'SOAPAction', value: '""' });
+                if (isSoap && !isSoap12) {
+                    const existingAction = headers.find(h => h.key.toLowerCase() === 'soapaction');
+                    if (existingAction && existingAction.value && existingAction.value.trim() !== '') {
+                        let val = existingAction.value.trim();
+                        if (!val.startsWith('"') && !val.endsWith('"')) {
+                            val = `"${val}"`;
+                        }
+                        existingAction.value = val;
+                    } else if (!hasHeader('soapaction')) {
+                        const detectedAction = resolvedBody ? extractSoapActionFromXml(resolvedBody) : null;
+                        headers.push({ key: 'SOAPAction', value: detectedAction ? `"${detectedAction}"` : '""' });
+                    }
                 }
             }
         }

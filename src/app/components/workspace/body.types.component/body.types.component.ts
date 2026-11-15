@@ -11,7 +11,7 @@ import { ChangeDetectionStrategy } from '@angular/core';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 
-import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle, parseJsonSafe } from '../../../shared/utils/format.utils';
+import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle, parseJsonSafe, extractSoapActionFromXml } from '../../../shared/utils/format.utils';
 
 @Component({
   selector: 'app-body-types-component',
@@ -262,9 +262,23 @@ export class BodyTypesComponent {
 </soap:Envelope>`;
       }
 
+      let updatedHeaders = state?.headers ? [...state.headers] : [];
+      if (type === 'XML (SOAP)') {
+        const hasSoapAction = updatedHeaders.some(h => (h.key || '').trim().toLowerCase() === 'soapaction');
+        if (!hasSoapAction) {
+          const detectedAction = newRawBody ? extractSoapActionFromXml(newRawBody) : null;
+          const actionVal = detectedAction ? `"${detectedAction}"` : '""';
+          const cleanHeaders = updatedHeaders.filter(h => (h.key && h.key.trim() !== '') || (h.value && h.value.trim() !== ''));
+          cleanHeaders.push({ enabled: true, key: 'SOAPAction', value: actionVal });
+          cleanHeaders.push({ enabled: true, key: '', value: '' });
+          updatedHeaders = cleanHeaders;
+        }
+      }
+
       this.tabStateService.updateState(id, { 
         rawType: type,
         rawBody: newRawBody,
+        ...(type === 'XML (SOAP)' ? { headers: updatedHeaders } : {}),
         ...(isXml ? { rawBodyXml: newRawBody } : { rawBodyJson: newRawBody })
       });
     }

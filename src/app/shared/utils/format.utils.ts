@@ -330,3 +330,70 @@ export function formatXmlByField(xml: string): string {
     return xml;
   }
 }
+
+/**
+ * Automatically extracts the SOAPAction operation URI from a SOAP XML envelope.
+ * Supports:
+ * 1. WS-Addressing <(?:w+:)?Action> in <soap:Header>
+ * 2. Qualified operations <prefix:Operation> with prefix xmlns namespace in Envelope or element
+ * 3. Unqualified operations <Operation xmlns="..."> with default namespace
+ */
+export function extractSoapActionFromXml(xml: string): string | null {
+  if (!xml || typeof xml !== 'string') return null;
+  try {
+    // 1. WS-Addressing Action in Header
+    const wsaMatch = xml.match(/<(?:\w+:)?Action[^>]*>([^<]+)<\/(?:\w+:)?Action>/i);
+    if (wsaMatch && wsaMatch[1] && wsaMatch[1].trim()) {
+      return wsaMatch[1].trim();
+    }
+
+    // 2. Locate the Body element
+    const bodyMatch = xml.match(/<(?:\w+:)?Body[^>]*>([\s\S]*?)<\/(?:\w+:)?Body>/i);
+    if (!bodyMatch || !bodyMatch[1]) return null;
+    const bodyContent = bodyMatch[1].trim();
+
+    // 3. Find first child element inside Body
+    const firstTagMatch = bodyContent.match(/<([a-zA-Z0-9_\-]+(?::[a-zA-Z0-9_\-]+)?)([^>]*)>/);
+    if (!firstTagMatch) return null;
+
+    const fullTagName = firstTagMatch[1];
+    const tagAttributes = firstTagMatch[2] || '';
+    const parts = fullTagName.split(':');
+    const prefix = parts.length > 1 ? parts[0] : null;
+    const localName = parts.length > 1 ? parts[1] : parts[0];
+
+    let nsUri: string | null = null;
+    if (prefix) {
+      const prefixNsRegex = new RegExp(`xmlns:${prefix}\\s*=\\s*["']([^"']+)["']`, 'i');
+      const elemNsMatch = tagAttributes.match(prefixNsRegex);
+      if (elemNsMatch && elemNsMatch[1]) {
+        nsUri = elemNsMatch[1].trim();
+      } else {
+        const docNsMatch = xml.match(prefixNsRegex);
+        if (docNsMatch && docNsMatch[1]) {
+          nsUri = docNsMatch[1].trim();
+        }
+      }
+    } else {
+      const defaultNsMatch = tagAttributes.match(/xmlns\s*=\s*["']([^"']+)["']/i);
+      if (defaultNsMatch && defaultNsMatch[1]) {
+        nsUri = defaultNsMatch[1].trim();
+      } else {
+        const docDefNsMatch = xml.match(/<(?:\w+:)?Envelope[^>]*\sxmlns\s*=\s*["']([^"']+)["']/i);
+        if (docDefNsMatch && docDefNsMatch[1]) {
+          nsUri = docDefNsMatch[1].trim();
+        }
+      }
+    }
+
+    if (nsUri && localName) {
+      const separator = (nsUri.endsWith('/') || nsUri.endsWith(':') || nsUri.endsWith('#')) ? '' : '/';
+      return `${nsUri}${separator}${localName}`;
+    } else if (localName) {
+      return localName;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}

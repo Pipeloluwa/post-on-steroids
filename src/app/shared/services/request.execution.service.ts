@@ -11,7 +11,7 @@ import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
 import { NetworkService } from './network.service';
 import { API_BASE_URL } from '../constants/api.constants';
-import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
+import { sanitizeJsonBodyForScripts, extractSoapActionFromXml } from '../utils/format.utils';
 
 @Injectable({
     providedIn: 'root'
@@ -372,8 +372,20 @@ export class RequestExecutionService {
                     const ct = isSoap ? (isSoap12 ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8') : 'application/xml';
                     httpHeaders = httpHeaders.set('Content-Type', ct);
                 }
-                if (isSoap && !isSoap12 && !httpHeaders.has('SOAPAction')) {
-                    httpHeaders = httpHeaders.set('SOAPAction', '""');
+                if (isSoap && !isSoap12) {
+                    const soapActionKey = httpHeaders.keys().find(k => k.toLowerCase() === 'soapaction');
+                    const userAction = soapActionKey ? httpHeaders.get(soapActionKey) : null;
+                    if (userAction !== null && userAction !== undefined && userAction.trim() !== '') {
+                        let val = userAction.trim();
+                        if (!val.startsWith('"') && !val.endsWith('"')) {
+                            val = `"${val}"`;
+                        }
+                        httpHeaders = httpHeaders.set('SOAPAction', val);
+                    } else {
+                        const detectedAction = typeof finalBody === 'string' ? extractSoapActionFromXml(finalBody) : null;
+                        const actionVal = detectedAction ? `"${detectedAction}"` : '""';
+                        httpHeaders = httpHeaders.set('SOAPAction', actionVal);
+                    }
                 }
             }
             
@@ -472,8 +484,19 @@ export class RequestExecutionService {
                     if (freshState.bodyType === 'raw' && isXmlReq) {
                         const isSoap = freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP' || (bodyPayload && bodyPayload.includes('schemas.xmlsoap.org/soap/envelope/'));
                         const isSoap12 = isSoap && bodyPayload && bodyPayload.includes('2003/05/soap-envelope');
-                        if (isSoap && !isSoap12 && !Object.keys(headersObj).some(k => k.toLowerCase() === 'soapaction')) {
-                            headersObj['SOAPAction'] = '""';
+                        if (isSoap && !isSoap12) {
+                            const existingKey = Object.keys(headersObj).find(k => k.toLowerCase() === 'soapaction');
+                            const userAction = existingKey ? headersObj[existingKey] : null;
+                            if (userAction !== null && userAction !== undefined && userAction.trim() !== '') {
+                                let val = userAction.trim();
+                                if (!val.startsWith('"') && !val.endsWith('"')) {
+                                    val = `"${val}"`;
+                                }
+                                headersObj['SOAPAction'] = val;
+                            } else {
+                                const detectedAction = bodyPayload ? extractSoapActionFromXml(bodyPayload) : null;
+                                headersObj['SOAPAction'] = detectedAction ? `"${detectedAction}"` : '""';
+                            }
                         }
                     }
 
