@@ -106,15 +106,22 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
                 headers.push({ key: 'Content-Type', value: isSoap ? (isSoap12 ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8') : 'application/xml' });
                 if (isSoap && !isSoap12) {
                     const existingAction = headers.find(h => h.key.toLowerCase() === 'soapaction');
-                    if (existingAction && existingAction.value && existingAction.value.trim() !== '') {
-                        let val = existingAction.value.trim();
-                        if (!val.startsWith('"') && !val.endsWith('"')) {
-                            val = `"${val}"`;
+                    const hasMeaningfulAction = Boolean(existingAction?.value && existingAction.value.trim().replace(/^"+|"+$/g, '').trim().length > 0);
+
+                    if (hasMeaningfulAction) {
+                        let val = existingAction!.value.trim();
+                        if (!val.startsWith('"') || !val.endsWith('"')) {
+                            val = `"${val.replace(/^"+|"+$/g, '')}"`;
                         }
-                        existingAction.value = val;
-                    } else if (!hasHeader('soapaction')) {
+                        existingAction!.value = val;
+                    } else {
                         const detectedAction = resolvedBody ? extractSoapActionFromXml(resolvedBody) : null;
-                        headers.push({ key: 'SOAPAction', value: detectedAction ? `"${detectedAction}"` : '""' });
+                        const actionVal = detectedAction ? `"${detectedAction}"` : '""';
+                        if (existingAction) {
+                            existingAction.value = actionVal;
+                        } else {
+                            headers.push({ key: 'SOAPAction', value: actionVal });
+                        }
                     }
                 }
             }

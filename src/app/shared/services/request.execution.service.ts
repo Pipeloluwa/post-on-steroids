@@ -375,10 +375,12 @@ export class RequestExecutionService {
                 if (isSoap && !isSoap12) {
                     const soapActionKey = httpHeaders.keys().find(k => k.toLowerCase() === 'soapaction');
                     const userAction = soapActionKey ? httpHeaders.get(soapActionKey) : null;
-                    if (userAction !== null && userAction !== undefined && userAction.trim() !== '') {
-                        let val = userAction.trim();
-                        if (!val.startsWith('"') && !val.endsWith('"')) {
-                            val = `"${val}"`;
+                    const hasMeaningfulUserAction = Boolean(userAction && userAction.trim().replace(/^"+|"+$/g, '').trim().length > 0);
+
+                    if (hasMeaningfulUserAction) {
+                        let val = userAction!.trim();
+                        if (!val.startsWith('"') || !val.endsWith('"')) {
+                            val = `"${val.replace(/^"+|"+$/g, '')}"`;
                         }
                         httpHeaders = httpHeaders.set('SOAPAction', val);
                     } else {
@@ -487,10 +489,12 @@ export class RequestExecutionService {
                         if (isSoap && !isSoap12) {
                             const existingKey = Object.keys(headersObj).find(k => k.toLowerCase() === 'soapaction');
                             const userAction = existingKey ? headersObj[existingKey] : null;
-                            if (userAction !== null && userAction !== undefined && userAction.trim() !== '') {
-                                let val = userAction.trim();
-                                if (!val.startsWith('"') && !val.endsWith('"')) {
-                                    val = `"${val}"`;
+                            const hasMeaningfulUserAction = Boolean(userAction && userAction.trim().replace(/^"+|"+$/g, '').trim().length > 0);
+
+                            if (hasMeaningfulUserAction) {
+                                let val = userAction!.trim();
+                                if (!val.startsWith('"') || !val.endsWith('"')) {
+                                    val = `"${val.replace(/^"+|"+$/g, '')}"`;
                                 }
                                 headersObj['SOAPAction'] = val;
                             } else {
