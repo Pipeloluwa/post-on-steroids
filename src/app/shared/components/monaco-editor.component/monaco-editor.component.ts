@@ -981,11 +981,23 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     const editor = this.editorInstance();
     if (editor) {
       const currentModel = editor.getModel();
-      // Only call setValue if model content genuinely differs — setValue resets undo history!
+      // Only replace if model content genuinely differs — use executeEdits to preserve undo history!
       if (currentModel && currentModel.getValue() !== safeVal) {
-        this.isRestoringModel = true;
-        currentModel.setValue(safeVal);
-        this.isRestoringModel = false;
+        if (typeof editor.executeEdits === 'function' && typeof currentModel.getFullModelRange === 'function') {
+          editor.pushUndoStop?.();
+          editor.executeEdits('write-value', [
+            {
+              range: currentModel.getFullModelRange(),
+              text: safeVal,
+              forceMoveMarkers: true
+            }
+          ]);
+          editor.pushUndoStop?.();
+        } else {
+          this.isRestoringModel = true;
+          currentModel.setValue(safeVal);
+          this.isRestoringModel = false;
+        }
       }
       if (this.enableEncryptionToggles()) {
         this.updateDecorations();
@@ -1010,7 +1022,19 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     if (editor) {
       const model = editor.getModel();
       if (model && model.getValue() !== safeVal) {
-        model.setValue(safeVal);
+        if (typeof editor.executeEdits === 'function' && typeof model.getFullModelRange === 'function') {
+          editor.pushUndoStop?.();
+          editor.executeEdits('set-editor-value', [
+            {
+              range: model.getFullModelRange(),
+              text: safeVal,
+              forceMoveMarkers: true
+            }
+          ]);
+          editor.pushUndoStop?.();
+        } else {
+          model.setValue(safeVal);
+        }
       }
       if (this.enableEncryptionToggles()) {
         this.updateDecorations();
