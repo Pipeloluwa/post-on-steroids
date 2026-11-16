@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, MenuItem } = require('electron');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -164,6 +164,38 @@ function createWindow() {
         color: theme === 'light' ? '#f5f5f5' : '#2d2d2d',
         symbolColor: theme === 'light' ? '#000000' : '#ffffff'
       });
+    }
+  });
+
+  ipcMain.on('show-context-menu', (event, { isEditable, isReadOnly, hasSelection } = {}) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+
+    const menu = new Menu();
+
+    if (isEditable && !isReadOnly) {
+      menu.append(new MenuItem({ label: 'Undo', role: 'undo' }));
+      menu.append(new MenuItem({ label: 'Redo', role: 'redo' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ label: 'Cut', role: 'cut' }));
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
+      menu.append(new MenuItem({ label: 'Paste', role: 'paste' }));
+      menu.append(new MenuItem({ label: 'Paste and Match Style', role: 'pasteAndMatchStyle' }));
+      menu.append(new MenuItem({ label: 'Delete', role: 'delete' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+    } else if (isEditable && isReadOnly) {
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+    } else if (hasSelection) {
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+    }
+
+    if (menu.items.length > 0) {
+      menu.popup({ window: win });
     }
   });
 

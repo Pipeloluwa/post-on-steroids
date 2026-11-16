@@ -981,23 +981,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     const editor = this.editorInstance();
     if (editor) {
       const currentModel = editor.getModel();
-      // Only replace if model content genuinely differs — use executeEdits to preserve undo history!
+      // Only call setValue if model content genuinely differs (handles readOnly response viewers & external updates)
       if (currentModel && currentModel.getValue() !== safeVal) {
-        if (typeof editor.executeEdits === 'function' && typeof currentModel.getFullModelRange === 'function') {
-          editor.pushUndoStop?.();
-          editor.executeEdits('write-value', [
-            {
-              range: currentModel.getFullModelRange(),
-              text: safeVal,
-              forceMoveMarkers: true
-            }
-          ]);
-          editor.pushUndoStop?.();
-        } else {
-          this.isRestoringModel = true;
-          currentModel.setValue(safeVal);
-          this.isRestoringModel = false;
-        }
+        this.isRestoringModel = true;
+        currentModel.setValue(safeVal);
+        this.isRestoringModel = false;
       }
       if (this.enableEncryptionToggles()) {
         this.updateDecorations();
@@ -1022,9 +1010,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     if (editor) {
       const model = editor.getModel();
       if (model && model.getValue() !== safeVal) {
-        if (typeof editor.executeEdits === 'function' && typeof model.getFullModelRange === 'function') {
+        const isReadOnly = this.readOnly() || this.disabled();
+        let applied = false;
+        if (!isReadOnly && typeof editor.executeEdits === 'function' && typeof model.getFullModelRange === 'function') {
           editor.pushUndoStop?.();
-          editor.executeEdits('set-editor-value', [
+          applied = !!editor.executeEdits('set-editor-value', [
             {
               range: model.getFullModelRange(),
               text: safeVal,
@@ -1032,7 +1022,8 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
             }
           ]);
           editor.pushUndoStop?.();
-        } else {
+        }
+        if (!applied) {
           model.setValue(safeVal);
         }
       }
