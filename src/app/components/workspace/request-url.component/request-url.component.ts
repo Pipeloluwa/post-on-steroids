@@ -114,6 +114,10 @@ export class RequestUrlComponent {
     });
 
     onUrlChange(newUrl: string) {
+        if (newUrl && /^\s*curl\s+/i.test(newUrl)) {
+            this.parseCurlCommand(newUrl.trim());
+            return;
+        }
         if (this.hasUrlError() && newUrl?.trim()) {
             this.hasUrlError.set(false);
         }
@@ -239,7 +243,7 @@ export class RequestUrlComponent {
         if (!clipboardData) return;
         const pastedText = clipboardData.getData('text');
         
-        if (pastedText && pastedText.trim().toLowerCase().startsWith('curl ')) {
+        if (pastedText && /^\s*curl\s+/i.test(pastedText)) {
             event.preventDefault();
             this.parseCurlCommand(pastedText.trim());
         }
@@ -250,9 +254,13 @@ export class RequestUrlComponent {
         let url = '';
         const headers: { key: string; value: string; enabled: boolean }[] = [];
         let params: { key: string; value: string; enabled: boolean }[] = [];
+        const formDataRows: { enabled: boolean; key: string; value: string; type: 'text' | 'file' }[] = [];
         let auth: any = null;
         let body = '';
-        let isJsonBody = false;
+        let isJsonHeader = false;
+        let isXmlHeader = false;
+        let isSoapHeader = false;
+        let hasSoapActionHeader = false;
 
         // Tokenize respecting single and double quotes
         const tokens: string[] = [];
@@ -270,7 +278,16 @@ export class RequestUrlComponent {
                 continue;
             }
             if (char === '\\' && !inSingleQuote) {
-                if (curlStr[i+1] === '\n' || curlStr[i+1] === '\r') {
+                // Shell line continuation: backslash followed by optional whitespace and newline
+                let lookAhead = i + 1;
+                while (lookAhead < curlStr.length && (curlStr[lookAhead] === ' ' || curlStr[lookAhead] === '\t')) {
+                    lookAhead++;
+                }
+                if (lookAhead < curlStr.length && (curlStr[lookAhead] === '\n' || curlStr[lookAhead] === '\r')) {
+                    i = lookAhead;
+                    if (curlStr[i] === '\r' && curlStr[i + 1] === '\n') {
+                        i++;
+                    }
                     continue;
                 }
                 escapeNext = true;
@@ -278,10 +295,17 @@ export class RequestUrlComponent {
             }
 
             if (char === "'" && !inDoubleQuote) {
+                if (!inSingleQuote && currentToken === '$') {
+                    // Shell ANSI-C quoting prefix $'...' -> drop the '$'
+                    currentToken = '';
+                }
                 inSingleQuote = !inSingleQuote;
                 continue;
             }
             if (char === '"' && !inSingleQuote) {
+                if (!inDoubleQuote && currentToken === '$') {
+                    currentToken = '';
+                }
                 inDoubleQuote = !inDoubleQuote;
                 continue;
             }
@@ -309,34 +333,95 @@ export class RequestUrlComponent {
         // Process tokens
         for (let i = 1; i < tokens.length; i++) {
             const token = tokens[i];
-            
-            if (token === '-X' || token === '--request') {
-                method = tokens[++i]?.toUpperCase() || method;
-            } else if (token === '-H' || token === '--header') {
-                const headerStr = tokens[++i];
+            let flag = token;
+            let inlineVal: string | null = null;
+            const eqIdx = token.indexOf('=');
+            if (token.startsWith('-') && eqIdx > 1) {
+                flag = token.slice(0, eqIdx);
+                inlineVal = token.slice(eqIdx + 1);
+            }
+
+            const getNextVal = (): string => {
+                if (inlineVal !== null) return inlineVal;
+                return tokens[++i] || '';
+            };
+
+            if (flag === '-X' || flag === '--request') {
+                method = getNextVal().toUpperCase() || method;
+            } else if (flag === '-H' || flag === '--header') {
+                const headerStr = getNextVal();
                 if (headerStr) {
                     const separatorIdx = headerStr.indexOf(':');
                     if (separatorIdx > -1) {
                         const key = headerStr.slice(0, separatorIdx).trim();
                         const value = headerStr.slice(separatorIdx + 1).trim();
-                        
-                        if (key.toLowerCase() === 'authorization' && value.toLowerCase().startsWith('bearer ')) {
+                        const keyLower = key.toLowerCase();
+                        const valLower = value.toLowerCase();
+
+                        if (keyLower === 'authorization' && valLower.startsWith('bearer ')) {
                             auth = { type: 'bearer', token: value.substring(7).trim() };
+                        } else if (keyLower === 'authorization' && valLower.startsWith('basic ')) {
+                            auth = { type: 'basic', token: value.substring(6).trim() };
                         } else {
                             headers.push({ key, value, enabled: true });
                         }
-                        
-                        if (key.toLowerCase() === 'content-type' && value.toLowerCase().includes('application/json')) {
-                            isJsonBody = true;
+
+                        if (keyLower === 'content-type') {
+                            if (valLower.includes('application/soap+xml')) {
+                                isSoapHeader = true;
+                                isXmlHeader = true;
+                            } else if (valLower.includes('text/xml') || valLower.includes('application/xml') || valLower.includes('+xml')) {
+                                isXmlHeader = true;
+                            } else if (valLower.includes('application/json') || valLower.includes('+json')) {
+                                isJsonHeader = true;
+                            }
+                        } else if (keyLower === 'soapaction') {
+                            hasSoapActionHeader = true;
+                            isSoapHeader = true;
+                            isXmlHeader = true;
                         }
                     }
                 }
-            } else if (token === '-d' || token === '--data' || token === '--data-raw' || token === '--data-binary') {
-                body = tokens[++i] || '';
+            } else if (flag === '-d' || flag === '--data' || flag === '--data-raw' || flag === '--data-binary') {
+                const dataVal = getNextVal();
+                body = body ? (body + '&' + dataVal) : dataVal;
                 if (method === 'GET') method = 'POST'; // cURL defaults to POST if -d is used
+            } else if (flag === '-F' || flag === '--form') {
+                const formParam = getNextVal();
+                if (formParam) {
+                    const eq = formParam.indexOf('=');
+                    if (eq > -1) {
+                        const k = formParam.slice(0, eq).trim();
+                        const v = formParam.slice(eq + 1).trim();
+                        const isFile = v.startsWith('@');
+                        formDataRows.push({
+                            enabled: true,
+                            key: k,
+                            value: isFile ? v.slice(1) : v,
+                            type: isFile ? 'file' : 'text'
+                        });
+                    }
+                }
+                if (method === 'GET') method = 'POST';
+            } else if (flag === '-u' || flag === '--user') {
+                const userPass = getNextVal();
+                if (userPass) {
+                    try {
+                        auth = { type: 'basic', token: btoa(userPass) };
+                    } catch {
+                        auth = { type: 'basic', token: userPass };
+                    }
+                }
+            } else if (flag === '--url') {
+                url = getNextVal() || url;
             } else if (!token.startsWith('-') && !url) {
                 url = token;
             }
+        }
+
+        // Clean surrounding quotes from URL if any
+        if (url) {
+            url = url.replace(/^['"]|['"]$/g, '');
         }
 
         // Parse query params from URL
@@ -358,9 +443,32 @@ export class RequestUrlComponent {
         if (auth) updateData.auth = auth;
         
         if (body) {
-            updateData.rawBodyJson = body;
             updateData.bodyType = 'raw';
-            updateData.rawType = isJsonBody ? 'JSON' : 'Text';
+            updateData.rawBody = body;
+            updateData.payloadType = 'body';
+
+            const trimmedBody = body.trim();
+            const soapXmlPattern = /<(?:soap|soapenv|soap12):Envelope\b|xmlns:(?:soap|soapenv|soap12)=|http:\/\/schemas\.xmlsoap\.org\/soap\/envelope\/|http:\/\/www\.w3\.org\/2003\/05\/soap-envelope/i;
+            const isSoapDetected = isSoapHeader || hasSoapActionHeader || soapXmlPattern.test(trimmedBody);
+
+            const looksLikeXml = trimmedBody.startsWith('<') && (trimmedBody.endsWith('>') || trimmedBody.includes('</'));
+            const looksLikeJson = (trimmedBody.startsWith('{') && trimmedBody.endsWith('}')) || (trimmedBody.startsWith('[') && trimmedBody.endsWith(']'));
+            const isXmlDetected = isSoapDetected || isXmlHeader || trimmedBody.startsWith('<?xml') || (looksLikeXml && !looksLikeJson);
+
+            if (isSoapDetected) {
+                updateData.rawType = 'XML (SOAP)';
+                updateData.rawBodyXml = body;
+            } else if (isXmlDetected) {
+                updateData.rawType = 'XML';
+                updateData.rawBodyXml = body;
+            } else {
+                updateData.rawType = 'JSON';
+                updateData.rawBodyJson = body;
+            }
+        } else if (formDataRows.length > 0) {
+            updateData.bodyType = 'form-data';
+            updateData.formData = formDataRows;
+            updateData.payloadType = 'body';
         }
 
         if (Object.keys(updateData).length > 0) {

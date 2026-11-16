@@ -593,8 +593,13 @@ export class ImportComponent implements OnInit {
             if (mode === 'raw') {
                 bodyType = 'raw';
                 rawBody = req.body.raw || '';
-                const lang = req.body.options?.raw?.language;
-                if (lang === 'xml') {
+                const lang = req.body.options?.raw?.language?.toLowerCase();
+                const isSoap = (rawBody.includes('soap:Envelope') || rawBody.includes('soap12:Envelope') || rawBody.includes('schemas.xmlsoap.org'));
+                const isXml = lang === 'xml' || isSoap || rawBody.trim().startsWith('<?xml') || (rawBody.trim().startsWith('<') && rawBody.trim().endsWith('>'));
+                if (isSoap) {
+                    rawType = 'XML (SOAP)';
+                    rawBodyXml = rawBody;
+                } else if (isXml) {
                     rawType = 'XML';
                     rawBodyXml = rawBody;
                 } else {
