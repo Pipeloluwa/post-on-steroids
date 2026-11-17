@@ -402,15 +402,26 @@ export class RequestUrlComponent {
                 if (formParam) {
                     const eq = formParam.indexOf('=');
                     if (eq > -1) {
-                        const k = formParam.slice(0, eq).trim();
-                        const v = formParam.slice(eq + 1).trim();
+                        const k = formParam.slice(0, eq).trim().replace(/^["']|["']$/g, '');
+                        let v = formParam.slice(eq + 1).trim();
                         const isFile = v.startsWith('@');
-                        formDataRows.push({
-                            enabled: true,
-                            key: k,
-                            value: isFile ? v.slice(1) : v,
-                            type: isFile ? 'file' : 'text'
-                        });
+                        if (isFile) {
+                            const filePath = v.slice(1).split(';')[0].trim().replace(/^["']|["']$/g, '');
+                            formDataRows.push({
+                                enabled: true,
+                                key: k,
+                                value: filePath,
+                                type: 'file'
+                            });
+                        } else {
+                            v = v.replace(/^["']|["']$/g, '');
+                            formDataRows.push({
+                                enabled: true,
+                                key: k,
+                                value: v,
+                                type: 'text'
+                            });
+                        }
                     }
                 }
                 if (method === 'GET') method = 'POST';
@@ -526,6 +537,10 @@ export class RequestUrlComponent {
             updateData.bodyType = 'form-data';
             updateData.formData = formDataRows;
             updateData.payloadType = 'body';
+            const cleanHeaders = headers.filter(h => h.key.toLowerCase() !== 'content-type' || !h.value.toLowerCase().includes('multipart/form-data'));
+            if (cleanHeaders.length !== headers.length) {
+                updateData.headers = cleanHeaders;
+            }
         }
 
         if (Object.keys(updateData).length > 0) {

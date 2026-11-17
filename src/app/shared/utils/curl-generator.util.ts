@@ -68,7 +68,13 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
             key: resolveStr(h.key).trim().replace(/[\r\n]+/g, ''),
             value: resolveStr(h.value).trim().replace(/[\r\n]+/g, '')
         }))
-        .filter(h => h.key !== '');
+        .filter(h => {
+            if (h.key === '') return false;
+            if (state.bodyType === 'form-data' && h.key.toLowerCase() === 'content-type' && h.value.toLowerCase().includes('multipart/form-data')) {
+                return false;
+            }
+            return true;
+        });
 
     const hasHeader = (name: string) =>
         headers.some(h => h.key.toLowerCase() === name.toLowerCase());
