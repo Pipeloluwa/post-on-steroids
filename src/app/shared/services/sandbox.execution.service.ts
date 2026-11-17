@@ -270,6 +270,50 @@ window.addEventListener("message", async (event) => {
 
   let pm = { ...context };
 
+  pm.traverseFields = async function(target, paths, transformFn, autoEncrypt) {
+    const pathList = Array.isArray(paths) ? paths : [];
+    const matchPath = (p) => {
+      if (autoEncrypt) return true;
+      if (!p) return false;
+      if (pathList.includes(p)) return true;
+      for (const ep of pathList) {
+        if (ep && p.startsWith(ep + '.')) return true;
+      }
+      const last = p.includes('.') ? p.split('.').pop() : p;
+      return !/^\d+$/.test(last) && pathList.includes(last);
+    };
+    const walk = async (node, currPath) => {
+      if (node === null || node === undefined) return node;
+      if (Array.isArray(node)) {
+        for (let i = 0; i < node.length; i++) {
+          const itemPath = currPath ? currPath + '.' + i : String(i);
+          if (node[i] !== null && typeof node[i] === 'object') {
+            node[i] = await walk(node[i], itemPath);
+          } else if (matchPath(itemPath)) {
+            node[i] = await transformFn(node[i], itemPath);
+          }
+        }
+        return node;
+      }
+      if (typeof node === 'object') {
+        for (const key of Object.keys(node)) {
+          const nextPath = currPath ? currPath + '.' + key : key;
+          if (node[key] !== null && typeof node[key] === 'object') {
+            node[key] = await walk(node[key], nextPath);
+          } else if (matchPath(nextPath)) {
+            node[key] = await transformFn(node[key], nextPath);
+          }
+        }
+        return node;
+      }
+      if (matchPath(currPath || '__raw_text__')) {
+        return await transformFn(node, currPath || '__raw_text__');
+      }
+      return node;
+    };
+    return await walk(target, '');
+  };
+
   pm.sendRequest = function(req, callback) {
     let url = typeof req === 'string' ? req : (req && req.url);
     let method = (req && req.method) || 'GET';
@@ -348,11 +392,11 @@ window.addEventListener("message", async (event) => {
       "const fetch = _proxyFetch;",
       paramDeclarations,
       code,
-      "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params); if (_preReturn !== undefined) { body = _preReturn; } }",
-      "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params); }",
-      "if (typeof testScript === 'function') { const _testReturn = await testScript(responseStatus, responseTime, responseBody, responseHeaders || responseHeader); if (_testReturn !== undefined) { testPassed = !!_testReturn; } }",
-      "if (typeof encryptScript === 'function') { const _encReturn = await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); if (_encReturn !== undefined) { body = _encReturn; } }",
-      "if (typeof decryptScript === 'function') { const _decReturn = await decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths); if (_decReturn !== undefined) { body = _decReturn; } }",
+      "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText); if (_preReturn !== undefined) { body = _preReturn; } }",
+      "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText); }",
+      "if (typeof testScript === 'function') { const _testReturn = await testScript(responseStatus, responseTime, responseBody, responseHeaders || responseHeader, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText); if (_testReturn !== undefined) { testPassed = !!_testReturn; } }",
+      "if (typeof encryptScript === 'function') { const _encReturn = await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText); if (_encReturn !== undefined) { body = _encReturn; } }",
+      "if (typeof decryptScript === 'function') { const _decReturn = await decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText); if (_decReturn !== undefined) { body = _decReturn; } }",
       paramWriteBack,
       "})();"
     ];
@@ -432,6 +476,28 @@ window.addEventListener("message", async (event) => {
 
   private async directFetch(req: SandboxFetchRequest): Promise<FetchOutcome> {
     const method = (req.method || 'GET').toUpperCase();
+    const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
+    if (isElectronApp() && electronApi && typeof electronApi.executeHttpRequest === 'function') {
+      const res = await electronApi.executeHttpRequest({
+        url: req.url,
+        method,
+        headers: req.headers || {},
+        body: req.body,
+        verifySsl: false,
+        followRedirects: true
+      });
+      if (!res.ok) {
+        throw new Error(res.errorMessage || `Request failed for: ${req.url}`);
+      }
+      return {
+        ok: true,
+        status: res.statusCode,
+        statusText: res.statusText || '',
+        headers: res.headers || {},
+        body: res.body ?? ''
+      };
+    }
+
     const hasBody = method !== 'GET' && method !== 'HEAD' && req.body !== null;
     const res = await fetch(req.url, {
       method,
@@ -567,6 +633,28 @@ window.addEventListener("message", async (event) => {
           safeContext.body = sanitizeJsonBodyForScripts(safeContext.body);
         }
       }
+
+      // Ensure all script context parameters exist with safe defaults
+      safeContext = {
+        headers: [],
+        body: '',
+        params: [],
+        encryptedHeaders: [],
+        encryptedBodyPaths: [],
+        bodyType: 'raw',
+        rawType: 'JSON',
+        formData: [],
+        encryptedFormData: [],
+        urlEncodedData: [],
+        encryptedUrlEncodedData: [],
+        graphql: { query: '', variables: {} },
+        encryptedGraphqlPaths: [],
+        rawText: '',
+        encryptRawText: false,
+        autoEncryptBody: false,
+        autoEncryptHeaders: false,
+        ...safeContext
+      };
 
       if (safeContext && Array.isArray(safeContext.headers)) {
         const encHeaders: string[] = Array.isArray(safeContext.encryptedHeaders)

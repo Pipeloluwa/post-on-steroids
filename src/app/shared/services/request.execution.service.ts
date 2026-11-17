@@ -12,6 +12,7 @@ import { NotificationService } from './notification.service';
 import { NetworkService } from './network.service';
 import { API_BASE_URL } from '../constants/api.constants';
 import { sanitizeJsonBodyForScripts, extractSoapActionFromXml } from '../utils/format.utils';
+import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../utils/encryption-path.util';
 
 @Injectable({
     providedIn: 'root'
@@ -236,15 +237,40 @@ export class RequestExecutionService {
                 ? this.variableService.resolveScript(freshState.encryption.script)
                 : '';
             let encryptionLogs = '';
-            if (encryptionScriptCode && encryptionScriptCode.trim()) {
-                // Serialize body to string for encryption script
-                const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
-                const isXmlTypeEnc = freshState.rawType === 'XML' || freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP';
-                // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
-                const cleanBodyStr = (isXmlTypeEnc || freshState.rawType === 'Text' || freshState.bodyType === 'x-www-form-urlencoded' || freshState.bodyType === 'form-data')
-                    ? bodyStr.trim()
-                    : sanitizeJsonBodyForScripts(bodyStr);
 
+            const encState = freshState.encryption;
+            const isXmlType = freshState.rawType === 'XML' || freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP';
+            const preparedEnc = buildEncryptionPayloadContext({
+                bodyType: freshState.bodyType || 'none',
+                rawType: freshState.rawType || 'JSON',
+                rawBodyJson: !isXmlType && freshState.rawType !== 'Text'
+                    ? (typeof body === 'string' ? body : JSON.stringify(body ?? {}))
+                    : undefined,
+                rawBodyXml: isXmlType ? (typeof body === 'string' ? body : '') : undefined,
+                rawBodyText: freshState.rawType === 'Text' ? (typeof body === 'string' ? body : String(body ?? '')) : undefined,
+                rawBody: typeof body === 'string' ? body : undefined,
+                formData: freshState.bodyType === 'form-data' && Array.isArray(body) ? body : [],
+                urlEncodedData: freshState.bodyType === 'x-www-form-urlencoded' && Array.isArray(body) ? body : [],
+                graphqlQuery: freshState.bodyType === 'graphql' ? (body?.query || '') : '',
+                graphqlVariables: freshState.bodyType === 'graphql' ? (body?.variables || {}) : {},
+                encryptedBodyPaths: freshState.encryption?.encryptedBodyPaths || [],
+                autoEncryptBody: freshState.encryption?.autoEncryptBody || false
+            });
+
+            const hasFieldEncryptToggledOn = Boolean(
+                encState?.autoEncryptHeaders ||
+                (encState?.encryptedHeaders && encState.encryptedHeaders.length > 0) ||
+                (preparedEnc.bodyType !== 'none' && (
+                    preparedEnc.autoEncryptBody ||
+                    preparedEnc.encryptedBodyPaths.length > 0 ||
+                    preparedEnc.encryptedFormData.length > 0 ||
+                    preparedEnc.encryptedUrlEncodedData.length > 0 ||
+                    preparedEnc.encryptedGraphqlPaths.length > 0 ||
+                    preparedEnc.encryptRawText
+                ))
+            );
+
+            if (encryptionScriptCode && encryptionScriptCode.trim()) {
                 const rawEncHeaders = freshState.encryption?.encryptedHeaders || [];
                 const autoEncHeaders = !!freshState.encryption?.autoEncryptHeaders;
                 const normalizedEncHeaders = Array.from(new Set([
@@ -271,47 +297,54 @@ export class RequestExecutionService {
 
                 const encContext = {
                     headers,
-                    body: cleanBodyStr || bodyStr,
+                    body: preparedEnc.body,
                     params,
                     encryptedHeaders: normalizedEncHeaders,
-                    encryptedBodyPaths: freshState.encryption?.encryptedBodyPaths || [],
-                    autoEncryptBody: freshState.encryption?.autoEncryptBody || false,
+                    encryptedBodyPaths: preparedEnc.encryptedBodyPaths,
+                    bodyType: preparedEnc.bodyType,
+                    rawType: preparedEnc.rawType,
+                    formData: preparedEnc.formData,
+                    encryptedFormData: preparedEnc.encryptedFormData,
+                    urlEncodedData: preparedEnc.urlEncodedData,
+                    encryptedUrlEncodedData: preparedEnc.encryptedUrlEncodedData,
+                    graphql: preparedEnc.graphql,
+                    encryptedGraphqlPaths: preparedEnc.encryptedGraphqlPaths,
+                    rawText: preparedEnc.rawText,
+                    encryptRawText: preparedEnc.encryptRawText,
+                    autoEncryptBody: preparedEnc.autoEncryptBody,
                     autoEncryptHeaders: autoEncHeaders
                 };
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 encryptionLogs = encResult.logs || '';
 
-
                 if (encResult.success && encResult.context) {
                     headers = encResult.context.headers || headers;
-                    // Keep body as string for XML/SOAP or parse back to object for JSON
-                    const encryptedBodyStr = encResult.context.body != null ? encResult.context.body : bodyStr;
+                    body = reconcileEncryptionResult(preparedEnc, encResult.context);
+                    params = encResult.context.params || params;
 
-                    if (isXmlTypeEnc || freshState.rawType === 'Text') {
-                        body = encryptedBodyStr;
-                    } else if (freshState.bodyType === 'form-data' || freshState.bodyType === 'x-www-form-urlencoded') {
-                        if (typeof encResult.context.body === 'object') {
-                            body = encResult.context.body;
+                    if (hasFieldEncryptToggledOn && !isAutoAuthRetry) {
+                        const fnBodyOnly = encryptionScriptCode
+                            .replace(/^(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*\{/, '')
+                            .replace(/\}\s*$/, '')
+                            .replace(/"(?:[^"\\]|\\.)*"|(\/\*[\s\S]*?\*\/|\/\/.*)/g, (m, c) => (c ? '' : m))
+                            .trim();
+                        if (!fnBodyOnly) {
+                            this.notificationService.notify('Encryption Failed: Encryption script is empty', 'error');
+                        } else if (encResult.context?.encryptionPassed === false || encResult.context?.encryptionFailed === true) {
+                            this.notificationService.notify('Encryption Failed', 'error');
                         } else {
-                            try {
-                                body = JSON.parse(encryptedBodyStr);
-                            } catch {
-                                body = encResult.context.body;
-                            }
-                        }
-                    } else {
-                        try {
-                            body = JSON.parse(encryptedBodyStr);
-                        } catch (parseErr) {
-                            body = encryptedBodyStr;
+                            this.notificationService.notify('Encryption Passed', 'success');
                         }
                     }
-                    params = encResult.context.params || params;
                 } else if (encResult.error) {
                     if (!this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                     encryptionLogs = `Encryption Error: ${encResult.error}`;
                     console.error(' [Encryption] ERROR - Encryption script failed:', encResult.error);
+
+                    if (hasFieldEncryptToggledOn && !isAutoAuthRetry) {
+                        this.notificationService.notify(`Encryption Failed: ${encResult.error}`, 'error');
+                    }
 
                     const errorStr = `Encryption Script Error:\n${encResult.error}`;
                     const targetId = this.tabStateService.resolveTabId(effectiveTabId);
@@ -329,6 +362,8 @@ export class RequestExecutionService {
                     this.cancellationTokens.delete(tabId);
                     return;
                 }
+            } else if (hasFieldEncryptToggledOn && !isAutoAuthRetry) {
+                this.notificationService.notify('Encryption Failed: No encryption script configured', 'error');
             }
 
             // 5b. Pre-Request Script
@@ -339,7 +374,13 @@ export class RequestExecutionService {
                 const context = {
                     headers,
                     body,
-                    params
+                    params,
+                    bodyType: preparedEnc.bodyType,
+                    rawType: preparedEnc.rawType,
+                    formData: freshState.bodyType === 'form-data' && Array.isArray(body) ? body : preparedEnc.formData,
+                    urlEncodedData: freshState.bodyType === 'x-www-form-urlencoded' && Array.isArray(body) ? body : preparedEnc.urlEncodedData,
+                    graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
+                    rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
                 };
                 const result = await this.sandboxService.executeScript(preScriptCode, context);
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
@@ -506,19 +547,127 @@ export class RequestExecutionService {
 
             // Check if running inside Electron wrapper
             const isElectron = isElectronApp();
+            const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
+            const useElectronIpc = isElectron && electronApi && typeof electronApi.executeHttpRequest === 'function';
 
             // Only browser uses proxy to bypass CORS restrictions on remote endpoints.
             // Desktop / Electron executes all requests directly from the client without proxy.
             const isUsingProxy = !isElectron && !isLoopback && (freshState.settings?.bypassCors !== false);
 
             let httpResponse: HttpResponse<string> | HttpErrorResponse | null = null;
-            let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string } | null = null;
+            let proxyReturnedResponse: { statusCode: number; headers: Record<string, string>; body?: string; cookies?: any[]; responseTimeMs?: number } | null = null;
+            let electronNetworkError: { code?: string; message?: string } | null = null;
 
 
             try {
                 let reqObservable: any;
 
-                if (isUsingProxy) {
+                if (useElectronIpc) {
+                    const headersObj: Record<string, string> = {};
+                    httpHeaders.keys().forEach(k => {
+                        const cleanKey = k.trim().replace(/[\r\n]+/g, '');
+                        const cleanVal = (httpHeaders.get(k) ?? '').trim().replace(/[\r\n]+/g, '');
+                        if (cleanKey) {
+                            headersObj[cleanKey] = cleanVal;
+                        }
+                    });
+
+                    // Ensure Content-Type is present for Electron Node HTTP dispatch
+                    if (!Object.keys(headersObj).some(k => k.toLowerCase() === 'content-type')) {
+                        if (freshState.bodyType === 'raw' && isXmlReq) {
+                            const xmlText = typeof finalBody === 'string' ? finalBody : '';
+                            const isSoap = freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP' || xmlText.includes('soap:Envelope') || xmlText.includes('soap12:Envelope') || xmlText.includes('schemas.xmlsoap.org');
+                            const isSoap12 = isSoap && xmlText.includes('2003/05/soap-envelope');
+                            headersObj['Content-Type'] = isSoap ? (isSoap12 ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8') : 'application/xml';
+                        } else if (freshState.bodyType === 'raw' && freshState.rawType === 'Text') {
+                            headersObj['Content-Type'] = 'text/plain';
+                        } else if (freshState.bodyType === 'raw' && freshState.rawType === 'JSON') {
+                            headersObj['Content-Type'] = 'application/json';
+                        } else if (freshState.bodyType === 'x-www-form-urlencoded') {
+                            headersObj['Content-Type'] = 'application/x-www-form-urlencoded; charset=utf-8';
+                        } else if (freshState.bodyType === 'graphql') {
+                            headersObj['Content-Type'] = 'application/json';
+                        } else if (finalBody && freshState.bodyType !== 'form-data' && (typeof finalBody === 'object' || (typeof finalBody === 'string' && finalBody.trim().startsWith('{')))) {
+                            headersObj['Content-Type'] = 'application/json';
+                        }
+                    }
+
+                    let targetUrl = finalUrl;
+                    const queryString = httpParams.toString();
+                    if (queryString) {
+                        targetUrl += (targetUrl.includes('?') ? '&' : '?') + queryString;
+                    }
+
+                    let multipartParts: Array<{ name: string; value?: string; fileName?: string; mimeType?: string; base64Data?: string }> | null = null;
+                    let bodyPayload: string | null = null;
+
+                    if (freshState.bodyType === 'form-data' && Array.isArray(body)) {
+                        multipartParts = [];
+                        const rawFormData = freshState.formData;
+                        for (const row of body) {
+                            const originalRow = rawFormData.find((f: any) => this.variableService.resolve(f.key || '') === row.key || f.key === row.key);
+                            if (originalRow && originalRow.type === 'file' && originalRow.file) {
+                                const buf = await originalRow.file.arrayBuffer();
+                                const bytes = new Uint8Array(buf);
+                                let binary = '';
+                                for (let i = 0; i < bytes.length; i += 0x8000) {
+                                    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+                                }
+                                multipartParts.push({
+                                    name: row.key,
+                                    fileName: originalRow.file.name,
+                                    mimeType: originalRow.file.type || 'application/octet-stream',
+                                    base64Data: btoa(binary)
+                                });
+                            } else {
+                                multipartParts.push({
+                                    name: row.key,
+                                    value: String(row.value ?? '')
+                                });
+                            }
+                        }
+                    } else if (freshState.method !== 'GET' && freshState.method !== 'HEAD' && finalBody !== null && finalBody !== undefined) {
+                        bodyPayload = typeof finalBody === 'string' ? finalBody : JSON.stringify(finalBody);
+                    }
+
+                    const electronReqId = generateUUID();
+                    cancelToken.cancelFn = () => {
+                        electronApi.cancelHttpRequest?.(electronReqId);
+                    };
+
+                    const electronRes = await electronApi.executeHttpRequest({
+                        requestId: electronReqId,
+                        url: targetUrl,
+                        method: freshState.method,
+                        headers: headersObj,
+                        body: bodyPayload,
+                        multipartParts,
+                        verifySsl: freshState.settings?.verifySsl ?? false,
+                        followRedirects: freshState.settings?.followRedirects ?? true,
+                        enableCookies: freshState.settings?.enableCookies ?? true
+                    });
+
+                    if (electronRes?.cancelled || cancelToken.cancelled) {
+                        const targetId = this.tabStateService.resolveTabId(effectiveTabId);
+                        this.tabStateService.updateState(targetId, { isLoading: false });
+                        return;
+                    }
+
+                    if (electronRes?.ok) {
+                        proxyReturnedResponse = {
+                            statusCode: electronRes.statusCode,
+                            headers: electronRes.headers || {},
+                            body: electronRes.body ?? '',
+                            cookies: electronRes.cookies || [],
+                            responseTimeMs: electronRes.responseTimeMs
+                        };
+                    } else {
+                        electronNetworkError = {
+                            code: electronRes?.errorCode || 'NETWORK_ERROR',
+                            message: electronRes?.errorMessage || `Could not reach API at ${targetUrl}.`
+                        };
+                    }
+                } else if (isUsingProxy) {
                     // Build proxy payload for OnSteroidApi
                     const headersObj: Record<string, string> = {};
                     httpHeaders.keys().forEach(k => {
@@ -596,7 +745,7 @@ export class RequestExecutionService {
                             fd.append('url', targetUrl);
                             fd.append('method', freshState.method);
                             fd.append('headers', JSON.stringify(headersObj));
-                            fd.append('verifySsl', String(freshState.settings?.verifySsl ?? true));
+                            fd.append('verifySsl', String(freshState.settings?.verifySsl ?? false));
                             fd.append('bodyType', 'form-data');
                             
                             // Append original files and fields
@@ -619,7 +768,7 @@ export class RequestExecutionService {
                                 method: freshState.method,
                                 headers: headersObj,
                                 body: bodyPayload,
-                                verifySsl: freshState.settings?.verifySsl ?? true
+                                verifySsl: freshState.settings?.verifySsl ?? false
                             };
                             reqObservable = this.http.post<any>(currentProxyUrl, proxyPayload, {
                                 headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
@@ -699,18 +848,27 @@ export class RequestExecutionService {
             let status = 0;
             let rawResponseBody: any = '';
             const responseHeaders: { key: string, value: string }[] = [];
+            const responseCookies: any[] = Array.isArray(proxyReturnedResponse?.cookies) ? proxyReturnedResponse.cookies : [];
 
             if (proxyReturnedResponse) {
                 status = proxyReturnedResponse.statusCode;
                 rawResponseBody = proxyReturnedResponse.body ?? '';
-                if ((proxyReturnedResponse as any).responseTimeMs !== undefined) {
-                    responseTime = (proxyReturnedResponse as any).responseTimeMs;
+                if (proxyReturnedResponse.responseTimeMs !== undefined) {
+                    responseTime = proxyReturnedResponse.responseTimeMs;
                 }
                 if (proxyReturnedResponse.headers) {
                     Object.entries(proxyReturnedResponse.headers).forEach(([k, v]) => {
                         responseHeaders.push({ key: k, value: v });
                     });
                 }
+            } else if (electronNetworkError) {
+                status = 0;
+                rawResponseBody = {
+                    error: 'API Unreachable',
+                    code: electronNetworkError.code || 'NETWORK_ERROR',
+                    url: finalUrl,
+                    message: electronNetworkError.message || `Could not reach API at ${finalUrl}.`
+                };
             } else {
                 status = httpResponse?.status || 0;
                 rawResponseBody = (httpResponse as any)?.error;
@@ -718,26 +876,58 @@ export class RequestExecutionService {
                     rawResponseBody = (httpResponse as HttpResponse<string>)?.body || (httpResponse as any)?.message || '';
                 }
 
-                // Handle ProgressEvent (Network Errors) which stringify to {}
-                if (rawResponseBody && typeof rawResponseBody === 'object') {
-                    if (rawResponseBody instanceof Event || rawResponseBody.type === 'error' || rawResponseBody.name === 'HttpErrorResponse') {
-                        if (!this.networkService.isOnline()) {
-                            rawResponseBody = 'Internet connection lost. Please check your network and try again.';
-                        } else if (isUsingProxy) {
-                            rawResponseBody = environment.production
-                                ? 'Failed to connect to OnSteroid proxy (proxy.onsteroid.com). Please check your internet connection or verify the endpoint.'
-                                : `Failed to connect to local proxy (OnSteroidApi at ${environment.proxyUrl}). Please ensure OnSteroidApi is running.`;
-                        } else {
-                            rawResponseBody = isElectron
-                                ? ((httpResponse as any)?.message || 'Could not connect to the server. Please check the URL, SSL certificate, or network.')
-                                : ((httpResponse as any)?.message || 'Network Error / CORS Issue. Ensure the endpoint is reachable.');
-                        }
+                const isPlainEmptyObject =
+                    rawResponseBody !== null &&
+                    typeof rawResponseBody === 'object' &&
+                    !Array.isArray(rawResponseBody) &&
+                    Object.keys(rawResponseBody).length === 0;
+                const isProgressOrHttpErr =
+                    rawResponseBody &&
+                    typeof rawResponseBody === 'object' &&
+                    (rawResponseBody instanceof Event ||
+                        rawResponseBody.type === 'error' ||
+                        rawResponseBody.name === 'HttpErrorResponse' ||
+                        isPlainEmptyObject);
+                const isEmptyStringOnZeroStatus =
+                    status === 0 && (rawResponseBody === undefined || rawResponseBody === null || (typeof rawResponseBody === 'string' && !rawResponseBody.trim()));
+
+                if (isProgressOrHttpErr || isEmptyStringOnZeroStatus) {
+                    let message: string;
+                    if (!this.networkService.isOnline()) {
+                        message = 'Internet connection lost. Please check your network and try again.';
+                    } else if (isUsingProxy) {
+                        message = environment.production
+                            ? 'Failed to connect to the target API or OnSteroid proxy (proxy.onsteroid.com). Verify the endpoint URL and your internet connection.'
+                            : `Failed to connect to local proxy (OnSteroidApi at ${environment.proxyUrl}) or target API. Ensure OnSteroidApi is running.`;
+                    } else {
+                        message = isElectron
+                            ? ((httpResponse as any)?.message || `Unable to connect to ${finalUrl}. Please verify the URL, port, SSL certificate, or network connectivity.`)
+                            : `Unable to reach ${finalUrl}. The server may be offline, unreachable, blocked by CORS, or using an invalid SSL certificate.`;
                     }
+                    rawResponseBody = {
+                        error: 'API Unreachable',
+                        url: finalUrl,
+                        message
+                    };
                 }
 
                 httpResponse?.headers?.keys().forEach(key => {
                     responseHeaders.push({ key, value: httpResponse!.headers.get(key) || '' });
                 });
+            }
+
+            // Ensure unreachable status 0 responses never show an empty "{}" JSON body
+            if (status === 0 && (
+                rawResponseBody === '' ||
+                rawResponseBody === null ||
+                rawResponseBody === undefined ||
+                (typeof rawResponseBody === 'object' && !Array.isArray(rawResponseBody) && Object.keys(rawResponseBody).length === 0)
+            )) {
+                rawResponseBody = {
+                    error: 'API Unreachable',
+                    url: finalUrl,
+                    message: `Could not reach ${finalUrl}. Check that the server is running, the URL is valid, and network/SSL access is available.`
+                };
             }
 
             let responseSize = 0;
@@ -770,7 +960,13 @@ export class RequestExecutionService {
                     responseBody: responseBodyParsed,
                     headers, // provide request headers to post-script
                     body, // provide request body to post-script
-                    params // provide request params to post-script
+                    params, // provide request params to post-script
+                    bodyType: preparedEnc.bodyType,
+                    rawType: preparedEnc.rawType,
+                    formData: freshState.bodyType === 'form-data' && Array.isArray(body) ? body : preparedEnc.formData,
+                    urlEncodedData: freshState.bodyType === 'x-www-form-urlencoded' && Array.isArray(body) ? body : preparedEnc.urlEncodedData,
+                    graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
+                    rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
                 };
                 const result = await this.sandboxService.executeScript(postScriptCode, context);
                 postResponseLogs = result.logs || '';
@@ -796,7 +992,13 @@ export class RequestExecutionService {
                     responseHeader: responseHeaders,
                     headers,
                     body,
-                    params
+                    params,
+                    bodyType: preparedEnc.bodyType,
+                    rawType: preparedEnc.rawType,
+                    formData: freshState.bodyType === 'form-data' && Array.isArray(body) ? body : preparedEnc.formData,
+                    urlEncodedData: freshState.bodyType === 'x-www-form-urlencoded' && Array.isArray(body) ? body : preparedEnc.urlEncodedData,
+                    graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
+                    rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
                 };
                 const testResult = await this.sandboxService.executeScript(testScriptCode, testContext);
                 if (testResult.context?.testResults && Array.isArray(testResult.context.testResults)) {
@@ -883,6 +1085,7 @@ export class RequestExecutionService {
                 responseTime,
                 responseSize,
                 responseHeaders: responseHeaders.map(rh => ({ enabled: true, key: rh.key, value: rh.value })),
+                responseCookies,
                 testResults,
                 scripts: {
                     ...freshState.scripts,
@@ -956,10 +1159,17 @@ export class RequestExecutionService {
 
         } catch (globalErr: any) {
             console.error("Critical Execution Error:", globalErr);
-            this.tabStateService.updateState(tabId, {
+            const resolvedTargetUrl = (this.tabStateService.getState(effectiveTabId)?.url || '').trim();
+            const fallbackBody = {
+                error: 'API Unreachable',
+                url: resolvedTargetUrl,
+                message: globalErr?.message || String(globalErr || 'Failed to connect to the server.')
+            };
+            this.tabStateService.updateState(effectiveTabId, {
                 isLoading: false,
                 responseStatus: 0,
-                responseBody: `Error connecting: ${globalErr.message || globalErr}`
+                responseBody: fallbackBody,
+                responseSize: new Blob([JSON.stringify(fallbackBody)]).size
             });
         } finally {
             if (isAutoAuthRetry && originalTabId && originalTabId !== tabId) {

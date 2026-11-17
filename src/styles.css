@@ -287,3 +287,27 @@ input[type="password"]::-ms-clear {
   background: var(--postonsteroids-text-muted) !important;
 }
 
+/* Ensure Monaco search/replace widget and overflowing suggest widget never clip at the top */
+.monaco-editor .find-widget.visible {
+  top: 28px !important;
+  right: 16px !important;
+  border-top: 1px solid var(--vscode-widget-border, var(--postonsteroids-border)) !important;
+  border-radius: 6px !important;
+  z-index: 45 !important;
+}
+
+.monaco-editor .find-widget:not(.visible) {
+  top: 0px !important;
+  transform: translateY(calc(-100% - 48px)) !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox > .ibwrapper > textarea.input {
+  line-height: 18px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+.monaco-editor .suggest-widget {
+  margin-top: 10px !important;
+}
+

@@ -122,11 +122,26 @@
     border-bottom: none !important;
 }
 
-/* Ensure search/find widget and suggest widget / labels are not chopped off at the top */
-::ng-deep .monaco-editor .find-widget {
-    top: 8px !important;
+/* Ensure search/replace find widget and suggest widget / labels are not chopped off at the top */
+::ng-deep .monaco-editor .find-widget.visible {
+    top: 28px !important;
+    right: 16px !important;
+    border-top: 1px solid var(--vscode-widget-border, var(--postonsteroids-border)) !important;
+    border-radius: 6px !important;
+    z-index: 45 !important;
+}
+
+::ng-deep .monaco-editor .find-widget:not(.visible) {
+    top: 0px !important;
+    transform: translateY(calc(-100% - 48px)) !important;
+}
+
+::ng-deep .monaco-editor .find-widget .monaco-inputbox > .ibwrapper > textarea.input {
+    line-height: 18px !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
 }
 
 ::ng-deep .monaco-editor .suggest-widget {
-    margin-top: 6px !important;
+    margin-top: 10px !important;
 }

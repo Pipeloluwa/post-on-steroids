@@ -1,0 +1,11 @@
+@media (min-width: 768px) {
+  .graphql-query-pane {
+    width: var(--gql-left, 60%);
+    flex: none;
+  }
+
+  .graphql-vars-pane {
+    width: calc(100% - var(--gql-left, 60%) - 8px);
+    flex: 1 1 0%;
+  }
+}

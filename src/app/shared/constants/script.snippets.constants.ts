@@ -1,22 +1,22 @@
 export interface ScriptSnippet { id: string; name: string; description: string; code: string; }
 
-export const DEFAULT_ENCRYPTION_SCRIPT_SKELETON = `async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {
+export const DEFAULT_ENCRYPTION_SCRIPT_SKELETON = `async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText) {
     //only code written within this code block will be executed
 }`;
 
-export const DEFAULT_DECRYPTION_SCRIPT_SKELETON = `async function decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths) {
+export const DEFAULT_DECRYPTION_SCRIPT_SKELETON = `async function decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText) {
     //only code written within this code block will be executed
 }`;
 
-export const DEFAULT_PRE_REQUEST_SCRIPT_SKELETON = `async function preScript(headers, body, params) {
+export const DEFAULT_PRE_REQUEST_SCRIPT_SKELETON = `async function preScript(headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
     //only code written within this code block will be executed
 }`;
 
-export const DEFAULT_POST_RESPONSE_SCRIPT_SKELETON = `async function postScript(responseHeaders, responseBody, headers, body, params) {
+export const DEFAULT_POST_RESPONSE_SCRIPT_SKELETON = `async function postScript(responseHeaders, responseBody, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
     //only code written within this code block will be executed
 }`;
 
-export const DEFAULT_TEST_SCRIPT_SKELETON = `async function testScript(responseStatus, responseTime, responseBody, responseHeaders) {
+export const DEFAULT_TEST_SCRIPT_SKELETON = `async function testScript(responseStatus, responseTime, responseBody, responseHeaders, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
     //only code written within this code block will be executed
     let passed = true;
     return passed;

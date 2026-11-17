@@ -9,7 +9,7 @@ export class NotificationService {
     type = signal<'success' | 'warning' | 'error' | 'info'>('success');
     private hideTimeout: any = null;
 
-    notify(message: string, type: 'success' | 'warning' | 'error' | 'info' = 'success', durationMs: number = 6000) {
+    notify(message: string, type: 'success' | 'warning' | 'error' | 'info' = 'success', durationMs: number = 2500) {
         clearTimeout(this.hideTimeout);
         this.message.set(message);
         this.type.set(type);

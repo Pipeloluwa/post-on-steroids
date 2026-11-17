@@ -64,14 +64,14 @@ function resolveUpdateBaseUrl() {
 
 const UPDATE_BASE_URL = resolveUpdateBaseUrl();
 
-// Allow self-signed / internal SSL certificates on test and staging environments
-if (app && app.commandLine) {
-  app.commandLine.appendSwitch('ignore-certificate-errors');
-}
-
-app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
-  event.preventDefault();
-  callback(true);
+// Enforce strict SSL certificate verification by default; only bypass in unpackaged local dev mode
+app.on('certificate-error', (event, webContents, targetUrl, error, certificate, callback) => {
+  if (!app.isPackaged && /^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(targetUrl)) {
+    event.preventDefault();
+    callback(true);
+    return;
+  }
+  callback(false);
 });
 
 let mainWindow;
@@ -834,8 +834,318 @@ function checkForElectronUpdates() {
     });
 }
 
+const activeHttpRequests = new Map();
+const electronCookieJar = new Map();
+
+function buildMultipartBuffer(parts) {
+  const boundary = '----OnSteroidFormBoundary' + crypto.randomBytes(12).toString('hex');
+  const chunks = [];
+  for (const part of parts || []) {
+    if (!part || !part.name) continue;
+    const safeName = String(part.name).replace(/"/g, '\\"');
+    if (part.fileName && part.base64Data !== undefined) {
+      const safeFile = String(part.fileName).replace(/"/g, '\\"');
+      const mime = part.mimeType || 'application/octet-stream';
+      const header = `--${boundary}\r\nContent-Disposition: form-data; name="${safeName}"; filename="${safeFile}"\r\nContent-Type: ${mime}\r\n\r\n`;
+      chunks.push(Buffer.from(header, 'utf8'));
+      chunks.push(Buffer.from(part.base64Data, 'base64'));
+      chunks.push(Buffer.from('\r\n', 'utf8'));
+    } else {
+      const header = `--${boundary}\r\nContent-Disposition: form-data; name="${safeName}"\r\n\r\n`;
+      chunks.push(Buffer.from(header, 'utf8'));
+      chunks.push(Buffer.from(String(part.value ?? ''), 'utf8'));
+      chunks.push(Buffer.from('\r\n', 'utf8'));
+    }
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`, 'utf8'));
+  return {
+    boundary,
+    buffer: Buffer.concat(chunks)
+  };
+}
+
+function storeSetCookies(hostname, setCookieHeaders) {
+  if (!hostname || !Array.isArray(setCookieHeaders) || setCookieHeaders.length === 0) return;
+  let hostMap = electronCookieJar.get(hostname);
+  if (!hostMap) {
+    hostMap = new Map();
+    electronCookieJar.set(hostname, hostMap);
+  }
+  for (const headerStr of setCookieHeaders) {
+    const firstPart = String(headerStr || '').split(';')[0];
+    const eqIdx = firstPart.indexOf('=');
+    if (eqIdx > 0) {
+      const name = firstPart.slice(0, eqIdx).trim();
+      const val = firstPart.slice(eqIdx + 1).trim();
+      hostMap.set(name, val);
+    }
+  }
+}
+
+function parseSetCookieObjects(hostname, setCookieHeaders) {
+  if (!Array.isArray(setCookieHeaders)) return [];
+  return setCookieHeaders.map(raw => {
+    const parts = String(raw || '').split(';').map(p => p.trim());
+    const [pair, ...attrs] = parts;
+    const eqIdx = pair.indexOf('=');
+    const name = eqIdx > -1 ? pair.slice(0, eqIdx).trim() : pair;
+    const value = eqIdx > -1 ? pair.slice(eqIdx + 1).trim() : '';
+    let domain = hostname || '';
+    let pathVal = '/';
+    let expires = 'Session';
+    for (const attr of attrs) {
+      const lower = attr.toLowerCase();
+      if (lower.startsWith('domain=')) domain = attr.slice(7).trim();
+      else if (lower.startsWith('path=')) pathVal = attr.slice(5).trim();
+      else if (lower.startsWith('expires=')) expires = attr.slice(8).trim();
+    }
+    return { name, value, domain, path: pathVal, expires };
+  }).filter(c => !!c.name);
+}
+
+function formatElectronNetworkError(err, targetUrl) {
+  const code = (err && err.code) || '';
+  let hostname = targetUrl;
+  let origin = targetUrl;
+  try {
+    const parsed = new URL(targetUrl);
+    hostname = parsed.hostname;
+    origin = parsed.origin;
+  } catch {}
+
+  switch (code) {
+    case 'ENOTFOUND':
+    case 'EAI_AGAIN':
+      return { code, message: `DNS lookup failed: could not resolve host "${hostname}". Verify the domain name and your internet connection.` };
+    case 'ECONNREFUSED':
+      return { code, message: `Connection refused: no server is accepting connections at ${origin}. Verify the server is running and the port is correct.` };
+    case 'ETIMEDOUT':
+    case 'ESOCKETTIMEDOUT':
+      return { code, message: `Request timed out while waiting for a response from ${targetUrl}.` };
+    case 'EHOSTUNREACH':
+    case 'ENETUNREACH':
+      return { code, message: `Network or host unreachable for ${targetUrl}. Check your network connection, VPN, or firewall.` };
+    case 'ECONNRESET':
+      return { code, message: `Connection was closed unexpectedly by ${origin}.` };
+    case 'CERT_HAS_EXPIRED':
+      return { code, message: `SSL certificate verification failed for "${hostname}": the server certificate has expired. Disable "Verify SSL Certificate" in Settings to bypass validation.` };
+    case 'DEPTH_ZERO_SELF_SIGNED_CERT':
+    case 'SELF_SIGNED_CERT_IN_CHAIN':
+      return { code, message: `SSL certificate verification failed for "${hostname}": self-signed certificate detected. Disable "Verify SSL Certificate" in Settings to allow self-signed certificates.` };
+    case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+    case 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY':
+    case 'UNABLE_TO_GET_ISSUER_CERT':
+      return { code, message: `SSL certificate verification failed for "${hostname}": unable to verify issuer certificate chain. Disable "Verify SSL Certificate" in Settings to bypass validation.` };
+    case 'ERR_TLS_CERT_ALTNAME_INVALID':
+      return { code, message: `SSL certificate verification failed for "${hostname}": certificate hostname mismatch. Disable "Verify SSL Certificate" in Settings to bypass validation.` };
+    default:
+      return {
+        code: code || 'NETWORK_ERROR',
+        message: (err && err.message) ? `${err.message} (${targetUrl})` : `Unable to reach API at ${targetUrl}.`
+      };
+  }
+}
+
+function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies = []) {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    const requestId = options.requestId;
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(options.url);
+    } catch {
+      resolve({
+        ok: false,
+        errorCode: 'ERR_INVALID_URL',
+        errorMessage: `Invalid request URL: "${options.url}"`,
+        responseTimeMs: 0
+      });
+      return;
+    }
+
+    const isHttps = parsedUrl.protocol === 'https:';
+    const transport = isHttps ? https : http;
+    const method = (options.method || 'GET').toUpperCase();
+    const outHeaders = { ...(options.headers || {}) };
+
+    // Remove existing content-length so we compute an accurate byte length
+    for (const k of Object.keys(outHeaders)) {
+      if (k.toLowerCase() === 'content-length') {
+        delete outHeaders[k];
+      }
+    }
+
+    let bodyBuffer = null;
+    if (method !== 'GET' && method !== 'HEAD') {
+      if (Array.isArray(options.multipartParts)) {
+        const mp = buildMultipartBuffer(options.multipartParts);
+        bodyBuffer = mp.buffer;
+        for (const k of Object.keys(outHeaders)) {
+          if (k.toLowerCase() === 'content-type') delete outHeaders[k];
+        }
+        outHeaders['Content-Type'] = `multipart/form-data; boundary=${mp.boundary}`;
+      } else if (options.body !== null && options.body !== undefined) {
+        bodyBuffer = Buffer.isBuffer(options.body)
+          ? options.body
+          : Buffer.from(typeof options.body === 'string' ? options.body : JSON.stringify(options.body), 'utf8');
+      }
+      if (bodyBuffer) {
+        outHeaders['Content-Length'] = String(bodyBuffer.length);
+      }
+    }
+
+    // Attach cookies from Electron cookie jar when enabled and caller did not provide Cookie header
+    if (options.enableCookies !== false) {
+      const hasExplicitCookie = Object.keys(outHeaders).some(k => k.toLowerCase() === 'cookie');
+      const jar = electronCookieJar.get(parsedUrl.hostname);
+      if (!hasExplicitCookie && jar && jar.size > 0) {
+        outHeaders['Cookie'] = Array.from(jar.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+      }
+    }
+
+    const reqOpts = {
+      protocol: parsedUrl.protocol,
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: `${parsedUrl.pathname}${parsedUrl.search}`,
+      method,
+      headers: outHeaders,
+      timeout: options.timeoutMs || 120000
+    };
+
+    if (isHttps) {
+      // Disable TLS session caching so toggling Verify SSL ON <-> OFF takes effect immediately.
+      // SSL verification is OFF by default and enforced strictly when options.verifySsl === true.
+      reqOpts.agent = new https.Agent({
+        rejectUnauthorized: options.verifySsl === true,
+        maxCachedSessions: 0
+      });
+    }
+
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      if (requestId) activeHttpRequests.delete(requestId);
+      resolve(payload);
+    };
+
+    const req = transport.request(reqOpts, (res) => {
+      const statusCode = res.statusCode || 0;
+      const setCookies = Array.isArray(res.headers['set-cookie']) ? res.headers['set-cookie'] : [];
+      if (options.enableCookies !== false && setCookies.length > 0) {
+        storeSetCookies(parsedUrl.hostname, setCookies);
+      }
+      const parsedCookies = parseSetCookieObjects(parsedUrl.hostname, setCookies);
+      const nextCookies = [...accumulatedCookies, ...parsedCookies];
+
+      // Handle redirects
+      const location = res.headers['location'];
+      const isRedirect = [301, 302, 303, 307, 308].includes(statusCode) && !!location;
+      if (isRedirect && options.followRedirects !== false && redirectCount < 10) {
+        res.resume();
+        let nextUrl;
+        try {
+          nextUrl = new URL(location, parsedUrl).toString();
+        } catch {
+          nextUrl = location;
+        }
+        const switchToGet = [301, 302, 303].includes(statusCode) && method !== 'GET' && method !== 'HEAD';
+        const nextMethod = switchToGet ? 'GET' : method;
+        const nextHeaders = { ...(options.headers || {}) };
+        if (switchToGet) {
+          for (const k of Object.keys(nextHeaders)) {
+            if (k.toLowerCase() === 'content-type' || k.toLowerCase() === 'content-length') {
+              delete nextHeaders[k];
+            }
+          }
+        }
+        executeNodeHttpRequest(
+          {
+            ...options,
+            url: nextUrl,
+            method: nextMethod,
+            headers: nextHeaders,
+            body: switchToGet ? null : options.body,
+            multipartParts: switchToGet ? null : options.multipartParts
+          },
+          redirectCount + 1,
+          nextCookies
+        ).then(finish);
+        return;
+      }
+
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const resBody = Buffer.concat(chunks).toString('utf8');
+        const flatHeaders = {};
+        for (const [k, v] of Object.entries(res.headers || {})) {
+          if (v !== undefined) {
+            flatHeaders[k] = Array.isArray(v) ? v.join('; ') : String(v);
+          }
+        }
+        finish({
+          ok: true,
+          statusCode,
+          statusText: res.statusMessage || '',
+          headers: flatHeaders,
+          cookies: nextCookies,
+          body: resBody,
+          responseTimeMs: Date.now() - startTime
+        });
+      });
+    });
+
+    if (requestId) {
+      activeHttpRequests.set(requestId, req);
+    }
+
+    req.on('timeout', () => {
+      req.destroy(Object.assign(new Error('Request timed out'), { code: 'ETIMEDOUT' }));
+    });
+
+    req.on('error', (err) => {
+      if (err && err.message === 'ABORTED_BY_USER') {
+        finish({
+          ok: false,
+          cancelled: true,
+          errorCode: 'CANCELLED',
+          errorMessage: 'Request cancelled',
+          responseTimeMs: Date.now() - startTime
+        });
+        return;
+      }
+      const formatted = formatElectronNetworkError(err, options.url);
+      finish({
+        ok: false,
+        errorCode: formatted.code,
+        errorMessage: formatted.message,
+        responseTimeMs: Date.now() - startTime
+      });
+    });
+
+    if (bodyBuffer) {
+      req.write(bodyBuffer);
+    }
+    req.end();
+  });
+}
+
 app.on('ready', () => {
   evaluatePostUpdateWhatsNew();
+
+  ipcMain.handle('execute-http-request', async (_event, options) => {
+    return executeNodeHttpRequest(options || {});
+  });
+
+  ipcMain.on('cancel-http-request', (_event, requestId) => {
+    const req = requestId ? activeHttpRequests.get(requestId) : null;
+    if (req) {
+      req.destroy(new Error('ABORTED_BY_USER'));
+      activeHttpRequests.delete(requestId);
+    }
+  });
 
   ipcMain.handle('consume-pending-whats-new', () => {
     const payload = pendingWhatsNewForRenderer;

@@ -7,6 +7,7 @@ import { TabStateService } from '../../services/tab.state.service';
 import { VariableService } from '../../services/variable.service';
 import { MatIcon } from '@angular/material/icon';
 import { UTILITIES, generateUtilityValue, getUtilityDescription } from '../../utils/utility-variables';
+import { getAllJsonPathsByLine, getAllXmlPathsByLine, resolvePathMatch } from '../../utils/encryption-path.util';
 
 @Component({
   selector: 'app-monaco-editor',
@@ -78,6 +79,8 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     },
     stickyScroll: { enabled: false },
     scrollBeyondLastLine: false,
+    padding: { top: 8, bottom: 8 },
+    find: { addExtraSpaceOnTop: true },
     fixedOverflowWidgets: true,
     glyphMargin: this.enableEncryptionToggles(),
     wordWrap: this.wordWrap() ? 'on' : 'off',
@@ -139,6 +142,8 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
           readOnly,
           glyphMargin,
           wordWrap,
+          padding: { top: 8, bottom: 8 },
+          find: { addExtraSpaceOnTop: true },
           overviewRulerLanes: 0,
           overviewRulerBorder: false,
           hideCursorInOverviewRuler: true,
@@ -640,12 +645,15 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       editor.onMouseDown((e: any) => {
         const monacoGlobal = (window as any).monaco;
         if (e.target.type === monacoGlobal.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
-          if (this.autoEncrypt()) return;
           const lineNumber = e.target.position.lineNumber;
           const model = editor.getModel();
           if (model) {
             const lines = model.getValue().split('\n');
-            const path = this.getPathAtLine(lines, lineNumber - 1);
+            const lang = (this.language() || '').toLowerCase();
+            const pathsByLine = lang === 'xml'
+              ? getAllXmlPathsByLine(lines)
+              : getAllJsonPathsByLine(lines);
+            const path = pathsByLine[lineNumber - 1];
             if (path) {
               this.toggleEncryption.emit(path);
             }
@@ -713,18 +721,21 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     const decorations: any[] = [];
     const paths = this.encryptedPaths() || [];
     const autoEnc = this.autoEncrypt();
+    const lang = (this.language() || '').toLowerCase();
+    const pathsByLine = lang === 'xml'
+      ? getAllXmlPathsByLine(lines)
+      : getAllJsonPathsByLine(lines);
 
     for (let i = 0; i < lines.length; i++) {
-      const path = this.getPathAtLine(lines, i);
+      const path = pathsByLine[i];
       if (path) {
-        const lastPart = path.includes('.') ? path.split('.').pop()! : path;
-        const isEncrypted = autoEnc || paths.includes(path) || paths.includes(lastPart);
+        const isEncrypted = resolvePathMatch(path, paths, autoEnc);
         decorations.push({
           range: new monacoGlobal.Range(i + 1, 1, i + 1, 1),
           options: {
             isWholeLine: false,
             glyphMarginClassName: (isEncrypted ? 'monaco-lock-icon active ' : 'monaco-lock-icon inactive ') + `theme-sync-${this.themeUpdateId}`,
-            glyphMarginHoverMessage: { value: isEncrypted ? 'Click to disable encryption' : 'Click to enable encryption' }
+            glyphMarginHoverMessage: { value: isEncrypted ? `Click to disable encryption (${path})` : `Click to enable encryption (${path})` }
           }
         });
       }
@@ -737,80 +748,6 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     } else {
       this.decorationsCollection = editor.createDecorationsCollection(decorations);
     }
-  }
-
-  private getPathAtLine(lines: string[], targetLineIndex: number): string | null {
-    const lang = (this.language() || '').toLowerCase();
-    if (lang === 'xml') {
-      return this.getXmlPathAtLine(lines, targetLineIndex);
-    }
-    return this.getJsonPathAtLine(lines, targetLineIndex);
-  }
-
-  private getXmlPathAtLine(lines: string[], targetLineIndex: number): string | null {
-    const targetLine = lines[targetLineIndex];
-    if (!targetLine) return null;
-    const openMatch = targetLine.match(/<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(?:\/?>|>)/);
-    if (!openMatch) return null;
-    const targetTag = openMatch[1];
-    if (targetTag.startsWith('?') || targetTag.startsWith('!')) return null;
-
-    const stack: string[] = [];
-    for (let i = 0; i <= targetLineIndex; i++) {
-      const l = lines[i].trim();
-      if (!l || l.startsWith('<!--') || l.startsWith('<?')) continue;
-      const tagMatches = Array.from(l.matchAll(/<\/?([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(\/?)>/g));
-      for (const match of tagMatches) {
-        const isClosing = match[0].startsWith('</');
-        const isSelfClosing = match[2] === '/' || match[0].endsWith('/>') || match[0].endsWith('/ >');
-        const tagName = match[1];
-
-        if (isClosing) {
-          if (stack.length > 0 && stack[stack.length - 1] === tagName) {
-            stack.pop();
-          }
-        } else if (!isSelfClosing) {
-          if (i === targetLineIndex && tagName === targetTag) {
-            return [...stack, tagName].join('.');
-          }
-          const closeOnSameLine = l.includes(`</${tagName}>`);
-          if (!closeOnSameLine) {
-            stack.push(tagName);
-          }
-        } else {
-          if (i === targetLineIndex && tagName === targetTag) {
-            return [...stack, tagName].join('.');
-          }
-        }
-      }
-    }
-    return targetTag;
-  }
-
-  private getJsonPathAtLine(lines: string[], targetLineIndex: number): string | null {
-    const targetLine = lines[targetLineIndex];
-    if (!targetLine) return null;
-    const keyMatch = targetLine.match(/^\s*(?:\{\s*)?"([^"]+)"\s*:/);
-    if (!keyMatch) return null;
-
-    const targetKey = keyMatch[1];
-    const targetIndent = targetLine.search(/\S/);
-
-    const path: string[] = [targetKey];
-    let currentIndent = targetIndent;
-
-    for (let i = targetLineIndex - 1; i >= 0; i--) {
-      const line = lines[i];
-      const indent = line.search(/\S/);
-      if (indent !== -1 && indent < currentIndent) {
-        const parentMatch = line.match(/^\s*(?:\{\s*)?"([^"]+)"\s*:\s*\{/);
-        if (parentMatch) {
-          path.unshift(parentMatch[1]);
-          currentIndent = indent;
-        }
-      }
-    }
-    return path.join('.');
   }
 
   private applyHoveredVariable(

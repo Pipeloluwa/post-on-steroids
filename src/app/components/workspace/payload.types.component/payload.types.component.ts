@@ -18,6 +18,7 @@ import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/t
 import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet, DEFAULT_ENCRYPTION_SCRIPT_SKELETON, DEFAULT_DECRYPTION_SCRIPT_SKELETON, DEFAULT_PRE_REQUEST_SCRIPT_SKELETON, DEFAULT_POST_RESPONSE_SCRIPT_SKELETON, DEFAULT_TEST_SCRIPT_SKELETON } from '../../../shared/constants/script.snippets.constants';
 import { DialogService } from '../../../shared/services/dialog.service';
 import { sanitizeJsonBodyForScripts } from '../../../shared/utils/format.utils';
+import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../../../shared/utils/encryption-path.util';
 import { isElectronApp } from '../../../shared/utils/url.util';
 
 @Component({
@@ -220,26 +221,28 @@ export class PayloadTypesComponent {
           }
       });
 
-      let requestBody = '';
-      const isXmlType = state?.rawType === 'XML' || state?.rawType === 'XML (SOAP)' || state?.rawType === 'SOAP';
-      
-      if (state?.bodyType === 'raw') {
-          const rawBodyContent = isXmlType
-              ? (state.rawBodyXml || state.rawBody || '')
-              : (state.rawBodyJson || state.rawBody || '{}');
-          requestBody = isXmlType
-              ? this.variableService.resolve(rawBodyContent)
-              : this.variableService.resolveJson(rawBodyContent);
-      } else if (state?.bodyType === 'form-data') {
-          const fd: Record<string, string> = {};
-          for (const row of state.formData || []) {
-             if (row.enabled && row.key) fd[this.variableService.resolveScript(row.key)] = this.variableService.resolveScript(row.value);
-          }
-          requestBody = JSON.stringify(fd);
-      }
-      
-      // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
-      const cleanBody = isXmlType ? requestBody.trim() : sanitizeJsonBodyForScripts(requestBody);
+      const prepared = buildEncryptionPayloadContext({
+          bodyType: state?.bodyType || 'none',
+          rawType: state?.rawType || 'JSON',
+          rawBodyJson: state?.rawBodyJson ? this.variableService.resolveJson(state.rawBodyJson) : undefined,
+          rawBodyXml: state?.rawBodyXml ? this.variableService.resolve(state.rawBodyXml) : undefined,
+          rawBodyText: state?.rawBodyText ? this.variableService.resolve(state.rawBodyText) : undefined,
+          rawBody: state?.rawBody ? this.variableService.resolve(state.rawBody) : undefined,
+          formData: (state?.formData || []).map(row => ({
+              ...row,
+              key: this.variableService.resolve(row.key || ''),
+              value: typeof row.value === 'string' ? this.variableService.resolve(row.value) : row.value
+          })),
+          urlEncodedData: (state?.urlEncodedData || []).map(row => ({
+              ...row,
+              key: this.variableService.resolve(row.key || ''),
+              value: this.variableService.resolve(row.value || '')
+          })),
+          graphqlQuery: state?.graphqlQuery ? this.variableService.resolve(state.graphqlQuery) : '',
+          graphqlVariables: state?.graphqlVariables ? this.variableService.resolveJson(state.graphqlVariables) : '{}',
+          encryptedBodyPaths: state?.encryption?.encryptedBodyPaths || [],
+          autoEncryptBody: state?.encryption?.autoEncryptBody || false
+      });
 
       const rawEncryptedHeaders = state?.encryption?.encryptedHeaders || [];
       const autoEncryptHeaders = !!state?.encryption?.autoEncryptHeaders;
@@ -282,11 +285,21 @@ export class PayloadTypesComponent {
 
       const context = {
           headers: resolvedHeaders,
-          body: cleanBody || requestBody,
+          body: prepared.body,
           params: state?.params || [],
           encryptedHeaders: normalizedEncryptedHeaders,
-          encryptedBodyPaths: state?.encryption.encryptedBodyPaths || [],
-          autoEncryptBody: state?.encryption.autoEncryptBody || false,
+          encryptedBodyPaths: prepared.encryptedBodyPaths,
+          bodyType: prepared.bodyType,
+          rawType: prepared.rawType,
+          formData: prepared.formData,
+          encryptedFormData: prepared.encryptedFormData,
+          urlEncodedData: prepared.urlEncodedData,
+          encryptedUrlEncodedData: prepared.encryptedUrlEncodedData,
+          graphql: prepared.graphql,
+          encryptedGraphqlPaths: prepared.encryptedGraphqlPaths,
+          rawText: prepared.rawText,
+          encryptRawText: prepared.encryptRawText,
+          autoEncryptBody: prepared.autoEncryptBody,
           autoEncryptHeaders: autoEncryptHeaders,
       };
 
@@ -303,10 +316,10 @@ export class PayloadTypesComponent {
               return wasTargeted || wasModified;
           });
 
-          const bodyOut = result.context?.body;
-          const bodyString = typeof bodyOut === 'object' ? JSON.stringify(bodyOut, null, 2) : String(bodyOut ?? '');
-          const hasBodyTargets = (state?.encryption?.encryptedBodyPaths?.length ?? 0) > 0 || !!state?.encryption?.autoEncryptBody;
-          const bodyWasModified = bodyString.trim() !== '' && bodyString.trim() !== '{}' && bodyString.trim() !== (cleanBody || requestBody).trim();
+          const reconciledBody = reconcileEncryptionResult(prepared, result.context);
+          const bodyString = typeof reconciledBody === 'object' ? JSON.stringify(reconciledBody, null, 2) : String(reconciledBody ?? '');
+          const hasBodyTargets = prepared.encryptedBodyPaths.length > 0 || prepared.autoEncryptBody;
+          const bodyWasModified = bodyString.trim() !== '' && bodyString.trim() !== '{}' && bodyString.trim() !== prepared.initialBodyStr.trim();
 
           let resultString = bodyString;
           if (targetedOrModifiedHeaders.length > 0) {
@@ -342,7 +355,7 @@ export class PayloadTypesComponent {
                   encryptionConsole: `Error:\n${result.error}\n\nLogs:\n${result.logs || ''}`
               }
           });
-          this.notificationService.notify('Encryption script error: ' + result.error);
+          this.notificationService.notify('Encryption script error: ' + result.error, 'error');
       }
         } finally {
             this.isRunningEncryptionScript.set(false);
@@ -578,7 +591,7 @@ export class PayloadTypesComponent {
   auth = computed(() => this.tabState()?.auth ?? { type: 'none' as const, token: '' });
   scripts = computed(() => this.tabState()?.scripts ?? { preRequest: '', postResponse: '', preRequestConsole: '', postResponseConsole: '', encryptionConsole: '', testScript: '', testScriptEnabled: false });
   encryption = computed(() => this.tabState()?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
-  settings = computed(() => this.tabState()?.settings ?? { followRedirects: true, verifySsl: true, enableCookies: true, bypassCors: true });
+  settings = computed(() => this.tabState()?.settings ?? { followRedirects: true, verifySsl: false, enableCookies: true, bypassCors: true });
 
   setPayloadType(type: string) {
     this.tabStateService.updateState(this.tabId(), { payloadType: type });

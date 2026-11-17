@@ -89,10 +89,10 @@
             <button (click)="toggleAutoEncryptBody()"
                 title="Encrypt all fields"
                 class="relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none shrink-0"
-                [class.bg-(--postonsteroids-accent)]="encryption().encryptedBodyPaths.length > 0"
-                [class.bg-(--postonsteroids-bg-tertiary)]="encryption().encryptedBodyPaths.length === 0">
+                [class.bg-(--postonsteroids-accent)]="encryption().encryptedBodyPaths.length > 0 || encryption().autoEncryptBody"
+                [class.bg-(--postonsteroids-bg-tertiary)]="encryption().encryptedBodyPaths.length === 0 && !encryption().autoEncryptBody">
                 <div class="absolute top-[3px] left-[3px] w-[14px] h-[14px] bg-white rounded-full transition-transform duration-200"
-                    [class.translate-x-4]="encryption().encryptedBodyPaths.length > 0"></div>
+                    [class.translate-x-4]="encryption().encryptedBodyPaths.length > 0 || encryption().autoEncryptBody"></div>
             </button>
         </div>
     </div>
@@ -126,12 +126,12 @@
 
     <!-- ─── FORM-DATA ─── -->
     @if (bodyType() === 'form-data') {
-    <div class="flex flex-col">
-        <table class="w-full text-[12px] border-collapse">
+    <div class="flex-1 flex flex-col min-h-[180px] overflow-y-auto">
+        <table class="w-full table-fixed text-[12px] border-collapse">
             <thead>
                 <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/40">
-                    <th class="w-6 py-1.5 font-medium text-center"></th>
-                    <th class="py-1.5 px-2 font-medium text-left">Key</th>
+                    <th class="w-7 py-1.5 font-medium text-center"></th>
+                    <th class="w-[38%] py-1.5 px-2 font-medium text-left">Key</th>
                     <th class="py-1.5 px-2 font-medium text-left">Value</th>
                     <th class="py-1.5 px-2 font-medium text-left w-[90px]">Type</th>
                     <th class="w-8"></th>
@@ -139,32 +139,35 @@
             </thead>
             <tbody>
                 @for (row of formData(); track $index) {
-                <tr class="group border-b border-(--postonsteroids-border)/20 hover:bg-(--postonsteroids-bg-hover)/30">
-                    <td class="py-1 text-center">
+                <tr class="group h-[34px] border-b border-(--postonsteroids-border)/20 hover:bg-(--postonsteroids-bg-hover)/30">
+                    <td class="py-1 text-center align-middle">
                         <input type="checkbox" [checked]="row.enabled"
                             (change)="updateFormDataRow($index, 'enabled', $any($event.target).checked)"
                             class="accent-(--postonsteroids-accent) cursor-pointer" />
                     </td>
-                    <td class="py-1 px-2">
-                        <div class="flex items-center gap-x-1.5">
-                            @if (row.key) {
-                            <button type="button" (click)="toggleBodyEncryption(row.key)"
-                                [title]="isBodyFieldEncrypted(row.key) ? 'Encrypted (click to unlock)' : 'Click to encrypt this field'"
-                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors cursor-pointer shrink-0"
-                                [class.text-(--postonsteroids-accent)]="isBodyFieldEncrypted(row.key)"
-                                [class.text-(--postonsteroids-text-muted)]="!isBodyFieldEncrypted(row.key)">
-                                <mat-icon class="text-[14px]! size-[14px]!">{{ isBodyFieldEncrypted(row.key) ? 'lock' : 'lock_open' }}</mat-icon>
+                    <td class="py-1 px-2 align-middle">
+                        <div class="flex items-center gap-x-1.5 min-h-[26px]">
+                            <button type="button" (click)="row.key && toggleBodyEncryption(row.key)"
+                                [disabled]="!row.key"
+                                [title]="!row.key ? 'Enter key name to lock' : (isBodyFieldEncrypted(row.key) ? 'Encrypted (click to unlock)' : 'Click to encrypt this field')"
+                                class="w-[20px] h-[20px] flex items-center justify-center rounded hover:bg-(--postonsteroids-bg-hover) transition-colors shrink-0"
+                                [class.cursor-pointer]="!!row.key"
+                                [class.opacity-20]="!row.key"
+                                [class.pointer-events-none]="!row.key"
+                                [class.text-(--postonsteroids-accent)]="!!row.key && isBodyFieldEncrypted(row.key)"
+                                [class.text-(--postonsteroids-text-muted)]="!row.key || !isBodyFieldEncrypted(row.key)">
+                                <mat-icon class="text-[14px]! size-[14px]!">{{ (row.key && isBodyFieldEncrypted(row.key)) ? 'lock' : 'lock_open' }}</mat-icon>
                             </button>
-                            }
                             <app-variable-input [ngModel]="row.key"
                                 (ngModelChange)="updateFormDataRow($index, 'key', $event)" placeholder="Key"
-                                customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                                class="flex-1 min-w-0 block"
+                                customClass="w-full min-h-[24px] py-0.5 leading-[18px] text-[12px] bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
                             </app-variable-input>
                         </div>
                     </td>
-                    <td class="py-1 px-2">
+                    <td class="py-1 px-2 align-middle">
                         @if (row.type === 'file') {
-                        <div class="flex items-center gap-x-2">
+                        <div class="flex items-center gap-x-2 min-h-[26px]">
                             @if (row.value) {
                             <span
                                 class="text-[12px] text-(--postonsteroids-text-primary) font-mono truncate max-w-[250px]">{{
@@ -179,13 +182,16 @@
                             </button>
                         </div>
                         } @else {
-                        <app-variable-input [ngModel]="row.value"
-                            (ngModelChange)="updateFormDataRow($index, 'value', $event)" placeholder="Value"
-                            customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
-                        </app-variable-input>
+                        <div class="flex items-center min-h-[26px]">
+                            <app-variable-input [ngModel]="row.value"
+                                (ngModelChange)="updateFormDataRow($index, 'value', $event)" placeholder="Value"
+                                class="w-full min-w-0 block"
+                                customClass="w-full min-h-[24px] py-0.5 leading-[18px] text-[12px] bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                            </app-variable-input>
+                        </div>
                         }
                     </td>
-                    <td class="py-1 px-2">
+                    <td class="py-1 px-2 align-middle">
                         <app-scrollable-select-component [activeValue]="row.type" [optionValues]="rowTypes"
                             [verticalPosition]="22" [modalWidth]="90" [absoluteStartLeft]="true"
                             (outputSelectedValue)="setFormDataRowType($index, $any($event))">
@@ -197,7 +203,7 @@
                             </div>
                         </app-scrollable-select-component>
                     </td>
-                    <td class="py-1 text-center">
+                    <td class="py-1 text-center align-middle">
                         <button (click)="deleteFormDataRow($index)"
                             class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-(--postonsteroids-text-muted) hover:text-status-danger">
                             <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
@@ -208,7 +214,7 @@
             </tbody>
         </table>
         <button (click)="addFormDataRow()"
-            class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors">
+            class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors shrink-0">
             <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Field
         </button>
     </div>
@@ -216,48 +222,54 @@
 
     <!-- ─── X-WWW-FORM-URLENCODED ─── -->
     @if (bodyType() === 'x-www-form-urlencoded') {
-    <div class="flex flex-col">
-        <table class="w-full text-[12px] border-collapse">
+    <div class="flex-1 flex flex-col min-h-[180px] overflow-y-auto">
+        <table class="w-full table-fixed text-[12px] border-collapse">
             <thead>
                 <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/40">
-                    <th class="w-6 py-1.5 font-medium text-center"></th>
-                    <th class="py-1.5 px-2 font-medium text-left">Key</th>
+                    <th class="w-7 py-1.5 font-medium text-center"></th>
+                    <th class="w-[42%] py-1.5 px-2 font-medium text-left">Key</th>
                     <th class="py-1.5 px-2 font-medium text-left">Value</th>
                     <th class="w-8"></th>
                 </tr>
             </thead>
             <tbody>
                 @for (row of urlEncodedData(); track $index) {
-                <tr class="group border-b border-(--postonsteroids-border)/20 hover:bg-(--postonsteroids-bg-hover)/30">
-                    <td class="py-1 text-center">
+                <tr class="group h-[34px] border-b border-(--postonsteroids-border)/20 hover:bg-(--postonsteroids-bg-hover)/30">
+                    <td class="py-1 text-center align-middle">
                         <input type="checkbox" [checked]="row.enabled"
                             (change)="updateUrlEncodedRow($index, 'enabled', $any($event.target).checked)"
                             class="accent-(--postonsteroids-accent) cursor-pointer" />
                     </td>
-                    <td class="py-1 px-2">
-                        <div class="flex items-center gap-x-1.5">
-                            @if (row.key) {
-                            <button type="button" (click)="toggleBodyEncryption(row.key)"
-                                [title]="isBodyFieldEncrypted(row.key) ? 'Encrypted (click to unlock)' : 'Click to encrypt this field'"
-                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-colors cursor-pointer shrink-0"
-                                [class.text-(--postonsteroids-accent)]="isBodyFieldEncrypted(row.key)"
-                                [class.text-(--postonsteroids-text-muted)]="!isBodyFieldEncrypted(row.key)">
-                                <mat-icon class="text-[14px]! size-[14px]!">{{ isBodyFieldEncrypted(row.key) ? 'lock' : 'lock_open' }}</mat-icon>
+                    <td class="py-1 px-2 align-middle">
+                        <div class="flex items-center gap-x-1.5 min-h-[26px]">
+                            <button type="button" (click)="row.key && toggleBodyEncryption(row.key)"
+                                [disabled]="!row.key"
+                                [title]="!row.key ? 'Enter key name to lock' : (isBodyFieldEncrypted(row.key) ? 'Encrypted (click to unlock)' : 'Click to encrypt this field')"
+                                class="w-[20px] h-[20px] flex items-center justify-center rounded hover:bg-(--postonsteroids-bg-hover) transition-colors shrink-0"
+                                [class.cursor-pointer]="!!row.key"
+                                [class.opacity-20]="!row.key"
+                                [class.pointer-events-none]="!row.key"
+                                [class.text-(--postonsteroids-accent)]="!!row.key && isBodyFieldEncrypted(row.key)"
+                                [class.text-(--postonsteroids-text-muted)]="!row.key || !isBodyFieldEncrypted(row.key)">
+                                <mat-icon class="text-[14px]! size-[14px]!">{{ (row.key && isBodyFieldEncrypted(row.key)) ? 'lock' : 'lock_open' }}</mat-icon>
                             </button>
-                            }
                             <app-variable-input [ngModel]="row.key"
                                 (ngModelChange)="updateUrlEncodedRow($index, 'key', $event)" placeholder="Key"
-                                customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                                class="flex-1 min-w-0 block"
+                                customClass="w-full min-h-[24px] py-0.5 leading-[18px] text-[12px] bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
                             </app-variable-input>
                         </div>
                     </td>
-                    <td class="py-1 px-2">
-                        <app-variable-input [ngModel]="row.value"
-                            (ngModelChange)="updateUrlEncodedRow($index, 'value', $event)" placeholder="Value"
-                            customClass="w-full bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
-                        </app-variable-input>
+                    <td class="py-1 px-2 align-middle">
+                        <div class="flex items-center min-h-[26px]">
+                            <app-variable-input [ngModel]="row.value"
+                                (ngModelChange)="updateUrlEncodedRow($index, 'value', $event)" placeholder="Value"
+                                class="w-full min-w-0 block"
+                                customClass="w-full min-h-[24px] py-0.5 leading-[18px] text-[12px] bg-transparent outline-none text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                            </app-variable-input>
+                        </div>
                     </td>
-                    <td class="py-1 text-center">
+                    <td class="py-1 text-center align-middle">
                         <button (click)="deleteUrlEncodedRow($index)"
                             class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-(--postonsteroids-text-muted) hover:text-status-danger">
                             <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
@@ -268,7 +280,7 @@
             </tbody>
         </table>
         <button (click)="addUrlEncodedRow()"
-            class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors">
+            class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors shrink-0">
             <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Field
         </button>
     </div>
@@ -276,9 +288,11 @@
 
     <!-- ─── GRAPHQL ─── -->
     @if (bodyType() === 'graphql') {
-    <div class="flex-1 flex flex-col md:flex-row gap-2 min-h-0 h-full">
+    <div #graphqlContainer
+        class="flex-1 flex flex-col md:flex-row min-h-0 h-full gap-y-2 md:gap-y-0"
+        [style.--gql-left.%]="graphqlQueryPercent()">
         <!-- Query Pane -->
-        <div class="flex-1 flex flex-col min-h-0 border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-secondary)">
+        <div class="graphql-query-pane flex-1 md:flex-none flex flex-col min-h-[120px] md:min-h-0 min-w-0 border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-secondary)">
             <div class="flex items-center justify-between px-2.5 py-1 text-[11px] font-medium text-(--postonsteroids-text-secondary) bg-(--postonsteroids-bg-tertiary)/40 border-b border-(--postonsteroids-border)/30">
                 <span>Query</span>
             </div>
@@ -288,8 +302,19 @@
                 </app-monaco-editor>
             </div>
         </div>
+
+        <!-- Horizontal Resize Handle -->
+        <div (mousedown)="startResizingGraphql($event)"
+            title="Drag to resize Query and Variables editors"
+            class="hidden md:flex items-center justify-center w-[8px] h-full shrink-0 cursor-ew-resize group z-10 select-none">
+            <div class="w-[3px] h-10 rounded-full transition-colors duration-200"
+                [class.bg-(--postonsteroids-accent)]="isResizingGraphql()"
+                [class.bg-(--postonsteroids-border)]=" !isResizingGraphql()"
+                [class.group-hover:bg-(--postonsteroids-accent)]="!isResizingGraphql()"></div>
+        </div>
+
         <!-- Variables Pane -->
-        <div class="w-full md:w-[320px] lg:w-[380px] flex flex-col min-h-0 border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-secondary)">
+        <div class="graphql-vars-pane flex-1 flex flex-col min-h-[120px] md:min-h-0 min-w-0 border border-(--postonsteroids-border) rounded overflow-hidden bg-(--postonsteroids-bg-secondary)">
             <div class="flex items-center justify-between px-2.5 py-1 text-[11px] font-medium text-(--postonsteroids-text-secondary) bg-(--postonsteroids-bg-tertiary)/40 border-b border-(--postonsteroids-border)/30">
                 <span>Variables (JSON)</span>
             </div>

@@ -1,4 +1,4 @@
-import { Component, signal, inject, computed, PLATFORM_ID, input, viewChild } from '@angular/core';
+import { Component, signal, inject, computed, PLATFORM_ID, input, viewChild, ElementRef } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -12,6 +12,7 @@ import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 
 import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle, parseJsonSafe } from '../../../shared/utils/format.utils';
+import { extractAllBodyLeafPaths } from '../../../shared/utils/encryption-path.util';
 
 @Component({
   selector: 'app-body-types-component',
@@ -20,7 +21,9 @@ import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle, parseJsonSafe } from 
   templateUrl: './body.types.component.html',
   styleUrl: './body.types.component.css',
   host: {
-    class: 'flex-1 flex flex-col min-h-0'
+    class: 'flex-1 flex flex-col min-h-0',
+    '(document:mousemove)': 'onGraphqlResizeMove($event)',
+    '(document:mouseup)': 'stopResizingGraphql()'
   }
 })
 export class BodyTypesComponent {
@@ -30,6 +33,43 @@ export class BodyTypesComponent {
   private variableService = inject(VariableService);
   private notificationService = inject(NotificationService);
   tabId = input.required<string>();
+
+  graphqlContainer = viewChild<ElementRef<HTMLElement>>('graphqlContainer');
+  graphqlQueryPercent = signal<number>(this.loadSavedGraphqlPercent());
+  isResizingGraphql = signal<boolean>(false);
+
+  private loadSavedGraphqlPercent(): number {
+    if (!isPlatformBrowser(this.platformId)) return 60;
+    const saved = localStorage.getItem('onsteroids_graphql_query_percent');
+    if (saved) {
+      const val = parseFloat(saved);
+      if (!isNaN(val)) return Math.max(20, Math.min(82, val));
+    }
+    return 60;
+  }
+
+  startResizingGraphql(event: MouseEvent) {
+    event.preventDefault();
+    this.isResizingGraphql.set(true);
+  }
+
+  onGraphqlResizeMove(event: MouseEvent) {
+    if (!this.isResizingGraphql() || !this.isBrowser) return;
+    const containerEl = this.graphqlContainer()?.nativeElement;
+    if (!containerEl) return;
+    const rect = containerEl.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const pct = ((event.clientX - rect.left) / rect.width) * 100;
+    this.graphqlQueryPercent.set(Math.max(20, Math.min(82, Math.round(pct * 10) / 10)));
+  }
+
+  stopResizingGraphql() {
+    if (!this.isResizingGraphql()) return;
+    this.isResizingGraphql.set(false);
+    if (this.isBrowser) {
+      localStorage.setItem('onsteroids_graphql_query_percent', String(this.graphqlQueryPercent()));
+    }
+  }
 
   wrapStyles = WRAP_STYLE_OPTIONS;
   wrapStyle = computed<WrapStyle>(() => {
@@ -95,31 +135,47 @@ export class BodyTypesComponent {
 
   isBodyFieldEncrypted(key: string): boolean {
     if (!key) return false;
-    const paths = this.encryption()?.encryptedBodyPaths || [];
+    const enc = this.encryption();
+    if (enc?.autoEncryptBody) return true;
+    const paths = enc?.encryptedBodyPaths || [];
     return paths.includes(key);
+  }
+
+  private getCurrentBodyTargetPaths(): string[] {
+    const bt = this.bodyType();
+    if (bt === 'form-data') {
+      return this.formData().filter(f => f.enabled && f.type !== 'file').map(f => f.key.trim()).filter(Boolean);
+    }
+    if (bt === 'x-www-form-urlencoded') {
+      return this.urlEncodedData().filter(u => u.enabled).map(u => u.key.trim()).filter(Boolean);
+    }
+    if (bt === 'graphql') {
+      return extractAllBodyLeafPaths(this.graphqlVariables(), false);
+    }
+    if (bt === 'raw' && this.rawType() === 'Text') {
+      return ['__raw_text__'];
+    }
+    const bodyStr = this.monacoEditor()?.getEditorValue() || this.rawBodyContent();
+    const isXml = this.rawType() === 'XML' || this.rawType() === 'XML (SOAP)' || this.rawType() === 'SOAP';
+    return extractAllBodyLeafPaths(bodyStr, isXml);
   }
 
   toggleAutoEncryptBody() {
       const current = this.encryption();
       const bt = this.bodyType();
-      let targetPaths: string[] = [];
+      const targetPaths = this.getCurrentBodyTargetPaths();
+      const currentPaths = current.encryptedBodyPaths || [];
 
-      if (bt === 'form-data') {
-          targetPaths = this.formData().map(f => f.key.trim()).filter(Boolean);
-      } else if (bt === 'x-www-form-urlencoded') {
-          targetPaths = this.urlEncodedData().map(u => u.key.trim()).filter(Boolean);
-      } else if (bt === 'graphql') {
-          targetPaths = this.extractBodyPaths(this.graphqlVariables());
+      let hasActiveCurrentPaths: boolean;
+      if (bt === 'raw' && this.rawType() === 'Text') {
+          hasActiveCurrentPaths = !!current.autoEncryptBody || currentPaths.includes('__raw_text__');
       } else {
-          const bodyStr = this.monacoEditor()?.getEditorValue() || this.rawBodyContent();
-          targetPaths = this.extractBodyPaths(bodyStr);
+          hasActiveCurrentPaths =
+              !!current.autoEncryptBody ||
+              (currentPaths.length > 0 && (targetPaths.length === 0 || targetPaths.every(p => currentPaths.includes(p))));
       }
 
-      const currentPaths = current.encryptedBodyPaths || [];
-      const hasActiveCurrentPaths =
-          currentPaths.length > 0 &&
-          (targetPaths.length === 0 || targetPaths.every(p => currentPaths.includes(p)));
-
+      const nextAutoEncrypt = !hasActiveCurrentPaths;
       const newEncryptedBodyPaths = hasActiveCurrentPaths
           ? currentPaths.filter(p => !targetPaths.includes(p))
           : Array.from(new Set([...currentPaths, ...targetPaths]));
@@ -127,146 +183,45 @@ export class BodyTypesComponent {
       const id = this.tabId();
       if (id) {
           this.tabStateService.updateState(id, {
-              encryption: { ...current, encryptedBodyPaths: newEncryptedBodyPaths }
+              encryption: {
+                  ...current,
+                  encryptedBodyPaths: newEncryptedBodyPaths,
+                  autoEncryptBody: nextAutoEncrypt
+              }
           });
       }
-  }
-
-  private extractXmlBodyPaths(xml: string): string[] {
-    if (!xml || typeof xml !== 'string') return [];
-    const lines = xml.split(/\r?\n/);
-    const paths: string[] = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i].trim();
-      const leafMatch = l.match(/<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?>([^<]*)<\/\1>|<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?\/>/);
-      if (leafMatch) {
-        const p = this.getXmlPathAtLine(lines, i);
-        if (p && !paths.includes(p)) {
-          paths.push(p);
-        }
-      }
-    }
-    return paths;
-  }
-
-  private getXmlPathAtLine(lines: string[], targetLineIndex: number): string | null {
-    const targetLine = lines[targetLineIndex];
-    if (!targetLine) return null;
-    const openMatch = targetLine.match(/<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(?:\/?>|>)/);
-    if (!openMatch) return null;
-    const targetTag = openMatch[1];
-    if (targetTag.startsWith('?') || targetTag.startsWith('!')) return null;
-
-    const stack: string[] = [];
-    for (let i = 0; i <= targetLineIndex; i++) {
-      const l = lines[i].trim();
-      if (!l || l.startsWith('<!--') || l.startsWith('<?')) continue;
-      const tagMatches = Array.from(l.matchAll(/<\/?([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(\/?)>/g));
-      for (const match of tagMatches) {
-        const isClosing = match[0].startsWith('</');
-        const isSelfClosing = match[2] === '/' || match[0].endsWith('/>') || match[0].endsWith('/ >');
-        const tagName = match[1];
-
-        if (isClosing) {
-          if (stack.length > 0 && stack[stack.length - 1] === tagName) {
-            stack.pop();
-          }
-        } else if (!isSelfClosing) {
-          if (i === targetLineIndex && tagName === targetTag) {
-            return [...stack, tagName].join('.');
-          }
-          const closeOnSameLine = l.includes(`</${tagName}>`);
-          if (!closeOnSameLine) {
-            stack.push(tagName);
-          }
-        } else {
-          if (i === targetLineIndex && tagName === targetTag) {
-            return [...stack, tagName].join('.');
-          }
-        }
-      }
-    }
-    return targetTag;
-  }
-
-  private extractBodyPaths(bodyStr: string): string[] {
-      if (!bodyStr || !bodyStr.trim()) return [];
-      const isXml = this.rawType() === 'XML' || this.rawType() === 'XML (SOAP)' || this.rawType() === 'SOAP';
-      if (isXml) {
-          return this.extractXmlBodyPaths(bodyStr);
-      }
-      try {
-          const bodyObj = parseJsonSafe(bodyStr);
-          if (bodyObj && typeof bodyObj === 'object') {
-              const paths = this.getPrimitivePaths(bodyObj);
-              if (paths.length > 0) return paths;
-          }
-      } catch {
-          // Fall back to line/regex extraction below if JSON is partially malformed
-      }
-
-      // Fallback: extract leaf property paths directly from raw JSON text
-      const paths: string[] = [];
-      const stack: string[] = [];
-      const lines = bodyStr.split(/\r?\n/);
-      for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line || line.startsWith('//')) continue;
-
-          const objOpen = line.match(/^"([^"]+)"\s*:\s*\{/);
-          if (objOpen) {
-              stack.push(objOpen[1]);
-              if (line.includes('}')) {
-                  stack.pop();
-              }
-              continue;
-          }
-
-          const propMatch = line.match(/^"?([a-zA-Z0-9_.\-]+)"?\s*:\s*(.+)$/);
-          if (propMatch) {
-              const key = propMatch[1];
-              const valPart = propMatch[2].trim();
-              if (!valPart.startsWith('{')) {
-                  const fullPath = stack.length > 0 ? `${stack.join('.')}.${key}` : key;
-                  if (!paths.includes(fullPath)) {
-                      paths.push(fullPath);
-                  }
-              }
-          }
-
-          if (line.startsWith('}') && stack.length > 0) {
-              stack.pop();
-          }
-      }
-      return paths;
-  }
-
-  private getPrimitivePaths(obj: any, currentPath = ''): string[] {
-      let paths: string[] = [];
-      for (let key in obj) {
-          if (obj.hasOwnProperty(key)) {
-              const path = currentPath ? `${currentPath}.${key}` : key;
-              if (obj[key] !== null && typeof obj[key] === 'object') {
-                  paths = paths.concat(this.getPrimitivePaths(obj[key], path));
-              } else {
-                  paths.push(path);
-              }
-          }
-      }
-      return paths;
   }
 
   toggleBodyEncryption(path: string) {
     if (!path) return;
     const current = this.encryption();
-    const paths = new Set(current.encryptedBodyPaths || []);
+    const targetPaths = this.getCurrentBodyTargetPaths();
+    let paths = new Set(current.encryptedBodyPaths || []);
+
+    if (current.autoEncryptBody && targetPaths.some(tp => !paths.has(tp))) {
+      for (const tp of targetPaths) {
+        paths.add(tp);
+      }
+    }
+
     if (paths.has(path)) {
       paths.delete(path);
     } else {
       paths.add(path);
     }
-    this.setEncryptionField('encryptedBodyPaths', Array.from(paths));
+
+    const nextPaths = Array.from(paths);
+    const allSelected = targetPaths.length > 0 && targetPaths.every(tp => nextPaths.includes(tp));
+    const id = this.tabId();
+    if (id) {
+      this.tabStateService.updateState(id, {
+        encryption: {
+          ...current,
+          encryptedBodyPaths: nextPaths,
+          autoEncryptBody: allSelected
+        }
+      });
+    }
   }
 
   setBodyType(type: string) {
@@ -428,14 +383,15 @@ export class BodyTypesComponent {
     }
 
     const isXml = this.rawType() === 'XML' || this.rawType() === 'XML (SOAP)' || this.rawType() === 'SOAP';
-    const transformed = formatBodyByStyle(content, style, isXml ? 'XML' : this.rawType());
+    const isText = this.rawType() === 'Text';
+    const transformed = isText ? content : formatBodyByStyle(content, style, isXml ? 'XML' : this.rawType());
     
     if (editor) {
       editor.setEditorValue(transformed);
     } else {
       this.tabStateService.updateState(id, {
         rawBody: transformed,
-        ...(isXml ? { rawBodyXml: transformed } : { rawBodyJson: transformed })
+        ...(isXml ? { rawBodyXml: transformed } : (isText ? { rawBodyText: transformed } : { rawBodyJson: transformed }))
       });
     }
   }

@@ -1,6 +1,6 @@
 @if (show()) {
 <div
-    class="fixed top-6 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-x-3 px-4 py-3 rounded-2xl border shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300 max-w-[92vw] md:max-w-[560px] select-none"
+    class="fixed bottom-4 right-4 z-[250] flex items-center gap-x-2 px-3 py-1.5 rounded-lg border shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-[90vw] sm:max-w-[340px] select-none"
     [class.bg-[#FFFBEB]]="!isDark() && type() === 'warning'"
     [class.border-amber-300]="!isDark() && type() === 'warning'"
     [class.shadow-amber-900/10]="!isDark() && type() === 'warning'"
@@ -39,7 +39,7 @@
 
     <!-- Icon Container -->
     @if (type() === 'warning') {
-        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+        <div class="flex items-center justify-center w-5 h-5 rounded-md shrink-0"
              [class.bg-amber-100]="!isDark()"
              [class.text-amber-700]="!isDark()"
              [class.ring-1]="true"
@@ -47,10 +47,10 @@
              [class.bg-amber-900/50]="isDark()"
              [class.text-amber-400]="isDark()"
              [class.ring-amber-500/40]="isDark()">
-            <mat-icon class="text-[18px]! size-[18px]!">warning</mat-icon>
+            <mat-icon class="text-[14px]! size-[14px]!">warning</mat-icon>
         </div>
     } @else if (type() === 'error') {
-        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+        <div class="flex items-center justify-center w-5 h-5 rounded-md shrink-0"
              [class.bg-red-100]="!isDark()"
              [class.text-red-700]="!isDark()"
              [class.ring-1]="true"
@@ -58,10 +58,10 @@
              [class.bg-red-900/50]="isDark()"
              [class.text-red-400]="isDark()"
              [class.ring-red-500/40]="isDark()">
-            <mat-icon class="text-[18px]! size-[18px]!">error</mat-icon>
+            <mat-icon class="text-[14px]! size-[14px]!">error</mat-icon>
         </div>
     } @else if (type() === 'info') {
-        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+        <div class="flex items-center justify-center w-5 h-5 rounded-md shrink-0"
              [class.bg-blue-100]="!isDark()"
              [class.text-blue-700]="!isDark()"
              [class.ring-1]="true"
@@ -69,10 +69,10 @@
              [class.bg-blue-900/50]="isDark()"
              [class.text-blue-400]="isDark()"
              [class.ring-blue-500/40]="isDark()">
-            <mat-icon class="text-[18px]! size-[18px]!">info</mat-icon>
+            <mat-icon class="text-[14px]! size-[14px]!">info</mat-icon>
         </div>
     } @else {
-        <div class="flex items-center justify-center w-7 h-7 rounded-xl shrink-0"
+        <div class="flex items-center justify-center w-5 h-5 rounded-md shrink-0"
              [class.bg-emerald-100]="!isDark()"
              [class.text-emerald-700]="!isDark()"
              [class.ring-1]="true"
@@ -80,21 +80,21 @@
              [class.bg-emerald-900/50]="isDark()"
              [class.text-emerald-400]="isDark()"
              [class.ring-emerald-500/40]="isDark()">
-            <mat-icon class="text-[18px]! size-[18px]!">check_circle</mat-icon>
+            <mat-icon class="text-[14px]! size-[14px]!">check_circle</mat-icon>
         </div>
     }
 
     <!-- Message text -->
-    <span class="text-[13px] font-medium leading-snug flex-1">
+    <span class="text-[11.5px] font-medium leading-tight flex-1">
         {{ message() }}
     </span>
 
     <!-- Dismiss Button -->
     <button (click)="notificationService.close()" type="button" title="Dismiss"
-        class="size-6 flex items-center justify-center rounded-lg opacity-60 hover:opacity-100 transition-opacity cursor-pointer shrink-0 ml-1"
+        class="size-5 flex items-center justify-center rounded opacity-60 hover:opacity-100 transition-opacity cursor-pointer shrink-0 ml-0.5"
         [class.hover:bg-black/10]="!isDark()"
         [class.hover:bg-white/10]="isDark()">
-        <mat-icon class="text-[16px]! size-[16px]!">close</mat-icon>
+        <mat-icon class="text-[13px]! size-[13px]!">close</mat-icon>
     </button>
 </div>
 }

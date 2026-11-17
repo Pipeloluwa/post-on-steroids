@@ -3,7 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   setTheme: (theme) => ipcRenderer.send('theme-changed', theme),
   consumePendingWhatsNew: () => ipcRenderer.invoke('consume-pending-whats-new'),
-  showContextMenu: (opts) => ipcRenderer.send('show-context-menu', opts)
+  showContextMenu: (opts) => ipcRenderer.send('show-context-menu', opts),
+  executeHttpRequest: (options) => ipcRenderer.invoke('execute-http-request', options),
+  cancelHttpRequest: (requestId) => ipcRenderer.send('cancel-http-request', requestId)
 });
 
 // Provide native right-click context menu (Cut, Copy, Paste, Select All) for inputs in Electron

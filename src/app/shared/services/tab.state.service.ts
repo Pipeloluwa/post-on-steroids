@@ -4036,7 +4036,7 @@ export class TabStateService {
             },
             settings: state.settings || {
                 followRedirects: true,
-                verifySsl: true,
+                verifySsl: false,
                 enableCookies: true,
                 bypassCors: true
             },
@@ -6214,7 +6214,7 @@ export class TabStateService {
             },
             settings: {
                 followRedirects: dto.followRedirects ?? true,
-                verifySsl: dto.verifySsl ?? true,
+                verifySsl: dto.verifySsl ?? false,
                 enableCookies: dto.enableCookies ?? true,
                 bypassCors: dto.bypassCors ?? true
             },

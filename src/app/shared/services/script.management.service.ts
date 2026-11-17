@@ -269,14 +269,38 @@ export class ScriptManagementService {
             }
         }
 
-        // Apply comment replacement fix safely without corrupting quotes
+        // Apply comment replacement fix safely without corrupting quotes and upgrade legacy default signatures
         for (const script of result) {
             if (script.content) {
                 script.content = script.content
                     .split(".replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, '')")
                     .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? \'\' : m)')
                     .split('.replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, "")')
-                    .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)');
+                    .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)')
+                    .replace(
+                        /^(async\s+function\s+encryptScript\s*\([^)]*\))/,
+                        (match, sig) => (sig.includes('encryptedFormData')
+                            ? sig
+                            : 'async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText)')
+                    )
+                    .replace(
+                        /^(async\s+function\s+decryptScript\s*\([^)]*\))/,
+                        (match, sig) => (sig.includes('encryptedFormData')
+                            ? sig
+                            : 'async function decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText)')
+                    )
+                    .replace(
+                        /^(async\s+function\s+preScript\s*\(\s*headers\s*,\s*body\s*,\s*params\s*\))/,
+                        'async function preScript(headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText)'
+                    )
+                    .replace(
+                        /^(async\s+function\s+postScript\s*\(\s*responseHeaders\s*,\s*responseBody\s*,\s*headers\s*,\s*body\s*,\s*params\s*\))/,
+                        'async function postScript(responseHeaders, responseBody, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText)'
+                    )
+                    .replace(
+                        /^(async\s+function\s+testScript\s*\(\s*responseStatus\s*,\s*responseTime\s*,\s*responseBody\s*,\s*responseHeaders\s*\))/,
+                        'async function testScript(responseStatus, responseTime, responseBody, responseHeaders, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText)'
+                    );
             }
         }
 
