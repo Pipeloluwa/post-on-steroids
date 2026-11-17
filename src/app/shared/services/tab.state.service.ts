@@ -123,7 +123,11 @@ export interface RequestState {
     rawBody: string; // Keep for compatibility or current selection
     rawBodyJson: string;
     rawBodyXml: string;
+    rawBodyText?: string;
     formData: FormDataRow[];
+    urlEncodedData?: KeyValue[];
+    graphqlQuery?: string;
+    graphqlVariables?: string;
     requestBody: unknown;
     // Response
     responseBody: unknown;
@@ -1513,6 +1517,13 @@ export class TabStateService {
         const currentGroups = this.getGroupsForCapsule(capId);
         const updated = currentGroups.map(g => g.id === groupId ? { ...g, name: trimmed } : g);
         this.setGroupsForCapsule(capId, updated, true);
+    }
+
+    renameRequest(requestId: string, newName: string): void {
+        const trimmed = (newName || '').trim();
+        if (!trimmed) return;
+        this.updateState(requestId, { name: trimmed });
+        this.savedCapsules.update(col => col.map(r => r.id === requestId ? { ...r, name: trimmed } : r));
     }
 
     toggleGroupExpanded(groupId: string, capsuleId?: string): void {
@@ -3650,6 +3661,79 @@ export class TabStateService {
         };
     }
 
+    async transferGroupToCapsule(
+        group: RequestGroup,
+        targetCapsuleId: string,
+        mode: 'copy' | 'move'
+    ): Promise<{ transferredCount: number; targetCapsuleId: string; targetCapsuleName: string; savedIds: string[] }> {
+        const sourceCapId = this.activeCapsuleId();
+        let targetCap = this.capsules().find(c => c.id === targetCapsuleId);
+        if (!targetCap) {
+            throw new Error('Destination capsule was not found.');
+        }
+
+        let effectiveTargetCapId = targetCap.id;
+        if (effectiveTargetCapId === sourceCapId) {
+            throw new Error('Destination capsule must be different from the current capsule.');
+        }
+
+        const isOnline = this.isBrowser && this.authService.isLoggedIn();
+        if (isOnline) {
+            targetCap = await this.ensureCapsuleOnBackend(targetCap);
+            effectiveTargetCapId = targetCap.id;
+        }
+
+        let targetGroups = await this.loadGroupsForCapsule(effectiveTargetCapId);
+        let destGroup = targetGroups.find(g => g.name.toLowerCase() === group.name.toLowerCase());
+        let destGroupId: string;
+
+        if (!destGroup) {
+            destGroupId = this.createId();
+            destGroup = {
+                id: destGroupId,
+                name: group.name,
+                capsuleId: effectiveTargetCapId,
+                isExpanded: true,
+                requestIds: [],
+                createdAt: Date.now()
+            };
+            targetGroups = [...targetGroups, destGroup];
+            this.setGroupsForCapsule(effectiveTargetCapId, targetGroups, false);
+        } else {
+            destGroupId = destGroup.id;
+        }
+
+        const requestIds = group.requestIds || [];
+        let result = {
+            transferredCount: 0,
+            targetCapsuleId: effectiveTargetCapId,
+            targetCapsuleName: targetCap.name,
+            savedIds: [] as string[]
+        };
+
+        if (requestIds.length > 0) {
+            result = await this.transferRequestsToCapsule(
+                requestIds,
+                effectiveTargetCapId,
+                mode,
+                destGroupId
+            );
+        } else {
+            const vs = this.getVariableService();
+            const targetIsBackend = isOnline && !targetCap.isLocalOnly && this.isValidGuid(effectiveTargetCapId);
+            this.markLocalStructureTimestamp(effectiveTargetCapId);
+            if (targetIsBackend && vs) {
+                await vs.syncVariablesToBackend(effectiveTargetCapId).catch(() => {});
+            }
+        }
+
+        if (mode === 'move') {
+            await this.deleteRequestGroupsAndRequests([group.id], [], sourceCapId);
+        }
+
+        return result;
+    }
+
     async batchDeleteCapsules(ids: string[]): Promise<void> {
         if (!ids || ids.length === 0) return;
 
@@ -3927,6 +4011,10 @@ export class TabStateService {
             rawBody: state.rawBody || '',
             rawBodyJson: state.rawBodyJson || '',
             rawBodyXml: state.rawBodyXml || '',
+            rawBodyText: state.rawBodyText || '',
+            urlEncodedData: this.serializeNonEmptyKvRows(state.urlEncodedData),
+            graphqlQuery: state.graphqlQuery || '',
+            graphqlVariables: state.graphqlVariables || '',
             auth: {
                 type: state.auth?.type || 'none',
                 token: state.auth?.token || ''
@@ -5209,6 +5297,10 @@ export class TabStateService {
             .filter(f => (f.key && f.key.trim() !== '') || (f.value && f.value.trim() !== ''))
             .map(f => ({ enabled: !!f.enabled, key: (f.key || '').trim(), value: (f.value || '').trim(), type: f.type || 'text' }));
 
+        const normUrlEncoded = (s.urlEncodedData || [])
+            .filter(u => (u.key && u.key.trim() !== '') || (u.value && u.value.trim() !== ''))
+            .map(u => ({ enabled: !!u.enabled, key: (u.key || '').trim(), value: (u.value || '').trim() }));
+
         return JSON.stringify([
             (s.name || '').trim(),
             (s.url || '').trim(),
@@ -5219,6 +5311,9 @@ export class TabStateService {
             s.rawBody || '',
             s.rawBodyJson || '',
             s.rawBodyXml || '',
+            s.rawBodyText || '',
+            s.graphqlQuery || '',
+            s.graphqlVariables || '',
             s.auth?.type || 'none',
             s.auth?.token || '',
             s.scripts?.preRequest || '',
@@ -5241,7 +5336,8 @@ export class TabStateService {
             s.groupId ?? null,
             normParams,
             normHeaders,
-            normFormData
+            normFormData,
+            normUrlEncoded
         ]);
     }
 
@@ -6092,6 +6188,9 @@ export class TabStateService {
             rawBody: dto.rawBody || '',
             rawBodyJson: dto.rawBodyJson || '',
             rawBodyXml: dto.rawBodyXml || '',
+            rawBodyText: dto.rawBodyText || '',
+            graphqlQuery: dto.graphqlQuery || '',
+            graphqlVariables: dto.graphqlVariables || '{\n  \n}',
             auth: {
                 type: (dto.authType as any) || 'none',
                 token: dto.authToken || ''
@@ -6141,6 +6240,14 @@ export class TabStateService {
                 }));
                 return mapped.length > 0 ? mapped : base.formData;
             })(),
+            urlEncodedData: (() => {
+                const mapped = (dto.urlEncodedData || []).map((u: any) => ({
+                    enabled: u.isEnabled ?? u.enabled ?? true,
+                    key: u.key ?? u.paramKey ?? '',
+                    value: u.value ?? u.paramValue ?? ''
+                }));
+                return mapped.length > 0 ? mapped : base.urlEncodedData;
+            })(),
             responseBody: cached?.responseBody ?? base.responseBody,
             responseStatus: cached?.responseStatus ?? base.responseStatus,
             responseTime: cached?.responseTime ?? base.responseTime,
@@ -6156,7 +6263,7 @@ export class TabStateService {
     }
 
     duplicateTab(id: string): string | null {
-        const source = this.states().get(id);
+        const source = this.states().get(id) || this.savedCapsules().find(r => r.id === id);
         if (!source) return null;
 
         const newId = this.createId();
@@ -6280,7 +6387,11 @@ export class TabStateService {
             rawBody: '{}',
             rawBodyJson: '{}',
             rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>',
+            rawBodyText: '',
             formData: [{ enabled: true, key: '', value: '', type: 'text' }],
+            urlEncodedData: [{ enabled: true, key: '', value: '' }],
+            graphqlQuery: '',
+            graphqlVariables: '{\n  \n}',
             requestBody: {},
             responseBody: null,
             responseStatus: null,

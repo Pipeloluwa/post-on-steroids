@@ -89,9 +89,10 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
 
     if (allowsBody && state.bodyType === 'raw') {
         const isXml = state.rawType === 'XML' || state.rawType === 'XML (SOAP)' || state.rawType === 'SOAP';
+        const isText = state.rawType === 'Text';
         const rawSource = isXml
             ? (state.rawBodyXml || '')
-            : (state.rawBodyJson || state.rawBody || '');
+            : (isText ? (state.rawBodyText || state.rawBody || '') : (state.rawBodyJson || state.rawBody || ''));
 
         const resolvedBody = state.rawType === 'JSON'
             ? (resolveVariables ? resolveJson(rawSource) : rawSource)
@@ -100,6 +101,8 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
         if (!hasHeader('content-type')) {
             if (state.rawType === 'JSON') {
                 headers.push({ key: 'Content-Type', value: 'application/json' });
+            } else if (isText) {
+                headers.push({ key: 'Content-Type', value: 'text/plain' });
             } else if (isXml) {
                 const isSoap = state.rawType === 'XML (SOAP)' || state.rawType === 'SOAP' || (resolvedBody && (resolvedBody.includes('soap:Envelope') || resolvedBody.includes('soap12:Envelope') || resolvedBody.includes('schemas.xmlsoap.org')));
                 const isSoap12 = isSoap && resolvedBody && resolvedBody.includes('2003/05/soap-envelope');
@@ -130,6 +133,30 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
         if (resolvedBody && resolvedBody.trim() !== '') {
             bodyFlags.push(`--data-raw ${quoteShellArg(resolvedBody)}`);
         }
+    } else if (allowsBody && state.bodyType === 'x-www-form-urlencoded') {
+        if (!hasHeader('content-type')) {
+            headers.push({ key: 'Content-Type', value: 'application/x-www-form-urlencoded' });
+        }
+        const rows = (state.urlEncodedData || []).filter(r => r.enabled && (r.key || '').trim() !== '');
+        for (const row of rows) {
+            const k = resolveStr(row.key).trim();
+            const v = resolveStr(row.value || '');
+            bodyFlags.push(`--data-urlencode ${quoteShellArg(`${k}=${v}`)}`);
+        }
+    } else if (allowsBody && state.bodyType === 'graphql') {
+        if (!hasHeader('content-type')) {
+            headers.push({ key: 'Content-Type', value: 'application/json' });
+        }
+        const query = resolveStr(state.graphqlQuery || '');
+        let variables: any = {};
+        try {
+            const resolvedVars = resolveJson(state.graphqlVariables || '{}');
+            variables = JSON.parse(resolvedVars || '{}');
+        } catch {
+            variables = {};
+        }
+        const graphqlPayload = JSON.stringify({ query, variables });
+        bodyFlags.push(`--data-raw ${quoteShellArg(graphqlPayload)}`);
     } else if (allowsBody && state.bodyType === 'form-data') {
         const formRows = (state.formData || []).filter(f => f.enabled && (f.key || '').trim() !== '');
         for (const row of formRows) {

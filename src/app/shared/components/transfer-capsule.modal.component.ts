@@ -29,7 +29,7 @@ import { NotificationService } from '../services/notification.service';
                             </div>
                             <div class="min-w-0">
                                 <h3 id="transfer-capsule-title" class="text-[14px] font-bold text-(--postonsteroids-text-primary) leading-tight">
-                                    {{ mode() === 'copy' ? 'Copy to Capsule' : 'Move to Capsule' }}
+                                    {{ mode() === 'copy' ? (folder() ? 'Copy Folder to Capsule' : 'Copy to Capsule') : (folder() ? 'Move Folder to Capsule' : 'Move to Capsule') }}
                                 </h3>
                                 <p class="text-[11px] text-(--postonsteroids-text-muted) truncate">
                                     {{ requestSummaryText() }}
@@ -179,7 +179,7 @@ import { NotificationService } from '../services/notification.service';
                         }
 
                         <!-- Destination Folder (Stable height, sleek dropdown) -->
-                        @if (selectedCapsuleId() !== '__new__') {
+                        @if (selectedCapsuleId() !== '__new__' && !folder()) {
                             <div class="relative" (click)="$event.stopPropagation()">
                                 <label class="block text-[12px] font-semibold text-(--postonsteroids-text-secondary) mb-1.5">
                                     Destination Folder (Optional)
@@ -302,10 +302,10 @@ import { NotificationService } from '../services/notification.service';
                                 class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white text-[12px] font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                             @if (isSubmitting()) {
                                 <mat-icon class="text-[15px]! size-[15px]! animate-spin">sync</mat-icon>
-                                <span>{{ mode() === 'copy' ? 'Copying...' : 'Moving...' }}</span>
+                                <span>{{ mode() === 'copy' ? (folder() ? 'Copying Folder...' : 'Copying...') : (folder() ? 'Moving Folder...' : 'Moving...') }}</span>
                             } @else {
                                 <mat-icon class="text-[15px]! size-[15px]!">{{ mode() === 'copy' ? 'content_copy' : 'drive_file_move' }}</mat-icon>
-                                <span>{{ mode() === 'copy' ? 'Copy Request(s)' : 'Move Request(s)' }}</span>
+                                <span>{{ mode() === 'copy' ? (folder() ? 'Copy Folder' : 'Copy Request(s)') : (folder() ? 'Move Folder' : 'Move Request(s)') }}</span>
                             }
                         </button>
                     </div>
@@ -320,6 +320,7 @@ export class TransferCapsuleModalComponent {
 
     isOpen = input<boolean>(false);
     requestIds = input<string[]>([]);
+    folder = input<RequestGroup | null>(null);
     initialMode = input<'copy' | 'move'>('copy');
 
     closed = output<void>();
@@ -364,6 +365,11 @@ export class TransferCapsuleModalComponent {
     });
 
     requestSummaryText = computed(() => {
+        const f = this.folder();
+        if (f) {
+            const count = (f.requestIds || []).length;
+            return `Folder "${f.name}" (${count} request${count !== 1 ? 's' : ''}) from "${this.sourceCapsuleName()}"`;
+        }
         const ids = this.requestIds();
         if (ids.length === 1) {
             const req = this.tabStateService.getState(ids[0])
@@ -377,7 +383,7 @@ export class TransferCapsuleModalComponent {
     });
 
     canSubmit = computed(() => {
-        if (this.requestIds().length === 0) return false;
+        if (!this.folder() && this.requestIds().length === 0) return false;
         if (this.selectedCapsuleId() === '__new__') {
             return this.newCapsuleName().trim().length > 0;
         }
@@ -521,14 +527,24 @@ export class TransferCapsuleModalComponent {
                 destinationCapsuleId = created.id;
             }
 
-            const chosenGroupId = this.targetGroupId().trim() || null;
             const currentMode = this.mode();
-            const result = await this.tabStateService.transferRequestsToCapsule(
-                this.requestIds(),
-                destinationCapsuleId,
-                currentMode,
-                chosenGroupId
-            );
+            let result: { targetCapsuleId: string; targetCapsuleName: string; transferredCount: number; savedIds: string[] };
+
+            if (this.folder()) {
+                result = await this.tabStateService.transferGroupToCapsule(
+                    this.folder()!,
+                    destinationCapsuleId,
+                    currentMode
+                );
+            } else {
+                const chosenGroupId = this.targetGroupId().trim() || null;
+                result = await this.tabStateService.transferRequestsToCapsule(
+                    this.requestIds(),
+                    destinationCapsuleId,
+                    currentMode,
+                    chosenGroupId
+                );
+            }
 
             const shouldSwitch = this.switchAfterTransfer();
             if (shouldSwitch) {
@@ -547,8 +563,11 @@ export class TransferCapsuleModalComponent {
             }
 
             const verb = currentMode === 'copy' ? 'Copied' : 'Moved';
+            const itemLabel = this.folder()
+                ? `folder "${this.folder()!.name}" (${result.transferredCount} request${result.transferredCount !== 1 ? 's' : ''})`
+                : `${result.transferredCount} request${result.transferredCount !== 1 ? 's' : ''}`;
             this.notificationService.notify(
-                `${verb} ${result.transferredCount} request${result.transferredCount !== 1 ? 's' : ''} to "${result.targetCapsuleName}".`,
+                `${verb} ${itemLabel} to "${result.targetCapsuleName}".`,
                 'success'
             );
 

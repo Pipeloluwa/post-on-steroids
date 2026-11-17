@@ -10,28 +10,52 @@
         <div class="border-b border-(--postonsteroids-border)/70 flex items-center h-[38px] shrink-0 px-1.5 gap-x-1"
              [class.justify-between]="isSidebarOpen()" [class.justify-center]="!isSidebarOpen()">
             @if (isSidebarOpen()) {
-                <!-- Capsule switcher dropdown -->
-                <select aria-label="Select capsule"
-                        class="flex-1 min-w-0 text-[11px] font-medium bg-(--postonsteroids-bg-primary)/40 text-(--postonsteroids-text-primary) outline-none cursor-pointer truncate border border-(--postonsteroids-border)/70 rounded-md px-1.5 py-0.5 hover:border-(--postonsteroids-accent) transition-colors"
-                        [ngModel]="tabStateService.activeCapsuleId()"
-                        (ngModelChange)="onCapsuleChange($event)">
-                    @for (c of tabStateService.capsules(); track c.id) {
-                        <option [value]="c.id" class="bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-primary)">
-                            {{ c.name }}
+                @if (isEditingCapsuleName()) {
+                    <input type="text"
+                           class="flex-1 min-w-0 h-[28px] bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) text-[12px] font-medium px-2 py-1 rounded-md border border-(--postonsteroids-accent) outline-none"
+                           [ngModel]="editingCapsuleName()"
+                           (ngModelChange)="editingCapsuleName.set($event)"
+                           (click)="$event.stopPropagation()"
+                           (keydown.enter)="saveCapsuleName($event)"
+                           (keydown.escape)="cancelEditingCapsuleName($event)"
+                           (blur)="saveCapsuleName($event)"
+                           autofocus />
+                    <button (click)="saveCapsuleName($event)" type="button" title="Save capsule name" aria-label="Save capsule name"
+                        class="p-1 rounded-md hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) transition-colors flex items-center justify-center cursor-pointer shrink-0">
+                        <mat-icon class="text-[16px]! size-[16px]!">check</mat-icon>
+                    </button>
+                    <button (click)="cancelEditingCapsuleName($event)" type="button" title="Cancel" aria-label="Cancel"
+                        class="p-1 rounded-md hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) transition-colors flex items-center justify-center cursor-pointer shrink-0">
+                        <mat-icon class="text-[16px]! size-[16px]!">close</mat-icon>
+                    </button>
+                } @else {
+                    <!-- Capsule switcher dropdown (increased height size) -->
+                    <select aria-label="Select capsule"
+                            class="flex-1 min-w-0 h-[28px] text-[12px] font-medium bg-(--postonsteroids-bg-primary)/40 text-(--postonsteroids-text-primary) outline-none cursor-pointer truncate border border-(--postonsteroids-border)/70 rounded-md px-2 py-1 hover:border-(--postonsteroids-accent) transition-colors"
+                            [ngModel]="tabStateService.activeCapsuleId()"
+                            (ngModelChange)="onCapsuleChange($event)">
+                        @for (c of tabStateService.capsules(); track c.id) {
+                            <option [value]="c.id" class="bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-primary)">
+                                {{ c.name }}
+                            </option>
+                        }
+                        <option value="__create_new__" class="bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-accent) font-semibold">
+                            + New Capsule...
                         </option>
-                    }
-                    <option value="__create_new__" class="bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-accent) font-semibold">
-                        + New Capsule...
-                    </option>
-                </select>
-                <button (click)="duplicateCurrentCapsule()" type="button" title="Duplicate current capsule" aria-label="Duplicate current capsule" [disabled]="isDuplicatingCapsule()"
-                    class="p-1 rounded-md hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors flex items-center justify-center cursor-pointer shrink-0 disabled:opacity-50">
-                    @if (isDuplicatingCapsule()) {
-                        <mat-icon class="text-[15px]! size-[15px]! animate-spin">sync</mat-icon>
-                    } @else {
-                        <mat-icon class="text-[15px]! size-[15px]!">content_copy</mat-icon>
-                    }
-                </button>
+                    </select>
+                    <button (click)="startEditingCapsuleName($event)" type="button" title="Rename capsule" aria-label="Rename capsule"
+                        class="p-1 rounded-md hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors flex items-center justify-center cursor-pointer shrink-0">
+                        <mat-icon class="text-[15px]! size-[15px]!">edit</mat-icon>
+                    </button>
+                    <button (click)="duplicateCurrentCapsule()" type="button" title="Duplicate current capsule" aria-label="Duplicate current capsule" [disabled]="isDuplicatingCapsule()"
+                        class="p-1 rounded-md hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors flex items-center justify-center cursor-pointer shrink-0 disabled:opacity-50">
+                        @if (isDuplicatingCapsule()) {
+                            <mat-icon class="text-[15px]! size-[15px]! animate-spin">sync</mat-icon>
+                        } @else {
+                            <mat-icon class="text-[15px]! size-[15px]!">content_copy</mat-icon>
+                        }
+                    </button>
+                }
             }
             <button (click)="toggleSidebar()" type="button" title="Toggle Sidebar" aria-label="Toggle Sidebar"
                     class="p-1 rounded-md hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors flex items-center justify-center cursor-pointer shrink-0">
@@ -224,6 +248,16 @@
                                                 class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer flex items-center justify-center">
                                             <mat-icon class="text-[14px]! size-[14px]!">edit</mat-icon>
                                         </button>
+                                        <button (click)="openTransferModalForFolder(item.group, 'copy', $event)" type="button"
+                                                title="Copy folder to capsule" aria-label="Copy folder to capsule"
+                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
+                                            <mat-icon class="text-[14px]! size-[14px]!">content_copy</mat-icon>
+                                        </button>
+                                        <button (click)="openTransferModalForFolder(item.group, 'move', $event)" type="button"
+                                                title="Move folder to capsule" aria-label="Move folder to capsule"
+                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
+                                            <mat-icon class="text-[14px]! size-[14px]!">drive_file_move</mat-icon>
+                                        </button>
                                         <button (click)="ungroupFolder(item.group, $event)" type="button"
                                                 title="Ungroup folder (keep requests)" aria-label="Ungroup folder"
                                                 class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
@@ -342,7 +376,8 @@
                      [class.bg-(--postonsteroids-accent)/12]="selectedRequestIds().has(req.id)"
                      [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id && !selectedRequestIds().has(req.id)"
                      [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)') + ' — Shift+Click or Ctrl+Click to multi-select'"
-                     (click)="onRequestRowContainerClick(req, $event, groupId)">
+                     (click)="onRequestRowContainerClick(req, $event, groupId)"
+                     (dblclick)="startEditingRequest(req, $event)">
 
                     @if (tabStateService.activeTabId() === req.id || selectedRequestIds().has(req.id)) {
                         <span class="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-full bg-(--postonsteroids-accent)"></span>
@@ -368,27 +403,44 @@
                                   [class.rotate-90]="isRequestExpanded(req.id)">chevron_right</mat-icon>
                     </button>
 
-                    <button type="button"
-                            class="sidebar-focus-trigger flex-1 min-w-0 flex items-center gap-x-1.5 text-left bg-transparent border-0 p-0 cursor-pointer outline-none"
-                            [attr.aria-label]="getShortMethod(req.method) + ' ' + tabStateService.resolveRequestTitle(req.name, req.url)"
-                            (focus)="onFocusRequest(req.id, groupId)"
-                            (click)="onRequestRowClick(req, $event, groupId)"
-                            (keydown.escape)="clearSidebarFocus($event)">
+                    @if (editingRequestId() === req.id) {
                         <span class="text-[10px] font-bold tracking-tight w-[36px] shrink-0 text-left tabular-nums" [style.color]="getMethodColor(req.method)">
                             {{ getShortMethod(req.method) }}
                         </span>
-                        <span class="text-[12.5px] leading-[1.3] truncate flex-1 min-w-0 group-hover/tab:text-(--postonsteroids-text-primary)"
-                              [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id"
-                              [class.text-(--postonsteroids-text-secondary)]="tabStateService.activeTabId() !== req.id"
-                              [class.font-medium]="tabStateService.activeTabId() === req.id">
-                            {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
-                        </span>
+                        <input type="text"
+                               class="flex-1 min-w-0 bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) text-[12px] font-medium px-1.5 py-[1px] rounded border border-(--postonsteroids-accent) outline-none"
+                               [ngModel]="editingRequestName()"
+                               (ngModelChange)="editingRequestName.set($event)"
+                               (click)="$event.stopPropagation()"
+                               (mousedown)="$event.stopPropagation()"
+                               (pointerdown)="$event.stopPropagation()"
+                               (keydown.enter)="saveRequestName(req.id, $event)"
+                               (keydown.escape)="cancelEditingRequest($event)"
+                               (blur)="saveRequestName(req.id, $event)"
+                               autofocus />
+                    } @else {
+                        <button type="button"
+                                class="sidebar-focus-trigger flex-1 min-w-0 flex items-center gap-x-1.5 text-left bg-transparent border-0 p-0 cursor-pointer outline-none"
+                                [attr.aria-label]="getShortMethod(req.method) + ' ' + tabStateService.resolveRequestTitle(req.name, req.url)"
+                                (focus)="onFocusRequest(req.id, groupId)"
+                                (click)="onRequestRowClick(req, $event, groupId)"
+                                (keydown.escape)="clearSidebarFocus($event)">
+                            <span class="text-[10px] font-bold tracking-tight w-[36px] shrink-0 text-left tabular-nums" [style.color]="getMethodColor(req.method)">
+                                {{ getShortMethod(req.method) }}
+                            </span>
+                            <span class="text-[12.5px] leading-[1.3] truncate flex-1 min-w-0 group-hover/tab:text-(--postonsteroids-text-primary)"
+                                  [class.text-(--postonsteroids-text-primary)]="tabStateService.activeTabId() === req.id"
+                                  [class.text-(--postonsteroids-text-secondary)]="tabStateService.activeTabId() !== req.id"
+                                  [class.font-medium]="tabStateService.activeTabId() === req.id">
+                                {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
+                            </span>
 
-                        @if (req.isDirty) {
-                            <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"
-                                 [class.hidden]="moveMenuRequestId() === req.id"></div>
-                        }
-                    </button>
+                            @if (req.isDirty) {
+                                <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0 group-hover/tab:hidden"
+                                     [class.hidden]="moveMenuRequestId() === req.id"></div>
+                            }
+                        </button>
+                    }
 
                     <!-- Hover actions (only take layout space on row hover or when move menu is open) -->
                     <div class="hidden group-hover/tab:flex items-center gap-x-0.5 shrink-0"
@@ -397,6 +449,22 @@
                          (mousedown)="$event.stopPropagation()"
                          (pointerdown)="$event.stopPropagation()"
                          (touchstart)="$event.stopPropagation()">
+                        <button class="cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
+                                type="button"
+                                title="Duplicate request"
+                                aria-label="Duplicate request"
+                                (click)="duplicateRequestFromSidebar(req.id, $event)">
+                            <mat-icon class="text-[14px]! size-[14px]!">content_copy</mat-icon>
+                        </button>
+
+                        <button class="cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
+                                type="button"
+                                title="Rename request"
+                                aria-label="Rename request"
+                                (click)="startEditingRequest(req, $event)">
+                            <mat-icon class="text-[14px]! size-[14px]!">edit</mat-icon>
+                        </button>
+
                         <button class="cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
                                 type="button"
                                 title="Move to folder / group"
@@ -577,8 +645,9 @@
     <app-create-capsule-modal #createCapsuleModal />
 <app-transfer-capsule-modal [isOpen]="isTransferModalOpen()"
                              [requestIds]="transferRequestIds()"
+                             [folder]="transferFolder()"
                              [initialMode]="transferInitialMode()"
-                             (closed)="isTransferModalOpen.set(false)"
+                             (closed)="isTransferModalOpen.set(false); transferFolder.set(null)"
                              (completed)="onTransferCompleted($event)" />
 <app-curl-modal [isOpen]="curlModalRequest() !== null"
                 [request]="curlModalRequest()"

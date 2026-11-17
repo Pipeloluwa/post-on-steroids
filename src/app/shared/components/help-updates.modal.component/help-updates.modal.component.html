@@ -204,19 +204,22 @@
                             <span
                                 class="px-1.5 py-0.5 rounded bg-(--postonsteroids-accent) text-white text-[10px] font-extrabold uppercase tracking-wider">What's
                                 New</span>
-                            <span>Release 3.0.0 — XML / SOAP Services, Advanced Text Wrap, Native Desktop Calls & Payload Encryption</span>
+                            <span>Release 3.0.0 — URL-Encoded, GraphQL, Form-Data Encryption, Folder Transfers & XML / SOAP Services</span>
                         </div>
                         <span class="text-(--postonsteroids-text-muted) font-normal shrink-0 ml-2">November 2026</span>
                     </div>
                     <ul class="list-disc list-inside space-y-1 text-[11px] leading-relaxed">
+                        <li><strong>URL-Encoded (<code class="text-(--postonsteroids-accent) font-mono">x-www-form-urlencoded</code>) Requests & cURL:</strong> Full key-value form encoding with variable interpolation, bidirectional cURL command generation and import, individual field lock toggles, and Auto-encrypt encryption support.</li>
+                        <li><strong>GraphQL Query & Variables Engine:</strong> Build GraphQL queries with a dedicated dual-pane layout for Query and Variables JSON, supporting variable encryption locks, Auto-encrypt, and cURL export/import.</li>
+                        <li><strong>Raw Text Body & Plaintext Mode:</strong> Send raw plaintext payloads with dedicated formatting, variable evaluation, Auto-encrypt protection, and cURL compatibility.</li>
+                        <li><strong>Form-Data & Field Encryption Locks:</strong> Added individual lock buttons to form-data and url-encoded rows to securely encrypt specific sensitive fields before transmission, alongside the quick Auto-encrypt toggle.</li>
+                        <li><strong>Sidebar Request Duplicate & Inline Rename:</strong> Duplicate or rename any request directly from the left sidebar tree via hover actions or inline editing, fully synchronized with open tabs.</li>
+                        <li><strong>Group Folder Copy & Move to Capsule:</strong> Transfer entire group folders and all member requests to another capsule with one click using the updated Transfer modal.</li>
+                        <li><strong>Workspace Capsule Renaming & Enlarged Selector:</strong> Rename capsules right from the workspace header with inline editing, and enjoy a taller, more readable capsule dropdown selector.</li>
                         <li><strong>Full XML & SOAP 1.1 / 1.2 Web Service Support:</strong> Build and send SOAP requests just like Postman with pre-configured SOAP Envelope templates, automatic <code class="text-(--postonsteroids-accent) font-mono">SOAPAction</code> header handling, and content negotiation for <code class="text-(--postonsteroids-accent) font-mono">text/xml</code> and <code class="text-(--postonsteroids-accent) font-mono">application/soap+xml</code>.</li>
-                        <li><strong>Advanced XML Text Wrap & Formatting:</strong> Pretty indentation, Key-Field (one line per element), Soft Wrap, and Single-Line Collapsed formatting are now fully operational for XML and SOAP payloads in both the request body and the response viewer.</li>
-                        <li><strong>Full Undo/Redo Preservation (Ctrl+Z / Ctrl+Y):</strong> Wrapping, un-wrapping, or reformatting your payload now preserves Monaco Editor's undo stack, allowing you to seamlessly undo formatting changes without wiping previous edits.</li>
-                        <li><strong>XML Payload Encryption & Monaco Lock Margin:</strong> Gutter lock icons now dynamically appear on XML elements, enabling line-by-line encryption toggles and one-click Auto-encrypt for all leaf tags matching the JSON encryption workflow.</li>
-                        <li><strong>Auto-Clearing & Dedicated Clear Controls:</strong> Previous responses, test results, and console outputs are automatically cleared upon request execution to prevent confusion between old and new runs. Added dedicated Clear buttons across Response Body, Headers, Cookies, Test Results, and Consoles.</li>
-                        <li><strong>Native Electron Execution & Streamlined Desktop Settings:</strong> Requests initiated in Electron run natively without proxy routing, and browser-specific CORS bypass toggles are cleanly hidden on desktop.</li>
-                        <li><strong>Cross-Capsule Request Portability & cURL Export:</strong> Copy or move requests across capsules and folders with ease, and export any request into an executable cURL command with a single click.</li>
-                        <li><strong>Native Right-Click Input Menu & Response Viewer Reliability:</strong> Right-click Cut, Copy, Paste, Undo, Redo, and Select All are now fully supported across all desktop inputs, and response viewer Monaco editors update instantaneously with parsed JSON/XML data.</li>
+                        <li><strong>Advanced XML Text Wrap & Formatting:</strong> Pretty indentation, Key-Field, Soft Wrap, and Single-Line Collapsed formatting are now fully operational for XML and SOAP payloads.</li>
+                        <li><strong>Full Undo/Redo Preservation (Ctrl+Z / Ctrl+Y):</strong> Wrapping, un-wrapping, or reformatting your payload now preserves Monaco Editor's undo stack without wiping previous edits.</li>
+                        <li><strong>Refined Search & Monaco Suggestion Positioning:</strong> Search endpoint popups and Monaco autocomplete suggest / find widgets have been adjusted downward so labels and inputs are never cut off at the top.</li>
                     </ul>
                 </div>
 

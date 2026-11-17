@@ -121,3 +121,12 @@
     background: none !important;
     border-bottom: none !important;
 }
+
+/* Ensure search/find widget and suggest widget / labels are not chopped off at the top */
+::ng-deep .monaco-editor .find-widget {
+    top: 8px !important;
+}
+
+::ng-deep .monaco-editor .suggest-widget {
+    margin-top: 6px !important;
+}

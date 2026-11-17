@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
-import { TabStateService, EncryptionState, FormDataRow } from '../../../shared/services/tab.state.service';
+import { TabStateService, EncryptionState, FormDataRow, KeyValue } from '../../../shared/services/tab.state.service';
 import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ChangeDetectionStrategy } from '@angular/core';
@@ -48,7 +48,10 @@ export class BodyTypesComponent {
     const state = this.tabStateService.getState(this.tabId());
     const rt = this.rawType();
     const isXml = rt === 'XML' || rt === 'XML (SOAP)' || rt === 'SOAP';
-    return isXml ? (state?.rawBodyXml || '') : (state?.rawBodyJson || '{}');
+    const isText = rt === 'Text';
+    if (isXml) return state?.rawBodyXml || '';
+    if (isText) return state?.rawBodyText || state?.rawBody || '';
+    return state?.rawBodyJson || '{}';
   });
 
   onRawBodyChange(content: string) {
@@ -57,21 +60,27 @@ export class BodyTypesComponent {
     
     this.originalPrettyContent = null; // Clear cached source truth on user edit
     const isXml = this.rawType() === 'XML' || this.rawType() === 'XML (SOAP)' || this.rawType() === 'SOAP';
+    const isText = this.rawType() === 'Text';
     
     if (isXml) {
        this.tabStateService.updateState(id, { rawBodyXml: content, rawBody: content });
+    } else if (isText) {
+       this.tabStateService.updateState(id, { rawBodyText: content, rawBody: content });
     } else {
        this.tabStateService.updateState(id, { rawBodyJson: content, rawBody: content });
     }
   }
 
-  bodyTypes = ['none', 'form-data', 'raw'];
-  rawTypes = ['JSON', 'XML', 'XML (SOAP)'];
+  bodyTypes = ['none', 'form-data', 'x-www-form-urlencoded', 'raw', 'graphql'];
+  rawTypes = ['JSON', 'XML', 'XML (SOAP)', 'Text'];
   rowTypes = ['text', 'file'];
 
   bodyType = computed(() => this.tabStateService.getState(this.tabId())?.bodyType ?? 'none');
   rawType = computed(() => this.tabStateService.getState(this.tabId())?.rawType ?? 'JSON');
   formData = computed(() => this.tabStateService.getState(this.tabId())?.formData ?? []);
+  urlEncodedData = computed(() => this.tabStateService.getState(this.tabId())?.urlEncodedData ?? []);
+  graphqlQuery = computed(() => this.tabStateService.getState(this.tabId())?.graphqlQuery ?? '');
+  graphqlVariables = computed(() => this.tabStateService.getState(this.tabId())?.graphqlVariables ?? '{\n  \n}');
   encryption = computed(() => this.tabStateService.getState(this.tabId())?.encryption ?? { algorithm: 'none' as const, key: '', autoEncryptBody: false, autoEncryptHeaders: false, encryptedHeaders: [], encryptedBodyPaths: [], script: '' });
 
   setEncryptionField(field: keyof EncryptionState, value: any) {
@@ -84,17 +93,36 @@ export class BodyTypesComponent {
     }
   }
 
+  isBodyFieldEncrypted(key: string): boolean {
+    if (!key) return false;
+    const paths = this.encryption()?.encryptedBodyPaths || [];
+    return paths.includes(key);
+  }
+
   toggleAutoEncryptBody() {
       const current = this.encryption();
-      const bodyStr = this.monacoEditor()?.getEditorValue() || this.rawBodyContent();
-      const currentBodyPaths = this.extractBodyPaths(bodyStr);
+      const bt = this.bodyType();
+      let targetPaths: string[] = [];
 
+      if (bt === 'form-data') {
+          targetPaths = this.formData().map(f => f.key.trim()).filter(Boolean);
+      } else if (bt === 'x-www-form-urlencoded') {
+          targetPaths = this.urlEncodedData().map(u => u.key.trim()).filter(Boolean);
+      } else if (bt === 'graphql') {
+          targetPaths = this.extractBodyPaths(this.graphqlVariables());
+      } else {
+          const bodyStr = this.monacoEditor()?.getEditorValue() || this.rawBodyContent();
+          targetPaths = this.extractBodyPaths(bodyStr);
+      }
+
+      const currentPaths = current.encryptedBodyPaths || [];
       const hasActiveCurrentPaths =
-          current.encryptedBodyPaths &&
-          current.encryptedBodyPaths.length > 0 &&
-          (currentBodyPaths.length === 0 || currentBodyPaths.some(p => current.encryptedBodyPaths.includes(p)));
+          currentPaths.length > 0 &&
+          (targetPaths.length === 0 || targetPaths.every(p => currentPaths.includes(p)));
 
-      const newEncryptedBodyPaths = hasActiveCurrentPaths ? [] : currentBodyPaths;
+      const newEncryptedBodyPaths = hasActiveCurrentPaths
+          ? currentPaths.filter(p => !targetPaths.includes(p))
+          : Array.from(new Set([...currentPaths, ...targetPaths]));
 
       const id = this.tabId();
       if (id) {
@@ -251,7 +279,10 @@ export class BodyTypesComponent {
     if (id) {
       const state = this.tabStateService.getState(id);
       const isXml = type === 'XML' || type === 'XML (SOAP)' || type === 'SOAP';
-      let newRawBody = isXml ? state?.rawBodyXml : state?.rawBodyJson;
+      const isText = type === 'Text';
+      let newRawBody = isXml
+          ? state?.rawBodyXml
+          : (isText ? (state?.rawBodyText || '') : state?.rawBodyJson);
 
       if (type === 'XML (SOAP)' && (!newRawBody || !newRawBody.trim() || newRawBody.trim() === '{}')) {
         newRawBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -265,8 +296,45 @@ export class BodyTypesComponent {
       this.tabStateService.updateState(id, { 
         rawType: type,
         rawBody: newRawBody,
-        ...(isXml ? { rawBodyXml: newRawBody } : { rawBodyJson: newRawBody })
+        ...(isXml ? { rawBodyXml: newRawBody } : (isText ? { rawBodyText: newRawBody } : { rawBodyJson: newRawBody }))
       });
+    }
+  }
+
+  // URL-Encoded CRUD
+  addUrlEncodedRow() {
+    const id = this.tabId();
+    if (!id) return;
+    const rows = [...this.urlEncodedData(), { enabled: true, key: '', value: '' }];
+    this.tabStateService.updateState(id, { urlEncodedData: rows });
+  }
+
+  deleteUrlEncodedRow(i: number) {
+    const id = this.tabId();
+    if (!id) return;
+    const rows = this.urlEncodedData().filter((_, idx) => idx !== i);
+    this.tabStateService.updateState(id, { urlEncodedData: rows.length ? rows : [{ enabled: true, key: '', value: '' }] });
+  }
+
+  updateUrlEncodedRow(i: number, field: keyof KeyValue, val: any) {
+    const id = this.tabId();
+    if (!id) return;
+    const rows = this.urlEncodedData().map((r, idx) => idx === i ? { ...r, [field]: val } : r);
+    this.tabStateService.updateState(id, { urlEncodedData: rows });
+  }
+
+  // GraphQL methods
+  onGraphqlQueryChange(query: string) {
+    const id = this.tabId();
+    if (id) {
+      this.tabStateService.updateState(id, { graphqlQuery: query });
+    }
+  }
+
+  onGraphqlVariablesChange(vars: string) {
+    const id = this.tabId();
+    if (id) {
+      this.tabStateService.updateState(id, { graphqlVariables: vars });
     }
   }
 

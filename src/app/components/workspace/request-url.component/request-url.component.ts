@@ -255,11 +255,14 @@ export class RequestUrlComponent {
         const headers: { key: string; value: string; enabled: boolean }[] = [];
         let params: { key: string; value: string; enabled: boolean }[] = [];
         const formDataRows: { enabled: boolean; key: string; value: string; type: 'text' | 'file' }[] = [];
+        const urlEncodedList: string[] = [];
         let auth: any = null;
         let body = '';
         let isJsonHeader = false;
         let isXmlHeader = false;
         let isSoapHeader = false;
+        let isUrlEncodedHeader = false;
+        let isTextHeader = false;
         let hasSoapActionHeader = false;
 
         // Tokenize respecting single and double quotes
@@ -372,8 +375,12 @@ export class RequestUrlComponent {
                                 isXmlHeader = true;
                             } else if (valLower.includes('text/xml') || valLower.includes('application/xml') || valLower.includes('+xml')) {
                                 isXmlHeader = true;
+                            } else if (valLower.includes('application/x-www-form-urlencoded')) {
+                                isUrlEncodedHeader = true;
                             } else if (valLower.includes('application/json') || valLower.includes('+json')) {
                                 isJsonHeader = true;
+                            } else if (valLower.includes('text/plain')) {
+                                isTextHeader = true;
                             }
                         } else if (keyLower === 'soapaction') {
                             hasSoapActionHeader = true;
@@ -382,6 +389,10 @@ export class RequestUrlComponent {
                         }
                     }
                 }
+            } else if (flag === '--data-urlencode') {
+                const dataVal = getNextVal();
+                if (dataVal) urlEncodedList.push(dataVal);
+                if (method === 'GET') method = 'POST';
             } else if (flag === '-d' || flag === '--data' || flag === '--data-raw' || flag === '--data-binary') {
                 const dataVal = getNextVal();
                 body = body ? (body + '&' + dataVal) : dataVal;
@@ -442,28 +453,74 @@ export class RequestUrlComponent {
         if (params.length > 0) updateData.params = params;
         if (auth) updateData.auth = auth;
         
-        if (body) {
-            updateData.bodyType = 'raw';
-            updateData.rawBody = body;
+        const parseUrlEncodedStr = (str: string) => {
+            const rows: { enabled: boolean; key: string; value: string }[] = [];
+            const pairs = str.split('&');
+            for (const p of pairs) {
+                if (!p) continue;
+                const eq = p.indexOf('=');
+                let k = eq > -1 ? p.slice(0, eq) : p;
+                let v = eq > -1 ? p.slice(eq + 1) : '';
+                try { k = decodeURIComponent(k.replace(/\+/g, ' ')); } catch {}
+                try { v = decodeURIComponent(v.replace(/\+/g, ' ')); } catch {}
+                rows.push({ enabled: true, key: k, value: v });
+            }
+            return rows;
+        };
+
+        if (urlEncodedList.length > 0 || (isUrlEncodedHeader && body)) {
+            const combinedList = [...urlEncodedList];
+            if (isUrlEncodedHeader && body) {
+                combinedList.push(body);
+            }
+            const allRows: { enabled: boolean; key: string; value: string }[] = [];
+            for (const item of combinedList) {
+                allRows.push(...parseUrlEncodedStr(item));
+            }
+            updateData.bodyType = 'x-www-form-urlencoded';
+            updateData.urlEncodedData = allRows.length > 0 ? allRows : [{ enabled: true, key: '', value: '' }];
             updateData.payloadType = 'body';
-
+        } else if (body) {
+            updateData.payloadType = 'body';
             const trimmedBody = body.trim();
-            const soapXmlPattern = /<(?:soap|soapenv|soap12):Envelope\b|xmlns:(?:soap|soapenv|soap12)=|http:\/\/schemas\.xmlsoap\.org\/soap\/envelope\/|http:\/\/www\.w3\.org\/2003\/05\/soap-envelope/i;
-            const isSoapDetected = isSoapHeader || hasSoapActionHeader || soapXmlPattern.test(trimmedBody);
 
-            const looksLikeXml = trimmedBody.startsWith('<') && (trimmedBody.endsWith('>') || trimmedBody.includes('</'));
-            const looksLikeJson = (trimmedBody.startsWith('{') && trimmedBody.endsWith('}')) || (trimmedBody.startsWith('[') && trimmedBody.endsWith(']'));
-            const isXmlDetected = isSoapDetected || isXmlHeader || trimmedBody.startsWith('<?xml') || (looksLikeXml && !looksLikeJson);
+            let isGraphql = false;
+            if (trimmedBody.startsWith('{') && trimmedBody.endsWith('}')) {
+                try {
+                    const parsedGql = JSON.parse(trimmedBody);
+                    if (parsedGql && typeof parsedGql.query === 'string') {
+                        isGraphql = true;
+                        updateData.bodyType = 'graphql';
+                        updateData.graphqlQuery = parsedGql.query;
+                        updateData.graphqlVariables = parsedGql.variables ? JSON.stringify(parsedGql.variables, null, 2) : '{\n  \n}';
+                    }
+                } catch {}
+            }
 
-            if (isSoapDetected) {
-                updateData.rawType = 'XML (SOAP)';
-                updateData.rawBodyXml = body;
-            } else if (isXmlDetected) {
-                updateData.rawType = 'XML';
-                updateData.rawBodyXml = body;
-            } else {
-                updateData.rawType = 'JSON';
-                updateData.rawBodyJson = body;
+            if (!isGraphql) {
+                updateData.bodyType = 'raw';
+                updateData.rawBody = body;
+
+                const soapXmlPattern = /<(?:soap|soapenv|soap12):Envelope\b|xmlns:(?:soap|soapenv|soap12)=|http:\/\/schemas\.xmlsoap\.org\/soap\/envelope\/|http:\/\/www\.w3\.org\/2003\/05\/soap-envelope/i;
+                const isSoapDetected = isSoapHeader || hasSoapActionHeader || soapXmlPattern.test(trimmedBody);
+
+                const looksLikeXml = trimmedBody.startsWith('<') && (trimmedBody.endsWith('>') || trimmedBody.includes('</'));
+                const looksLikeJson = (trimmedBody.startsWith('{') && trimmedBody.endsWith('}')) || (trimmedBody.startsWith('[') && trimmedBody.endsWith(']'));
+                const isXmlDetected = isSoapDetected || isXmlHeader || trimmedBody.startsWith('<?xml') || (looksLikeXml && !looksLikeJson);
+
+                if (isSoapDetected) {
+                    updateData.rawType = 'XML (SOAP)';
+                    updateData.rawBodyXml = body;
+                } else if (isXmlDetected) {
+                    updateData.rawType = 'XML';
+                    updateData.rawBodyXml = body;
+                } else if (isTextHeader && !looksLikeJson) {
+                    updateData.rawType = 'Text';
+                    updateData.rawBodyText = body;
+                } else {
+                    updateData.rawType = 'JSON';
+                    updateData.rawBodyJson = body;
+                }
             }
         } else if (formDataRows.length > 0) {
             updateData.bodyType = 'form-data';

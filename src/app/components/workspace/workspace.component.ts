@@ -239,6 +239,37 @@ export class WorkspaceComponent {
     }
 
     isDuplicatingCapsule = signal<boolean>(false);
+    isEditingCapsuleName = signal<boolean>(false);
+    editingCapsuleName = signal<string>('');
+
+    startEditingCapsuleName(event?: Event): void {
+        event?.stopPropagation();
+        const activeCapsule = this.tabStateService.capsules().find(c => c.id === this.tabStateService.activeCapsuleId());
+        if (!activeCapsule) return;
+        this.editingCapsuleName.set(activeCapsule.name);
+        this.isEditingCapsuleName.set(true);
+    }
+
+    async saveCapsuleName(event?: Event): Promise<void> {
+        event?.stopPropagation();
+        if (!this.isEditingCapsuleName()) return;
+        const activeCapsuleId = this.tabStateService.activeCapsuleId();
+        const newName = this.editingCapsuleName().trim();
+        if (activeCapsuleId && newName) {
+            try {
+                await this.tabStateService.renameCapsule(activeCapsuleId, newName);
+                this.notificationService.notify(`Capsule renamed to "${newName}".`);
+            } catch (e: any) {
+                this.notificationService.notify(e?.message || 'Failed to rename capsule.');
+            }
+        }
+        this.isEditingCapsuleName.set(false);
+    }
+
+    cancelEditingCapsuleName(event?: Event): void {
+        event?.stopPropagation();
+        this.isEditingCapsuleName.set(false);
+    }
 
     async duplicateCurrentCapsule() {
         if (this.isDuplicatingCapsule()) return;
@@ -283,8 +314,46 @@ export class WorkspaceComponent {
     moveMenuRequestId = signal<string | null>(null);
     isTransferModalOpen = signal<boolean>(false);
     transferRequestIds = signal<string[]>([]);
+    transferFolder = signal<RequestGroup | null>(null);
     transferInitialMode = signal<'copy' | 'move'>('copy');
     curlModalRequest = signal<RequestState | null>(null);
+
+    // Request rename state
+    editingRequestId = signal<string | null>(null);
+    editingRequestName = signal<string>('');
+
+    startEditingRequest(req: RequestState, event?: Event): void {
+        event?.stopPropagation();
+        this.editingRequestId.set(req.id);
+        this.editingRequestName.set(req.name || '');
+    }
+
+    saveRequestName(reqId: string, event?: Event): void {
+        event?.stopPropagation();
+        const newName = this.editingRequestName().trim();
+        if (newName) {
+            this.tabStateService.renameRequest(reqId, newName);
+        }
+        this.editingRequestId.set(null);
+    }
+
+    cancelEditingRequest(event?: Event): void {
+        event?.stopPropagation();
+        this.editingRequestId.set(null);
+    }
+
+    duplicateRequestFromSidebar(reqId: string, event?: Event): void {
+        event?.stopPropagation();
+        this.tabStateService.duplicateTab(reqId);
+    }
+
+    openTransferModalForFolder(group: RequestGroup, mode: 'copy' | 'move', event: Event): void {
+        event.stopPropagation();
+        this.transferFolder.set(group);
+        this.transferRequestIds.set([]);
+        this.transferInitialMode.set(mode);
+        this.isTransferModalOpen.set(true);
+    }
 
     lastSelectedRequestId = signal<string | null>(null);
     isDraggingRequest = signal<boolean>(false);
@@ -816,6 +885,7 @@ export class WorkspaceComponent {
     openTransferModalForRequest(requestId: string, mode: 'copy' | 'move', event: Event): void {
         event.stopPropagation();
         this.moveMenuRequestId.set(null);
+        this.transferFolder.set(null);
         const ids = this.getEffectiveIdsForAction(requestId);
         this.transferRequestIds.set(ids);
         this.transferInitialMode.set(mode);
@@ -824,6 +894,7 @@ export class WorkspaceComponent {
 
     openTransferModalFromSelection(mode: 'copy' | 'move' = 'copy', event?: Event): void {
         event?.stopPropagation();
+        this.transferFolder.set(null);
         const ids = this.getSelectedRequestIdsIncludingFolders();
         if (ids.length === 0) {
             this.notificationService.notify('Select at least one non-empty folder or request.', 'warning');
@@ -835,6 +906,7 @@ export class WorkspaceComponent {
     }
 
     onTransferCompleted(res: { mode: 'copy' | 'move'; switched: boolean }): void {
+        this.transferFolder.set(null);
         if (res.mode === 'move' || res.switched) {
             this.selectedGroupIds.set(new Set());
             this.selectedRequestIds.set(new Set());

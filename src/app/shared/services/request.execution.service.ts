@@ -3,7 +3,7 @@ import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } 
 import { generateUUID } from '../utils/uuid.util';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 import { environment } from '../../../environments/environment';
-import { TabStateService, FormDataRow } from './tab.state.service';
+import { TabStateService, FormDataRow, KeyValue } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
@@ -177,11 +177,12 @@ export class RequestExecutionService {
                     // Read from the type-specific field to ensure the latest editor content is used.
                     // The shared `rawBody` can be stale if the user corrected the payload after a failed request.
                     const isXmlType = freshState.rawType === 'XML' || freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP';
+                    const isTextType = freshState.rawType === 'Text';
                     const rawBodyContent = isXmlType
                         ? (freshState.rawBodyXml || '')
-                        : (freshState.rawBodyJson || '{}');
+                        : (isTextType ? (freshState.rawBodyText || freshState.rawBody || '') : (freshState.rawBodyJson || '{}'));
 
-                    let resolvedRaw = isXmlType
+                    let resolvedRaw = (isXmlType || isTextType)
                         ? this.variableService.resolve(rawBodyContent)
                         : this.variableService.resolveJson(rawBodyContent);
 
@@ -190,11 +191,31 @@ export class RequestExecutionService {
                         resolvedRaw = sanitizeJsonBodyForScripts(resolvedRaw);
                     }
 
-                    try {
-                        body = JSON.parse(resolvedRaw);
-                    } catch {
+                    if (freshState.rawType === 'JSON') {
+                        try {
+                            body = JSON.parse(resolvedRaw);
+                        } catch {
+                            body = resolvedRaw;
+                        }
+                    } else {
                         body = resolvedRaw;
                     }
+                } else if (freshState.bodyType === 'x-www-form-urlencoded') {
+                    body = (freshState.urlEncodedData || []).filter((r: KeyValue) => r.enabled && r.key).map((r: KeyValue) => ({
+                        ...r,
+                        key: this.variableService.resolve(r.key),
+                        value: this.variableService.resolve(r.value || '')
+                    }));
+                } else if (freshState.bodyType === 'graphql') {
+                    const query = this.variableService.resolve(freshState.graphqlQuery || '');
+                    let variables: any = {};
+                    try {
+                        const resolvedVars = this.variableService.resolveJson(freshState.graphqlVariables || '{}');
+                        variables = JSON.parse(resolvedVars || '{}');
+                    } catch {
+                        variables = {};
+                    }
+                    body = { query, variables };
                 } else if (freshState.bodyType === 'form-data') {
                     // For Sandbox passing we can pass form-data as array
                     body = freshState.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({
@@ -220,7 +241,9 @@ export class RequestExecutionService {
                 const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
                 const isXmlTypeEnc = freshState.rawType === 'XML' || freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP';
                 // Safely strip comments and sanitize JSON body without corrupting '/', '//', or '/*' inside encrypted values
-                const cleanBodyStr = isXmlTypeEnc ? bodyStr.trim() : sanitizeJsonBodyForScripts(bodyStr);
+                const cleanBodyStr = (isXmlTypeEnc || freshState.rawType === 'Text' || freshState.bodyType === 'x-www-form-urlencoded' || freshState.bodyType === 'form-data')
+                    ? bodyStr.trim()
+                    : sanitizeJsonBodyForScripts(bodyStr);
 
                 const rawEncHeaders = freshState.encryption?.encryptedHeaders || [];
                 const autoEncHeaders = !!freshState.encryption?.autoEncryptHeaders;
@@ -265,8 +288,18 @@ export class RequestExecutionService {
                     // Keep body as string for XML/SOAP or parse back to object for JSON
                     const encryptedBodyStr = encResult.context.body != null ? encResult.context.body : bodyStr;
 
-                    if (isXmlTypeEnc) {
+                    if (isXmlTypeEnc || freshState.rawType === 'Text') {
                         body = encryptedBodyStr;
+                    } else if (freshState.bodyType === 'form-data' || freshState.bodyType === 'x-www-form-urlencoded') {
+                        if (typeof encResult.context.body === 'object') {
+                            body = encResult.context.body;
+                        } else {
+                            try {
+                                body = JSON.parse(encryptedBodyStr);
+                            } catch {
+                                body = encResult.context.body;
+                            }
+                        }
                     } else {
                         try {
                             body = JSON.parse(encryptedBodyStr);
@@ -391,7 +424,7 @@ export class RequestExecutionService {
                 }
             }
             
-            // Build real FormData if needed
+            // Build real FormData or URLSearchParams if needed
             if (freshState.bodyType === 'form-data' && Array.isArray(body)) {
                 const fd = new FormData();
                 const rawFormData = freshState.formData;
@@ -411,6 +444,37 @@ export class RequestExecutionService {
                 if (contentTypeKey) {
                     httpHeaders = httpHeaders.delete(contentTypeKey);
                 }
+            } else if (freshState.bodyType === 'x-www-form-urlencoded') {
+                const urlParams = new URLSearchParams();
+                if (Array.isArray(body)) {
+                    for (const row of body) {
+                        if (row && row.key) {
+                            urlParams.append(row.key, row.value ?? '');
+                        }
+                    }
+                } else if (body && typeof body === 'object') {
+                    for (const [k, v] of Object.entries(body)) {
+                        urlParams.append(k, String(v ?? ''));
+                    }
+                } else if (typeof body === 'string') {
+                    finalBody = body;
+                }
+                if (!finalBody) {
+                    finalBody = urlParams.toString();
+                }
+                if (!httpHeaders.has('Content-Type')) {
+                    httpHeaders = httpHeaders.set('Content-Type', 'application/x-www-form-urlencoded; charset=utf-8');
+                }
+            } else if (freshState.bodyType === 'graphql') {
+                if (!httpHeaders.has('Content-Type')) {
+                    httpHeaders = httpHeaders.set('Content-Type', 'application/json');
+                }
+                finalBody = typeof body === 'string' ? body : JSON.stringify(body);
+            } else if (freshState.bodyType === 'raw' && freshState.rawType === 'Text') {
+                if (!httpHeaders.has('Content-Type')) {
+                    httpHeaders = httpHeaders.set('Content-Type', 'text/plain');
+                }
+                finalBody = typeof body === 'string' ? body : String(body ?? '');
             } else {
                 // Ensure Content-Type is application/json if body is an object or JSON string and not already set
                 if (finalBody && !httpHeaders.has('Content-Type')) {
@@ -466,7 +530,9 @@ export class RequestExecutionService {
                     });
 
                     let bodyPayload: string | null = null;
-                    if (body !== undefined && body !== null) {
+                    if (freshState.bodyType === 'x-www-form-urlencoded' || freshState.bodyType === 'graphql' || (freshState.bodyType === 'raw' && freshState.rawType === 'Text')) {
+                        bodyPayload = typeof finalBody === 'string' ? finalBody : (finalBody ? JSON.stringify(finalBody) : null);
+                    } else if (body !== undefined && body !== null) {
                         bodyPayload = typeof body === 'string' ? body : JSON.stringify(body);
                     }
 
@@ -476,7 +542,13 @@ export class RequestExecutionService {
                             const isSoap = freshState.rawType === 'XML (SOAP)' || freshState.rawType === 'SOAP' || (bodyPayload && (bodyPayload.includes('soap:Envelope') || bodyPayload.includes('soap12:Envelope') || bodyPayload.includes('schemas.xmlsoap.org')));
                             const isSoap12 = isSoap && bodyPayload && bodyPayload.includes('2003/05/soap-envelope');
                             headersObj['Content-Type'] = isSoap ? (isSoap12 ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8') : 'application/xml';
+                        } else if (freshState.bodyType === 'raw' && freshState.rawType === 'Text') {
+                            headersObj['Content-Type'] = 'text/plain';
                         } else if (freshState.bodyType === 'raw' && freshState.rawType === 'JSON') {
+                            headersObj['Content-Type'] = 'application/json';
+                        } else if (freshState.bodyType === 'x-www-form-urlencoded') {
+                            headersObj['Content-Type'] = 'application/x-www-form-urlencoded; charset=utf-8';
+                        } else if (freshState.bodyType === 'graphql') {
                             headersObj['Content-Type'] = 'application/json';
                         } else if (finalBody && (typeof finalBody === 'object' || (typeof finalBody === 'string' && finalBody.trim().startsWith('{')))) {
                             headersObj['Content-Type'] = 'application/json';
