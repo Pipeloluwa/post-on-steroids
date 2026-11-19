@@ -311,3 +311,29 @@ input[type="password"]::-ms-clear {
   margin-top: 10px !important;
 }
 
+/* Prevent Monaco find-widget / toolbar compact hover tooltips from wrapping or flickering near the right screen edge */
+.monaco-editor .context-view:has(.monaco-hover.workbench-hover.compact),
+.monaco-editor .workbench-hover-container:has(.monaco-hover.workbench-hover.compact) {
+  pointer-events: none !important;
+  width: max-content !important;
+}
+
+.monaco-editor .monaco-hover.workbench-hover.compact {
+  pointer-events: none !important;
+  white-space: nowrap !important;
+  width: max-content !important;
+  max-width: none !important;
+  margin-top: 6px !important;
+}
+
+.monaco-editor .monaco-hover.workbench-hover.compact .monaco-hover-content,
+.monaco-editor .monaco-hover.workbench-hover.compact .hover-row,
+.monaco-editor .monaco-hover.workbench-hover.compact .hover-contents {
+  white-space: nowrap !important;
+  width: max-content !important;
+  max-width: none !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+
+

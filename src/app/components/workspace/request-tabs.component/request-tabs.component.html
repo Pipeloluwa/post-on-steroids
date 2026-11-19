@@ -1,26 +1,26 @@
 <div
-    class="w-full flex items-center justify-between h-[38px] bg-(--postonsteroids-bg-primary) border-b border-(--postonsteroids-border) select-none">
+    class="w-full flex items-center justify-between h-[32px] bg-(--postonsteroids-bg-primary) border-b border-(--postonsteroids-border) select-none">
 
 
     <!-- History Navigation -->
     <div class="flex items-center h-full border-r border-(--postonsteroids-border)">
         <button (click)="goBack()" [disabled]="!canGoBack()"
-            class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors"
+            class="h-full px-1.5 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors"
             title="Go back (previous tab)">
             <mat-icon
-                class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_back</mat-icon>
+                class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_back</mat-icon>
         </button>
         <button (click)="goForward()" [disabled]="!canGoForward()"
-            class="h-full px-2 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors"
+            class="h-full px-1.5 flex items-center cursor-pointer hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 disabled:cursor-not-allowed group transition-colors"
             title="Go forward (next tab)">
             <mat-icon
-                class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_forward</mat-icon>
+                class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary)">arrow_forward</mat-icon>
         </button>
     </div>
 
     <button (click)="scrollLeft()" [disabled]="!canScrollLeft()"
         class="h-full flex items-center px-1 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
-        <mat-icon class="text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">chevron_left</mat-icon>
+        <mat-icon class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted)">chevron_left</mat-icon>
     </button>
 
     <!-- Tabs Container -->
@@ -36,22 +36,22 @@
         <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)"
             (contextmenu)="onTabContextMenu($event, tab.id)" [title]="tab.name"
             (cdkDragMoved)="onDragMoved($event)"
-            class="request-tab relative flex items-center h-full pl-3 pr-1 gap-x-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group w-[140px] min-w-[140px] max-w-[140px] shrink-0"
+            class="request-tab relative flex items-center h-full px-2 gap-x-1.5 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group min-w-[130px] max-w-[200px] w-auto shrink-0"
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
 
             <!-- Method -->
-            <span class="text-[9px] font-bold uppercase min-w-[36px]" [style.color]="getMethodColor(getTabMethod(tab.id))">
+            <span class="text-[9px] font-bold uppercase shrink-0" [style.color]="getMethodColor(getTabMethod(tab.id))">
                 {{ getTabMethod(tab.id) }}
             </span>
 
             <!-- Name/URL -->
-            <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 text-left">
+            <span class="text-[11px] text-(--postonsteroids-text-secondary) truncate flex-1 min-w-0 text-left">
                 {{ tab.name }}
             </span>
 
             <!-- Dirty Indicator (Dot) -->
             @if (tab.isDirty) {
-            <div class="w-[6px] h-[6px] rounded-full bg-(--postonsteroids-accent)"></div>
+            <div class="w-[5px] h-[5px] rounded-full bg-(--postonsteroids-accent) shrink-0"></div>
             }
 
             <!-- Active Tab Bottom Indicator -->
@@ -59,14 +59,14 @@
             <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-(--postonsteroids-accent)"></div>
             }
 
-            <button type="button" (click)="duplicateTab(tab.id, $event)" class="flex" title="Duplicate tab" aria-label="Duplicate tab">
+            <button type="button" (click)="duplicateTab(tab.id, $event)" class="hidden group-hover:flex items-center shrink-0" title="Duplicate tab" aria-label="Duplicate tab">
                 <mat-icon
-                    class="text-[15px]! size-[15px]! ml-auto opacity-0 group-hover:opacity-100 cursor-pointer">content_copy</mat-icon>
+                    class="text-[14px]! size-[14px]! cursor-pointer">content_copy</mat-icon>
             </button>
 
-            <button type="button" (click)="closeTab(tab.id, $event)" class="flex" title="Close tab" aria-label="Close tab">
+            <button type="button" (click)="closeTab(tab.id, $event)" class="hidden group-hover:flex items-center shrink-0" title="Close tab" aria-label="Close tab">
                 <mat-icon
-                    class="text-[16px]! size-[16px]!  ml-auto opacity-0 group-hover:opacity-100 cursor-pointer">close</mat-icon>
+                    class="text-[15px]! size-[15px]! cursor-pointer">close</mat-icon>
             </button>
         </div>
         }
@@ -74,8 +74,8 @@
         @if (isTabsLoading()) {
         <div class="flex items-center h-full shrink-0" role="status" aria-label="Loading request tabs">
             @for (skeleton of skeletonTabs; track skeleton) {
-            <div class="relative flex items-center h-full px-3 border-r border-(--postonsteroids-border) w-[140px] min-w-[140px] max-w-[140px] shrink-0">
-                <div class="relative w-full h-[14px] rounded bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border)/60 overflow-hidden">
+            <div class="relative flex items-center h-full px-2 border-r border-(--postonsteroids-border) w-[140px] min-w-[140px] max-w-[140px] shrink-0">
+                <div class="relative w-full h-[12px] rounded bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border)/60 overflow-hidden">
                     <div class="tab-skeleton-shimmer"></div>
                 </div>
             </div>
@@ -85,34 +85,34 @@
         
         <!-- Add Request Button Beside Last Tab -->
         <button (click)="addTab()"
-            class="h-[80%] flex items-center justify-center aspect-square ml-1.5 rounded-lg border border-(--postonsteroids-border) border-dashed text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) hover:border-(--postonsteroids-accent) transition-all cursor-pointer bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-accent)/10 shrink-0"
+            class="h-[78%] flex items-center justify-center aspect-square ml-1.5 rounded-md border border-(--postonsteroids-border) border-dashed text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) hover:border-(--postonsteroids-accent) transition-all cursor-pointer bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-accent)/10 shrink-0"
             title="Create new request">
-            <mat-icon class="text-[16px]! size-[16px]!">add</mat-icon>
+            <mat-icon class="text-[15px]! size-[15px]!">add</mat-icon>
         </button>
     </div>
 
     <!-- Scroll Right Arrow -->
     <button (click)="scrollRight()" [disabled]="!canScrollRight()"
         class="h-full flex items-center px-1 border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
-        <mat-icon class="text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">chevron_right</mat-icon>
+        <mat-icon class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted)">chevron_right</mat-icon>
     </button>
 
 
-    <!-- Import From Swagger Button -->
+    <!-- Import Swagger / SOAP Button -->
     <div (click)="swaggerModal.open()"
         class="h-full flex items-center gap-x-1 px-2 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)"
-        title="Import from Swagger">
-        <mat-icon class="text-[18px]! size-[18px]! text-(--postonsteroids-text-secondary)">cloud_download</mat-icon>
-        <span class="text-[10px] text-(--postonsteroids-text-secondary) leading-none whitespace-nowrap">Import Swagger</span>
+        title="Import Swagger / SOAP">
+        <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary)">cloud_download</mat-icon>
+        <span class="text-[10px] text-(--postonsteroids-text-secondary) leading-none whitespace-nowrap">Import Swagger / SOAP</span>
     </div>
 
     <!-- More Options (Endpoints Modal) -->
     <div
         class="h-full flex items-center px-1 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover)">
-        <app-scrollable-select-component [optionValues]="endpoints()" [searchable]="true" [verticalPosition]="38"
+        <app-scrollable-select-component [optionValues]="endpoints()" [searchable]="true" [verticalPosition]="32"
             [modalWidth]="300" [modalHeight]="300" [absoluteStartLeft]="false"
             (outputSelectedValue)="selectEndpoint($event)">
-            <mat-icon class="pt-[3px] text-[20px]! size-[20px]! text-(--postonsteroids-text-muted)">search</mat-icon>
+            <mat-icon class="pt-[2px] text-[18px]! size-[18px]! text-(--postonsteroids-text-muted)">search</mat-icon>
         </app-scrollable-select-component>
     </div>
 

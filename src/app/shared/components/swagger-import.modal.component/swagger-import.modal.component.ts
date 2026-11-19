@@ -8,6 +8,7 @@ import { TabStateService, RequestState, RequestGroup } from '../../services/tab.
 import { SwaggerExtractionService } from '../../services/swagger-extraction.service';
 import { IGlobalVariable } from '../../../interfaces/services/IVariableService';
 import { extractRequestsVariables } from '../../utils/import-variable.util';
+import { parseWsdlToRequests, parseAsmxOperationPageToRequest } from '../../utils/wsdl-parser.util';
 
 @Component({
     selector: 'app-swagger-import-modal',
@@ -50,7 +51,7 @@ export class SwaggerImportModalComponent {
     async importFromSwagger() {
         let url = this.swaggerUrl().trim();
         if (!url) {
-            this.setStatus('Please enter a Swagger or OpenAPI URL.', true);
+            this.setStatus('Please enter a Swagger, OpenAPI, or WSDL/SOAP URL.', true);
             return;
         }
 
@@ -63,19 +64,21 @@ export class SwaggerImportModalComponent {
         try {
             new URL(url);
         } catch {
-            this.setStatus('Please enter a valid URL (e.g. https://example.com/swagger or https://example.com/swagger/v1/swagger.json).', true);
+            this.setStatus('Please enter a valid URL (e.g. https://example.com/swagger or https://example.com/service.asmx?WSDL).', true);
             return;
         }
 
         this.isImporting.set(true);
-        this.setStatus('Extracting OpenAPI specification...', false);
+        this.setStatus('Extracting API specification...', false);
 
         try {
-            const openApi = await this.swaggerExtraction.extractSwaggerSpec(url);
-            const result = this.buildRequestStates(openApi, url);
+            const extracted = await this.swaggerExtraction.extractApiSpec(url);
+            const result = extracted.kind === 'wsdl'
+                ? this.buildWsdlRequestStates(extracted)
+                : this.buildRequestStates(extracted.spec, url);
 
             if (result.requests.length === 0) {
-                this.setStatus('No operations found inside the Swagger document.', true);
+                this.setStatus('No operations found inside the API documentation.', true);
                 return;
             }
 
@@ -103,13 +106,58 @@ export class SwaggerImportModalComponent {
             this.setStatus(successMessage, false);
             setTimeout(() => this.close(), 800);
         } catch (error: any) {
-            console.error('Swagger import failed', error);
-            const message = `Failed to import Swagger: ${error?.message || error}`;
+            console.error('API specification import failed', error);
+            const message = `Failed to import Swagger / SOAP: ${error?.message || error}`;
             this.onImportStatus.emit({ message, isError: true });
             this.setStatus(message, true);
         } finally {
             this.isImporting.set(false);
         }
+    }
+
+    private buildWsdlRequestStates(extracted: {
+        kind: 'wsdl';
+        wsdlXml: string;
+        xsdXmls: string[];
+        serviceUrl: string;
+        asmxOps?: { opName: string; opHtml: string; pageUrl: string; serviceName: string }[];
+    }): { collectionName: string; requests: RequestState[]; groups: RequestGroup[]; variables: IGlobalVariable[] } {
+        let collectionName = 'SOAP Service';
+        let parsedReqs: any[] = [];
+
+        if (extracted.wsdlXml) {
+            const wsdlResult = parseWsdlToRequests(extracted.wsdlXml, extracted.serviceUrl, extracted.xsdXmls);
+            collectionName = wsdlResult.serviceName || collectionName;
+            parsedReqs = wsdlResult.requests;
+        } else if (Array.isArray(extracted.asmxOps) && extracted.asmxOps.length > 0) {
+            collectionName = extracted.asmxOps[0].serviceName || collectionName;
+            const baseServiceUrl = extracted.serviceUrl.replace(/\?(single)?wsdl$/i, '');
+            parsedReqs = extracted.asmxOps.map(op =>
+                parseAsmxOperationPageToRequest(op.opName, op.opHtml, baseServiceUrl)
+            );
+        }
+
+        const requests: RequestState[] = parsedReqs.map(pr => {
+            const requestId = this.createId();
+            return {
+                ...this.tabStateService.getDefaultState(requestId),
+                id: requestId,
+                name: `${collectionName} — ${pr.name}`,
+                url: pr.url,
+                method: 'POST',
+                isDirty: true,
+                params: [{ enabled: true, key: '', value: '' }],
+                headers: [...pr.headers, { enabled: true, key: '', value: '' }],
+                bodyType: 'raw',
+                rawType: 'XML (SOAP)',
+                rawBody: pr.rawBody,
+                rawBodyJson: '',
+                rawBodyXml: pr.rawBodyXml
+            } as RequestState;
+        });
+
+        const variables = extractRequestsVariables(requests);
+        return { collectionName, requests, groups: [], variables };
     }
 
     private setStatus(message: string, isError: boolean) {
@@ -154,7 +202,21 @@ export class SwaggerImportModalComponent {
 
                 const allParams = this.extractParameters(mergedParams, openApi);
                 const params = [...allParams.queryParams, { enabled: true, key: '', value: '' }];
-                const headers = allParams.headerParams;
+                const extraJsonHeaders = [
+                    ...this.extractJsonHeaderMap(pathObject['headers'] ?? pathObject['x-headers'], openApi),
+                    ...this.extractJsonHeaderMap(operation['headers'] ?? operation['x-headers'], openApi),
+                    ...this.extractSecurityHeaderDefaults(operation.security ?? openApi['security'], openApi)
+                ];
+                const rawCombinedHeaders = [...allParams.headerParams, ...extraJsonHeaders];
+                const dedupHeaderMap = new Map<string, { enabled: boolean; key: string; value: string }>();
+                if (!rawCombinedHeaders.some(h => h.key.toLowerCase() === 'accept')) {
+                    dedupHeaderMap.set('accept', { enabled: true, key: 'Accept', value: 'application/json' });
+                }
+                for (const h of rawCombinedHeaders) {
+                    if (!h.key) continue;
+                    dedupHeaderMap.set(h.key.toLowerCase(), h);
+                }
+                const headers = Array.from(dedupHeaderMap.values());
                 const pathParams = allParams.pathParams;
                 for (const pp of pathParams) {
                     if (pp.key) {
@@ -172,7 +234,7 @@ export class SwaggerImportModalComponent {
                     method,
                     isDirty: true,
                     params,
-                    headers: [{ enabled: true, key: 'Accept', value: 'application/json' }, ...headers, { enabled: true, key: '', value: '' }],
+                    headers: [...headers, { enabled: true, key: '', value: '' }],
                     bodyType: body.rawBody ? 'raw' : 'none',
                     rawType: 'JSON',
                     rawBody: body.rawBody,
@@ -342,6 +404,74 @@ export class SwaggerImportModalComponent {
         return serviceBase;
     }
 
+    private isHeaderContainerName(name: string): boolean {
+        const lower = (name || '').trim().toLowerCase();
+        return ['headers', 'header', 'httpheaders', 'http_headers', 'customheaders', 'custom_headers', 'requestheaders', 'request_headers', 'x-headers'].includes(lower);
+    }
+
+    private formatScalarOrJson(val: any): string {
+        if (val === undefined || val === null) return '';
+        if (typeof val === 'object') return JSON.stringify(val);
+        return String(val);
+    }
+
+    private extractJsonHeaderMap(rawHeaders: any, openApi: Record<string, any>): { enabled: boolean; key: string; value: string }[] {
+        if (!rawHeaders) return [];
+        let target = rawHeaders;
+        if (typeof target === 'string') {
+            const trimmed = target.trim();
+            if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return [];
+            try { target = JSON.parse(trimmed); } catch { return []; }
+        }
+        if (target && typeof target === 'object' && target.$ref) {
+            target = this.resolveRef(target.$ref, openApi) || target;
+        }
+        if (Array.isArray(target)) {
+            return target
+                .filter((h: any) => h && (h.key || h.name))
+                .map((h: any) => ({
+                    enabled: h.enabled ?? true,
+                    key: String(h.key || h.name),
+                    value: this.formatScalarOrJson(h.value ?? h.example ?? this.resolveExampleValue(h, openApi) ?? '')
+                }));
+        }
+        if (target && typeof target === 'object') {
+            const schemaProps = target.properties && typeof target.properties === 'object' ? target.properties : null;
+            const sourceObj = schemaProps || target;
+            const out: { enabled: boolean; key: string; value: string }[] = [];
+            for (const [k, v] of Object.entries(sourceObj)) {
+                if (!k) continue;
+                let resolvedVal: any = v;
+                if (resolvedVal && typeof resolvedVal === 'object' && !Array.isArray(resolvedVal) &&
+                    ('schema' in resolvedVal || 'example' in resolvedVal || 'default' in resolvedVal || 'type' in resolvedVal || '$ref' in resolvedVal)) {
+                    resolvedVal = this.resolveExampleValue(resolvedVal, openApi) ?? (resolvedVal as any).example ?? (resolvedVal as any).default ?? '';
+                }
+                out.push({ enabled: true, key: k, value: this.formatScalarOrJson(resolvedVal) });
+            }
+            return out;
+        }
+        return [];
+    }
+
+    private extractSecurityHeaderDefaults(securityReqs: any, openApi: Record<string, any>): { enabled: boolean; key: string; value: string }[] {
+        const schemes = openApi['components']?.securitySchemes || openApi['securityDefinitions'];
+        if (!schemes || typeof schemes !== 'object' || !Array.isArray(securityReqs) || securityReqs.length === 0) return [];
+        const headers: { enabled: boolean; key: string; value: string }[] = [];
+        for (const reqObj of securityReqs) {
+            if (!reqObj || typeof reqObj !== 'object') continue;
+            for (const schemeName of Object.keys(reqObj)) {
+                const scheme = schemes[schemeName];
+                if (!scheme || typeof scheme !== 'object') continue;
+                if (scheme.type === 'apiKey' && scheme.in === 'header' && scheme.name) {
+                    headers.push({ enabled: true, key: String(scheme.name), value: '' });
+                } else if (scheme.type === 'http' && String(scheme.scheme).toLowerCase() === 'bearer') {
+                    headers.push({ enabled: true, key: 'Authorization', value: 'Bearer {{token}}' });
+                }
+            }
+        }
+        return headers;
+    }
+
     private extractParameters(parameters: any, openApi: Record<string, any>): { queryParams: { enabled: boolean; key: string; value: string }[]; headerParams: { enabled: boolean; key: string; value: string }[]; pathParams: { enabled: boolean; key: string; value: string }[] } {
         const queryParams: { enabled: boolean; key: string; value: string }[] = [];
         const headerParams: { enabled: boolean; key: string; value: string }[] = [];
@@ -351,14 +481,48 @@ export class SwaggerImportModalComponent {
 
         for (const param of parameters) {
             if (!param || typeof param !== 'object' || !param.name) continue;
+            const resolvedSchema = param.schema?.$ref
+                ? (this.resolveRef(param.schema.$ref, openApi) || param.schema)
+                : param.schema;
             const exampleValue = this.resolveExampleValue(param, openApi) ?? '';
-            const entryValue = typeof exampleValue === 'object' ? JSON.stringify(exampleValue, null, 2) : String(exampleValue);
+
+            if (param.in === 'header') {
+                // Handle Swagger endpoints that describe headers as a JSON object / schema wrapper
+                let parsedObj: any = null;
+                if (exampleValue && typeof exampleValue === 'object' && !Array.isArray(exampleValue)) {
+                    parsedObj = exampleValue;
+                } else if (typeof exampleValue === 'string' && exampleValue.trim().startsWith('{')) {
+                    try {
+                        const maybe = JSON.parse(exampleValue.trim());
+                        if (maybe && typeof maybe === 'object' && !Array.isArray(maybe)) {
+                            parsedObj = maybe;
+                        }
+                    } catch { }
+                }
+
+                const hasSchemaObjectProps = resolvedSchema?.type === 'object' && resolvedSchema?.properties && typeof resolvedSchema.properties === 'object';
+                if (hasSchemaObjectProps) {
+                    headerParams.push(...this.extractJsonHeaderMap(resolvedSchema, openApi));
+                    continue;
+                }
+                if (parsedObj && (this.isHeaderContainerName(String(param.name)) || resolvedSchema?.type === 'object')) {
+                    headerParams.push(...this.extractJsonHeaderMap(parsedObj, openApi));
+                    continue;
+                }
+
+                headerParams.push({
+                    enabled: true,
+                    key: String(param.name),
+                    value: this.formatScalarOrJson(exampleValue)
+                });
+                continue;
+            }
+
+            const entryValue = this.formatScalarOrJson(exampleValue);
             const entry = { enabled: true, key: String(param.name), value: entryValue };
 
             if (param.in === 'query') {
                 queryParams.push(entry);
-            } else if (param.in === 'header') {
-                headerParams.push(entry);
             } else if (param.in === 'path') {
                 pathParams.push(entry);
             }

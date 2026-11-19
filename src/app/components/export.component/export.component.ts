@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService } from '../../shared/services/tab.state.service';
 import { VariableService } from '../../shared/services/variable.service';
+import { convertCapsuleToPostmanCollection } from '../../shared/utils/postman-export.util';
 
 @Component({
     selector: 'app-export-component',
@@ -109,6 +110,26 @@ export class ExportComponent {
             };
 
             this.downloadJson(exportData, `onsteroid_all_capsules_export_${Date.now()}.json`);
+        } finally {
+            this.isExporting.set(false);
+        }
+    }
+
+    async exportSelectedAsPostman() {
+        const selectedIds = this.selectedCapsules();
+        const targetCapsules = selectedIds.size > 0
+            ? this.capsules().filter(c => selectedIds.has(c.id))
+            : this.capsules();
+        if (targetCapsules.length === 0 || this.isExporting()) return;
+
+        this.isExporting.set(true);
+        try {
+            for (const capsule of targetCapsules) {
+                const fullCapsule = await this.tabStateService.getFullCapsuleExportData(capsule.id);
+                const pmCollection = convertCapsuleToPostmanCollection(fullCapsule);
+                const safeName = (fullCapsule.name || 'capsule').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                this.downloadJson(pmCollection, `${safeName}.postman_collection.json`);
+            }
         } finally {
             this.isExporting.set(false);
         }

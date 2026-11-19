@@ -8,6 +8,7 @@ import { AuthService } from '../../shared/services/auth.service';
 import { SwaggerImportModalComponent } from '../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractPostmanVariables, extractRequestsVariables } from '../../shared/utils/import-variable.util';
+import { isWsdlXml, parseWsdlToRequests } from '../../shared/utils/wsdl-parser.util';
 
 interface ParsedCapsuleGroup {
     name: string;
@@ -110,7 +111,19 @@ export class ImportComponent implements OnInit {
         reader.onload = (e) => {
             try {
                 const content = e.target?.result as string;
-                const data = JSON.parse(content);
+                let data: any;
+                if (isWsdlXml(content) || /\.wsdl$/i.test(file.name)) {
+                    const parsedWsdl = parseWsdlToRequests(content, file.name);
+                    if (parsedWsdl.requests.length === 0) {
+                        throw new Error('No SOAP operations were found inside this WSDL file.');
+                    }
+                    data = {
+                        name: parsedWsdl.serviceName || file.name.replace(/\.wsdl$/i, ''),
+                        requests: parsedWsdl.requests
+                    };
+                } else {
+                    data = JSON.parse(content);
+                }
                 const pending = this.prepareImportData(data, file.name);
                 
                 this.pendingImport.set(pending);
@@ -118,7 +131,7 @@ export class ImportComponent implements OnInit {
                 this.showSavePrompt.set(true);
             } catch (err: any) {
                 console.error('Import validation failed:', err);
-                const msg = err?.message || 'Invalid file format. Please upload an OnSteroid export file or a Postman Collection JSON.';
+                const msg = err?.message || 'Invalid file format. Please upload an OnSteroid export JSON, Postman Collection JSON, or WSDL file.';
                 this.showStatus(msg, true);
             } finally {
                 input.value = '';
@@ -193,7 +206,7 @@ export class ImportComponent implements OnInit {
         // 1. Postman Collection Format (v2.0 / v2.1)
         if (data.info && Array.isArray(data.item)) {
             const collectionName = data.info.name || 'Imported Postman Collection';
-            const postmanReqs = this.flattenPostmanItems(data.item);
+            const postmanReqs = this.flattenPostmanItems(data.item, undefined, data.auth);
             const mapped = postmanReqs.map(it => ({
                 ...this.mapPostmanRequest(it),
                 __folderName: it.folderName
@@ -427,8 +440,9 @@ export class ImportComponent implements OnInit {
                 ...state,
                 id: reqId,
                 capsuleId: capId,
+                ...(Array.isArray(rawReq.examples) ? { examples: rawReq.examples } : {}),
                 isDirty: false
-            };
+            } as RequestState;
         }
 
         // If postman-like raw item with request object: { name, request }
@@ -461,15 +475,26 @@ export class ImportComponent implements OnInit {
             }))
             : baseState.headers;
 
-        // Normalize formData array
+        // Normalize formData array (support both 'form-data' and legacy 'formData' bodyType)
         const formData = Array.isArray(rawReq.formData)
             ? rawReq.formData.map((f: any) => ({
                 enabled: f.enabled ?? f.isEnabled ?? true,
                 key: f.key ?? '',
                 value: f.value ?? '',
-                type: f.type === 'file' ? 'file' : 'text'
+                type: f.type === 'file' ? 'file' : 'text',
+                ...(f.fileName ? { fileName: f.fileName } : {})
             }))
             : baseState.formData;
+
+        const urlEncodedData = Array.isArray(rawReq.urlEncodedData)
+            ? rawReq.urlEncodedData.map((u: any) => ({
+                enabled: u.enabled ?? u.isEnabled ?? true,
+                key: u.key ?? '',
+                value: u.value ?? ''
+            }))
+            : baseState.urlEncodedData;
+
+        const normalizedBodyType = rawReq.bodyType === 'formData' ? 'form-data' : (rawReq.bodyType || baseState.bodyType);
 
         return {
             ...baseState,
@@ -479,9 +504,12 @@ export class ImportComponent implements OnInit {
             name: rawReq.name || 'Imported Request',
             url: rawReq.url || '',
             method: (rawReq.method || 'GET').toUpperCase(),
+            bodyType: normalizedBodyType,
             params,
             headers,
             formData,
+            urlEncodedData,
+            ...(Array.isArray(rawReq.examples) ? { examples: rawReq.examples } : {}),
             auth: {
                 type: rawReq.auth?.type || (rawReq.authType as any) || 'none',
                 token: rawReq.auth?.token || rawReq.authToken || ''
@@ -516,46 +544,58 @@ export class ImportComponent implements OnInit {
         } as RequestState;
     }
 
-    private flattenPostmanItems(items: any[], parentFolder?: string): { name: string; request: any; folderName?: string }[] {
-        const results: { name: string; request: any; folderName?: string }[] = [];
+    private flattenPostmanItems(
+        items: any[],
+        parentFolder?: string,
+        inheritedAuth?: any
+    ): { name: string; request: any; response?: any[]; event?: any[]; auth?: any; folderName?: string }[] {
+        const results: { name: string; request: any; response?: any[]; event?: any[]; auth?: any; folderName?: string }[] = [];
 
         for (const item of items) {
+            const folderAuth = item.auth || inheritedAuth;
             if (item.request) {
                 results.push({
                     name: item.name || 'Request',
                     request: item.request,
+                    response: Array.isArray(item.response) ? item.response : [],
+                    event: Array.isArray(item.event) ? item.event : [],
+                    auth: folderAuth,
                     folderName: parentFolder
                 });
             }
             if (Array.isArray(item.item) && item.item.length > 0) {
                 const folderLabel = item.name ? (parentFolder ? `${parentFolder} / ${item.name}` : item.name) : parentFolder;
-                results.push(...this.flattenPostmanItems(item.item, folderLabel));
+                results.push(...this.flattenPostmanItems(item.item, folderLabel, folderAuth));
             }
         }
 
         return results;
     }
 
-    private mapPostmanRequest(item: { name: string; request: any }): Partial<RequestState> {
-        const req = item.request;
-        const method = typeof req === 'string' ? 'GET' : (req.method || 'GET').toUpperCase();
-
-        // Extract URL
+    private extractPostmanUrlAndParams(urlData: any): {
+        url: string;
+        params: { enabled: boolean; key: string; value: string }[];
+    } {
         let url = '';
         const params: { enabled: boolean; key: string; value: string }[] = [];
 
-        if (typeof req === 'string') {
-            url = req;
-        } else if (typeof req?.url === 'string') {
-            url = req.url;
-        } else if (req?.url && typeof req.url === 'object') {
-            url = req.url.raw || '';
-            if (Array.isArray(req.url.query)) {
-                for (const q of req.url.query) {
+        if (typeof urlData === 'string') {
+            url = urlData;
+        } else if (urlData && typeof urlData === 'object') {
+            url = urlData.raw || '';
+            if (!url && (urlData.host || urlData.path)) {
+                const proto = urlData.protocol ? `${urlData.protocol}://` : 'https://';
+                const host = Array.isArray(urlData.host) ? urlData.host.join('.') : (urlData.host || '');
+                const port = urlData.port ? `:${urlData.port}` : '';
+                const pathParts = Array.isArray(urlData.path) ? urlData.path.join('/') : (urlData.path || '');
+                url = `${proto}${host}${port}${pathParts ? '/' + pathParts.replace(/^\/+/, '') : ''}`;
+            }
+            if (Array.isArray(urlData.query)) {
+                for (const q of urlData.query) {
                     params.push({
                         enabled: !q.disabled,
                         key: q.key || '',
-                        value: q.value || ''
+                        value: q.value !== undefined && q.value !== null ? String(q.value) : ''
                     });
                 }
             }
@@ -565,28 +605,77 @@ export class ImportComponent implements OnInit {
             params.push({ enabled: true, key: '', value: '' });
         }
 
-        // Extract Headers
+        return { url, params };
+    }
+
+    private extractPostmanBodyAndHeaders(req: any, inheritedAuth?: any): {
+        headers: { enabled: boolean; key: string; value: string }[];
+        bodyType: string;
+        rawType: string;
+        rawBody: string;
+        rawBodyJson: string;
+        rawBodyXml: string;
+        rawBodyText: string;
+        formData: { enabled: boolean; key: string; value: string; type: 'text' | 'file'; fileName?: string }[];
+        urlEncodedData: { enabled: boolean; key: string; value: string }[];
+        graphqlQuery: string;
+        graphqlVariables: string;
+        auth: { type: 'none' | 'bearer' | 'basic'; token: string };
+    } {
         const headers: { enabled: boolean; key: string; value: string }[] = [];
         if (Array.isArray(req?.header)) {
             for (const h of req.header) {
                 headers.push({
                     enabled: !h.disabled,
                     key: h.key || '',
-                    value: h.value || ''
+                    value: h.value !== undefined && h.value !== null ? String(h.value) : ''
                 });
             }
         }
+
+        // Extract Auth (request auth takes precedence over folder/collection auth)
+        const resolvedAuth = req?.auth || inheritedAuth;
+        let authType: 'none' | 'bearer' | 'basic' = 'none';
+        let authToken = '';
+        if (resolvedAuth && resolvedAuth.type !== 'noauth') {
+            if (resolvedAuth.type === 'bearer') {
+                authType = 'bearer';
+                const tokenObj = resolvedAuth.bearer?.find((b: any) => b.key === 'token') || resolvedAuth.bearer?.[0];
+                authToken = tokenObj?.value || '';
+            } else if (resolvedAuth.type === 'basic') {
+                authType = 'basic';
+                const userObj = resolvedAuth.basic?.find((b: any) => b.key === 'username');
+                const passObj = resolvedAuth.basic?.find((b: any) => b.key === 'password');
+                if (userObj?.value || passObj?.value) {
+                    authToken = `${userObj?.value || ''}:${passObj?.value || ''}`;
+                }
+            } else if (resolvedAuth.type === 'apikey' && Array.isArray(resolvedAuth.apikey)) {
+                const keyObj = resolvedAuth.apikey.find((a: any) => a.key === 'key');
+                const valObj = resolvedAuth.apikey.find((a: any) => a.key === 'value');
+                const inObj = resolvedAuth.apikey.find((a: any) => a.key === 'in');
+                if (keyObj?.value && (inObj?.value || 'header') === 'header') {
+                    const alreadyHas = headers.some(h => h.key.toLowerCase() === String(keyObj.value).toLowerCase());
+                    if (!alreadyHas) {
+                        headers.push({ enabled: true, key: String(keyObj.value), value: String(valObj?.value || '') });
+                    }
+                }
+            }
+        }
+
         if (headers.length === 0) {
             headers.push({ enabled: true, key: 'Accept', value: 'application/json' }, { enabled: true, key: '', value: '' });
         }
 
-        // Extract Body
         let bodyType = 'none';
         let rawType = 'JSON';
         let rawBody = '{}';
         let rawBodyJson = '{}';
         let rawBodyXml = '';
-        const formData: { enabled: boolean; key: string; value: string; type: 'text' | 'file' }[] = [];
+        let rawBodyText = '';
+        const formData: { enabled: boolean; key: string; value: string; type: 'text' | 'file'; fileName?: string }[] = [];
+        const urlEncodedData: { enabled: boolean; key: string; value: string }[] = [];
+        let graphqlQuery = '';
+        let graphqlVariables = '';
 
         if (req?.body) {
             const mode = req.body.mode;
@@ -594,7 +683,7 @@ export class ImportComponent implements OnInit {
                 bodyType = 'raw';
                 rawBody = req.body.raw || '';
                 const lang = req.body.options?.raw?.language?.toLowerCase();
-                const isSoap = (rawBody.includes('soap:Envelope') || rawBody.includes('soap12:Envelope') || rawBody.includes('schemas.xmlsoap.org'));
+                const isSoap = rawBody.includes('soap:Envelope') || rawBody.includes('soapenv:Envelope') || rawBody.includes('soap12:Envelope') || rawBody.includes('schemas.xmlsoap.org');
                 const isXml = lang === 'xml' || isSoap || rawBody.trim().startsWith('<?xml') || (rawBody.trim().startsWith('<') && rawBody.trim().endsWith('>'));
                 if (isSoap) {
                     rawType = 'XML (SOAP)';
@@ -602,39 +691,152 @@ export class ImportComponent implements OnInit {
                 } else if (isXml) {
                     rawType = 'XML';
                     rawBodyXml = rawBody;
+                } else if (lang === 'text') {
+                    rawType = 'Text';
+                    rawBodyText = rawBody;
                 } else {
                     rawType = 'JSON';
                     rawBodyJson = rawBody;
                 }
             } else if (mode === 'formdata' && Array.isArray(req.body.formdata)) {
-                bodyType = 'formData';
+                bodyType = 'form-data';
                 for (const f of req.body.formdata) {
+                    const isFile = f.type === 'file';
                     formData.push({
                         enabled: !f.disabled,
                         key: f.key || '',
-                        value: f.value || '',
-                        type: f.type === 'file' ? 'file' : 'text'
+                        value: isFile ? (Array.isArray(f.src) ? f.src[0] || '' : (f.src || f.value || '')) : (f.value ?? ''),
+                        type: isFile ? 'file' : 'text',
+                        ...(isFile && (f.src || f.value) ? { fileName: Array.isArray(f.src) ? f.src[0] : (f.src || f.value) } : {})
                     });
                 }
+            } else if (mode === 'urlencoded' && Array.isArray(req.body.urlencoded)) {
+                bodyType = 'x-www-form-urlencoded';
+                for (const u of req.body.urlencoded) {
+                    urlEncodedData.push({
+                        enabled: !u.disabled,
+                        key: u.key || '',
+                        value: u.value !== undefined && u.value !== null ? String(u.value) : ''
+                    });
+                }
+            } else if (mode === 'graphql' && req.body.graphql) {
+                bodyType = 'graphql';
+                graphqlQuery = req.body.graphql.query || '';
+                graphqlVariables = typeof req.body.graphql.variables === 'string'
+                    ? req.body.graphql.variables
+                    : (req.body.graphql.variables ? JSON.stringify(req.body.graphql.variables, null, 2) : '');
             }
         }
 
         if (formData.length === 0) {
             formData.push({ enabled: true, key: '', value: '', type: 'text' });
         }
+        if (urlEncodedData.length === 0) {
+            urlEncodedData.push({ enabled: true, key: '', value: '' });
+        }
 
-        // Extract Auth
-        let authType: 'none' | 'bearer' | 'basic' = 'none';
-        let authToken = '';
-        if (req?.auth) {
-            if (req.auth.type === 'bearer') {
-                authType = 'bearer';
-                const tokenObj = req.auth.bearer?.find((b: any) => b.key === 'token') || req.auth.bearer?.[0];
-                authToken = tokenObj?.value || '';
-            } else if (req.auth.type === 'basic') {
-                authType = 'basic';
+        return {
+            headers,
+            bodyType,
+            rawType,
+            rawBody,
+            rawBodyJson,
+            rawBodyXml,
+            rawBodyText,
+            formData,
+            urlEncodedData,
+            graphqlQuery,
+            graphqlVariables,
+            auth: { type: authType, token: authToken }
+        };
+    }
+
+    private mapPostmanRequest(item: {
+        name: string;
+        request: any;
+        response?: any[];
+        event?: any[];
+        auth?: any;
+    }): Partial<RequestState> & { examples?: any[] } {
+        const req = item.request;
+        const method = typeof req === 'string' ? 'GET' : (req.method || 'GET').toUpperCase();
+        const { url, params } = this.extractPostmanUrlAndParams(typeof req === 'string' ? req : req?.url);
+        const bodyAndHeaders = this.extractPostmanBodyAndHeaders(req, item.auth);
+
+        // Extract pre-request & test scripts from Postman events
+        let preRequest = '';
+        let testScript = '';
+        if (Array.isArray(item.event)) {
+            for (const ev of item.event) {
+                const execLines = Array.isArray(ev?.script?.exec) ? ev.script.exec.join('\n') : (ev?.script?.exec || '');
+                if (!execLines) continue;
+                if (ev.listen === 'prerequest') {
+                    preRequest = preRequest ? `${preRequest}\n${execLines}` : execLines;
+                } else if (ev.listen === 'test') {
+                    testScript = testScript ? `${testScript}\n${execLines}` : execLines;
+                }
             }
         }
+
+        // Map Postman saved examples (item.response[]) into OnSteroid examples
+        const examples = Array.isArray(item.response)
+            ? item.response.map((resp: any, idx: number) => {
+                const orig = resp?.originalRequest;
+                const origUrlParams = orig
+                    ? this.extractPostmanUrlAndParams(typeof orig === 'string' ? orig : orig?.url)
+                    : { url, params };
+                const origBodyHeaders = orig
+                    ? this.extractPostmanBodyAndHeaders(orig, item.auth)
+                    : bodyAndHeaders;
+
+                const respHeaders = Array.isArray(resp?.header)
+                    ? resp.header
+                        .filter((h: any) => h && h.key)
+                        .map((h: any) => ({ key: String(h.key), value: String(h.value ?? '') }))
+                    : [];
+
+                let parsedRespBody: any = resp?.body ?? '';
+                if (typeof parsedRespBody === 'string') {
+                    const trimmed = parsedRespBody.trim();
+                    if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length > 0) {
+                        try { parsedRespBody = JSON.parse(trimmed); } catch { /* keep raw string */ }
+                    }
+                }
+
+                const statusStr = resp?.code
+                    ? `${resp.code}${resp.status ? ' ' + resp.status : ''}`
+                    : (resp?.status || '200 OK');
+                const bodyByteLen = typeof resp?.body === 'string' ? resp.body.length : 0;
+
+                const snapshot = {
+                    method: (orig?.method || method).toUpperCase(),
+                    url: origUrlParams.url || url,
+                    params: origUrlParams.params,
+                    headers: origBodyHeaders.headers,
+                    bodyType: origBodyHeaders.bodyType,
+                    rawType: origBodyHeaders.rawType,
+                    rawBody: origBodyHeaders.rawBody,
+                    rawBodyJson: origBodyHeaders.rawBodyJson,
+                    rawBodyXml: origBodyHeaders.rawBodyXml,
+                    rawBodyText: origBodyHeaders.rawBodyText,
+                    formData: origBodyHeaders.formData,
+                    urlEncodedData: origBodyHeaders.urlEncodedData,
+                    graphqlQuery: origBodyHeaders.graphqlQuery,
+                    graphqlVariables: origBodyHeaders.graphqlVariables,
+                    responseBody: parsedRespBody,
+                    responseStatus: statusStr,
+                    responseTime: resp?.responseTime ?? 0,
+                    responseSize: bodyByteLen ? `${bodyByteLen} B` : '0 B',
+                    responseHeaders: respHeaders,
+                    responseCookies: Array.isArray(resp?.cookie) ? resp.cookie : []
+                };
+
+                return {
+                    name: String(resp?.name || `Example ${idx + 1}`),
+                    requestSnapshot: snapshot
+                };
+            })
+            : [];
 
         return {
             name: item.name,
@@ -642,17 +844,17 @@ export class ImportComponent implements OnInit {
             method,
             payloadType: 'params',
             params,
-            headers,
-            bodyType,
-            rawType,
-            rawBody,
-            rawBodyJson,
-            rawBodyXml,
-            formData,
-            auth: {
-                type: authType,
-                token: authToken
-            }
+            ...bodyAndHeaders,
+            scripts: {
+                preRequest,
+                postResponse: '',
+                testScript,
+                testScriptEnabled: !!testScript,
+                preRequestConsole: '',
+                postResponseConsole: '',
+                encryptionConsole: ''
+            },
+            ...(examples.length > 0 ? { examples } : {})
         };
     }
 }

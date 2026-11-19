@@ -139,22 +139,79 @@ export function extractPostmanVariables(collectionData: any): IGlobalVariable[] 
                 }
             }
 
-            // Scan URL string for embedded variable patterns
+            // Scan URL string (and structured host/path/query) for embedded variable patterns
             const rawUrl = typeof req === 'string'
                 ? req
-                : (typeof req.url === 'string' ? req.url : (req.url?.raw || ''));
-            scanTextForVariables(rawUrl, varMap);
+                : (typeof req.url === 'string'
+                    ? req.url
+                    : (req.url?.raw || [
+                        Array.isArray(req.url?.host) ? req.url.host.join('.') : (req.url?.host || ''),
+                        Array.isArray(req.url?.path) ? req.url.path.join('/') : (req.url?.path || '')
+                    ].filter(Boolean).join('/')));
+            scanTextForVariables(rawUrl, varMap, true);
+
+            if (req.url && typeof req.url === 'object' && Array.isArray(req.url.query)) {
+                for (const q of req.url.query) {
+                    scanTextForVariables(q?.value, varMap, false);
+                }
+            }
 
             // Scan headers
             if (Array.isArray(req.header)) {
                 for (const h of req.header) {
-                    scanTextForVariables(h.value, varMap);
+                    scanTextForVariables(h?.value, varMap, false);
                 }
             }
 
-            // Scan body
+            // Scan auth values
+            if (req.auth && typeof req.auth === 'object') {
+                for (const arr of [req.auth.bearer, req.auth.basic, req.auth.apikey]) {
+                    if (Array.isArray(arr)) {
+                        for (const entry of arr) {
+                            scanTextForVariables(entry?.value, varMap, false);
+                        }
+                    }
+                }
+            }
+
+            // Scan body across all Postman body modes
             if (req.body?.mode === 'raw' && req.body.raw) {
-                scanTextForVariables(req.body.raw, varMap);
+                scanTextForVariables(req.body.raw, varMap, false);
+            }
+            if (Array.isArray(req.body?.formdata)) {
+                for (const fd of req.body.formdata) {
+                    scanTextForVariables(fd?.value, varMap, false);
+                }
+            }
+            if (Array.isArray(req.body?.urlencoded)) {
+                for (const ue of req.body.urlencoded) {
+                    scanTextForVariables(ue?.value, varMap, false);
+                }
+            }
+            if (req.body?.graphql) {
+                scanTextForVariables(req.body.graphql.query, varMap, false);
+                scanTextForVariables(req.body.graphql.variables, varMap, false);
+            }
+
+            // Scan scripts & saved examples for global {{var}} references
+            if (Array.isArray(item.event)) {
+                for (const ev of item.event) {
+                    const execStr = Array.isArray(ev?.script?.exec) ? ev.script.exec.join('\n') : ev?.script?.exec;
+                    scanTextForVariables(execStr, varMap, false);
+                }
+            }
+            if (Array.isArray(item.response)) {
+                for (const resp of item.response) {
+                    const orig = resp?.originalRequest;
+                    if (orig) {
+                        const origUrl = typeof orig.url === 'string' ? orig.url : orig.url?.raw;
+                        scanTextForVariables(origUrl, varMap, false);
+                        if (Array.isArray(orig.header)) {
+                            for (const h of orig.header) scanTextForVariables(h?.value, varMap, false);
+                        }
+                        if (orig.body?.raw) scanTextForVariables(orig.body.raw, varMap, false);
+                    }
+                }
             }
         }
     }
@@ -202,24 +259,39 @@ export function extractRequestsVariables(
     if (Array.isArray(requests)) {
         for (const req of requests) {
             if (!req) continue;
-            scanTextForVariables(req.url, varMap);
+            scanTextForVariables(req.url, varMap, true);
 
             if (Array.isArray(req.headers)) {
                 for (const h of req.headers) {
-                    scanTextForVariables(h?.value, varMap);
+                    scanTextForVariables(h?.value, varMap, false);
                 }
             }
 
             if (Array.isArray(req.params)) {
                 for (const p of req.params) {
-                    scanTextForVariables(p?.value, varMap);
+                    scanTextForVariables(p?.value, varMap, false);
                 }
             }
 
-            const rawBody = req.rawBodyJson || req.rawBody || req.rawBodyXml;
-            if (rawBody && typeof rawBody === 'string') {
-                scanTextForVariables(rawBody, varMap);
+            if (Array.isArray(req.formData)) {
+                for (const fd of req.formData) {
+                    scanTextForVariables(fd?.value, varMap, false);
+                }
             }
+
+            if (Array.isArray(req.urlEncodedData)) {
+                for (const ue of req.urlEncodedData) {
+                    scanTextForVariables(ue?.value, varMap, false);
+                }
+            }
+
+            const rawBody = req.rawBodyJson || req.rawBody || req.rawBodyXml || req.rawBodyText;
+            if (rawBody && typeof rawBody === 'string') {
+                scanTextForVariables(rawBody, varMap, false);
+            }
+            if (req.graphqlQuery) scanTextForVariables(req.graphqlQuery, varMap, false);
+            if (req.graphqlVariables) scanTextForVariables(req.graphqlVariables, varMap, false);
+            if (req.auth?.token) scanTextForVariables(req.auth.token, varMap, false);
         }
     }
 
@@ -227,10 +299,14 @@ export function extractRequestsVariables(
 }
 
 /**
- * Searches a string for {{key}}, :key, and {key} variable references
+ * Searches a string for {{key}}, :key (URL path params), and {key} variable references
  * and adds any unrepresented keys to the map.
  */
-function scanTextForVariables(text: any, varMap: Map<string, IGlobalVariable>): void {
+function scanTextForVariables(
+    text: any,
+    varMap: Map<string, IGlobalVariable>,
+    includePathSyntax: boolean = false
+): void {
     if (!text || typeof text !== 'string') return;
 
     // 1. Postman global syntax: {{varName}}
@@ -249,6 +325,8 @@ function scanTextForVariables(text: any, varMap: Map<string, IGlobalVariable>): 
             }
         }
     }
+
+    if (!includePathSyntax) return;
 
     // 2. Path parameter syntax: :varName (preceded by start, /, ?, &, or =)
     const pathMatches = text.match(/(?:^|[/?&=]):([a-zA-Z0-9_-]+)/g);

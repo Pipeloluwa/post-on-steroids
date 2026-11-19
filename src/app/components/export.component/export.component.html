@@ -10,21 +10,42 @@
                     <mat-icon class="text-[24px]">code</mat-icon>
                 </div>
                 <div>
-                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Export All Capsules</h3>
-                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Download all your capsules as individual JSON files.</p>
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Export All (OnSteroid JSON)</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Download all capsules with requests, examples, folders, and variables as OnSteroid JSON.</p>
+                </div>
+            </div>
+        </div>
+
+        <div (click)="exportSelectedAsPostman()"
+            class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group">
+            <div class="flex items-center gap-x-4">
+                <div
+                    class="size-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-all">
+                    <mat-icon class="text-[24px]">send</mat-icon>
+                </div>
+                <div>
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Export as Postman (v2.1)</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Download selected or all capsules as standard Postman Collection JSON files (including examples &amp; variables).</p>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="mt-8 flex flex-col gap-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Select Capsules to Export</h3>
-            <button (click)="exportSelected()" [disabled]="selectedCapsules().size === 0"
-                class="px-4 py-2 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white font-bold rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                <mat-icon>file_download</mat-icon>
-                Export Selected ({{ selectedCapsules().size }})
-            </button>
+            <div class="flex items-center gap-2">
+                <button (click)="exportSelectedAsPostman()" [disabled]="selectedCapsules().size === 0 || isExporting()"
+                    class="px-3.5 py-2 bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) border border-(--postonsteroids-border) font-bold rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-xs">
+                    <mat-icon class="text-[18px]! size-[18px]!">send</mat-icon>
+                    Postman ({{ selectedCapsules().size }})
+                </button>
+                <button (click)="exportSelected()" [disabled]="selectedCapsules().size === 0 || isExporting()"
+                    class="px-4 py-2 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white font-bold rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-xs">
+                    <mat-icon class="text-[18px]! size-[18px]!">file_download</mat-icon>
+                    Export JSON ({{ selectedCapsules().size }})
+                </button>
+            </div>
         </div>
 
         <div class="space-y-2">

@@ -3,6 +3,21 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
+import { isWsdlXml, inspectAsmxOrSvcHtml, extractWsdlSchemaLocations } from '../utils/wsdl-parser.util';
+
+export type ExtractedApiSpecResult =
+    | {
+        kind: 'openapi';
+        spec: Record<string, any>;
+        sourceUrl: string;
+    }
+    | {
+        kind: 'wsdl';
+        wsdlXml: string;
+        xsdXmls: string[];
+        serviceUrl: string;
+        asmxOps?: { opName: string; opHtml: string; pageUrl: string; serviceName: string }[];
+    };
 
 /**
  * Service for extracting OpenAPI/Swagger specifications from various sources
@@ -15,6 +30,146 @@ export class SwaggerExtractionService {
     private http = inject(HttpClient);
     private proxyUrl = environment.proxyUrl;
     private proxyFallbackUrl = environment.proxyFallbackUrl;
+
+    /**
+     * Unified API documentation extractor supporting both OpenAPI/Swagger AND SOAP/WSDL/ASMX/SVC.
+     */
+    async extractApiSpec(inputUrl: string): Promise<ExtractedApiSpecResult> {
+        const trimmedUrl = inputUrl.trim();
+        const looksSoapFirst = /[?&](single)?wsdl(?:$|[&#])/i.test(trimmedUrl)
+            || /\.(wsdl|asmx|svc)(?:$|[?#])/i.test(trimmedUrl);
+
+        if (looksSoapFirst) {
+            const soapRes = await this.tryExtractSoapSpec(trimmedUrl);
+            if (soapRes) return soapRes;
+            const openApiSpec = await this.extractSwaggerSpec(trimmedUrl);
+            return { kind: 'openapi', spec: openApiSpec, sourceUrl: trimmedUrl };
+        }
+
+        // Check direct response first: might be OpenAPI JSON or WSDL XML
+        try {
+            const directRes = await this.fetchWithProxy(trimmedUrl, 'application/json,application/xml,text/xml,text/html,*/*');
+            if (directRes.ok) {
+                if (directRes.json && (directRes.json['openapi'] || directRes.json['swagger'] || directRes.json['paths'])) {
+                    return { kind: 'openapi', spec: directRes.json, sourceUrl: trimmedUrl };
+                }
+                if (isWsdlXml(directRes.text)) {
+                    const xsdXmls = await this.fetchWsdlImports(directRes.text, trimmedUrl);
+                    return { kind: 'wsdl', wsdlXml: directRes.text, xsdXmls, serviceUrl: trimmedUrl };
+                }
+                const asmxCheck = inspectAsmxOrSvcHtml(directRes.text, trimmedUrl);
+                if (asmxCheck.wsdlUrls.length > 0 || asmxCheck.operationNames.length > 0) {
+                    const soapRes = await this.tryExtractSoapSpec(trimmedUrl);
+                    if (soapRes) return soapRes;
+                }
+            }
+        } catch { }
+
+        try {
+            const openApiSpec = await this.extractSwaggerSpec(trimmedUrl);
+            return { kind: 'openapi', spec: openApiSpec, sourceUrl: trimmedUrl };
+        } catch (openApiErr) {
+            const soapRes = await this.tryExtractSoapSpec(trimmedUrl);
+            if (soapRes) return soapRes;
+            throw openApiErr;
+        }
+    }
+
+    private async fetchWsdlImports(wsdlXml: string, baseUrl: string): Promise<string[]> {
+        const schemaLocs = extractWsdlSchemaLocations(wsdlXml, baseUrl).slice(0, 8);
+        if (schemaLocs.length === 0) return [];
+        const results = await Promise.all(
+            schemaLocs.map(async loc => {
+                try {
+                    const res = await this.fetchWithProxy(loc, 'application/xml,text/xml,*/*');
+                    return res.ok && res.text ? res.text : '';
+                } catch {
+                    return '';
+                }
+            })
+        );
+        return results.filter(Boolean);
+    }
+
+    private async tryExtractSoapSpec(targetUrl: string): Promise<ExtractedApiSpecResult | null> {
+        const cleanUrl = targetUrl.trim();
+        const baseServiceUrl = cleanUrl.replace(/\?(single)?wsdl$/i, '');
+        const candidateWsdlUrls: string[] = [];
+
+        if (/[?&](single)?wsdl$/i.test(cleanUrl) || /\.wsdl$/i.test(cleanUrl)) {
+            candidateWsdlUrls.push(cleanUrl);
+        }
+        candidateWsdlUrls.push(`${baseServiceUrl}?WSDL`, `${baseServiceUrl}?wsdl`, `${baseServiceUrl}?singleWsdl`);
+
+        const visited = new Set<string>();
+        for (const wsdlUrl of candidateWsdlUrls) {
+            if (visited.has(wsdlUrl)) continue;
+            visited.add(wsdlUrl);
+            try {
+                const res = await this.fetchWithProxy(wsdlUrl, 'application/xml,text/xml,*/*');
+                if (res.ok && isWsdlXml(res.text)) {
+                    const xsdXmls = await this.fetchWsdlImports(res.text, wsdlUrl);
+                    return { kind: 'wsdl', wsdlXml: res.text, xsdXmls, serviceUrl: wsdlUrl };
+                }
+            } catch { }
+        }
+
+        // Inspect ASMX / SVC HTML page for WSDL links or ?op= Operation pages
+        try {
+            const htmlRes = await this.fetchWithProxy(baseServiceUrl, 'text/html,application/xhtml+xml,*/*');
+            if (htmlRes.ok && htmlRes.text) {
+                if (isWsdlXml(htmlRes.text)) {
+                    const xsdXmls = await this.fetchWsdlImports(htmlRes.text, baseServiceUrl);
+                    return { kind: 'wsdl', wsdlXml: htmlRes.text, xsdXmls, serviceUrl: baseServiceUrl };
+                }
+
+                const info = inspectAsmxOrSvcHtml(htmlRes.text, baseServiceUrl);
+                for (const discoveredWsdl of info.wsdlUrls) {
+                    if (visited.has(discoveredWsdl)) continue;
+                    visited.add(discoveredWsdl);
+                    try {
+                        const wRes = await this.fetchWithProxy(discoveredWsdl, 'application/xml,text/xml,*/*');
+                        if (wRes.ok && isWsdlXml(wRes.text)) {
+                            const xsdXmls = await this.fetchWsdlImports(wRes.text, discoveredWsdl);
+                            return { kind: 'wsdl', wsdlXml: wRes.text, xsdXmls, serviceUrl: discoveredWsdl };
+                        }
+                    } catch { }
+                }
+
+                // Fallback: ASMX ?op=OpName pages when ?WSDL is blocked on DMZ/firewall
+                if (info.operationNames.length > 0) {
+                    const opsToFetch = info.operationNames.slice(0, 40);
+                    const asmxOps: { opName: string; opHtml: string; pageUrl: string; serviceName: string }[] = [];
+                    const batchSize = 6;
+                    for (let i = 0; i < opsToFetch.length; i += batchSize) {
+                        const batch = opsToFetch.slice(i, i + batchSize);
+                        const fetched = await Promise.all(
+                            batch.map(async opName => {
+                                const opUrl = `${baseServiceUrl}?op=${encodeURIComponent(opName)}`;
+                                try {
+                                    const opRes = await this.fetchWithProxy(opUrl, 'text/html,*/*');
+                                    return {
+                                        opName,
+                                        opHtml: opRes.ok ? opRes.text : '',
+                                        pageUrl: opUrl,
+                                        serviceName: info.serviceName
+                                    };
+                                } catch {
+                                    return { opName, opHtml: '', pageUrl: opUrl, serviceName: info.serviceName };
+                                }
+                            })
+                        );
+                        asmxOps.push(...fetched);
+                    }
+                    if (asmxOps.length > 0) {
+                        return { kind: 'wsdl', wsdlXml: '', xsdXmls: [], serviceUrl: baseServiceUrl, asmxOps };
+                    }
+                }
+            }
+        } catch { }
+
+        return null;
+    }
 
     /**
      * Extracts OpenAPI spec from a Swagger URL
@@ -148,8 +303,34 @@ export class SwaggerExtractionService {
         }
 
         // Direct fetch fallback only for Electron where web security is disabled.
-        // In the browser, direct calls to external URLs fail due to CORS.
+        // Prefer electronAPI IPC handler so self-signed SSL certificates on internal/DMZ endpoints work reliably.
         if (isElectron) {
+            const electronAPI = (typeof window !== 'undefined' ? (window as any).electronAPI : null);
+            if (electronAPI?.executeHttpRequest) {
+                try {
+                    const eRes = await electronAPI.executeHttpRequest({
+                        url: targetUrl,
+                        method: 'GET',
+                        headers: { 'Accept': accept },
+                        verifySsl: false,
+                        followRedirects: true
+                    });
+                    if (eRes && eRes.statusCode >= 200 && eRes.statusCode < 400) {
+                        const text = typeof eRes.body === 'string' ? eRes.body : JSON.stringify(eRes.body ?? '');
+                        let parsedJson: any = null;
+                        try {
+                            parsedJson = JSON.parse(text);
+                        } catch { }
+                        return {
+                            ok: true,
+                            status: eRes.statusCode,
+                            text,
+                            json: parsedJson
+                        };
+                    }
+                } catch { }
+            }
+
             try {
                 const rawText = await firstValueFrom(
                     this.http.get(targetUrl, {

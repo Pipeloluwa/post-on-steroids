@@ -3,19 +3,19 @@
     <div class="w-full max-w-lg rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-6 shadow-xl" (click)="$event.stopPropagation()">
         <div class="flex items-start justify-between gap-x-3 mb-4">
             <div>
-                <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Import from Swagger</h3>
-                <p class="text-[12px] text-(--postonsteroids-text-secondary) mt-1">Enter any Swagger UI or OpenAPI URL (e.g. Swagger UI, JSON/YAML spec, or docs endpoint).</p>
+                <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Import Swagger / SOAP</h3>
+                <p class="text-[12px] text-(--postonsteroids-text-secondary) mt-1">Enter a Swagger / OpenAPI URL or a WSDL / ASMX SOAP service URL to import endpoints and payloads.</p>
             </div>
             <button (click)="close()" class="text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) rounded-full p-2 cursor-pointer">
                 <mat-icon class="text-[20px]! size-[20px]!">close</mat-icon>
             </button>
         </div>
 
-        <label for="swaggerUrlInput" class="block text-[12px] text-(--postonsteroids-text-secondary) mb-2">Swagger / OpenAPI URL</label>
+        <label for="swaggerUrlInput" class="block text-[12px] text-(--postonsteroids-text-secondary) mb-2">Swagger / OpenAPI or WSDL / SOAP URL</label>
         <input id="swaggerUrlInput" #swaggerUrlInput type="url" [value]="swaggerUrl()" (input)="swaggerUrl.set($any($event.target).value)"
-            placeholder="e.g. https://example.com/swagger or /v1/swagger.json"
+            placeholder="e.g. https://example.com/swagger or https://example.com/service.asmx?WSDL"
             class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30"
-            aria-label="Swagger URL input" />
+            aria-label="Swagger or SOAP URL input" />
 
         @if (hasActiveCapsule()) {
         <label class="mt-3 flex items-center gap-2 cursor-pointer select-none text-xs text-(--postonsteroids-text-primary)">
@@ -28,7 +28,7 @@
         <label class="mt-2.5 flex items-center gap-2 cursor-pointer select-none text-xs text-(--postonsteroids-text-secondary)">
             <input type="checkbox" [checked]="saveToBackend()" (change)="saveToBackend.set($any($event.target).checked)"
                 class="cursor-pointer rounded border-(--postonsteroids-border) text-(--postonsteroids-accent) focus:ring-(--postonsteroids-accent)/30" />
-            <span class="cursor-pointer">Save imported Swagger data to backend database</span>
+            <span class="cursor-pointer">Save imported APIs to backend database</span>
         </label>
 
         @if (statusMessage()) {
@@ -47,7 +47,7 @@
                 @if (isImporting()) {
                 Importing...
                 } @else {
-                Import Swagger
+                Import Swagger / SOAP
                 }
             </button>
         </div>

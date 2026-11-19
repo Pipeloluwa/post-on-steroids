@@ -185,7 +185,7 @@ export class WorkspaceComponent {
         if (container) {
             const rect = container.getBoundingClientRect();
             if (this.isResizing()) {
-                const tabHeight = 38;
+                const tabHeight = 32;
                 const newHeight = event.clientY - rect.top - tabHeight;
                 this.requestHeight.set(this.clampHeight(newHeight));
             }
@@ -1237,6 +1237,9 @@ export class WorkspaceComponent {
                     });
                 }
             } else if (event.key.toLowerCase() === 'z') {
+                if (this.isEditableTextInputTarget(target)) {
+                    return;
+                }
                 if (event.shiftKey) {
                     this.tabStateService.redo();
                 } else {
@@ -1244,10 +1247,28 @@ export class WorkspaceComponent {
                 }
                 event.preventDefault();
             } else if (event.key.toLowerCase() === 'y' && !isMac) {
+                if (this.isEditableTextInputTarget(target)) {
+                    return;
+                }
                 this.tabStateService.redo();
                 event.preventDefault();
             }
         }
+    }
+
+    private isEditableTextInputTarget(target: HTMLElement | null): boolean {
+        if (!target) return false;
+        if (target.isContentEditable || target.closest('[contenteditable="true"]')) {
+            return true;
+        }
+        const inputEl = (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
+            ? target as HTMLInputElement | HTMLTextAreaElement
+            : target.closest('input, textarea') as HTMLInputElement | HTMLTextAreaElement | null;
+        if (!inputEl) return false;
+        if (inputEl.tagName === 'TEXTAREA') return !inputEl.readOnly && !inputEl.disabled;
+        const inputType = ((inputEl as HTMLInputElement).type || 'text').toLowerCase();
+        const nonTextTypes = ['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'];
+        return !nonTextTypes.includes(inputType) && !inputEl.readOnly && !inputEl.disabled;
     }
 
     onBeforeUnload(event: BeforeUnloadEvent) {

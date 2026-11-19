@@ -1,9 +1,38 @@
-import { Component, ChangeDetectionStrategy, signal, computed, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, computed, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { generateUUID } from '../../shared/utils/uuid.util';
+import { copyTextToClipboard } from '../../shared/utils/clipboard.util';
+import {
+    sanitizeRegexFlags,
+    evaluateRegex,
+    formatRegexLiteral,
+    convertAllTextCases,
+    convertNumberBases,
+    encodeBase64Utf8,
+    decodeBase64Utf8,
+    decodeJwtToken,
+    formatLocalDateInput,
+    formatLocalDatetimeInput,
+    parseEpochInput,
+    renderSafeMarkdown,
+    sortJsonKeysDeep,
+    RegexMatchDetail
+} from '../../shared/utils/developer-tools.util';
 import { MatIcon } from '@angular/material/icon';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+
+export interface RegexCompositionSegment {
+    id: number;
+    pattern: string;
+    label: string;
+    desc: string;
+}
+
+interface RegexHistorySnapshot {
+    pattern: string;
+    composition: RegexCompositionSegment[];
+}
 
 @Component({
     selector: 'app-utility-component',
@@ -16,202 +45,279 @@ export class UtilityComponent {
     private sanitizer = inject(DomSanitizer);
 
     activeTool = signal<string | null>(null);
+    toolSearchQuery = signal<string>('');
+
     tools = [
-        { id: 'uuid', name: 'UUID Generator', description: 'Generate random v4 UUIDs', icon: 'fingerprint' },
-        { id: 'regex', name: 'Regex', description: 'Build and test regular expressions', icon: 'fact_check' },
-        { id: 'time', name: 'Timestamp & Epoch', description: 'Convert between epoch and readable dates', icon: 'schedule' },
-        { id: 'json', name: 'JSON Formatter', description: 'Format and minify JSON payloads', icon: 'data_object' },
-        { id: 'base64', name: 'Base64 Encoder', description: 'Encode and decode Base64 strings', icon: 'swap_horiz' },
-        { id: 'url', name: 'URL Encoder', description: 'Encode and decode URL parameters', icon: 'link' },
-        { id: 'hash', name: 'SHA-256 Hash', description: 'Generate SHA-256 hash from text', icon: 'lock' },
-        { id: 'html', name: 'HTML Entities', description: 'Encode and decode HTML entities', icon: 'code' },
-        { id: 'jwt', name: 'JWT Decoder', description: 'Decode JSON Web Tokens', icon: 'security' },
-        { id: 'lorem', name: 'Lorem Ipsum', description: 'Generate dummy text paragraphs', icon: 'text_snippet' },
-        { id: 'diff', name: 'Text Diff', description: 'Compare two text blocks line by line', icon: 'compare_arrows' },
-        { id: 'color', name: 'Color Converter', description: 'Convert between HEX, RGB, and HSL', icon: 'palette' },
-        { id: 'markdown', name: 'Markdown Preview', description: 'Live preview of markdown text', icon: 'description' },
-        { id: 'url-parse', name: 'URL Parser', description: 'Parse URLs into their components', icon: 'account_tree' },
-        { id: 'case', name: 'Text Case Converter', description: 'Convert text to camel, snake, kebab, etc.', icon: 'text_format' },
-        { id: 'base', name: 'Number Base Converter', description: 'Convert numbers between bases', icon: '123' },
-        { id: 'random-string', name: 'Random String', description: 'Generate secure random strings and passwords', icon: 'password' },
-        { id: 'text-stat', name: 'Text Statistics', description: 'Count words, characters, and lines', icon: 'analytics' }
+        { id: 'uuid', name: 'UUID Generator', description: 'Generate single or batch v4 UUIDs with formatting options', icon: 'fingerprint' },
+        { id: 'regex', name: 'Regex Builder & Tester', description: 'Compose, test, and preview regular expressions live', icon: 'fact_check' },
+        { id: 'time', name: 'Timestamp & Epoch', description: 'Convert between epoch (s/ms/μs/ns) and local/UTC dates', icon: 'schedule' },
+        { id: 'json', name: 'JSON Formatter', description: 'Format, minify, validate, and sort JSON payloads', icon: 'data_object' },
+        { id: 'base64', name: 'Base64 Encoder', description: 'UTF-8 & URL-safe Base64 encode and decode', icon: 'swap_horiz' },
+        { id: 'url', name: 'URL Encoder', description: 'Encode and decode URL components or full URIs', icon: 'link' },
+        { id: 'hash', name: 'Hash Generator', description: 'Live SHA-1, SHA-256, SHA-384, and SHA-512 digests', icon: 'lock' },
+        { id: 'html', name: 'HTML Entities', description: 'Encode and decode named & numeric HTML entities', icon: 'code' },
+        { id: 'jwt', name: 'JWT Decoder', description: 'Live decode JWT header, payload, claims, and expiry', icon: 'security' },
+        { id: 'lorem', name: 'Lorem Ipsum', description: 'Generate dummy text paragraphs instantly', icon: 'text_snippet' },
+        { id: 'diff', name: 'Text Diff', description: 'Live line-by-line text comparison with diff stats', icon: 'compare_arrows' },
+        { id: 'color', name: 'Color Converter', description: 'Convert between HEX, RGB, and HSL with live picker', icon: 'palette' },
+        { id: 'markdown', name: 'Markdown Preview', description: 'Live XSS-safe preview of Markdown documents', icon: 'description' },
+        { id: 'url-parse', name: 'URL Parser', description: 'Inspect URL components and query parameter tables', icon: 'account_tree' },
+        { id: 'case', name: 'Text Case Converter', description: 'Live convert text across 10 naming conventions at once', icon: 'text_format' },
+        { id: 'base', name: 'Number Base Converter', description: 'BigInt precision base conversion (Bin, Oct, Dec, Hex, 2-36)', icon: '123' },
+        { id: 'random-string', name: 'Random String', description: 'Cryptographically secure random strings and passwords', icon: 'password' },
+        { id: 'text-stat', name: 'Text Statistics', description: 'Count words, characters, lines, bytes, and reading time', icon: 'analytics' }
     ];
+
+    filteredTools = computed(() => {
+        const q = this.toolSearchQuery().trim().toLowerCase();
+        if (!q) return this.tools;
+        return this.tools.filter(
+            t => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.id.toLowerCase().includes(q)
+        );
+    });
+
+    activeToolMeta = computed(() => {
+        const id = this.activeTool();
+        return this.tools.find(t => t.id === id) || null;
+    });
 
     setActiveTool(toolId: string | null) {
         this.activeTool.set(toolId);
+        if (toolId === 'uuid' && !this.uuidValue()) {
+            this.generateUuid();
+        } else if (toolId === 'random-string' && !this.randomStringOutput()) {
+            this.generateRandomString();
+        } else if (toolId === 'lorem' && !this.loremOutput()) {
+            this.generateLorem();
+        } else if (toolId === 'json' && !this.jsonOutput()) {
+            this.formatJson();
+        }
     }
 
-    uuidValue = signal('');
+    // ── UUID Generator ──
+    uuidValue = signal(generateUUID());
+    uuidCount = signal(1);
+    uuidUppercase = signal(false);
+    uuidHyphens = signal(true);
+    uuidList = signal<string[]>([]);
+
+    // ── Timestamp & Epoch ──
     now = signal(new Date());
-    dateValue = signal(this.formatDateInput(this.now()));
-    datetimeValue = signal(this.formatDatetimeLocal(this.now()));
-    epochValue = signal('');
-    jsonInput = signal('{\n  "hello": "world"\n}');
+    dateValue = signal(formatLocalDateInput(this.now()));
+    datetimeValue = signal(formatLocalDatetimeInput(this.now()));
+    epochValue = signal(String(Math.floor(Date.now() / 1000)));
+
+    // ── JSON Formatter ──
+    jsonInput = signal('{\n  "hello": "world",\n  "items": [1, 2, 3]\n}');
     jsonOutput = signal('');
+    jsonIndent = signal<number>(2);
+    jsonSortKeys = signal<boolean>(false);
+    jsonError = signal<string>('');
+
+    // ── Base64 ──
     base64Input = signal('');
     base64Output = signal('');
+    base64UrlSafe = signal(false);
+
+    // ── URL Encoder ──
     urlInput = signal('');
     urlOutput = signal('');
+    urlFullUriMode = signal(false);
+
+    // ── Hash Generator ──
     hashInput = signal('');
     hashOutput = signal('');
+    hashEncoding = signal<'hex' | 'base64'>('hex');
+    hashDigests = signal<{ sha1: string; sha256: string; sha384: string; sha512: string }>({
+        sha1: '',
+        sha256: '',
+        sha384: '',
+        sha512: ''
+    });
+
     copyStatus = signal('');
-    private copyTimer: number | null = null;
+    private copyTimer: ReturnType<typeof setTimeout> | null = null;
 
     // ── HTML Entity ──
     htmlEntityInput = signal('');
     htmlEntityOutput = signal('');
 
-    // ── JWT Decoder ──
+    // ── JWT Decoder (Live) ──
     jwtInput = signal('');
-    jwtHeader = signal('');
-    jwtPayload = signal('');
-    jwtError = signal('');
+    jwtDecoded = computed(() => decodeJwtToken(this.jwtInput()));
+    jwtHeader = computed(() => this.jwtDecoded().headerJson);
+    jwtPayload = computed(() => this.jwtDecoded().payloadJson);
+    jwtError = computed(() => this.jwtDecoded().error);
 
     // ── Lorem Ipsum ──
     loremParagraphs = signal(3);
     loremOutput = signal('');
 
-    // ── Text Diff ──
+    // ── Text Diff (Live) ──
     diffTextA = signal('');
     diffTextB = signal('');
-    diffResult = signal<{ type: 'same' | 'added' | 'removed'; text: string }[]>([]);
+    diffResult = computed<{ type: 'same' | 'added' | 'removed'; text: string }[]>(() => {
+        const a = this.diffTextA();
+        const b = this.diffTextB();
+        if (!a && !b) return [];
+        return this.calculateDiffLines(a.split(/\r?\n/), b.split(/\r?\n/));
+    });
+    diffStats = computed(() => {
+        let added = 0;
+        let removed = 0;
+        let same = 0;
+        for (const row of this.diffResult()) {
+            if (row.type === 'added') added++;
+            else if (row.type === 'removed') removed++;
+            else same++;
+        }
+        return { added, removed, same };
+    });
 
     // ── Regex Builder & Tester ──
-    regexActiveSection = signal<'builder' | 'tester'>('builder');
+    regexActiveSection = signal<'builder' | 'tester' | 'both'>('both');
     regexPattern = signal('');
     regexFlags = signal('g');
     regexInput = signal('');
-    regexMatches = signal<{ match: string; index: number; groups: string[] }[]>([]);
-    regexError = signal('');
-    regexBlockHistory = signal<string[]>([]);
+    regexReplaceWith = signal('');
+    regexQuantifierN = signal(2);
+    regexQuantifierM = signal(5);
+    editingSegmentId = signal<number | null>(null);
+    private regexHistoryStack = signal<RegexHistorySnapshot[]>([]);
+    regexBlockHistory = computed(() => this.regexHistoryStack().map(s => s.pattern));
 
     // Composition workspace: segments that combine to form the regex pattern
-    regexComposition = signal<{ id: number; pattern: string; label: string; desc: string }[]>([]);
-    private regexSegmentIdCounter = 0;
+    regexComposition = signal<RegexCompositionSegment[]>([]);
+    private regexSegmentIdCounter = 1;
 
-    // Derived pattern from composition workspace — keeps the pattern input in sync
     regexComposedPattern = computed(() =>
         this.regexComposition().map(s => s.pattern).join('')
     );
 
-    regexIsValid = computed(() => {
-        const pattern = this.regexPattern();
-        if (!pattern) return null; // empty = neutral
-        try {
-            new RegExp(pattern, this.regexFlags());
-            return true;
-        } catch {
-            return false;
-        }
-    });
+    regexLiteral = computed(() => formatRegexLiteral(this.regexPattern(), this.regexFlags()));
+
+    regexEvaluation = computed(() =>
+        evaluateRegex(this.regexPattern(), this.regexFlags(), this.regexInput(), this.regexReplaceWith())
+    );
+
+    regexIsValid = computed(() => this.regexEvaluation().isValid);
+    regexError = computed(() => this.regexEvaluation().error);
+    regexMatches = computed<RegexMatchDetail[]>(() => this.regexEvaluation().matches);
+    regexReplacedOutput = computed(() => this.regexEvaluation().replacedText);
 
     regexHighlightedInput = computed<SafeHtml>(() => {
         const pattern = this.regexPattern();
         const input = this.regexInput();
-        const flags = this.regexFlags();
+        const flags = sanitizeRegexFlags(this.regexFlags());
         if (!pattern || !input) return this.sanitizer.bypassSecurityTrustHtml(this.escapeHtml(input || ''));
+        const cappedInput = input.length > 20000 ? input.slice(0, 20000) : input;
         try {
-            const regex = new RegExp(pattern, flags.includes('g') ? flags : flags + 'g');
-            const escaped = this.escapeHtml(input);
-            // We need to work on the original string, then escape
             let result = '';
             let lastIndex = 0;
-            const re = new RegExp(pattern, flags.includes('g') ? flags : flags + 'g');
+            const globalFlags = flags.includes('g') ? flags : flags + 'g';
+            const re = new RegExp(pattern, globalFlags);
             let m: RegExpExecArray | null;
             let safety = 0;
-            while ((m = re.exec(input)) !== null && safety < 1000) {
-                const before = this.escapeHtml(input.substring(lastIndex, m.index));
+            while ((m = re.exec(cappedInput)) !== null && safety < 1000) {
+                const before = this.escapeHtml(cappedInput.substring(lastIndex, m.index));
                 const matched = this.escapeHtml(m[0]);
                 result += before + `<mark class="regex-match-highlight">${matched}</mark>`;
                 lastIndex = m.index + m[0].length;
-                if (m[0].length === 0) re.lastIndex++;
+                if (m[0].length === 0) {
+                    if (re.lastIndex >= cappedInput.length) break;
+                    re.lastIndex++;
+                }
                 safety++;
             }
-            result += this.escapeHtml(input.substring(lastIndex));
+            result += this.escapeHtml(cappedInput.substring(lastIndex));
             return this.sanitizer.bypassSecurityTrustHtml(result);
         } catch {
-            return this.sanitizer.bypassSecurityTrustHtml(this.escapeHtml(input));
+            return this.sanitizer.bypassSecurityTrustHtml(this.escapeHtml(cappedInput));
         }
     });
 
-    regexBlocks = [
-        {
-            category: 'Character Classes',
-            items: [
-                { label: '[a-z]', desc: 'Lowercase letter', pattern: '[a-z]' },
-                { label: '[A-Z]', desc: 'Uppercase letter', pattern: '[A-Z]' },
-                { label: '[0-9]', desc: 'Any digit', pattern: '[0-9]' },
-                { label: '\\w', desc: 'Word char', pattern: '\\w' },
-                { label: '\\d', desc: 'Digit', pattern: '\\d' },
-                { label: '\\s', desc: 'Whitespace', pattern: '\\s' },
-                { label: '.', desc: 'Any char', pattern: '.' },
-            ]
-        },
-        {
-            category: 'Negated Classes',
-            items: [
-                { label: '[^a-z]', desc: 'Not lowercase', pattern: '[^a-z]' },
-                { label: '[^0-9]', desc: 'Not a digit', pattern: '[^0-9]' },
-                { label: '\\W', desc: 'Non-word char', pattern: '\\W' },
-                { label: '\\D', desc: 'Non-digit', pattern: '\\D' },
-                { label: '\\S', desc: 'Non-whitespace', pattern: '\\S' },
-            ]
-        },
-        {
-            category: 'Quantifiers',
-            items: [
-                { label: '*', desc: 'Zero or more', pattern: '*' },
-                { label: '+', desc: 'One or more', pattern: '+' },
-                { label: '?', desc: 'Zero or one', pattern: '?' },
-                { label: '{n}', desc: 'Exactly n times', pattern: '{n}' },
-                { label: '{n,}', desc: 'n or more', pattern: '{n,}' },
-                { label: '{n,m}', desc: 'Between n and m', pattern: '{n,m}' },
-                { label: '*?', desc: 'Lazy zero+', pattern: '*?' },
-                { label: '+?', desc: 'Lazy one+', pattern: '+?' },
-            ]
-        },
-        {
-            category: 'Anchors & Boundaries',
-            items: [
-                { label: '^', desc: 'Start of string', pattern: '^' },
-                { label: '$', desc: 'End of string', pattern: '$' },
-                { label: '\\b', desc: 'Word boundary', pattern: '\\b' },
-                { label: '\\B', desc: 'Non-word boundary', pattern: '\\B' },
-            ]
-        },
-        {
-            category: 'Groups & Lookarounds',
-            items: [
-                { label: '(...)', desc: 'Capturing group', pattern: '()' },
-                { label: '(?:...)', desc: 'Non-capturing', pattern: '(?:)' },
-                { label: '(?=...)', desc: 'Positive lookahead', pattern: '(?=)' },
-                { label: '(?!...)', desc: 'Negative lookahead', pattern: '(?!)' },
-                { label: '(?<=...)', desc: 'Positive lookbehind', pattern: '(?<=)' },
-                { label: '(?<!...)', desc: 'Negative lookbehind', pattern: '(?<!)' },
-                { label: 'a|b', desc: 'Alternation (OR)', pattern: '|' },
-                { label: '\\1', desc: 'Back-reference', pattern: '\\1' },
-            ]
-        },
-        {
-            category: 'Common Templates',
-            items: [
-                { label: 'Email', desc: 'Match email address', pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}' },
-                { label: 'URL', desc: 'Match HTTP/HTTPS URL', pattern: 'https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*)' },
-                { label: 'IPv4', desc: 'Match IPv4 address', pattern: '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)' },
-                { label: 'UUID', desc: 'Match UUID v4', pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' },
-                { label: 'Phone', desc: 'International phone', pattern: '\\+?[1-9]\\d{0,2}[-.\\s]?\\(?\\d{1,4}\\)?[-.\\s]?\\d{1,4}[-.\\s]?\\d{1,9}' },
-                { label: 'Date', desc: 'YYYY-MM-DD', pattern: '\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])' },
-                { label: 'Time', desc: 'HH:MM:SS (24h)', pattern: '([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d' },
-                { label: 'Hex Color', desc: 'Match #RGB / #RRGGBB', pattern: '#([0-9a-fA-F]{3}){1,2}\\b' },
-                { label: 'Credit Card', desc: 'Visa/MC/Amex', pattern: '(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})' },
-                { label: 'HTML Tag', desc: 'Match HTML tags', pattern: '<([a-zA-Z][a-zA-Z0-9]*)\\b[^>]*>(.*?)<\\/\\1>' },
-                { label: 'File Extension', desc: 'Match .ext', pattern: '\\.[a-zA-Z0-9]{1,10}$' },
-                { label: 'MAC Address', desc: 'Match MAC', pattern: '([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}' },
-                { label: 'Username', desc: '3-16 alphanumeric', pattern: '^[a-zA-Z0-9_-]{3,16}$' },
-                { label: 'Strong Password', desc: '8+ chars, mixed', pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}' },
-            ]
-        }
-    ];
+    regexBlocks = computed(() => {
+        const n = Math.max(1, this.regexQuantifierN() || 1);
+        const m = Math.max(n, this.regexQuantifierM() || n + 1);
+        return [
+            {
+                category: 'Character Classes',
+                items: [
+                    { label: '[a-z]', desc: 'Lowercase letter', pattern: '[a-z]' },
+                    { label: '[A-Z]', desc: 'Uppercase letter', pattern: '[A-Z]' },
+                    { label: '[0-9]', desc: 'Any digit', pattern: '[0-9]' },
+                    { label: '\\w', desc: 'Word char', pattern: '\\w' },
+                    { label: '\\d', desc: 'Digit', pattern: '\\d' },
+                    { label: '\\s', desc: 'Whitespace', pattern: '\\s' },
+                    { label: '.', desc: 'Any char', pattern: '.' },
+                ]
+            },
+            {
+                category: 'Negated Classes',
+                items: [
+                    { label: '[^a-z]', desc: 'Not lowercase', pattern: '[^a-z]' },
+                    { label: '[^0-9]', desc: 'Not a digit', pattern: '[^0-9]' },
+                    { label: '\\W', desc: 'Non-word char', pattern: '\\W' },
+                    { label: '\\D', desc: 'Non-digit', pattern: '\\D' },
+                    { label: '\\S', desc: 'Non-whitespace', pattern: '\\S' },
+                ]
+            },
+            {
+                category: 'Quantifiers',
+                items: [
+                    { label: '*', desc: 'Zero or more', pattern: '*' },
+                    { label: '+', desc: 'One or more', pattern: '+' },
+                    { label: '?', desc: 'Zero or one', pattern: '?' },
+                    { label: `{${n}}`, desc: `Exactly ${n} times`, pattern: `{${n}}` },
+                    { label: `{${n},}`, desc: `${n} or more`, pattern: `{${n},}` },
+                    { label: `{${n},${m}}`, desc: `Between ${n} and ${m}`, pattern: `{${n},${m}}` },
+                    { label: '*?', desc: 'Lazy zero+', pattern: '*?' },
+                    { label: '+?', desc: 'Lazy one+', pattern: '+?' },
+                ]
+            },
+            {
+                category: 'Anchors & Boundaries',
+                items: [
+                    { label: '^', desc: 'Start of string', pattern: '^' },
+                    { label: '$', desc: 'End of string', pattern: '$' },
+                    { label: '\\b', desc: 'Word boundary', pattern: '\\b' },
+                    { label: '\\B', desc: 'Non-word boundary', pattern: '\\B' },
+                ]
+            },
+            {
+                category: 'Groups & Lookarounds',
+                items: [
+                    { label: '(...)', desc: 'Wrap in capturing group', pattern: '()' },
+                    { label: '(?:...)', desc: 'Wrap in non-capturing', pattern: '(?:)' },
+                    { label: '(?=...)', desc: 'Positive lookahead', pattern: '(?=)' },
+                    { label: '(?!...)', desc: 'Negative lookahead', pattern: '(?!)' },
+                    { label: '(?<=...)', desc: 'Positive lookbehind', pattern: '(?<=)' },
+                    { label: '(?<!...)', desc: 'Negative lookbehind', pattern: '(?<!)' },
+                    { label: 'a|b', desc: 'Alternation (OR)', pattern: '|' },
+                    { label: '\\1', desc: 'Back-reference #1', pattern: '\\1' },
+                ]
+            },
+            {
+                category: 'Common Templates',
+                items: [
+                    { label: 'Email', desc: 'Match email address', pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}', sample: 'Contact support@example.com or sales.team@company.org today.' },
+                    { label: 'URL', desc: 'Match HTTP/HTTPS URL', pattern: 'https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*)', sample: 'Visit https://onsteroids.app/docs?page=1 or http://example.org.' },
+                    { label: 'IPv4', desc: 'Match IPv4 address', pattern: '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)', sample: 'Servers: 192.168.1.1, 10.0.0.254, invalid 999.1.1.1' },
+                    { label: 'UUID', desc: 'Match UUID v4', pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', sample: 'Request ID: 550e8400-e29b-41d4-a716-446655440000' },
+                    { label: 'Phone', desc: 'International phone', pattern: '\\+?[1-9]\\d{0,2}[-.\\s]?\\(?\\d{1,4}\\)?[-.\\s]?\\d{1,4}[-.\\s]?\\d{1,9}', sample: 'Call +1 (555) 234-5678 or +44 20 7946 0958' },
+                    { label: 'Date', desc: 'YYYY-MM-DD', pattern: '\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])', sample: 'Release dates: 2025-03-15 and 2025-11-19' },
+                    { label: 'Time', desc: 'HH:MM:SS (24h)', pattern: '([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d', sample: 'Log timestamps: 08:30:00 and 23:59:59' },
+                    { label: 'Hex Color', desc: 'Match #RGB / #RRGGBB', pattern: '#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\\b', sample: 'Theme palette: #3B82F6, #fff, and #10B981' },
+                    { label: 'Credit Card', desc: 'Visa/MC/Amex', pattern: '(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})', sample: 'Test card: 4111111111111111' },
+                    { label: 'HTML Tag', desc: 'Match HTML tags', pattern: '<([a-zA-Z][a-zA-Z0-9]*)\\b[^>]*>(.*?)<\\/\\1>', sample: '<div class="box">Hello</div> and <span>World</span>' },
+                    { label: 'File Extension', desc: 'Match .ext', pattern: '\\.[a-zA-Z0-9]{1,10}$', sample: 'report.pdf' },
+                    { label: 'MAC Address', desc: 'Match MAC', pattern: '([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}', sample: 'Device MAC: 00:1A:2B:3C:4D:5E' },
+                    { label: 'Username', desc: '3-16 alphanumeric', pattern: '^[a-zA-Z0-9_-]{3,16}$', sample: 'dev_user_01' },
+                    { label: 'Strong Password', desc: '8+ chars, mixed', pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}', sample: 'Steroids@2025!' },
+                ]
+            }
+        ];
+    });
 
     regexFlagReference = [
         { flag: 'g', desc: 'Global — find all matches' },
@@ -220,49 +326,169 @@ export class UtilityComponent {
         { flag: 's', desc: 'Dotall — . matches newlines' },
         { flag: 'u', desc: 'Unicode — full Unicode matching' },
         { flag: 'y', desc: 'Sticky — match at lastIndex only' },
+        { flag: 'd', desc: 'Indices — generate start/end indices for substrings' },
     ];
 
+    constructor() {
+        // Keep hash digests updated live whenever hashInput or hashEncoding changes
+        effect(() => {
+            const text = this.hashInput();
+            const enc = this.hashEncoding();
+            this.computeAllHashesLive(text, enc);
+        });
+    }
+
+    private pushRegexHistorySnapshot() {
+        const snap: RegexHistorySnapshot = {
+            pattern: this.regexPattern(),
+            composition: this.regexComposition().map(s => ({ ...s }))
+        };
+        this.regexHistoryStack.update(h => [...h.slice(-49), snap]);
+    }
+
+    onRegexPatternManualInput(newVal: string) {
+        this.pushRegexHistorySnapshot();
+        this.regexPattern.set(newVal);
+        if (!newVal) {
+            this.regexComposition.set([]);
+        } else {
+            this.regexComposition.set([
+                {
+                    id: this.regexSegmentIdCounter++,
+                    pattern: newVal,
+                    label: newVal,
+                    desc: 'Custom pattern'
+                }
+            ]);
+        }
+    }
+
+    onRegexFlagsInput(rawFlags: string) {
+        this.regexFlags.set(sanitizeRegexFlags(rawFlags));
+    }
+
     insertRegexBlock(pattern: string) {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
-        this.regexPattern.update(p => p + pattern);
+        this.addCompositionSegment({ label: pattern, desc: 'Pattern block', pattern });
     }
 
     useRegexTemplate(pattern: string) {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
-        this.regexPattern.set(pattern);
+        this.useTemplateAsComposition({ label: 'Template', desc: 'Regex template', pattern });
     }
 
     clearRegexPattern() {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        if (!this.regexPattern() && this.regexComposition().length === 0) return;
+        this.pushRegexHistorySnapshot();
         this.regexPattern.set('');
         this.regexComposition.set([]);
     }
 
     undoRegexBlock() {
-        const history = this.regexBlockHistory();
-        if (history.length === 0) return;
-        const prev = history[history.length - 1];
-        this.regexBlockHistory.update(h => h.slice(0, -1));
-        this.regexPattern.set(prev);
+        const stack = this.regexHistoryStack();
+        if (stack.length === 0) return;
+        const prev = stack[stack.length - 1];
+        this.regexHistoryStack.update(h => h.slice(0, -1));
+        this.regexPattern.set(prev.pattern);
+        this.regexComposition.set(prev.composition);
     }
 
     // ── Composition Workspace Methods ──
     addCompositionSegment(item: { label: string; desc: string; pattern: string }) {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
-        const segment = { id: this.regexSegmentIdCounter++, pattern: item.pattern, label: item.label, desc: item.desc };
-        this.regexComposition.update(segments => [...segments, segment]);
+        const currentPattern = this.regexPattern();
+        let currentSegments = [...this.regexComposition()];
+
+        // Ensure manually typed pattern is preserved as initial segment before adding blocks
+        if (currentPattern && currentSegments.length === 0) {
+            currentSegments = [
+                {
+                    id: this.regexSegmentIdCounter++,
+                    pattern: currentPattern,
+                    label: currentPattern,
+                    desc: 'Custom pattern'
+                }
+            ];
+        }
+
+        const isQuantifier = /^(\*|\+|\?|\{\d+(?:,\d*)?\})\??$/.test(item.pattern);
+        if (isQuantifier && currentSegments.length === 0) {
+            this.setCopyStatus('Add a character class or token before adding a quantifier');
+            return;
+        }
+
+        this.pushRegexHistorySnapshot();
+
+        // Handle group/lookaround wrapping: wrap last segment if present, else wrap \w+
+        const groupWrapMap: Record<string, { prefix: string; suffix: string }> = {
+            '()': { prefix: '(', suffix: ')' },
+            '(?:)': { prefix: '(?:', suffix: ')' },
+            '(?=)': { prefix: '(?=', suffix: ')' },
+            '(?!)': { prefix: '(?!', suffix: ')' },
+            '(?<=)': { prefix: '(?<=', suffix: ')' },
+            '(?<!)': { prefix: '(?<!', suffix: ')' }
+        };
+
+        const wrapper = groupWrapMap[item.pattern];
+        if (wrapper) {
+            if (currentSegments.length > 0) {
+                const last = currentSegments[currentSegments.length - 1];
+                const wrappedPattern = `${wrapper.prefix}${last.pattern}${wrapper.suffix}`;
+                currentSegments[currentSegments.length - 1] = {
+                    ...last,
+                    pattern: wrappedPattern,
+                    label: wrappedPattern,
+                    desc: `${item.desc} (${last.label})`
+                };
+                this.regexComposition.set(currentSegments);
+            } else {
+                const defaultInner = `${wrapper.prefix}\\w+${wrapper.suffix}`;
+                this.regexComposition.set([
+                    {
+                        id: this.regexSegmentIdCounter++,
+                        pattern: defaultInner,
+                        label: defaultInner,
+                        desc: item.desc
+                    }
+                ]);
+            }
+            this.syncPatternFromComposition();
+            return;
+        }
+
+        const segment: RegexCompositionSegment = {
+            id: this.regexSegmentIdCounter++,
+            pattern: item.pattern,
+            label: item.label,
+            desc: item.desc
+        };
+        this.regexComposition.set([...currentSegments, segment]);
         this.syncPatternFromComposition();
     }
 
-    useTemplateAsComposition(item: { label: string; desc: string; pattern: string }) {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
-        const segment = { id: this.regexSegmentIdCounter++, pattern: item.pattern, label: item.label, desc: item.desc };
+    useTemplateAsComposition(item: { label: string; desc: string; pattern: string; sample?: string }) {
+        this.pushRegexHistorySnapshot();
+        const segment: RegexCompositionSegment = {
+            id: this.regexSegmentIdCounter++,
+            pattern: item.pattern,
+            label: item.label,
+            desc: item.desc
+        };
         this.regexComposition.set([segment]);
+        this.syncPatternFromComposition();
+        if (item.sample && !this.regexInput().trim()) {
+            this.regexInput.set(item.sample);
+        }
+        this.setCopyStatus(`Loaded "${item.label}" template`);
+    }
+
+    updateCompositionSegmentPattern(id: number, newPattern: string) {
+        this.pushRegexHistorySnapshot();
+        this.regexComposition.update(segments =>
+            segments.map(s => (s.id === id ? { ...s, pattern: newPattern, label: newPattern || s.label } : s))
+        );
         this.syncPatternFromComposition();
     }
 
     removeCompositionSegment(id: number) {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.pushRegexHistorySnapshot();
         this.regexComposition.update(segments => segments.filter(s => s.id !== id));
         this.syncPatternFromComposition();
     }
@@ -271,7 +497,7 @@ export class UtilityComponent {
         const segments = [...this.regexComposition()];
         const targetIndex = index + direction;
         if (targetIndex < 0 || targetIndex >= segments.length) return;
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.pushRegexHistorySnapshot();
         const temp = segments[index];
         segments[index] = segments[targetIndex];
         segments[targetIndex] = temp;
@@ -280,13 +506,11 @@ export class UtilityComponent {
     }
 
     clearComposition() {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
-        this.regexComposition.set([]);
-        this.regexPattern.set('');
+        this.clearRegexPattern();
     }
 
     applyCompositionToPattern() {
-        this.regexBlockHistory.update(h => [...h, this.regexPattern()]);
+        this.pushRegexHistorySnapshot();
         this.regexPattern.set(this.regexComposedPattern());
     }
 
@@ -307,8 +531,27 @@ export class UtilityComponent {
         if (current.includes(flag)) {
             this.regexFlags.set(current.replace(flag, ''));
         } else {
-            this.regexFlags.set(current + flag);
+            this.regexFlags.set(sanitizeRegexFlags(current + flag));
         }
+    }
+
+    testRegex(): void {
+        const matches = this.regexMatches();
+        const err = this.regexError();
+        if (err) {
+            this.setCopyStatus(err);
+        } else {
+            this.setCopyStatus(`${matches.length} match${matches.length !== 1 ? 'es' : ''} found`);
+        }
+    }
+
+    copyAllRegexMatches(): void {
+        const text = this.regexMatches().map(m => m.match).join('\n');
+        this.copyText(text);
+    }
+
+    namedGroupEntries(groups: Record<string, string>): { key: string; value: string }[] {
+        return Object.entries(groups || {}).map(([key, value]) => ({ key, value }));
     }
 
     // ── Color Converter ──
@@ -316,9 +559,9 @@ export class UtilityComponent {
     colorRgb = computed(() => this.hexToRgb(this.colorHex()));
     colorHsl = computed(() => this.hexToHsl(this.colorHex()));
 
-    // ── Markdown Preview ──
+    // ── Markdown Preview (XSS-Safe) ──
     markdownInput = signal('# Hello World\n\nThis is **bold** and *italic* text.\n\n- Item 1\n- Item 2\n- Item 3\n\n```js\nconsole.log("hello");\n```\n\n> A blockquote example\n\n[Example Link](https://example.com)');
-    markdownHtml = computed<SafeHtml>(() => this.sanitizer.bypassSecurityTrustHtml(this.renderMarkdown(this.markdownInput())));
+    markdownHtml = computed<SafeHtml>(() => this.sanitizer.bypassSecurityTrustHtml(renderSafeMarkdown(this.markdownInput())));
 
     // ── URL Parser ──
     urlParseInput = signal('');
@@ -326,98 +569,158 @@ export class UtilityComponent {
         try {
             const urlStr = this.urlParseInput().trim();
             if (!urlStr) return null;
-            return new URL(urlStr.startsWith('http') ? urlStr : `https://${urlStr}`);
+            return new URL(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(urlStr) ? urlStr : `https://${urlStr}`);
         } catch {
             return null;
         }
     });
+    urlParsedQueryParams = computed<{ key: string; value: string }[]>(() => {
+        const parsed = this.urlParseResult();
+        if (!parsed) return [];
+        const out: { key: string; value: string }[] = [];
+        parsed.searchParams.forEach((value, key) => out.push({ key, value }));
+        return out;
+    });
 
-    // ── Text Case Converter ──
+    // ── Text Case Converter (Live All-At-Once + Click Selection) ──
     textCaseInput = signal('');
     textCaseOutput = signal('');
+    allTextCases = computed(() => convertAllTextCases(this.textCaseInput()));
+    textCaseItems = computed(() => {
+        const all = this.allTextCases();
+        return [
+            { id: 'camel', label: 'camelCase', value: all.camel },
+            { id: 'pascal', label: 'PascalCase', value: all.pascal },
+            { id: 'snake', label: 'snake_case', value: all.snake },
+            { id: 'constant', label: 'CONSTANT_CASE', value: all.constant },
+            { id: 'kebab', label: 'kebab-case', value: all.kebab },
+            { id: 'dot', label: 'dot.case', value: all.dot },
+            { id: 'path', label: 'path/case', value: all.path },
+            { id: 'title', label: 'Title Case', value: all.title },
+            { id: 'sentence', label: 'Sentence case', value: all.sentence },
+            { id: 'upper', label: 'UPPERCASE', value: all.upper },
+            { id: 'lower', label: 'lowercase', value: all.lower },
+        ];
+    });
 
-    convertTextCase(format: 'upper' | 'lower' | 'camel' | 'snake' | 'kebab' | 'pascal'): void {
-        const text = this.textCaseInput();
-        if (!text) return;
-        switch (format) {
-            case 'upper': this.textCaseOutput.set(text.toUpperCase()); break;
-            case 'lower': this.textCaseOutput.set(text.toLowerCase()); break;
-            case 'camel': this.textCaseOutput.set(text.toLowerCase().replace(/[^a-zA-Z0-9]+(.)/g, (_, chr) => chr.toUpperCase())); break;
-            case 'snake': this.textCaseOutput.set(text.replace(/([a-z])([A-Z])/g, '$1_$2').replace(/[^a-zA-Z0-9]+/g, '_').toLowerCase()); break;
-            case 'kebab': this.textCaseOutput.set(text.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()); break;
-            case 'pascal': this.textCaseOutput.set(text.toLowerCase().replace(/(?:^|[^a-zA-Z0-9]+)(.)/g, (_, chr) => chr.toUpperCase())); break;
-        }
+    convertTextCase(format: 'upper' | 'lower' | 'camel' | 'snake' | 'kebab' | 'pascal' | 'constant' | 'dot' | 'path' | 'title' | 'sentence'): void {
+        const all = this.allTextCases();
+        const result = all[format] || '';
+        this.textCaseOutput.set(result);
         this.setCopyStatus(`Converted to ${format} case`);
     }
 
-    // ── Number Base Converter ──
-    numberBaseInput = signal('');
+    // ── Number Base Converter (Live BigInt Precision) ──
+    numberBaseInput = signal('255');
     numberBaseFrom = signal<number>(10);
     numberBaseTo = signal<number>(16);
-    numberBaseOutput = signal('');
+    numberBaseConversion = computed(() =>
+        convertNumberBases(this.numberBaseInput(), this.numberBaseFrom(), this.numberBaseTo())
+    );
+    numberBaseOutput = computed(() => {
+        const res = this.numberBaseConversion();
+        return res.isValid ? res.custom : res.error;
+    });
 
     convertNumberBase(): void {
-        try {
-            const input = this.numberBaseInput().trim();
-            if (!input) {
-                this.numberBaseOutput.set('');
-                return;
-            }
-            const parsed = parseInt(input, this.numberBaseFrom());
-            if (isNaN(parsed)) {
-                this.numberBaseOutput.set('Invalid number for the selected base');
-                return;
-            }
-            this.numberBaseOutput.set(parsed.toString(this.numberBaseTo()).toUpperCase());
-        } catch {
-            this.numberBaseOutput.set('Conversion error');
+        const res = this.numberBaseConversion();
+        if (res.isValid) {
+            this.setCopyStatus(`Converted base ${this.numberBaseFrom()} → base ${this.numberBaseTo()}`);
+        } else if (res.error) {
+            this.setCopyStatus(res.error);
         }
     }
 
-    // ── Random String ──
+    // ── Random String (Cryptographically Secure) ──
     randomStringLength = signal(16);
+    randomStringCount = signal(1);
+    randomStringExcludeAmbiguous = signal(false);
     randomStringOutput = signal('');
+    randomStringList = signal<string[]>([]);
     randomStringIncludes = signal({ upper: true, lower: true, num: true, sym: true });
 
     generateRandomString(): void {
+        const ambiguous = /[0O1lI]/g;
         const chars = {
             upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
             lower: 'abcdefghijklmnopqrstuvwxyz',
             num: '0123456789',
             sym: '!@#$%^&*()_+-=[]{}|;:,.<>?'
         };
-        const activeChars = Object.entries(this.randomStringIncludes())
+        let activeChars = Object.entries(this.randomStringIncludes())
             .filter(([_, active]) => active)
             .map(([key]) => chars[key as keyof typeof chars])
             .join('');
-            
+
+        if (this.randomStringExcludeAmbiguous()) {
+            activeChars = activeChars.replace(ambiguous, '');
+        }
+
         if (!activeChars) {
             this.randomStringOutput.set('');
+            this.randomStringList.set([]);
+            this.setCopyStatus('Select at least one character set');
             return;
         }
 
-        let result = '';
-        for (let i = 0; i < this.randomStringLength(); i++) {
-            result += activeChars.charAt(Math.floor(Math.random() * activeChars.length));
+        const len = Math.max(1, Math.min(512, this.randomStringLength() || 16));
+        const count = Math.max(1, Math.min(25, this.randomStringCount() || 1));
+        const generated: string[] = [];
+
+        for (let c = 0; c < count; c++) {
+            generated.push(this.secureRandomFromCharset(activeChars, len));
         }
-        this.randomStringOutput.set(result);
-        this.setCopyStatus('Random string generated');
+
+        this.randomStringList.set(generated);
+        this.randomStringOutput.set(generated.join('\n'));
+        this.setCopyStatus(count > 1 ? `Generated ${count} secure strings` : 'Secure random string generated');
+    }
+
+    private secureRandomFromCharset(charset: string, length: number): string {
+        const charLen = charset.length;
+        if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+            const out: string[] = [];
+            const maxUnbiased = Math.floor(256 / charLen) * charLen;
+            const buf = new Uint8Array(length * 2);
+            while (out.length < length) {
+                crypto.getRandomValues(buf);
+                for (let i = 0; i < buf.length && out.length < length; i++) {
+                    if (buf[i] < maxUnbiased) {
+                        out.push(charset.charAt(buf[i] % charLen));
+                    }
+                }
+            }
+            return out.join('');
+        }
+        let fallback = '';
+        for (let i = 0; i < length; i++) {
+            fallback += charset.charAt(Math.floor(Math.random() * charLen));
+        }
+        return fallback;
     }
 
     toggleRandomStringInclude(type: 'upper' | 'lower' | 'num' | 'sym') {
         this.randomStringIncludes.update(current => ({ ...current, [type]: !current[type] }));
+        this.generateRandomString();
     }
 
     // ── Text Statistics ──
     textStatInput = signal('');
     textStatResult = computed(() => {
         const text = this.textStatInput();
+        const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+        const sentences = text.trim() ? text.split(/[.!?]+/).filter(s => s.trim().length > 0).length : 0;
+        const paragraphs = text.trim() ? text.split(/\n\s*\n/).filter(p => p.trim().length > 0).length : 0;
+        const readingTimeSec = Math.ceil((words / 200) * 60);
         return {
             chars: text.length,
             charsNoSpaces: text.replace(/\s+/g, '').length,
-            words: text.trim() ? text.trim().split(/\s+/).length : 0,
+            words,
             lines: text ? text.split(/\r\n|\r|\n/).length : 0,
-            bytes: new Blob([text]).size
+            paragraphs,
+            sentences,
+            readingTime: readingTimeSec < 60 ? `${readingTimeSec}s` : `${Math.ceil(readingTimeSec / 60)}m`,
+            bytes: new TextEncoder().encode(text).length
         };
     });
 
@@ -429,19 +732,33 @@ export class UtilityComponent {
     dateEpochSec = computed(() => Math.floor(this.toEpochMs(this.dateValue()) / 1000));
     datetimeEpochMs = computed(() => this.toEpochMs(this.datetimeValue()));
     datetimeEpochSec = computed(() => Math.floor(this.toEpochMs(this.datetimeValue()) / 1000));
-    epochToDate = computed(() => this.convertEpochToDate(this.epochValue()));
+    epochParsed = computed(() => parseEpochInput(this.epochValue(), this.now().getTime()));
+    epochToDate = computed(() => {
+        const parsed = this.epochParsed();
+        if (!this.epochValue().trim()) return '';
+        if (!parsed.isValid) return parsed.error || 'Invalid timestamp';
+        return `${parsed.utcIso} (${parsed.localString}) — ${parsed.relative}`;
+    });
 
     generateUuid(): void {
-        const uuid = generateUUID();
-        this.uuidValue.set(uuid);
-        this.setCopyStatus('UUID generated');
+        const count = Math.max(1, Math.min(50, this.uuidCount() || 1));
+        const list: string[] = [];
+        for (let i = 0; i < count; i++) {
+            let id = generateUUID();
+            if (!this.uuidHyphens()) id = id.replace(/-/g, '');
+            if (this.uuidUppercase()) id = id.toUpperCase();
+            list.push(id);
+        }
+        this.uuidList.set(list);
+        this.uuidValue.set(list.join('\n'));
+        this.setCopyStatus(count > 1 ? `Generated ${count} UUIDs` : 'UUID generated');
     }
 
     refreshNow(): void {
         const now = new Date();
         this.now.set(now);
-        this.dateValue.set(this.formatDateInput(now));
-        this.datetimeValue.set(this.formatDatetimeLocal(now));
+        this.dateValue.set(formatLocalDateInput(now));
+        this.datetimeValue.set(formatLocalDatetimeInput(now));
         this.setCopyStatus('Timestamp refreshed');
     }
 
@@ -450,10 +767,8 @@ export class UtilityComponent {
             this.setCopyStatus('Nothing to copy');
             return;
         }
-        navigator.clipboard.writeText(value).then(() => {
-            this.setCopyStatus('Copied to clipboard');
-        }).catch(() => {
-            this.setCopyStatus('Copy failed');
+        copyTextToClipboard(value).then(ok => {
+            this.setCopyStatus(ok ? 'Copied to clipboard' : 'Copy failed');
         });
     }
 
@@ -463,27 +778,48 @@ export class UtilityComponent {
 
     updateJsonInput(value: string): void {
         this.jsonInput.set(value);
+        this.jsonError.set('');
     }
 
     formatJson(): void {
         try {
-            const parsed: unknown = JSON.parse(this.jsonInput());
-            this.jsonOutput.set(JSON.stringify(parsed, null, 2));
+            let parsed: unknown = JSON.parse(this.jsonInput());
+            if (this.jsonSortKeys()) {
+                parsed = sortJsonKeysDeep(parsed);
+            }
+            const indent = this.jsonIndent() === 0 ? '\t' : this.jsonIndent();
+            this.jsonOutput.set(JSON.stringify(parsed, null, indent));
+            this.jsonError.set('');
             this.setCopyStatus('JSON formatted');
-        } catch {
-            this.jsonOutput.set('Invalid JSON');
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Invalid JSON';
+            this.jsonError.set(msg);
+            this.jsonOutput.set(`Invalid JSON: ${msg}`);
             this.setCopyStatus('JSON could not be parsed');
         }
     }
 
     minifyJson(): void {
         try {
-            const parsed: unknown = JSON.parse(this.jsonInput());
+            let parsed: unknown = JSON.parse(this.jsonInput());
+            if (this.jsonSortKeys()) {
+                parsed = sortJsonKeysDeep(parsed);
+            }
             this.jsonOutput.set(JSON.stringify(parsed));
+            this.jsonError.set('');
             this.setCopyStatus('JSON minified');
-        } catch {
-            this.jsonOutput.set('Invalid JSON');
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Invalid JSON';
+            this.jsonError.set(msg);
+            this.jsonOutput.set(`Invalid JSON: ${msg}`);
             this.setCopyStatus('JSON could not be parsed');
+        }
+    }
+
+    swapJsonOutputToInput(): void {
+        if (this.jsonOutput() && !this.jsonError()) {
+            this.jsonInput.set(this.jsonOutput());
+            this.setCopyStatus('Moved output to input');
         }
     }
 
@@ -493,7 +829,7 @@ export class UtilityComponent {
 
     encodeBase64(): void {
         try {
-            this.base64Output.set(btoa(unescape(encodeURIComponent(this.base64Input()))));
+            this.base64Output.set(encodeBase64Utf8(this.base64Input(), this.base64UrlSafe()));
             this.setCopyStatus('Base64 encoded');
         } catch {
             this.base64Output.set('Unable to encode value');
@@ -502,10 +838,17 @@ export class UtilityComponent {
 
     decodeBase64(): void {
         try {
-            this.base64Output.set(decodeURIComponent(escape(atob(this.base64Input().trim()))));
+            this.base64Output.set(decodeBase64Utf8(this.base64Input()));
             this.setCopyStatus('Base64 decoded');
         } catch {
             this.base64Output.set('Invalid Base64 value');
+        }
+    }
+
+    swapBase64(): void {
+        if (this.base64Output()) {
+            this.base64Input.set(this.base64Output());
+            this.setCopyStatus('Swapped output to input');
         }
     }
 
@@ -514,16 +857,25 @@ export class UtilityComponent {
     }
 
     encodeUrl(): void {
-        this.urlOutput.set(encodeURIComponent(this.urlInput()));
+        const fn = this.urlFullUriMode() ? encodeURI : encodeURIComponent;
+        this.urlOutput.set(fn(this.urlInput()));
         this.setCopyStatus('URL encoded');
     }
 
     decodeUrl(): void {
         try {
-            this.urlOutput.set(decodeURIComponent(this.urlInput()));
+            const fn = this.urlFullUriMode() ? decodeURI : decodeURIComponent;
+            this.urlOutput.set(fn(this.urlInput()));
             this.setCopyStatus('URL decoded');
         } catch {
             this.urlOutput.set('Invalid encoded URL value');
+        }
+    }
+
+    swapUrl(): void {
+        if (this.urlOutput()) {
+            this.urlInput.set(this.urlOutput());
+            this.setCopyStatus('Swapped output to input');
         }
     }
 
@@ -531,20 +883,48 @@ export class UtilityComponent {
         this.hashInput.set(value);
     }
 
-    async generateSha256(): Promise<void> {
+    private async computeAllHashesLive(input: string, encoding: 'hex' | 'base64'): Promise<void> {
         if (typeof crypto === 'undefined' || !crypto.subtle) {
-            this.hashOutput.set('SHA-256 is not available in this browser context');
+            this.hashOutput.set('Web Crypto API is not available in this context');
             return;
         }
+        const data = new TextEncoder().encode(input);
+        const formatDigest = (buf: ArrayBuffer) => {
+            const bytes = new Uint8Array(buf);
+            if (encoding === 'base64') {
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                return btoa(bin);
+            }
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
 
-        const data = new TextEncoder().encode(this.hashInput());
-        const digest = await crypto.subtle.digest('SHA-256', data);
-        const bytes = Array.from(new Uint8Array(digest));
-        this.hashOutput.set(bytes.map(byte => byte.toString(16).padStart(2, '0')).join(''));
-        this.setCopyStatus('SHA-256 generated');
+        try {
+            const [d1, d256, d384, d512] = await Promise.all([
+                crypto.subtle.digest('SHA-1', data),
+                crypto.subtle.digest('SHA-256', data),
+                crypto.subtle.digest('SHA-384', data),
+                crypto.subtle.digest('SHA-512', data)
+            ]);
+            const sha256 = formatDigest(d256);
+            this.hashDigests.set({
+                sha1: formatDigest(d1),
+                sha256,
+                sha384: formatDigest(d384),
+                sha512: formatDigest(d512)
+            });
+            this.hashOutput.set(sha256);
+        } catch {
+            // Ignore digest errors
+        }
     }
 
-    // ── HTML Entity Encode/Decode ──────────────────────────────────────
+    async generateSha256(): Promise<void> {
+        await this.computeAllHashesLive(this.hashInput(), this.hashEncoding());
+        this.setCopyStatus('Hashes updated');
+    }
+
+    // ── HTML Entity Encode/Decode ──
     encodeHtmlEntities(): void {
         const input = this.htmlEntityInput();
         const encoded = input
@@ -560,64 +940,40 @@ export class UtilityComponent {
     decodeHtmlEntities(): void {
         const input = this.htmlEntityInput();
         const decoded = input
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&copy;/gi, '©')
+            .replace(/&reg;/gi, '®')
+            .replace(/&quot;/gi, '"')
+            .replace(/&apos;/gi, "'")
             .replace(/&#39;/g, "'")
-            .replace(/&#x27;/g, "'")
-            .replace(/&#(\d+);/g, (_match, dec: string) => String.fromCharCode(parseInt(dec, 10)))
-            .replace(/&#x([0-9a-fA-F]+);/g, (_match, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+            .replace(/&#x27;/gi, "'")
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/&#(\d+);/g, (_match, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
+            .replace(/&#x([0-9a-fA-F]+);/g, (_match, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+            .replace(/&amp;/gi, '&');
         this.htmlEntityOutput.set(decoded);
         this.setCopyStatus('HTML entities decoded');
     }
 
-    // ── JWT Decoder ────────────────────────────────────────────────────
+    swapHtmlEntities(): void {
+        if (this.htmlEntityOutput()) {
+            this.htmlEntityInput.set(this.htmlEntityOutput());
+            this.setCopyStatus('Swapped output to input');
+        }
+    }
+
+    // ── JWT Decoder ──
     decodeJwt(): void {
-        const token = this.jwtInput().trim();
-        this.jwtError.set('');
-        this.jwtHeader.set('');
-        this.jwtPayload.set('');
-
-        if (!token) {
-            this.jwtError.set('Please enter a JWT token');
-            return;
+        const res = this.jwtDecoded();
+        if (res.isValid) {
+            this.setCopyStatus('JWT decoded');
+        } else if (res.error) {
+            this.setCopyStatus(res.error);
         }
-
-        const parts = token.split('.');
-        if (parts.length < 2) {
-            this.jwtError.set('Invalid JWT format — expected at least 2 dot-separated parts');
-            return;
-        }
-
-        try {
-            const header = JSON.parse(atob(this.base64UrlDecode(parts[0])));
-            this.jwtHeader.set(JSON.stringify(header, null, 2));
-        } catch {
-            this.jwtError.set('Failed to decode JWT header');
-            return;
-        }
-
-        try {
-            const payload = JSON.parse(atob(this.base64UrlDecode(parts[1])));
-            this.jwtPayload.set(JSON.stringify(payload, null, 2));
-        } catch {
-            this.jwtError.set('Failed to decode JWT payload');
-            return;
-        }
-
-        this.setCopyStatus('JWT decoded');
     }
 
-    private base64UrlDecode(str: string): string {
-        let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-        while (base64.length % 4) {
-            base64 += '=';
-        }
-        return base64;
-    }
-
-    // ── Lorem Ipsum Generator ──────────────────────────────────────────
+    // ── Lorem Ipsum Generator ──
     private readonly loremSentences = [
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
         'Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
@@ -637,7 +993,7 @@ export class UtilityComponent {
     ];
 
     generateLorem(): void {
-        const count = Math.max(1, Math.min(10, this.loremParagraphs()));
+        const count = Math.max(1, Math.min(20, this.loremParagraphs() || 3));
         const paragraphs: string[] = [];
         for (let p = 0; p < count; p++) {
             const sentenceCount = 3 + Math.floor(Math.random() * 4);
@@ -651,18 +1007,14 @@ export class UtilityComponent {
         this.setCopyStatus('Lorem Ipsum generated');
     }
 
-    // ── Text Diff ──────────────────────────────────────────────────────
+    // ── Text Diff ──
     computeDiff(): void {
-        const linesA = this.diffTextA().split('\n');
-        const linesB = this.diffTextB().split('\n');
+        const stats = this.diffStats();
+        this.setCopyStatus(`Diff: +${stats.added} added, −${stats.removed} removed, ${stats.same} unchanged`);
+    }
+
+    private calculateDiffLines(linesA: string[], linesB: string[]): { type: 'same' | 'added' | 'removed'; text: string }[] {
         const result: { type: 'same' | 'added' | 'removed'; text: string }[] = [];
-
-        const maxLen = Math.max(linesA.length, linesB.length);
-        // Simple line-by-line diff
-        const setB = new Set(linesB);
-        const setA = new Set(linesA);
-
-        // Use a basic LCS-style approach for small inputs
         const lcs = this.computeLCS(linesA, linesB);
         let ai = 0;
         let bi = 0;
@@ -690,17 +1042,13 @@ export class UtilityComponent {
                 bi++;
             }
         }
-
-        this.diffResult.set(result);
-        this.setCopyStatus('Diff computed');
+        return result;
     }
 
     private computeLCS(a: string[], b: string[]): string[] {
         const m = a.length;
         const n = b.length;
-        // Limit LCS computation for performance on large inputs
         if (m > 500 || n > 500) {
-            // Fallback: just return common lines in order
             const result: string[] = [];
             let j = 0;
             for (let i = 0; i < m && j < n; i++) {
@@ -733,66 +1081,19 @@ export class UtilityComponent {
         return result;
     }
 
-    // ── Regex Tester ───────────────────────────────────────────────────
-    testRegex(): void {
-        this.regexError.set('');
-        this.regexMatches.set([]);
-        const pattern = this.regexPattern();
-        if (!pattern) {
-            this.regexError.set('Please enter a regex pattern');
-            return;
-        }
-
-        try {
-            const regex = new RegExp(pattern, this.regexFlags());
-            const input = this.regexInput();
-            const matches: { match: string; index: number; groups: string[] }[] = [];
-
-            if (this.regexFlags().includes('g')) {
-                let match: RegExpExecArray | null;
-                let safety = 0;
-                while ((match = regex.exec(input)) !== null && safety < 1000) {
-                    matches.push({
-                        match: match[0],
-                        index: match.index,
-                        groups: match.slice(1),
-                    });
-                    if (match[0].length === 0) regex.lastIndex++;
-                    safety++;
-                }
-            } else {
-                const match = regex.exec(input);
-                if (match) {
-                    matches.push({
-                        match: match[0],
-                        index: match.index,
-                        groups: match.slice(1),
-                    });
-                }
-            }
-
-            this.regexMatches.set(matches);
-            this.setCopyStatus(`${matches.length} match${matches.length !== 1 ? 'es' : ''} found`);
-        } catch (e) {
-            this.regexError.set(`Invalid regex: ${e instanceof Error ? e.message : String(e)}`);
-        }
-    }
-
-    copyAllRegexMatches(): void {
-        const text = this.regexMatches().map(m => m.match).join('\n');
-        this.copyText(text);
-    }
-
-    // ── Color Converter ────────────────────────────────────────────────
+    // ── Color Converter ──
     updateColorFromHex(hex: string): void {
-        if (/^#[0-9a-fA-F]{6}$/.test(hex) || /^#[0-9a-fA-F]{3}$/.test(hex)) {
-            this.colorHex.set(hex);
+        const trimmed = (hex || '').trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(trimmed) || /^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+            this.colorHex.set(trimmed.toUpperCase());
+        } else if (/^[0-9a-fA-F]{6}$/.test(trimmed) || /^[0-9a-fA-F]{3}$/.test(trimmed)) {
+            this.colorHex.set('#' + trimmed.toUpperCase());
         }
     }
 
     updateColorFromRgb(r: number, g: number, b: number): void {
-        const hex = '#' + [r, g, b].map(c => Math.max(0, Math.min(255, c)).toString(16).padStart(2, '0')).join('');
-        this.colorHex.set(hex);
+        const hex = '#' + [r, g, b].map(c => Math.max(0, Math.min(255, Number(c) || 0)).toString(16).padStart(2, '0')).join('');
+        this.colorHex.set(hex.toUpperCase());
     }
 
     private hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -817,92 +1118,20 @@ export class UtilityComponent {
         return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
     }
 
-    // ── Markdown Preview ───────────────────────────────────────────────
-    private renderMarkdown(md: string): string {
-        let html = md
-            // Code blocks (must be before inline code)
-            .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="md-code-block"><code>$2</code></pre>')
-            // Inline code
-            .replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>')
-            // Headers
-            .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-            // Bold and italic
-            .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.+?)\*/g, '<em>$1</em>')
-            // Blockquotes
-            .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-            // Links
-            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-            // Unordered lists
-            .replace(/^- (.+)$/gm, '<li>$1</li>')
-            // Horizontal rule
-            .replace(/^---$/gm, '<hr>')
-            // Line breaks
-            .replace(/\n\n/g, '<br><br>')
-            .replace(/\n/g, '<br>');
-
-        // Wrap consecutive <li> elements in <ul>
-        html = html.replace(/((?:<li>.*?<\/li>(?:<br>)?)+)/g, '<ul>$1</ul>');
-        // Clean up <br> inside <ul>
-        html = html.replace(/<ul>([\s\S]*?)<\/ul>/g, (_, inner: string) =>
-            '<ul>' + inner.replace(/<br>/g, '') + '</ul>'
-        );
-
-        return html;
-    }
-
     private toEpochMs(value: string): number {
         if (!value) return 0;
         const date = value.includes('T') ? new Date(value) : new Date(`${value}T00:00:00`);
         return Number.isNaN(date.getTime()) ? 0 : date.getTime();
     }
 
-    private convertEpochToDate(value: string): string {
-        const normalized = value.trim();
-        if (!normalized) return '';
-
-        const numberValue = Number(normalized);
-        if (!Number.isFinite(numberValue)) {
-            return 'Invalid timestamp';
-        }
-
-        const milliseconds = normalized.length <= 10 ? numberValue * 1000 : numberValue;
-        const date = new Date(milliseconds);
-        if (Number.isNaN(date.getTime())) {
-            return 'Invalid timestamp';
-        }
-
-        return `${date.toISOString()} (${date.toLocaleString()})`;
-    }
-
-    private formatDateInput(date: Date): string {
-        return date.toISOString().slice(0, 10);
-    }
-
-    private formatDatetimeLocal(date: Date): string {
-        return date.toISOString().slice(0, 19);
-    }
-
     private setCopyStatus(message: string): void {
         this.copyStatus.set(message);
         if (this.copyTimer !== null) {
-            window.clearTimeout(this.copyTimer);
+            clearTimeout(this.copyTimer);
         }
-        this.copyTimer = window.setTimeout(() => {
+        this.copyTimer = setTimeout(() => {
             this.copyStatus.set('');
             this.copyTimer = null;
-        }, 2500);
-    }
-
-    private uuidFallback(): string {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-        });
+        }, 2200);
     }
 }

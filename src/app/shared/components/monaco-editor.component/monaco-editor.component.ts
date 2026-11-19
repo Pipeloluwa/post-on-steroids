@@ -106,6 +106,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private isSwappingModel = false;
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
+  private hoverMutationObserver: MutationObserver | null = null;
   private themeUpdateId = 0;
   private activeModelCacheKey = '';
 
@@ -303,6 +304,8 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     editor.onDidChangeCursorPosition?.(() => {
       MonacoEditorComponent.lastFocusedEditor = this;
     });
+
+    this.setupCompactHoverBoundaryGuard(editor);
 
     if (this.enableFloatingVar()) {
       const selSub = editor.onDidChangeCursorSelection?.(() => {
@@ -824,6 +827,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       this.resizeObserver = null;
     }
 
+    if (this.hoverMutationObserver) {
+      this.hoverMutationObserver.disconnect();
+      this.hoverMutationObserver = null;
+    }
+
     const editor = this.editorInstance();
     if (editor?.deltaDecorations && this.variableDecorations.length > 0) {
       editor.deltaDecorations(this.variableDecorations, []);
@@ -860,6 +868,49 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       }
       editor.setModel(null);
     }
+  }
+
+  private setupCompactHoverBoundaryGuard(editor: any) {
+    if (!this.isBrowser) return;
+    const editorDom: HTMLElement | null = editor?.getDomNode?.() || null;
+    if (!editorDom || typeof MutationObserver === 'undefined') return;
+
+    if (this.hoverMutationObserver) {
+      this.hoverMutationObserver.disconnect();
+    }
+
+    let isAdjusting = false;
+    const clampHover = () => {
+      if (isAdjusting) return;
+      const contextView = editorDom.querySelector('.context-view') as HTMLElement | null;
+      const hoverEl = contextView?.querySelector('.monaco-hover.workbench-hover.compact') as HTMLElement | null;
+      if (!contextView || !hoverEl || contextView.style.display === 'none') return;
+
+      isAdjusting = true;
+      try {
+        hoverEl.style.transform = '';
+        const editorRect = editorDom.getBoundingClientRect();
+        const hoverRect = hoverEl.getBoundingClientRect();
+        const maxRight = Math.min(editorRect.right, window.innerWidth) - 8;
+        const overflowRight = hoverRect.right - maxRight;
+        if (overflowRight > 0) {
+          hoverEl.style.transform = `translateX(-${Math.ceil(overflowRight)}px)`;
+        }
+      } finally {
+        isAdjusting = false;
+      }
+    };
+
+    this.hoverMutationObserver = new MutationObserver(() => {
+      clampHover();
+    });
+
+    this.hoverMutationObserver.observe(editorDom, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class']
+    });
   }
 
   private setupFunctionBodyRestriction(editor: MonacoEditor) {

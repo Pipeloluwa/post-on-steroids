@@ -13,6 +13,7 @@ import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
 import { DESKTOP_DOWNLOADS_CONFIG, DesktopPackage, buildDownloadLink } from '../../constants/desktop-downloads.constants';
 import { isElectronApp } from '../../utils/url.util';
+import { convertCapsuleToPostmanCollection } from '../../utils/postman-export.util';
 
 @Component({
     selector: 'app-navbar-component',
@@ -186,7 +187,7 @@ export class NavbarComponent {
         this.router.navigate(['/import']);
     }
 
-    exportEndpoint() {
+    async exportEndpoint() {
         this.showFileMenu.set(false);
         const activeId = this.tabStateService.activeTabId();
         const state = activeId ? this.tabStateService.getState(activeId) : null;
@@ -194,7 +195,8 @@ export class NavbarComponent {
             this.notificationService.notify('No active request to export.');
             return;
         }
-        this.downloadJson(state, `request_${state.name || 'untitled'}.json`);
+        const examples = await this.tabStateService.getExamples(state.id).catch(() => []);
+        this.downloadJson({ ...state, ...(examples.length > 0 ? { examples } : {}) }, `request_${state.name || 'untitled'}.json`);
         this.notificationService.notify('Endpoint exported successfully.');
     }
 
@@ -223,6 +225,17 @@ export class NavbarComponent {
         const safeName = colName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
         this.downloadJson(exportData, `capsule_${safeName}.json`);
         this.notificationService.notify(`Capsule "${colName}" exported successfully (${single.requests.length} request${single.requests.length !== 1 ? 's' : ''}).`);
+    }
+
+    async exportPostmanCollection() {
+        this.showFileMenu.set(false);
+        const activeCapId = this.tabStateService.activeCapsuleId();
+        const single = await this.tabStateService.getFullCapsuleExportData(activeCapId);
+        const colName = single.name || 'capsule';
+        const pmCollection = convertCapsuleToPostmanCollection(single);
+        const safeName = colName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
+        this.downloadJson(pmCollection, `${safeName}.postman_collection.json`);
+        this.notificationService.notify(`Postman Collection "${colName}" exported (${single.requests.length} request${single.requests.length !== 1 ? 's' : ''}).`);
     }
 
     closeActiveTab() {

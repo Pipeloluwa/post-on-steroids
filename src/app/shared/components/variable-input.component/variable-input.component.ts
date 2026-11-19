@@ -74,6 +74,11 @@ export class VariableInputComponent implements ControlValueAccessor {
     isMouseInPopup = false;
     hoveredVariable = signal<{ key: string, val: string, type: string, x: number, y: number } | null>(null);
 
+    // Per-input undo/redo history so Ctrl+Z/Ctrl+Y inside this input only reverts changes to this input
+    private inputUndoStack: { value: string; cursor: number }[] = [{ value: '', cursor: 0 }];
+    private inputRedoStack: { value: string; cursor: number }[] = [];
+    private isApplyingInputHistory = false;
+
     parsedSegments = computed(() => {
         const val = this.value();
         if (!val) return [];
@@ -291,7 +296,57 @@ export class VariableInputComponent implements ControlValueAccessor {
     }
 
     writeValue(val: string): void {
-        this.value.set(val || '');
+        const normalized = val || '';
+        const prev = this.value();
+        this.value.set(normalized);
+        if (!this.isApplyingInputHistory && normalized !== prev) {
+            const isFocused = typeof document !== 'undefined' && this.inputField?.nativeElement === document.activeElement;
+            if (!isFocused || this.inputUndoStack.length <= 1) {
+                this.inputUndoStack = [{ value: normalized, cursor: normalized.length }];
+                this.inputRedoStack = [];
+            } else {
+                this.recordInputHistory(normalized, this.currentCursorIndex());
+            }
+        }
+    }
+
+    private recordInputHistory(value: string, cursor: number): void {
+        const top = this.inputUndoStack[this.inputUndoStack.length - 1];
+        if (top && top.value === value) {
+            top.cursor = cursor;
+            return;
+        }
+        this.inputUndoStack.push({ value, cursor });
+        if (this.inputUndoStack.length > 100) {
+            this.inputUndoStack.shift();
+        }
+        this.inputRedoStack = [];
+    }
+
+    private undoInput(): void {
+        if (this.inputUndoStack.length <= 1) return;
+        const current = this.inputUndoStack.pop()!;
+        this.inputRedoStack.push(current);
+        const prev = this.inputUndoStack[this.inputUndoStack.length - 1];
+        this.applyInputHistorySnapshot(prev);
+    }
+
+    private redoInput(): void {
+        if (this.inputRedoStack.length === 0) return;
+        const next = this.inputRedoStack.pop()!;
+        this.inputUndoStack.push(next);
+        this.applyInputHistorySnapshot(next);
+    }
+
+    private applyInputHistorySnapshot(snapshot: { value: string; cursor: number }): void {
+        this.isApplyingInputHistory = true;
+        try {
+            this.value.set(snapshot.value);
+            this.onChange(snapshot.value);
+            this.restoreFocus(snapshot.cursor);
+        } finally {
+            this.isApplyingInputHistory = false;
+        }
     }
 
     registerOnChange(fn: (val: string) => void): void {
@@ -309,6 +364,7 @@ export class VariableInputComponent implements ControlValueAccessor {
         const selStart = inputElement.selectionStart;
         const selEnd = inputElement.selectionEnd;
         this.value.set(newVal);
+        this.recordInputHistory(newVal, selEnd ?? newVal.length);
         this.onChange(newVal);
         this.updateCursorPosition();
         if (selStart !== null && selEnd !== null) {
@@ -321,6 +377,27 @@ export class VariableInputComponent implements ControlValueAccessor {
     }
     
     onKeyDown(event: KeyboardEvent) {
+        const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const isCtrlOrCmd = isMac ? event.metaKey : event.ctrlKey;
+        if (isCtrlOrCmd && !event.altKey) {
+            const keyLower = event.key.toLowerCase();
+            if (keyLower === 'z') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.shiftKey) {
+                    this.redoInput();
+                } else {
+                    this.undoInput();
+                }
+                return;
+            } else if (keyLower === 'y' && !isMac) {
+                event.preventDefault();
+                event.stopPropagation();
+                this.redoInput();
+                return;
+            }
+        }
+
         const state = this.suggestionState();
         if (state.list.length > 0) {
             if (event.key === 'ArrowDown') {
@@ -408,10 +485,11 @@ export class VariableInputComponent implements ControlValueAccessor {
                 }
                 
                 const newVal = beforeVar + '{{' + item.insertText + '}}' + afterCursor;
+                const newCursorPos = beforeVar.length + 2 + item.insertText.length + 2;
                 this.value.set(newVal);
+                this.recordInputHistory(newVal, newCursorPos);
                 this.onChange(newVal);
                 
-                const newCursorPos = beforeVar.length + 2 + item.insertText.length + 2;
                 this.restoreFocus(newCursorPos);
             }
         } else if (state.type === 'path') {
@@ -423,10 +501,11 @@ export class VariableInputComponent implements ControlValueAccessor {
                 const afterReplaced = textAfterCursor.substring(replaceLen);
                 
                 const newVal = beforeVar + item.insertText + afterReplaced;
+                const newCursorPos = lastColon + 1 + item.insertText.length;
                 this.value.set(newVal);
+                this.recordInputHistory(newVal, newCursorPos);
                 this.onChange(newVal);
                 
-                const newCursorPos = lastColon + 1 + item.insertText.length;
                 this.restoreFocus(newCursorPos);
             }
         } else if (state.type === 'utility') {
@@ -439,10 +518,11 @@ export class VariableInputComponent implements ControlValueAccessor {
                 
                 const valToInsert = item.insertText;
                 const newVal = beforeVar + valToInsert + afterReplaced;
+                const newCursorPos = lastDollar + valToInsert.length;
                 this.value.set(newVal);
+                this.recordInputHistory(newVal, newCursorPos);
                 this.onChange(newVal);
                 
-                const newCursorPos = lastDollar + valToInsert.length;
                 this.restoreFocus(newCursorPos);
             }
         }

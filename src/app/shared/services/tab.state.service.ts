@@ -3865,6 +3865,90 @@ export class TabStateService {
         return null;
     }
 
+    private attachExamplesToRequests(requests: RequestState[]): RequestState[] {
+        return requests.map(r => {
+            const cached = this.requestExamplesMap().get(r.id);
+            const examples = cached !== undefined ? cached : this.getLocalExamples(r.id);
+            if (!examples || examples.length === 0) return r;
+            return {
+                ...r,
+                examples: examples.map(ex => ({
+                    id: ex.id,
+                    name: ex.name,
+                    requestSnapshot: ex.requestSnapshot,
+                    createdAt: ex.createdAt
+                }))
+            } as RequestState;
+        });
+    }
+
+    private async persistImportedExamples(
+        createdRequests: RequestState[],
+        sourceRequests: any[],
+        persistToBackend: boolean
+    ): Promise<void> {
+        const backendTasks: Promise<any>[] = [];
+
+        for (let idx = 0; idx < createdRequests.length; idx++) {
+            const req = createdRequests[idx];
+            const src = sourceRequests?.[idx];
+            const rawExamples = Array.isArray(src?.examples) ? src.examples : [];
+            if (rawExamples.length === 0) continue;
+
+            const normalizedList = rawExamples.map((ex: any, exIdx: number) => {
+                let snapObj: any = ex?.requestSnapshot;
+                if (typeof snapObj === 'string') {
+                    try { snapObj = JSON.parse(snapObj); } catch { snapObj = {}; }
+                }
+                snapObj = snapObj && typeof snapObj === 'object' ? { ...snapObj } : {};
+                return {
+                    id: ex?.id || `ex_${this.createId()}_${exIdx}`,
+                    requestId: req.id,
+                    name: String(ex?.name || `Example ${exIdx + 1}`),
+                    requestSnapshot: JSON.stringify(snapObj),
+                    createdAt: ex?.createdAt || new Date().toISOString()
+                };
+            });
+
+            this.requestExamplesMap.update(map => {
+                const next = new Map(map);
+                const existing = next.get(req.id) || [];
+                next.set(req.id, [...existing, ...normalizedList]);
+                return next;
+            });
+            const existingLocal = this.getLocalExamples(req.id);
+            this.saveLocalExamples(req.id, [...existingLocal, ...normalizedList]);
+
+            if (persistToBackend && this.isBrowser && this.authService.isLoggedIn() && this.isValidGuid(req.id)) {
+                for (const localEx of normalizedList) {
+                    backendTasks.push(
+                        firstValueFrom(
+                            this.http.post<{ data: any }>(`${API_BASE_URL}/request/${req.id}/example`, {
+                                name: localEx.name,
+                                requestSnapshot: localEx.requestSnapshot
+                            })
+                        ).then(res => {
+                            if (res?.data) {
+                                this.requestExamplesMap.update(map => {
+                                    const next = new Map(map);
+                                    const list = (next.get(req.id) || []).map(item => item.id === localEx.id ? res.data : item);
+                                    next.set(req.id, list);
+                                    return next;
+                                });
+                                const updatedLocal = this.getLocalExamples(req.id).map(item => item.id === localEx.id ? res.data : item);
+                                this.saveLocalExamples(req.id, updatedLocal);
+                            }
+                        }).catch(() => {})
+                    );
+                }
+            }
+        }
+
+        if (backendTasks.length > 0) {
+            await Promise.allSettled(backendTasks);
+        }
+    }
+
     getFullCapsuleExportDataSync(capsuleId: string): {
         id: string;
         name: string;
@@ -3881,7 +3965,7 @@ export class TabStateService {
         const name = cap?.name || (capsuleId === this.activeCapsuleId() ? this.activeCapsuleName() : 'Capsule');
         const autoAuthEnabled = (capsuleId === this.activeCapsuleId() ? this.autoAuthEnabled() : cap?.autoAuthEnabled) || 'off';
         const autoAuthEndpointId = (capsuleId === this.activeCapsuleId() ? this.autoAuthEndpointId() : cap?.autoAuthEndpointId) || null;
-        const requests = this.getCapsuleRequestsSync(capsuleId);
+        const requests = this.attachExamplesToRequests(this.getCapsuleRequestsSync(capsuleId));
         const groups = this.getGroupsForCapsule(capsuleId);
         const groupOrder = groups.map(g => g.id);
         const requestOrder = this.getRequestOrderForCapsule(capsuleId);
@@ -3962,9 +4046,19 @@ export class TabStateService {
         }
 
         const syncData = this.getFullCapsuleExportDataSync(capsuleId);
+        const targetRequests = requests.length > 0 ? requests : syncData.requests;
+
+        if (this.isBrowser && this.authService.isLoggedIn() && targetRequests.length > 0) {
+            await Promise.allSettled(
+                targetRequests
+                    .filter(r => this.isValidGuid(r.id))
+                    .map(r => this.getExamples(r.id).catch(() => []))
+            );
+        }
+
         return {
             ...syncData,
-            requests: requests.length > 0 ? requests : syncData.requests
+            requests: this.attachExamplesToRequests(targetRequests)
         };
     }
 
@@ -4210,8 +4304,12 @@ export class TabStateService {
                     if (sr.scripts) mapped.scripts = { ...mapped.scripts, ...sr.scripts };
                     if (sr.bodyWrapStyle) mapped.bodyWrapStyle = sr.bodyWrapStyle;
                     if (sr.responseWrapStyle) mapped.responseWrapStyle = sr.responseWrapStyle;
-                    if (sr.responseActiveMode) mapped.responseActiveMode = sr.responseActiveMode;
+            if (sr.responseActiveMode) mapped.responseActiveMode = sr.responseActiveMode;
                     if (sr.consoleWrap !== undefined) mapped.consoleWrap = sr.consoleWrap;
+                    if (sr.urlEncodedData?.length && (!mapped.urlEncodedData || mapped.urlEncodedData.length === 0)) mapped.urlEncodedData = sr.urlEncodedData;
+                    if (sr.graphqlQuery && !mapped.graphqlQuery) mapped.graphqlQuery = sr.graphqlQuery;
+                    if (sr.graphqlVariables && !mapped.graphqlVariables) mapped.graphqlVariables = sr.graphqlVariables;
+                    if (sr.rawBodyText && !mapped.rawBodyText) mapped.rawBodyText = sr.rawBodyText;
                     mapped.isDirty = false;
                     savedList.push(mapped);
                 }
@@ -4236,6 +4334,8 @@ export class TabStateService {
                 }
                 finalRequests = savedList;
             }
+
+            await this.persistImportedExamples(finalRequests, capInput.requests || [], canPersistBackend);
 
             // Remap groups (folders) and assign requests into them
             const newGroupsMap = new Map<string, RequestGroup>();
@@ -4525,6 +4625,10 @@ export class TabStateService {
                         if (inputReq.responseWrapStyle) mr.responseWrapStyle = inputReq.responseWrapStyle;
                         if (inputReq.responseActiveMode) mr.responseActiveMode = inputReq.responseActiveMode;
                         if (inputReq.consoleWrap !== undefined) mr.consoleWrap = inputReq.consoleWrap;
+                        if ((inputReq as any).urlEncodedData?.length && (!mr.urlEncodedData || mr.urlEncodedData.length === 0)) mr.urlEncodedData = (inputReq as any).urlEncodedData;
+                        if ((inputReq as any).graphqlQuery && !mr.graphqlQuery) mr.graphqlQuery = (inputReq as any).graphqlQuery;
+                        if ((inputReq as any).graphqlVariables && !mr.graphqlVariables) mr.graphqlVariables = (inputReq as any).graphqlVariables;
+                        if ((inputReq as any).rawBodyText && !mr.rawBodyText) mr.rawBodyText = (inputReq as any).rawBodyText;
 
                         if (triggerChanged && remappedTrigger) {
                             const savePayload = this.mapStateToSaveRequest(mr, newCap.id, newCap.name);
@@ -4640,16 +4744,21 @@ export class TabStateService {
                                 const k = (v.variableKey || v.key || '').trim();
                                 const kLower = k.toLowerCase();
                                 const matchedInput = inputVarByKey.get(kLower);
+                                const rawBackendVal = v.variableValue !== undefined && v.variableValue !== null && v.variableValue !== ''
+                                    ? v.variableValue
+                                    : (v.value !== undefined && v.value !== null && v.value !== '' ? v.value : undefined);
                                 return {
                                     id: v.id ? String(v.id) : this.createId(),
                                     key: k,
-                                    value: v.variableValue !== undefined ? v.variableValue : (v.value !== undefined ? v.value : (matchedInput?.value ?? '')),
+                                    value: rawBackendVal !== undefined ? rawBackendVal : (matchedInput?.value ?? ''),
                                     type: v.type || matchedInput?.type || 'global',
                                     enabled: v.isEnabled !== undefined ? v.isEnabled : (v.enabled !== undefined ? v.enabled : (matchedInput?.enabled ?? true)),
                                     ...(matchedInput?.source || remappedVarSources[kLower] ? { source: matchedInput?.source || remappedVarSources[kLower] } : {})
                                 };
                             })
                         : Array.from(inputVarByKey.values());
+
+                    await this.persistImportedExamples(mappedRequests, capInput?.requests || [], true);
 
                     if (this.isBrowser && capVars.length > 0) {
                         const varsJson = JSON.stringify(capVars);
@@ -4786,6 +4895,8 @@ export class TabStateService {
                 lastCreatedCap = newCap;
                 lastCreatedRequests = reqs;
                 lastCreatedCapVars = capVars;
+
+                await this.persistImportedExamples(reqs, c.requests || [], false);
             }
         }
 
@@ -5210,8 +5321,10 @@ export class TabStateService {
             const currentState = map.get(effectiveId) || map.get(id) || this.getDefaultState(effectiveId);
 
             const isSignificantChange = Object.keys(partialState).some(k => !ignorableKeys.includes(k));
+            const isTextInputFocused = this.isBrowser && typeof document !== 'undefined'
+                && this.isEditableTextElement(document.activeElement as HTMLElement | null);
 
-            if (recordHistory && isSignificantChange) {
+            if (recordHistory && isSignificantChange && !isTextInputFocused) {
                 const pastChange: Partial<RequestState> = {};
                 for (const key in partialState) {
                     if (!ignorableKeys.includes(key)) {
@@ -5282,6 +5395,21 @@ export class TabStateService {
 
     /** Per-tab counter bumped on every real edit; used to detect edits made while a save is in flight */
     private editVersions = new Map<string, number>();
+
+    private isEditableTextElement(el: HTMLElement | null): boolean {
+        if (!el) return false;
+        if (el.isContentEditable) return true;
+        if (el.tagName === 'TEXTAREA') {
+            return !(el as HTMLTextAreaElement).readOnly && !(el as HTMLTextAreaElement).disabled;
+        }
+        if (el.tagName === 'INPUT') {
+            const input = el as HTMLInputElement;
+            const type = (input.type || 'text').toLowerCase();
+            const nonTextTypes = ['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'];
+            return !nonTextTypes.includes(type) && !input.readOnly && !input.disabled;
+        }
+        return false;
+    }
 
     /** Serialises only the fields that are persisted to the backend, used for dirty detection */
     private persistableFingerprint(s: RequestState): string {

@@ -1,14 +1,31 @@
 <div class="p-6 h-full overflow-auto">
     <!-- Grid of Tools -->
     @if (!activeTool()) {
-        <div class="flex flex-col gap-y-2 mb-6">
-            <h1 class="text-xl font-bold text-(--postonsteroids-text-primary)">Utilities</h1>
-            <p class="text-sm text-(--postonsteroids-text-secondary)">Select a utility tool below to get started.</p>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div class="flex flex-col gap-y-1">
+                <h1 class="text-xl font-bold text-(--postonsteroids-text-primary)">Utilities</h1>
+                <p class="text-sm text-(--postonsteroids-text-secondary)">Select a utility tool below or search by keyword.</p>
+            </div>
+            <div class="relative w-full sm:w-72">
+                <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 text-[18px]! size-[18px]! text-(--postonsteroids-text-muted)">search</mat-icon>
+                <input type="text"
+                    [value]="toolSearchQuery()"
+                    (input)="toolSearchQuery.set($any($event.target).value)"
+                    placeholder="Search utilities (e.g. regex, jwt, hash)..."
+                    aria-label="Search utilities"
+                    class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) pl-9 pr-8 py-2 text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) placeholder:text-(--postonsteroids-text-muted)" />
+                @if (toolSearchQuery()) {
+                    <button type="button" (click)="toolSearchQuery.set('')" aria-label="Clear search"
+                        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                        <mat-icon class="text-[16px]! size-[16px]!">close</mat-icon>
+                    </button>
+                }
+            </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            @for (tool of tools; track tool.id) {
-                <div (click)="setActiveTool(tool.id)" 
+            @for (tool of filteredTools(); track tool.id) {
+                <div (click)="setActiveTool(tool.id)"
                     class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-5 cursor-pointer hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all duration-200 group flex flex-col gap-y-3 shadow-sm">
                     <div class="w-10 h-10 rounded-2xl bg-(--postonsteroids-bg-tertiary) flex items-center justify-center text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
                         <mat-icon>{{ tool.icon }}</mat-icon>
@@ -24,11 +41,31 @@
 
     <!-- Tool Detail View -->
     @if (activeTool()) {
-        <div class="mb-6 flex items-center gap-x-3">
-            <button (click)="setActiveTool(null)" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
-                <mat-icon class="text-[20px]! size-[20px]!">arrow_back</mat-icon>
-            </button>
-            <h1 class="text-xl font-bold text-(--postonsteroids-text-primary)">Utilities</h1>
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-x-3">
+                <button type="button" (click)="setActiveTool(null)" aria-label="Back to all utilities"
+                    class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
+                    <mat-icon class="text-[20px]! size-[20px]!">arrow_back</mat-icon>
+                </button>
+                <div>
+                    <h1 class="text-xl font-bold text-(--postonsteroids-text-primary)">{{ activeToolMeta()?.name || 'Utilities' }}</h1>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-x-3">
+                @if (copyStatus()) {
+                    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent) border border-(--postonsteroids-accent)/30">
+                        {{ copyStatus() }}
+                    </span>
+                }
+                <select [value]="activeTool()" (change)="setActiveTool($any($event.target).value)"
+                    aria-label="Quick switch utility tool"
+                    class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-1.5 text-xs font-semibold text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer">
+                    @for (t of tools; track t.id) {
+                        <option [value]="t.id">{{ t.name }}</option>
+                    }
+                </select>
+            </div>
         </div>
 
         @if (activeTool() === 'uuid') {
@@ -37,105 +74,211 @@
                 <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">UUID / GUID Generator</h2>
-                        <p class="text-sm text-(--postonsteroids-text-secondary)">Quickly create a new UUID and copy it for use
-                            in requests, headers, or test data.</p>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Generate single or bulk v4 UUIDs for requests, headers, or test data.</p>
                     </div>
-                    <button (click)="generateUuid()"
-                        class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
-                        <mat-icon class="text-[18px]! size-[18px]!">share</mat-icon>
-                        Generate UUID
-                    </button>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="flex items-center gap-x-1.5 text-xs text-(--postonsteroids-text-secondary)">
+                            <span>Count:</span>
+                            <input type="number" min="1" max="50" [value]="uuidCount()"
+                                (input)="uuidCount.set(+$any($event.target).value); generateUuid()"
+                                class="w-16 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-2 py-1 text-center font-mono text-xs text-(--postonsteroids-text-primary) outline-none" />
+                        </label>
+                        <label class="flex items-center gap-x-1.5 text-xs text-(--postonsteroids-text-primary) cursor-pointer">
+                            <input type="checkbox" [checked]="uuidUppercase()" (change)="uuidUppercase.set($any($event.target).checked); generateUuid()"
+                                class="accent-(--postonsteroids-accent)" />
+                            Uppercase
+                        </label>
+                        <label class="flex items-center gap-x-1.5 text-xs text-(--postonsteroids-text-primary) cursor-pointer">
+                            <input type="checkbox" [checked]="uuidHyphens()" (change)="uuidHyphens.set($any($event.target).checked); generateUuid()"
+                                class="accent-(--postonsteroids-accent)" />
+                            Hyphens
+                        </label>
+                        <button type="button" (click)="generateUuid()"
+                            class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover) cursor-pointer">
+                            <mat-icon class="text-[18px]! size-[18px]!">refresh</mat-icon>
+                            Generate
+                        </button>
+                    </div>
                 </div>
 
                 <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
-                    <input readonly type="text" [value]="uuidValue()"
-                        class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none" />
-                    <button (click)="copyText(uuidValue())"
-                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-3 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">
+                    @if (uuidCount() <= 1) {
+                        <input readonly type="text" [value]="uuidValue()" aria-label="Generated UUID"
+                            class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    } @else {
+                        <textarea readonly [value]="uuidValue()" rows="6" aria-label="Generated UUID list"
+                            class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"></textarea>
+                    }
+                    <button type="button" (click)="copyText(uuidValue())"
+                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-3 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer self-start">
                         Copy
                     </button>
                 </div>
-
-                @if (copyStatus()) {
-                <p class="mt-3 text-sm text-(--postonsteroids-text-secondary)">{{ copyStatus() }}</p>
-                }
             </section>
         }
-        
+
         @if (activeTool() === 'json') {
             <!-- ─── JSON Tools ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
-                <div class="flex flex-col gap-y-2">
-                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">JSON Tools</h2>
-                    <p class="text-sm text-(--postonsteroids-text-secondary)">Format or minify request and response payloads.</p>
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">JSON Tools</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Format, minify, validate, and canonicalize JSON payloads.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="flex items-center gap-x-1.5 text-xs text-(--postonsteroids-text-secondary)">
+                            <span>Indent:</span>
+                            <select [value]="jsonIndent()" (change)="jsonIndent.set(+$any($event.target).value); formatJson()"
+                                class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-2.5 py-1 text-xs text-(--postonsteroids-text-primary) outline-none">
+                                <option [value]="2">2 spaces</option>
+                                <option [value]="4">4 spaces</option>
+                                <option [value]="0">Tab</option>
+                            </select>
+                        </label>
+                        <label class="flex items-center gap-x-1.5 text-xs text-(--postonsteroids-text-primary) cursor-pointer">
+                            <input type="checkbox" [checked]="jsonSortKeys()" (change)="jsonSortKeys.set($any($event.target).checked); formatJson()"
+                                class="accent-(--postonsteroids-accent)" />
+                            Sort keys
+                        </label>
+                    </div>
                 </div>
 
+                @if (jsonError()) {
+                    <p class="mt-3 text-xs font-semibold text-status-danger">{{ jsonError() }}</p>
+                }
+
                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                    <textarea [value]="jsonInput()" (input)="updateJsonInput($any($event.target).value)" rows="8"
+                    <textarea [value]="jsonInput()" (input)="updateJsonInput($any($event.target).value)" rows="10"
                         class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
                         aria-label="JSON input"></textarea>
-                    <textarea readonly [value]="jsonOutput()" rows="8"
+                    <textarea readonly [value]="jsonOutput()" rows="10"
                         class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
                         aria-label="JSON output"></textarea>
                 </div>
 
                 <div class="mt-4 flex flex-wrap items-center gap-3">
-                    <button (click)="formatJson()"
-                        class="rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">Format</button>
-                    <button (click)="minifyJson()"
-                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">Minify</button>
-                    <button (click)="copyText(jsonOutput())"
-                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">Copy Output</button>
+                    <button type="button" (click)="formatJson()"
+                        class="rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover) cursor-pointer">Format</button>
+                    <button type="button" (click)="minifyJson()"
+                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Minify</button>
+                    <button type="button" (click)="swapJsonOutputToInput()"
+                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Use Output as Input</button>
+                    <button type="button" (click)="copyText(jsonOutput())"
+                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Copy Output</button>
                 </div>
             </section>
         }
 
         @if (activeTool() === 'base64') {
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
-                <div>
-                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Base64</h2>
-                    <textarea [value]="base64Input()" (input)="updateBase64Input($any($event.target).value)" rows="4"
-                        class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
-                        aria-label="Base64 input"></textarea>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button (click)="encodeBase64()" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Encode</button>
-                        <button (click)="decodeBase64()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Decode</button>
-                        <button (click)="copyText(base64Output())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Base64 Encoder / Decoder</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">UTF-8 safe Base64 and Base64URL conversion.</p>
                     </div>
-                    <p class="mt-3 min-h-10 break-words rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary)">{{ base64Output() }}</p>
+                    <label class="flex items-center gap-x-1.5 text-xs text-(--postonsteroids-text-primary) cursor-pointer">
+                        <input type="checkbox" [checked]="base64UrlSafe()" (change)="base64UrlSafe.set($any($event.target).checked)"
+                            class="accent-(--postonsteroids-accent)" />
+                        URL-safe Base64 (- and _, no padding)
+                    </label>
                 </div>
+                <textarea [value]="base64Input()" (input)="updateBase64Input($any($event.target).value)" rows="4"
+                    placeholder="Enter text or Base64 string..."
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
+                    aria-label="Base64 input"></textarea>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button type="button" (click)="encodeBase64()" class="rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover) cursor-pointer">Encode</button>
+                    <button type="button" (click)="decodeBase64()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Decode</button>
+                    <button type="button" (click)="swapBase64()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Swap ↑↓</button>
+                    <button type="button" (click)="copyText(base64Output())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Copy</button>
+                </div>
+                <textarea readonly [value]="base64Output()" rows="4" aria-label="Base64 output"
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"></textarea>
             </section>
         }
-        
+
         @if (activeTool() === 'url') {
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
-                <div>
-                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">URL Encoding</h2>
-                    <textarea [value]="urlInput()" (input)="updateUrlInput($any($event.target).value)" rows="4"
-                        class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
-                        aria-label="URL input"></textarea>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button (click)="encodeUrl()" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Encode</button>
-                        <button (click)="decodeUrl()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Decode</button>
-                        <button (click)="copyText(urlOutput())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">URL Encoding</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Encode or decode query parameters or complete URIs.</p>
                     </div>
-                    <p class="mt-3 min-h-10 break-words rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary)">{{ urlOutput() }}</p>
+                    <label class="flex items-center gap-x-1.5 text-xs text-(--postonsteroids-text-primary) cursor-pointer">
+                        <input type="checkbox" [checked]="urlFullUriMode()" (change)="urlFullUriMode.set($any($event.target).checked)"
+                            class="accent-(--postonsteroids-accent)" />
+                        Preserve URI structure (encodeURI mode)
+                    </label>
                 </div>
+                <textarea [value]="urlInput()" (input)="updateUrlInput($any($event.target).value)" rows="4"
+                    placeholder="Enter text or URL-encoded value..."
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
+                    aria-label="URL input"></textarea>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button type="button" (click)="encodeUrl()" class="rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover) cursor-pointer">Encode</button>
+                    <button type="button" (click)="decodeUrl()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Decode</button>
+                    <button type="button" (click)="swapUrl()" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Swap ↑↓</button>
+                    <button type="button" (click)="copyText(urlOutput())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Copy</button>
+                </div>
+                <textarea readonly [value]="urlOutput()" rows="4" aria-label="URL output"
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"></textarea>
             </section>
         }
 
         @if (activeTool() === 'hash') {
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
-                <div>
-                    <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">SHA-256</h2>
-                    <textarea [value]="hashInput()" (input)="updateHashInput($any($event.target).value)" rows="4"
-                        class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
-                        aria-label="SHA-256 input"></textarea>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button (click)="generateSha256()" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Hash</button>
-                        <button (click)="copyText(hashOutput())" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Hash Generator (Live SHA-1 / 256 / 384 / 512)</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Computes cryptographic digests live as you type.</p>
                     </div>
-                    <p class="mt-3 min-h-10 break-all rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 font-mono text-sm text-(--postonsteroids-text-primary)">{{ hashOutput() }}</p>
+                    <div class="flex items-center gap-x-2">
+                        <button type="button" (click)="hashEncoding.set('hex')"
+                            [class.bg-(--postonsteroids-accent)]="hashEncoding() === 'hex'"
+                            [class.text-white]="hashEncoding() === 'hex'"
+                            [class.bg-(--postonsteroids-bg-tertiary)]="hashEncoding() !== 'hex'"
+                            class="px-3 py-1 rounded-xl text-xs font-semibold cursor-pointer">Hex</button>
+                        <button type="button" (click)="hashEncoding.set('base64')"
+                            [class.bg-(--postonsteroids-accent)]="hashEncoding() === 'base64'"
+                            [class.text-white]="hashEncoding() === 'base64'"
+                            [class.bg-(--postonsteroids-bg-tertiary)]="hashEncoding() !== 'base64'"
+                            class="px-3 py-1 rounded-xl text-xs font-semibold cursor-pointer">Base64</button>
+                    </div>
+                </div>
+                <textarea [value]="hashInput()" (input)="updateHashInput($any($event.target).value)" rows="3"
+                    placeholder="Type or paste text to hash..."
+                    class="mt-3 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
+                    aria-label="Hash input"></textarea>
+
+                <div class="mt-4 space-y-3">
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">SHA-256</span>
+                            <button type="button" (click)="copyText(hashDigests().sha256)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                        </div>
+                        <p class="font-mono text-xs break-all text-(--postonsteroids-text-primary)">{{ hashDigests().sha256 }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">SHA-512</span>
+                            <button type="button" (click)="copyText(hashDigests().sha512)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                        </div>
+                        <p class="font-mono text-xs break-all text-(--postonsteroids-text-primary)">{{ hashDigests().sha512 }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">SHA-384</span>
+                            <button type="button" (click)="copyText(hashDigests().sha384)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                        </div>
+                        <p class="font-mono text-xs break-all text-(--postonsteroids-text-primary)">{{ hashDigests().sha384 }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">SHA-1</span>
+                            <button type="button" (click)="copyText(hashDigests().sha1)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                        </div>
+                        <p class="font-mono text-xs break-all text-(--postonsteroids-text-primary)">{{ hashDigests().sha1 }}</p>
+                    </div>
                 </div>
             </section>
         }
@@ -163,30 +306,35 @@
                 </div>
 
                 <div class="mt-4 flex flex-wrap items-center gap-3">
-                    <button (click)="encodeHtmlEntities()"
-                        class="rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">Encode</button>
-                    <button (click)="decodeHtmlEntities()"
-                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">Decode</button>
-                    <button (click)="copyText(htmlEntityOutput())"
-                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">Copy Output</button>
+                    <button type="button" (click)="encodeHtmlEntities()"
+                        class="rounded-2xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover) cursor-pointer">Encode</button>
+                    <button type="button" (click)="decodeHtmlEntities()"
+                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Decode</button>
+                    <button type="button" (click)="swapHtmlEntities()"
+                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Swap ↑↓</button>
+                    <button type="button" (click)="copyText(htmlEntityOutput())"
+                        class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Copy Output</button>
                 </div>
             </section>
         }
 
         @if (activeTool() === 'jwt') {
-            <!-- ─── JWT Decoder ─── -->
+            <!-- ─── JWT Decoder (Live) ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
-                <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
+                <div class="flex flex-col gap-y-2 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">JWT Decoder</h2>
-                        <p class="text-sm text-(--postonsteroids-text-secondary)">Paste a JWT token to decode its header and
-                            payload. No verification — decode only.</p>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Paste a JWT (or Bearer token) to decode its header, payload, and expiry live.</p>
                     </div>
-                    <button (click)="decodeJwt()"
-                        class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
-                        <mat-icon class="text-[18px]! size-[18px]!">key</mat-icon>
-                        Decode JWT
-                    </button>
+                    @if (jwtDecoded().isValid && jwtDecoded().isExpired !== null) {
+                        <span class="px-3 py-1 rounded-full text-xs font-bold"
+                            [class.bg-red-500/15]="jwtDecoded().isExpired"
+                            [class.text-red-500]="jwtDecoded().isExpired"
+                            [class.bg-green-500/15]="!jwtDecoded().isExpired"
+                            [class.text-green-500]="!jwtDecoded().isExpired">
+                            {{ jwtDecoded().isExpired ? 'Token Expired' : 'Token Active (Not Expired)' }}
+                        </span>
+                    }
                 </div>
 
                 <textarea [value]="jwtInput()" (input)="jwtInput.set($any($event.target).value)" rows="3"
@@ -195,30 +343,38 @@
                     aria-label="JWT input"></textarea>
 
                 @if (jwtError()) {
-                <p class="mt-3 text-sm font-medium text-status-danger">{{ jwtError() }}</p>
+                    <p class="mt-3 text-sm font-medium text-status-danger">{{ jwtError() }}</p>
                 }
 
                 @if (jwtHeader() || jwtPayload()) {
-                <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                    <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Header</span>
-                            <button (click)="copyText(jwtHeader())"
-                                class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                    @if (jwtDecoded().issuedAt || jwtDecoded().expiresAt) {
+                        <div class="mt-3 flex flex-wrap gap-4 text-xs text-(--postonsteroids-text-secondary)">
+                            @if (jwtDecoded().issuedAt) {
+                                <span><strong>Issued (iat):</strong> {{ jwtDecoded().issuedAt }}</span>
+                            }
+                            @if (jwtDecoded().expiresAt) {
+                                <span><strong>Expires (exp):</strong> {{ jwtDecoded().expiresAt }}</span>
+                            }
                         </div>
-                        <pre
-                            class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 font-mono text-sm text-(--postonsteroids-text-primary) overflow-auto max-h-[200px]">{{ jwtHeader() }}</pre>
-                    </div>
-                    <div>
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Payload</span>
-                            <button (click)="copyText(jwtPayload())"
-                                class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                    }
+                    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Header</span>
+                                <button type="button" (click)="copyText(jwtHeader())"
+                                    class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <pre class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 font-mono text-sm text-(--postonsteroids-text-primary) overflow-auto max-h-[260px]">{{ jwtHeader() }}</pre>
                         </div>
-                        <pre
-                            class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 font-mono text-sm text-(--postonsteroids-text-primary) overflow-auto max-h-[200px]">{{ jwtPayload() }}</pre>
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Payload</span>
+                                <button type="button" (click)="copyText(jwtPayload())"
+                                    class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <pre class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 font-mono text-sm text-(--postonsteroids-text-primary) overflow-auto max-h-[260px]">{{ jwtPayload() }}</pre>
+                        </div>
                     </div>
-                </div>
                 }
             </section>
         }
@@ -229,17 +385,16 @@
                 <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Lorem Ipsum Generator</h2>
-                        <p class="text-sm text-(--postonsteroids-text-secondary)">Generate placeholder text for request bodies
-                            and test data.</p>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Generate placeholder text for request bodies and test data.</p>
                     </div>
                     <div class="flex items-center gap-x-3">
                         <label class="text-sm text-(--postonsteroids-text-secondary)">Paragraphs:</label>
-                        <input type="number" [value]="loremParagraphs()" (input)="loremParagraphs.set(+$any($event.target).value)"
-                            min="1" max="10"
+                        <input type="number" [value]="loremParagraphs()" (input)="loremParagraphs.set(+$any($event.target).value); generateLorem()"
+                            min="1" max="20"
                             class="w-16 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-2 py-1.5 text-sm text-(--postonsteroids-text-primary) outline-none text-center"
                             aria-label="Number of paragraphs" />
-                        <button (click)="generateLorem()"
-                            class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
+                        <button type="button" (click)="generateLorem()"
+                            class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover) cursor-pointer">
                             <mat-icon class="text-[18px]! size-[18px]!">text_fields</mat-icon>
                             Generate
                         </button>
@@ -247,31 +402,32 @@
                 </div>
 
                 @if (loremOutput()) {
-                <div class="mt-4 relative">
-                    <textarea readonly [value]="loremOutput()" rows="8"
-                        class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
-                        aria-label="Lorem ipsum output"></textarea>
-                    <button (click)="copyText(loremOutput())"
-                        class="absolute top-3 right-3 rounded-xl bg-(--postonsteroids-bg-tertiary) px-3 py-1 text-xs font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-colors">Copy</button>
-                </div>
+                    <div class="mt-4 relative">
+                        <textarea readonly [value]="loremOutput()" rows="8"
+                            class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 text-sm text-(--postonsteroids-text-primary) outline-none"
+                            aria-label="Lorem ipsum output"></textarea>
+                        <button type="button" (click)="copyText(loremOutput())"
+                            class="absolute top-3 right-3 rounded-xl bg-(--postonsteroids-bg-tertiary) px-3 py-1 text-xs font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-colors cursor-pointer">Copy</button>
+                    </div>
                 }
             </section>
         }
 
         @if (activeTool() === 'diff') {
-            <!-- ─── Text Diff ─── -->
+            <!-- ─── Text Diff (Live) ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
-                <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
+                <div class="flex flex-col gap-y-3 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Text Diff</h2>
-                        <p class="text-sm text-(--postonsteroids-text-secondary)">Compare two text blocks and highlight
-                            differences line by line.</p>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Live line-by-line comparison between two text blocks.</p>
                     </div>
-                    <button (click)="computeDiff()"
-                        class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
-                        <mat-icon class="text-[18px]! size-[18px]!">compare_arrows</mat-icon>
-                        Compare
-                    </button>
+                    @if (diffResult().length > 0) {
+                        <div class="flex items-center gap-x-3 text-xs font-mono font-bold">
+                            <span class="text-status-success">+{{ diffStats().added }} added</span>
+                            <span class="text-status-danger">−{{ diffStats().removed }} removed</span>
+                            <span class="text-(--postonsteroids-text-muted)">{{ diffStats().same }} unchanged</span>
+                        </div>
+                    }
                 </div>
 
                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -292,17 +448,16 @@
                 </div>
 
                 @if (diffResult().length > 0) {
-                <div
-                    class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 font-mono text-sm overflow-auto max-h-[300px]">
-                    @for (line of diffResult(); track $index) {
-                    <div class="px-2 py-0.5 rounded"
-                        [class.diff-same]="line.type === 'same'"
-                        [class.diff-added]="line.type === 'added'"
-                        [class.diff-removed]="line.type === 'removed'">
-                        <span class="inline-block w-4 mr-2 text-center opacity-60 select-none">{{ line.type === 'added' ? '+' : line.type === 'removed' ? '−' : ' ' }}</span>{{ line.text || ' ' }}
+                    <div class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 font-mono text-sm overflow-auto max-h-[320px]">
+                        @for (line of diffResult(); track $index) {
+                            <div class="px-2 py-0.5 rounded"
+                                [class.diff-same]="line.type === 'same'"
+                                [class.diff-added]="line.type === 'added'"
+                                [class.diff-removed]="line.type === 'removed'">
+                                <span class="inline-block w-4 mr-2 text-center opacity-60 select-none">{{ line.type === 'added' ? '+' : line.type === 'removed' ? '−' : ' ' }}</span>{{ line.text || ' ' }}
+                            </div>
+                        }
                     </div>
-                    }
-                </div>
                 }
             </section>
         }
@@ -312,23 +467,30 @@
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Regex Builder &amp; Tester</h2>
-                        <p class="text-sm text-(--postonsteroids-text-secondary)">Build, compose, and test regular expressions with professional templates.</p>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Regex Builder &amp; Live Tester</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Build, compose, test, and replace regular expressions in real time.</p>
                     </div>
-                    
+
                     <div class="flex p-1 rounded-2xl bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border)">
-                        <button (click)="regexActiveSection.set('builder')" 
+                        <button type="button" (click)="regexActiveSection.set('both')"
+                            [class.bg-(--postonsteroids-bg-tertiary)]="regexActiveSection() === 'both'"
+                            [class.text-(--postonsteroids-text-primary)]="regexActiveSection() === 'both'"
+                            [class.text-(--postonsteroids-text-secondary)]="regexActiveSection() !== 'both'"
+                            class="px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-colors cursor-pointer">
+                            Split View
+                        </button>
+                        <button type="button" (click)="regexActiveSection.set('builder')"
                             [class.bg-(--postonsteroids-bg-tertiary)]="regexActiveSection() === 'builder'"
                             [class.text-(--postonsteroids-text-primary)]="regexActiveSection() === 'builder'"
                             [class.text-(--postonsteroids-text-secondary)]="regexActiveSection() !== 'builder'"
-                            class="px-4 py-1.5 text-sm font-semibold rounded-xl transition-colors cursor-pointer">
+                            class="px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-colors cursor-pointer">
                             Builder
                         </button>
-                        <button (click)="regexActiveSection.set('tester')"
+                        <button type="button" (click)="regexActiveSection.set('tester')"
                             [class.bg-(--postonsteroids-bg-tertiary)]="regexActiveSection() === 'tester'"
                             [class.text-(--postonsteroids-text-primary)]="regexActiveSection() === 'tester'"
                             [class.text-(--postonsteroids-text-secondary)]="regexActiveSection() !== 'tester'"
-                            class="px-4 py-1.5 text-sm font-semibold rounded-xl transition-colors cursor-pointer">
+                            class="px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-colors cursor-pointer">
                             Tester
                         </button>
                     </div>
@@ -336,77 +498,186 @@
 
                 <!-- Current Pattern Bar -->
                 <div class="mt-6 flex flex-col gap-y-2">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
                         <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Current Pattern</span>
-                        <div class="flex items-center gap-x-2">
+                        <div class="flex flex-wrap items-center gap-x-2">
                             @if (regexIsValid() === true) {
                                 <span class="text-[11px] font-semibold text-status-success flex items-center gap-x-1">
                                     <mat-icon class="text-[14px]! size-[14px]!">check_circle</mat-icon> Valid
                                 </span>
+                                @if (regexInput()) {
+                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent)">
+                                        {{ regexMatches().length }} match{{ regexMatches().length !== 1 ? 'es' : '' }}
+                                    </span>
+                                }
                             }
                             @if (regexIsValid() === false) {
                                 <span class="text-[11px] font-semibold text-status-danger flex items-center gap-x-1">
                                     <mat-icon class="text-[14px]! size-[14px]!">error</mat-icon> Invalid
                                 </span>
                             }
-                            <button (click)="undoRegexBlock()" title="Undo last block"
+                            <button type="button" (click)="undoRegexBlock()" title="Undo last regex change" aria-label="Undo last regex change"
+                                [disabled]="regexBlockHistory().length === 0"
                                 [class.opacity-40]="regexBlockHistory().length === 0"
                                 [class.cursor-not-allowed]="regexBlockHistory().length === 0"
                                 class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
                                 <mat-icon class="text-[16px]! size-[16px]!">undo</mat-icon>
                             </button>
-                            <button (click)="clearRegexPattern()" title="Clear pattern"
+                            <button type="button" (click)="clearRegexPattern()" title="Clear pattern" aria-label="Clear pattern"
                                 class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
                                 <mat-icon class="text-[16px]! size-[16px]!">delete_sweep</mat-icon>
                             </button>
-                            <button (click)="copyText(regexPattern())" title="Copy pattern"
-                                class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
-                                <mat-icon class="text-[16px]! size-[16px]!">content_copy</mat-icon>
+                            <button type="button" (click)="copyText(regexPattern())" title="Copy raw pattern"
+                                class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
+                                Copy Pattern
+                            </button>
+                            <button type="button" (click)="copyText(regexLiteral())" title="Copy JS literal (/pattern/flags)"
+                                class="px-2 py-1 rounded-lg text-[11px] font-mono font-semibold bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) transition-colors cursor-pointer">
+                                Copy /literal/
                             </button>
                         </div>
                     </div>
+
                     <div class="flex items-center gap-x-2">
                         <span class="text-sm text-(--postonsteroids-text-muted) shrink-0">/</span>
-                        <input type="text" [value]="regexPattern()" (input)="regexPattern.set($any($event.target).value)"
+                        <input type="text" [value]="regexPattern()" (input)="onRegexPatternManualInput($any($event.target).value)"
                             placeholder="[a-z]+@[a-z]+\.[a-z]+"
-                            class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
+                            class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) placeholder:text-(--postonsteroids-text-muted)"
                             aria-label="Regex pattern" />
                         <span class="text-sm text-(--postonsteroids-text-muted) shrink-0">/</span>
-                        <input type="text" [value]="regexFlags()" (input)="regexFlags.set($any($event.target).value)"
+                        <input type="text" [value]="regexFlags()" (input)="onRegexFlagsInput($any($event.target).value)"
                             placeholder="g"
-                            class="w-20 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none text-center placeholder:text-(--postonsteroids-text-muted)"
+                            class="w-24 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) text-center placeholder:text-(--postonsteroids-text-muted)"
                             aria-label="Regex flags" />
                     </div>
 
+                    @if (regexError()) {
+                        <p class="text-xs font-medium text-status-danger">{{ regexError() }}</p>
+                    }
+
                     <!-- Flag Reference Chips -->
-                    <div class="flex flex-wrap gap-1.5 mt-1">
-                        @for (ref of regexFlagReference; track ref.flag) {
-                            <button (click)="toggleRegexFlag(ref.flag)" [title]="ref.desc"
-                                class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer"
-                                [class.bg-(--postonsteroids-accent)]="regexFlags().includes(ref.flag)"
-                                [class.text-white]="regexFlags().includes(ref.flag)"
-                                [class.border-(--postonsteroids-accent)]="regexFlags().includes(ref.flag)"
-                                [class.bg-(--postonsteroids-bg-primary)]="!regexFlags().includes(ref.flag)"
-                                [class.text-(--postonsteroids-text-secondary)]="!regexFlags().includes(ref.flag)"
-                                [class.border-(--postonsteroids-border)]="!regexFlags().includes(ref.flag)">
-                                {{ ref.flag }}
-                            </button>
-                        }
+                    <div class="flex flex-wrap items-center justify-between gap-2 mt-1">
+                        <div class="flex flex-wrap gap-1.5">
+                            @for (ref of regexFlagReference; track ref.flag) {
+                                <button type="button" (click)="toggleRegexFlag(ref.flag)" [title]="ref.desc"
+                                    class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer"
+                                    [class.bg-(--postonsteroids-accent)]="regexFlags().includes(ref.flag)"
+                                    [class.text-white]="regexFlags().includes(ref.flag)"
+                                    [class.border-(--postonsteroids-accent)]="regexFlags().includes(ref.flag)"
+                                    [class.bg-(--postonsteroids-bg-primary)]="!regexFlags().includes(ref.flag)"
+                                    [class.text-(--postonsteroids-text-secondary)]="!regexFlags().includes(ref.flag)"
+                                    [class.border-(--postonsteroids-border)]="!regexFlags().includes(ref.flag)">
+                                    {{ ref.flag }}
+                                </button>
+                            }
+                        </div>
+
+                        <!-- Configurable Quantifier Bounds (n, m) -->
+                        <div class="flex items-center gap-x-2 text-xs text-(--postonsteroids-text-secondary)">
+                            <span>Quantifier bounds:</span>
+                            <label class="flex items-center gap-x-1">
+                                <span class="font-mono">n=</span>
+                                <input type="number" min="1" max="100" [value]="regexQuantifierN()"
+                                    (input)="regexQuantifierN.set(+$any($event.target).value)"
+                                    class="w-14 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-1.5 py-0.5 text-center font-mono text-xs text-(--postonsteroids-text-primary) outline-none" />
+                            </label>
+                            <label class="flex items-center gap-x-1">
+                                <span class="font-mono">m=</span>
+                                <input type="number" min="1" max="100" [value]="regexQuantifierM()"
+                                    (input)="regexQuantifierM.set(+$any($event.target).value)"
+                                    class="w-14 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-1.5 py-0.5 text-center font-mono text-xs text-(--postonsteroids-text-primary) outline-none" />
+                            </label>
+                        </div>
                     </div>
                 </div>
 
-                @if (regexActiveSection() === 'builder') {
-                    <div class="mt-6 flex flex-col gap-y-6">
+                @if (regexActiveSection() === 'tester' || regexActiveSection() === 'both') {
+                    <!-- ── Live Tester & Replace Panel ── -->
+                    <div class="mt-6 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                        <div class="grid gap-4 lg:grid-cols-2">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Test Text</span>
+                                    @if (regexMatches().length > 0) {
+                                        <button type="button" (click)="copyAllRegexMatches()"
+                                            class="text-[11px] font-semibold text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                                            Copy All {{ regexMatches().length }} Matches
+                                        </button>
+                                    }
+                                </div>
+                                <textarea [value]="regexInput()" (input)="regexInput.set($any($event.target).value)" rows="5"
+                                    placeholder="Paste or type test text here (or click a Common Template below to load sample text)..."
+                                    class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) placeholder:text-(--postonsteroids-text-muted)"
+                                    aria-label="Regex test input"></textarea>
+                            </div>
 
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Live Highlight &amp; Matches</span>
+                                    <span class="text-[11px] font-mono text-(--postonsteroids-text-secondary)">{{ regexLiteral() }}</span>
+                                </div>
+                                <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) overflow-auto min-h-[122px] max-h-[160px] whitespace-pre-wrap break-words regex-highlight-container"
+                                    [innerHTML]="regexHighlightedInput()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Replacement Preview -->
+                        <div class="mt-4 grid gap-3 lg:grid-cols-2 items-start">
+                            <div>
+                                <label class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider mb-1.5 block">Replace With (supports $1, $&amp;, $&lt;name&gt;)</label>
+                                <input type="text" [value]="regexReplaceWith()" (input)="regexReplaceWith.set($any($event.target).value)"
+                                    placeholder="e.g. [$&] or $1"
+                                    aria-label="Replacement pattern"
+                                    class="w-full rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
+                            </div>
+                            @if (regexReplaceWith() && regexInput()) {
+                                <div>
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Replaced Result</span>
+                                        <button type="button" (click)="copyText(regexReplacedOutput())"
+                                            class="text-[11px] font-semibold text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy Replaced</button>
+                                    </div>
+                                    <div class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 font-mono text-xs text-(--postonsteroids-text-primary) max-h-[100px] overflow-auto whitespace-pre-wrap break-words">{{ regexReplacedOutput() }}</div>
+                                </div>
+                            }
+                        </div>
+
+                        @if (regexMatches().length > 0) {
+                            <div class="mt-4 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) overflow-hidden">
+                                <div class="px-3 py-1.5 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-between">
+                                    <span class="text-[11px] uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Match Details ({{ regexMatches().length }})</span>
+                                </div>
+                                <div class="p-3 space-y-1.5 max-h-[180px] overflow-auto">
+                                    @for (m of regexMatches(); track $index) {
+                                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-primary) text-xs">
+                                            <span class="text-[10px] font-mono text-(--postonsteroids-text-muted) shrink-0">[{{ m.index }}..{{ m.endIndex }}]</span>
+                                            <code class="font-mono font-bold text-(--postonsteroids-accent) break-all">"{{ m.match }}"</code>
+                                            @if (m.groups.length > 0) {
+                                                <span class="text-[11px] font-mono text-(--postonsteroids-text-secondary)">groups: [{{ m.groups.join(', ') }}]</span>
+                                            }
+                                            @for (ng of namedGroupEntries(m.namedGroups); track ng.key) {
+                                                <span class="px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-[10px] font-mono text-(--postonsteroids-text-primary)">{{ ng.key }}="{{ ng.value }}"</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (regexActiveSection() === 'builder' || regexActiveSection() === 'both') {
+                    <div class="mt-6 flex flex-col gap-y-6">
                         <!-- ── Composition Workspace ── -->
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
                             <div class="flex items-center justify-between mb-3">
                                 <div class="flex items-center gap-x-2">
                                     <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-accent)">construction</mat-icon>
-                                    <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Composition Workspace</span>
+                                    <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Composition Workspace (click any segment to edit inline)</span>
                                 </div>
                                 @if (regexComposition().length > 0) {
-                                    <button (click)="clearComposition()"
+                                    <button type="button" (click)="clearComposition()"
                                         class="inline-flex items-center gap-x-1 text-[11px] font-semibold text-status-danger hover:opacity-80 transition-colors cursor-pointer">
                                         <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
                                         Clear All
@@ -415,121 +686,66 @@
                             </div>
 
                             @if (regexComposition().length === 0) {
-                                <div class="flex items-center justify-center py-6 border-2 border-dashed border-(--postonsteroids-border) rounded-xl">
-                                    <span class="text-[12px] text-(--postonsteroids-text-muted) italic">Click building blocks below to compose your regex</span>
+                                <div class="flex items-center justify-center py-5 border-2 border-dashed border-(--postonsteroids-border) rounded-xl">
+                                    <span class="text-[12px] text-(--postonsteroids-text-muted) italic">Click building blocks or templates below to compose your regex</span>
                                 </div>
                             } @else {
                                 <div class="flex flex-wrap gap-2 p-3 rounded-xl border border-(--postonsteroids-border)/50 bg-(--postonsteroids-bg-secondary) min-h-[48px]">
                                     @for (segment of regexComposition(); track segment.id; let i = $index) {
-                                        <div class="group/seg flex items-center gap-x-1 pl-3 pr-1 py-1.5 rounded-xl border border-(--postonsteroids-accent)/30 bg-(--postonsteroids-accent)/5 transition-all hover:border-(--postonsteroids-accent)/60 hover:bg-(--postonsteroids-accent)/10">
-                                            <!-- Move left -->
+                                        <div class="group/seg flex items-center gap-x-1 pl-2.5 pr-1 py-1 rounded-xl border border-(--postonsteroids-accent)/30 bg-(--postonsteroids-accent)/5 transition-all hover:border-(--postonsteroids-accent)/60 hover:bg-(--postonsteroids-accent)/10">
                                             @if (i > 0) {
-                                                <button (click)="moveCompositionSegment(i, -1)"
-                                                    class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)"
+                                                <button type="button" (click)="moveCompositionSegment(i, -1)"
+                                                    class="opacity-60 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)"
                                                     title="Move left" aria-label="Move segment left">
                                                     <mat-icon class="text-[12px]! size-[12px]!">chevron_left</mat-icon>
                                                 </button>
                                             }
-                                            <code class="font-mono text-[12px] font-bold text-(--postonsteroids-accent)">{{ segment.label }}</code>
+                                            <input type="text"
+                                                [value]="segment.pattern"
+                                                (input)="updateCompositionSegmentPattern(segment.id, $any($event.target).value)"
+                                                [style.width.ch]="(segment.pattern.length || 1) + 2"
+                                                aria-label="Edit regex segment"
+                                                class="min-w-[3ch] max-w-[32ch] bg-transparent font-mono text-[12px] font-bold text-(--postonsteroids-accent) outline-none border-b border-transparent focus:border-(--postonsteroids-accent)" />
                                             <span class="text-[10px] text-(--postonsteroids-text-secondary) hidden sm:inline">{{ segment.desc }}</span>
-                                            <!-- Move right -->
                                             @if (i < regexComposition().length - 1) {
-                                                <button (click)="moveCompositionSegment(i, 1)"
-                                                    class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)"
+                                                <button type="button" (click)="moveCompositionSegment(i, 1)"
+                                                    class="opacity-60 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary)"
                                                     title="Move right" aria-label="Move segment right">
                                                     <mat-icon class="text-[12px]! size-[12px]!">chevron_right</mat-icon>
                                                 </button>
                                             }
-                                            <!-- Remove -->
-                                            <button (click)="removeCompositionSegment(segment.id)"
-                                                class="opacity-0 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-red-500/20 transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-status-danger ml-0.5"
+                                            <button type="button" (click)="removeCompositionSegment(segment.id)"
+                                                class="opacity-60 group-hover/seg:opacity-100 p-0.5 rounded hover:bg-red-500/20 transition-all cursor-pointer text-(--postonsteroids-text-muted) hover:text-status-danger ml-0.5"
                                                 title="Remove segment" aria-label="Remove segment">
                                                 <mat-icon class="text-[12px]! size-[12px]!">close</mat-icon>
                                             </button>
                                         </div>
                                     }
                                 </div>
-
-                                <!-- Composed output preview -->
-                                <div class="mt-3 flex items-center gap-x-2">
-                                    <span class="text-[11px] text-(--postonsteroids-text-muted) shrink-0">Composed:</span>
-                                    <code class="text-[12px] font-mono text-(--postonsteroids-accent) break-all flex-1 bg-(--postonsteroids-bg-tertiary) px-3 py-1.5 rounded-lg border border-(--postonsteroids-border)/50">{{ regexComposedPattern() }}</code>
-                                </div>
                             }
                         </div>
 
                         <!-- ── Building Blocks Palette ── -->
                         <div>
-                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider mb-3 block">Building Blocks</span>
+                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider mb-3 block">Building Blocks &amp; Templates</span>
                             <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                                @for (blockGroup of regexBlocks; track blockGroup.category) {
+                                @for (blockGroup of regexBlocks(); track blockGroup.category) {
                                     <div class="flex flex-col gap-y-3">
                                         <h3 class="text-sm font-bold text-(--postonsteroids-text-primary)">{{ blockGroup.category }}</h3>
                                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                             @for (item of blockGroup.items; track item.label) {
-                                                <div (click)="blockGroup.category === 'Common Templates' ? useTemplateAsComposition(item) : addCompositionSegment(item)"
-                                                    class="flex flex-col p-2.5 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) cursor-pointer hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-colors group">
+                                                <button type="button"
+                                                    (click)="blockGroup.category === 'Common Templates' ? useTemplateAsComposition(item) : addCompositionSegment(item)"
+                                                    class="flex flex-col text-left p-2.5 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) cursor-pointer hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-colors group">
                                                     <code class="font-mono text-[13px] font-bold text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) break-all">{{ item.label }}</code>
                                                     <span class="text-[11px] text-(--postonsteroids-text-secondary) mt-1">{{ item.desc }}</span>
-                                                </div>
+                                                </button>
                                             }
                                         </div>
                                     </div>
                                 }
                             </div>
                         </div>
-                    </div>
-                }
-
-                @if (regexActiveSection() === 'tester') {
-                    <div class="mt-6">
-                        <div class="flex items-center justify-between mb-3">
-                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">Test Text</span>
-                            <button (click)="testRegex()"
-                                class="inline-flex items-center gap-x-1.5 rounded-full bg-(--postonsteroids-accent) px-3 py-1.5 text-[12px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover) cursor-pointer">
-                                <mat-icon class="text-[16px]! size-[16px]!">search</mat-icon>
-                                Run Test
-                            </button>
-                        </div>
-                        <textarea [value]="regexInput()" (input)="regexInput.set($any($event.target).value)" rows="5"
-                            placeholder="Input text to test against..."
-                            class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
-                            aria-label="Regex test input"></textarea>
-
-                        <!-- Live Highlighted Matches -->
-                        @if (regexPattern() && regexInput()) {
-                            <div class="mt-3">
-                                <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider mb-2 block">Live Highlight</span>
-                                <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) overflow-auto max-h-[200px] whitespace-pre-wrap break-words regex-highlight-container"
-                                    [innerHTML]="regexHighlightedInput()">
-                                </div>
-                            </div>
-                        }
-
-                        @if (regexError()) {
-                            <p class="mt-3 text-sm font-medium text-status-danger">{{ regexError() }}</p>
-                        }
-
-                        @if (regexMatches().length > 0) {
-                            <div class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) overflow-hidden">
-                                <div class="px-4 py-2 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-between">
-                                    <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider">{{ regexMatches().length }} match{{ regexMatches().length !== 1 ? 'es' : '' }}</span>
-                                    <button (click)="copyAllRegexMatches()"
-                                        class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy All</button>
-                                </div>
-                                <div class="p-4 space-y-2 max-h-[200px] overflow-auto">
-                                    @for (m of regexMatches(); track $index) {
-                                        <div class="flex items-center gap-x-3 px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-secondary) text-sm">
-                                            <span class="text-[10px] font-mono text-(--postonsteroids-text-muted) shrink-0 min-w-[50px]">idx: {{ m.index }}</span>
-                                            <code class="font-mono text-(--postonsteroids-accent) break-all">"{{ m.match }}"</code>
-                                            @if (m.groups.length > 0) {
-                                                <span class="text-[10px] text-(--postonsteroids-text-muted)">groups: {{ m.groups.join(', ') }}</span>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        }
                     </div>
                 }
             </section>
@@ -540,12 +756,10 @@
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-2">
                     <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Color Converter</h2>
-                    <p class="text-sm text-(--postonsteroids-text-secondary)">Convert between HEX, RGB, and HSL color formats.
-                    </p>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Convert between HEX, RGB, and HSL color formats.</p>
                 </div>
 
                 <div class="mt-4 flex flex-wrap items-start gap-6">
-                    <!-- Color Preview -->
                     <div class="flex flex-col items-center gap-y-2">
                         <div class="w-20 h-20 rounded-2xl border border-(--postonsteroids-border) shadow-inner"
                             [style.background]="colorHex()"></div>
@@ -554,7 +768,6 @@
                             aria-label="Color picker" />
                     </div>
 
-                    <!-- Values -->
                     <div class="flex-1 grid gap-3 sm:grid-cols-3">
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
                             <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">HEX</span>
@@ -563,7 +776,7 @@
                                     (input)="updateColorFromHex($any($event.target).value)"
                                     class="flex-1 bg-transparent font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
                                     aria-label="HEX value" />
-                                <button (click)="copyText(colorHex())"
+                                <button type="button" (click)="copyText(colorHex())"
                                     class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer shrink-0">Copy</button>
                             </div>
                         </div>
@@ -572,7 +785,7 @@
                             <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary)">
                                 rgb({{ colorRgb().r }}, {{ colorRgb().g }}, {{ colorRgb().b }})
                             </p>
-                            <button (click)="copyText('rgb(' + colorRgb().r + ', ' + colorRgb().g + ', ' + colorRgb().b + ')')"
+                            <button type="button" (click)="copyText('rgb(' + colorRgb().r + ', ' + colorRgb().g + ', ' + colorRgb().b + ')')"
                                 class="mt-1 text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
                         </div>
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
@@ -580,7 +793,7 @@
                             <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary)">
                                 hsl({{ colorHsl().h }}, {{ colorHsl().s }}%, {{ colorHsl().l }}%)
                             </p>
-                            <button (click)="copyText('hsl(' + colorHsl().h + ', ' + colorHsl().s + '%, ' + colorHsl().l + '%)')"
+                            <button type="button" (click)="copyText('hsl(' + colorHsl().h + ', ' + colorHsl().s + '%, ' + colorHsl().l + '%)')"
                                 class="mt-1 text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
                         </div>
                     </div>
@@ -593,7 +806,7 @@
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-2">
                     <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Markdown Preview</h2>
-                    <p class="text-sm text-(--postonsteroids-text-secondary)">Write markdown and see a live rendered preview.</p>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Write markdown and see a live XSS-safe rendered preview.</p>
                 </div>
 
                 <div class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -616,11 +829,10 @@
                     <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Current Timestamp</h2>
-                            <p class="text-sm text-(--postonsteroids-text-secondary)">View the current date and time in different
-                                formats.</p>
+                            <p class="text-sm text-(--postonsteroids-text-secondary)">View and copy the current date and time in different formats.</p>
                         </div>
-                        <button (click)="refreshNow()"
-                            class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-[13px] font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover)">
+                        <button type="button" (click)="refreshNow()"
+                            class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-[13px] font-semibold text-(--postonsteroids-text-primary) transition-colors duration-200 hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
                             <mat-icon class="text-[18px]! size-[18px]!">refresh</mat-icon>
                             Refresh
                         </button>
@@ -628,272 +840,366 @@
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
-                            <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Local</span>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Local</span>
+                                <button type="button" (click)="copyText(currentLocal())" class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
                             <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentLocal() }}</p>
                         </div>
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
-                            <span class="text-xs uppercase text-(--postonsteroids-text-muted)">UTC ISO</span>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">UTC ISO</span>
+                                <button type="button" (click)="copyText(currentIso())" class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
                             <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentIso() }}</p>
                         </div>
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
-                            <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Epoch (ms)</span>
-                            <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentEpochMs() }}</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Epoch (ms)</span>
+                                <button type="button" (click)="copyText('' + currentEpochMs())" class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="mt-2 text-sm font-mono font-semibold text-(--postonsteroids-text-primary)">{{ currentEpochMs() }}</p>
                         </div>
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
-                            <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Epoch (sec)</span>
-                            <p class="mt-2 text-sm font-semibold text-(--postonsteroids-text-primary)">{{ currentEpochSec() }}</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs uppercase text-(--postonsteroids-text-muted)">Epoch (sec)</span>
+                                <button type="button" (click)="copyText('' + currentEpochSec())" class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="mt-2 text-sm font-mono font-semibold text-(--postonsteroids-text-primary)">{{ currentEpochSec() }}</p>
                         </div>
                     </div>
                 </section>
 
                 <!-- ─── Date / Timestamp Converters ─── -->
                 <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
-                    <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Date / Timestamp Converters</h2>
-                            <p class="text-sm text-(--postonsteroids-text-secondary)">Convert between human readable dates and
-                                integer epoch values.</p>
-                        </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Date / Timestamp Converters</h2>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Convert between local dates and epoch values (auto-detects seconds, milliseconds, microseconds, nanoseconds).</p>
                     </div>
 
                     <div class="mt-6 grid gap-4 lg:grid-cols-2">
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
-                            <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-(--postonsteroids-text-muted)">Date to
-                                Epoch</h3>
+                            <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-(--postonsteroids-text-muted)">Date to Epoch</h3>
                             <div class="mt-3 space-y-3">
-                                <div class="grid gap-2 sm:grid-cols-2">
-                                    <label class="text-[12px] font-medium text-(--postonsteroids-text-secondary)">Date</label>
+                                <div class="grid gap-2 sm:grid-cols-2 items-center">
+                                    <label class="text-[12px] font-medium text-(--postonsteroids-text-secondary)">Date (Local)</label>
                                     <input type="date" [value]="dateValue()" (input)="dateValue.set($any($event.target).value)"
                                         class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 text-sm text-(--postonsteroids-text-primary) outline-none" />
                                 </div>
-                                <div class="grid gap-2 sm:grid-cols-2">
-                                    <label
-                                        class="text-[12px] font-medium text-(--postonsteroids-text-secondary)">DateTime</label>
-                                    <input type="datetime-local" [value]="datetimeValue()"
+                                <div class="grid gap-2 sm:grid-cols-2 items-center">
+                                    <label class="text-[12px] font-medium text-(--postonsteroids-text-secondary)">DateTime (Local)</label>
+                                    <input type="datetime-local" step="1" [value]="datetimeValue()"
                                         (input)="datetimeValue.set($any($event.target).value)"
                                         class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 text-sm text-(--postonsteroids-text-primary) outline-none" />
                                 </div>
                             </div>
 
                             <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                                <div
-                                    class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
-                                    <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Epoch ms</span>
-                                    <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{
-                                        dateEpochMs() }}</p>
+                                <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Date Epoch ms</span>
+                                        <button type="button" (click)="copyText('' + dateEpochMs())" class="text-[10px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                                    </div>
+                                    <p class="mt-1 font-mono text-sm font-semibold text-(--postonsteroids-text-primary)">{{ dateEpochMs() }}</p>
                                 </div>
-                                <div
-                                    class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
-                                    <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Epoch sec</span>
-                                    <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{
-                                        dateEpochSec() }}</p>
+                                <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Date Epoch sec</span>
+                                        <button type="button" (click)="copyText('' + dateEpochSec())" class="text-[10px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                                    </div>
+                                    <p class="mt-1 font-mono text-sm font-semibold text-(--postonsteroids-text-primary)">{{ dateEpochSec() }}</p>
                                 </div>
                             </div>
 
-                            <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                                <div
-                                    class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
-                                    <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">DateTime ms</span>
-                                    <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{
-                                        datetimeEpochMs() }}</p>
+                            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">DateTime ms</span>
+                                        <button type="button" (click)="copyText('' + datetimeEpochMs())" class="text-[10px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                                    </div>
+                                    <p class="mt-1 font-mono text-sm font-semibold text-(--postonsteroids-text-primary)">{{ datetimeEpochMs() }}</p>
                                 </div>
-                                <div
-                                    class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
-                                    <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">DateTime sec</span>
-                                    <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{
-                                        datetimeEpochSec() }}</p>
+                                <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">DateTime sec</span>
+                                        <button type="button" (click)="copyText('' + datetimeEpochSec())" class="text-[10px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                                    </div>
+                                    <p class="mt-1 font-mono text-sm font-semibold text-(--postonsteroids-text-primary)">{{ datetimeEpochSec() }}</p>
                                 </div>
                             </div>
                         </div>
 
                         <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
-                            <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-(--postonsteroids-text-muted)">Epoch to
-                                Date</h3>
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-(--postonsteroids-text-muted)">Epoch to Date</h3>
+                                @if (epochParsed().detectedUnit) {
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent)">
+                                        Detected: {{ epochParsed().detectedUnit }}
+                                    </span>
+                                }
+                            </div>
                             <div class="mt-3 space-y-3">
-                                <label
-                                    class="block text-[12px] font-medium text-(--postonsteroids-text-secondary)">Epoch value</label>
+                                <label class="block text-[12px] font-medium text-(--postonsteroids-text-secondary)">Epoch value</label>
                                 <input type="text" [value]="epochValue()"
                                     (input)="updateEpochValue($any($event.target).value)"
                                     placeholder="e.g. 1680000000000 or 1680000000"
-                                    class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 text-sm text-(--postonsteroids-text-primary) outline-none" />
+                                    class="w-full rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
                             </div>
 
-                            <div
-                                class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
-                                <span class="text-[11px] uppercase text-(--postonsteroids-text-muted)">Converted</span>
-                                <p class="mt-2 break-words text-sm font-semibold text-(--postonsteroids-text-primary)">{{
-                                    epochToDate() }}</p>
-                            </div>
+                            @if (epochParsed().isValid) {
+                                <div class="mt-4 space-y-2">
+                                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3 flex items-center justify-between">
+                                        <div>
+                                            <span class="text-[10px] uppercase text-(--postonsteroids-text-muted)">UTC ISO</span>
+                                            <p class="font-mono text-xs font-semibold text-(--postonsteroids-text-primary)">{{ epochParsed().utcIso }}</p>
+                                        </div>
+                                        <button type="button" (click)="copyText(epochParsed().utcIso)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                                    </div>
+                                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3 flex items-center justify-between">
+                                        <div>
+                                            <span class="text-[10px] uppercase text-(--postonsteroids-text-muted)">Local ({{ epochParsed().relative }})</span>
+                                            <p class="font-mono text-xs font-semibold text-(--postonsteroids-text-primary)">{{ epochParsed().localString }}</p>
+                                        </div>
+                                        <button type="button" (click)="copyText(epochParsed().localString)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                                    </div>
+                                </div>
+                            } @else if (epochValue()) {
+                                <div class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-3">
+                                    <p class="text-sm font-semibold text-status-danger">{{ epochToDate() }}</p>
+                                </div>
+                            }
                         </div>
                     </div>
                 </section>
             </div>
         }
+
         @if (activeTool() === 'url-parse') {
             <!-- ─── URL Parser ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-2">
                     <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">URL Parser</h2>
-                    <p class="text-sm text-(--postonsteroids-text-secondary)">Break down a URL into its constituent parts.</p>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Break down a URL into its constituent components and query parameters.</p>
                 </div>
 
                 <div class="mt-4">
                     <textarea [value]="urlParseInput()" (input)="urlParseInput.set($any($event.target).value)" rows="3"
-                        placeholder="https://example.com:8080/path/to/resource?query=1#hash"
+                        placeholder="https://example.com:8080/path/to/resource?query=1&amp;filter=active#hash"
                         class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
                         aria-label="URL Parse input"></textarea>
                 </div>
 
-                @if (urlParseResult()) {
-                <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
-                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Protocol</span>
-                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.protocol }}</p>
+                @if (urlParseResult(); as parsed) {
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Protocol</span>
+                            <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ parsed.protocol }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Host</span>
+                            <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ parsed.host }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Pathname</span>
+                            <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ parsed.pathname }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Search</span>
+                            <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ parsed.search || '(empty)' }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Hash</span>
+                            <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ parsed.hash || '(empty)' }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Origin</span>
+                            <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ parsed.origin }}</p>
+                        </div>
                     </div>
-                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
-                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Host</span>
-                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.host }}</p>
-                    </div>
-                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
-                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Pathname</span>
-                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.pathname }}</p>
-                    </div>
-                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
-                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Search</span>
-                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.search || '(empty)' }}</p>
-                    </div>
-                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
-                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Hash</span>
-                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.hash || '(empty)' }}</p>
-                    </div>
-                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
-                        <span class="text-[11px] uppercase text-(--postonsteroids-text-muted) font-semibold">Origin</span>
-                        <p class="mt-2 font-mono text-sm text-(--postonsteroids-text-primary) break-words">{{ urlParseResult()?.origin }}</p>
-                    </div>
-                </div>
+
+                    @if (urlParsedQueryParams().length > 0) {
+                        <div class="mt-4 rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4">
+                            <span class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted) tracking-wider block mb-2">Query Parameters ({{ urlParsedQueryParams().length }})</span>
+                            <div class="space-y-1.5">
+                                @for (qp of urlParsedQueryParams(); track $index) {
+                                    <div class="flex items-center justify-between gap-3 px-3 py-1.5 rounded-xl bg-(--postonsteroids-bg-secondary) font-mono text-xs">
+                                        <span class="font-bold text-(--postonsteroids-accent)">{{ qp.key }}</span>
+                                        <span class="flex-1 text-(--postonsteroids-text-primary) break-all">{{ qp.value }}</span>
+                                        <button type="button" (click)="copyText(qp.value)" class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
                 }
             </section>
         }
 
         @if (activeTool() === 'case') {
-            <!-- ─── Text Case Converter ─── -->
+            <!-- ─── Text Case Converter (All Formats Live) ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-2">
                     <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Text Case Converter</h2>
-                    <p class="text-sm text-(--postonsteroids-text-secondary)">Convert text between various naming conventions.</p>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Type once to convert across all naming conventions simultaneously (handles camelCase, acronyms, snake_case, and phrases).</p>
                 </div>
 
-                <div class="mt-4 grid gap-4 lg:grid-cols-2">
-                    <textarea [value]="textCaseInput()" (input)="textCaseInput.set($any($event.target).value)" rows="5"
-                        placeholder="Type something here..."
-                        class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
-                        aria-label="Text Case input"></textarea>
-                    <textarea readonly [value]="textCaseOutput()" rows="5"
-                        class="w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"
-                        aria-label="Text Case output"></textarea>
-                </div>
+                <textarea [value]="textCaseInput()" (input)="textCaseInput.set($any($event.target).value)" rows="3"
+                    placeholder="e.g. helloWorld XMLHttpRequest foo_bar-baz"
+                    class="mt-4 w-full resize-y rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none placeholder:text-(--postonsteroids-text-muted)"
+                    aria-label="Text Case input"></textarea>
 
-                <div class="mt-4 flex flex-wrap gap-2">
-                    <button (click)="convertTextCase('upper')" class="rounded-2xl bg-(--postonsteroids-accent) px-3 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">UPPERCASE</button>
-                    <button (click)="convertTextCase('lower')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">lowercase</button>
-                    <button (click)="convertTextCase('camel')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">camelCase</button>
-                    <button (click)="convertTextCase('snake')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">snake_case</button>
-                    <button (click)="convertTextCase('kebab')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">kebab-case</button>
-                    <button (click)="convertTextCase('pascal')" class="rounded-2xl bg-(--postonsteroids-bg-tertiary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">PascalCase</button>
-                    <button (click)="copyText(textCaseOutput())" class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy Output</button>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    @for (item of textCaseItems(); track item.id) {
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 flex flex-col justify-between">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[11px] font-bold text-(--postonsteroids-text-muted)">{{ item.label }}</span>
+                                <button type="button" (click)="copyText(item.value)"
+                                    class="text-[11px] font-semibold text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="font-mono text-xs text-(--postonsteroids-text-primary) break-all min-h-[18px]">{{ item.value || '—' }}</p>
+                        </div>
+                    }
                 </div>
             </section>
         }
 
         @if (activeTool() === 'base') {
-            <!-- ─── Number Base Converter ─── -->
+            <!-- ─── Number Base Converter (Live BigInt Precision) ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-2">
                     <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Number Base Converter</h2>
-                    <p class="text-sm text-(--postonsteroids-text-secondary)">Convert numbers between Decimal, Hexadecimal, Binary, etc.</p>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Arbitrary-precision BigInt base conversion with strict digit validation.</p>
                 </div>
 
                 <div class="mt-4 flex flex-wrap gap-4 items-end">
-                    <div class="flex flex-col gap-y-1">
+                    <div class="flex-1 min-w-[220px] flex flex-col gap-y-1">
                         <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Number</label>
                         <input type="text" [value]="numberBaseInput()" (input)="numberBaseInput.set($any($event.target).value)"
-                            placeholder="123"
-                            class="w-48 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                            placeholder="255 or 0xFF"
+                            class="w-full rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
                     </div>
                     <div class="flex flex-col gap-y-1">
-                        <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">From Base</label>
+                        <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">From Base (2–36)</label>
                         <input type="number" [value]="numberBaseFrom()" (input)="numberBaseFrom.set(+$any($event.target).value)"
                             min="2" max="36"
-                            class="w-24 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                            class="w-28 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
                     </div>
                     <div class="flex flex-col gap-y-1">
-                        <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">To Base</label>
+                        <label class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Custom Target Base</label>
                         <input type="number" [value]="numberBaseTo()" (input)="numberBaseTo.set(+$any($event.target).value)"
                             min="2" max="36"
-                            class="w-24 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                            class="w-32 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
                     </div>
-                    <button (click)="convertNumberBase()"
-                        class="h-[38px] rounded-xl bg-(--postonsteroids-accent) px-4 py-2 text-sm font-semibold text-white hover:bg-(--postonsteroids-accent-hover)">Convert</button>
                 </div>
 
-                @if (numberBaseOutput()) {
-                <div class="mt-4">
-                    <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold mb-1 block">Result</span>
-                    <div class="flex items-center gap-x-2">
-                        <input readonly type="text" [value]="numberBaseOutput()"
-                            class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-3 py-2 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
-                        <button (click)="copyText(numberBaseOutput())"
-                            class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) px-4 py-2 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                @if (numberBaseConversion().error) {
+                    <p class="mt-3 text-xs font-semibold text-status-danger">{{ numberBaseConversion().error }}</p>
+                }
+
+                @if (numberBaseConversion().isValid) {
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">Decimal (Base 10)</span>
+                                <button type="button" (click)="copyText(numberBaseConversion().decimal)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="font-mono text-sm break-all text-(--postonsteroids-text-primary)">{{ numberBaseConversion().decimal }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">Hexadecimal (Base 16)</span>
+                                <button type="button" (click)="copyText(numberBaseConversion().hex)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="font-mono text-sm break-all text-(--postonsteroids-text-primary)">{{ numberBaseConversion().hex }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">Binary (Base 2)</span>
+                                <button type="button" (click)="copyText(numberBaseConversion().binary)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="font-mono text-sm break-all text-(--postonsteroids-text-primary)">{{ numberBaseConversion().binary }}</p>
+                        </div>
+                        <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs font-bold uppercase text-(--postonsteroids-text-muted)">Octal (Base 8)</span>
+                                <button type="button" (click)="copyText(numberBaseConversion().octal)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="font-mono text-sm break-all text-(--postonsteroids-text-primary)">{{ numberBaseConversion().octal }}</p>
+                        </div>
+                        <div class="sm:col-span-2 rounded-2xl border border-(--postonsteroids-accent)/40 bg-(--postonsteroids-bg-primary) p-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-xs font-bold uppercase text-(--postonsteroids-accent)">Custom Target (Base {{ numberBaseTo() }})</span>
+                                <button type="button" (click)="copyText(numberBaseConversion().custom)" class="text-xs text-(--postonsteroids-accent) hover:underline cursor-pointer">Copy</button>
+                            </div>
+                            <p class="font-mono text-sm break-all text-(--postonsteroids-text-primary)">{{ numberBaseConversion().custom }}</p>
+                        </div>
                     </div>
-                </div>
                 }
             </section>
         }
+
         @if (activeTool() === 'random-string') {
             <!-- ─── Random String Generator ─── -->
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-4 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Random String / Password Generator</h2>
-                        <p class="text-sm text-(--postonsteroids-text-secondary)">Generate secure random strings with specific character sets.</p>
+                        <p class="text-sm text-(--postonsteroids-text-secondary)">Cryptographically secure random strings using Web Crypto API.</p>
                     </div>
-                    <button (click)="generateRandomString()"
-                        class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover)">
+                    <button type="button" (click)="generateRandomString()"
+                        class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-accent) px-4 py-2 text-[13px] font-semibold text-white transition-colors duration-200 hover:bg-(--postonsteroids-accent-hover) cursor-pointer">
                         <mat-icon class="text-[18px]! size-[18px]!">refresh</mat-icon>
                         Generate
                     </button>
                 </div>
 
-                <div class="mt-6 flex flex-wrap gap-4 lg:gap-8">
-                    <div class="flex flex-col gap-y-2">
+                <div class="mt-6 flex flex-wrap gap-6 items-center">
+                    <div class="flex flex-col gap-y-1">
                         <label class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted)">Length ({{ randomStringLength() }})</label>
-                        <input type="range" min="4" max="128" [value]="randomStringLength()" (input)="randomStringLength.set(+$any($event.target).value)"
-                            class="w-48 mt-2" aria-label="String length" />
+                        <div class="flex items-center gap-x-2">
+                            <input type="range" min="4" max="128" [value]="randomStringLength()" (input)="randomStringLength.set(+$any($event.target).value); generateRandomString()"
+                                class="w-40" aria-label="String length slider" />
+                            <input type="number" min="1" max="512" [value]="randomStringLength()" (input)="randomStringLength.set(+$any($event.target).value); generateRandomString()"
+                                class="w-16 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-2 py-1 text-center font-mono text-xs text-(--postonsteroids-text-primary) outline-none" />
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-y-1">
+                        <label class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted)">Count</label>
+                        <input type="number" min="1" max="25" [value]="randomStringCount()" (input)="randomStringCount.set(+$any($event.target).value); generateRandomString()"
+                            class="w-16 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-2 py-1 text-center font-mono text-xs text-(--postonsteroids-text-primary) outline-none" />
                     </div>
                     <div class="flex flex-col gap-y-2">
-                        <label class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted)">Options</label>
-                        <div class="flex flex-wrap gap-3 mt-1">
-                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
-                                <input type="checkbox" [checked]="randomStringIncludes().upper" (change)="toggleRandomStringInclude('upper')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> A-Z
+                        <label class="text-xs uppercase font-semibold text-(--postonsteroids-text-muted)">Character Sets</label>
+                        <div class="flex flex-wrap gap-3">
+                            <label class="flex items-center gap-x-1.5 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().upper" (change)="toggleRandomStringInclude('upper')" class="accent-(--postonsteroids-accent)"> A-Z
                             </label>
-                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
-                                <input type="checkbox" [checked]="randomStringIncludes().lower" (change)="toggleRandomStringInclude('lower')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> a-z
+                            <label class="flex items-center gap-x-1.5 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().lower" (change)="toggleRandomStringInclude('lower')" class="accent-(--postonsteroids-accent)"> a-z
                             </label>
-                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
-                                <input type="checkbox" [checked]="randomStringIncludes().num" (change)="toggleRandomStringInclude('num')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> 0-9
+                            <label class="flex items-center gap-x-1.5 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().num" (change)="toggleRandomStringInclude('num')" class="accent-(--postonsteroids-accent)"> 0-9
                             </label>
-                            <label class="flex items-center gap-x-2 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
-                                <input type="checkbox" [checked]="randomStringIncludes().sym" (change)="toggleRandomStringInclude('sym')" class="w-4 h-4 rounded border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) accent-(--postonsteroids-accent)"> !@#$
+                            <label class="flex items-center gap-x-1.5 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringIncludes().sym" (change)="toggleRandomStringInclude('sym')" class="accent-(--postonsteroids-accent)"> !@#$
+                            </label>
+                            <label class="flex items-center gap-x-1.5 cursor-pointer text-sm text-(--postonsteroids-text-primary)">
+                                <input type="checkbox" [checked]="randomStringExcludeAmbiguous()" (change)="randomStringExcludeAmbiguous.set($any($event.target).checked); generateRandomString()" class="accent-(--postonsteroids-accent)"> Exclude 0O1lI
                             </label>
                         </div>
                     </div>
                 </div>
 
-                <div class="mt-6 flex items-center gap-x-2">
-                    <input readonly type="text" [value]="randomStringOutput()" placeholder="Click Generate..."
-                        class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
-                    <button (click)="copyText(randomStringOutput())"
-                        class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) px-4 py-3 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover)">Copy</button>
+                <div class="mt-6 flex items-start gap-x-2">
+                    @if (randomStringCount() <= 1) {
+                        <input readonly type="text" [value]="randomStringOutput()" placeholder="Click Generate..."
+                            class="flex-1 rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none" />
+                    } @else {
+                        <textarea readonly [value]="randomStringOutput()" rows="6"
+                            class="flex-1 resize-y rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-4 py-3 font-mono text-sm text-(--postonsteroids-text-primary) outline-none"></textarea>
+                    }
+                    <button type="button" (click)="copyText(randomStringOutput())"
+                        class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) px-4 py-3 text-sm font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">Copy</button>
                 </div>
             </section>
         }
@@ -903,7 +1209,7 @@
             <section class="rounded-3xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-6 shadow-sm">
                 <div class="flex flex-col gap-y-2">
                     <h2 class="text-lg font-bold text-(--postonsteroids-text-primary)">Text Statistics</h2>
-                    <p class="text-sm text-(--postonsteroids-text-secondary)">Count words, characters, and lines.</p>
+                    <p class="text-sm text-(--postonsteroids-text-secondary)">Live word, character, line, sentence, UTF-8 byte counts, and reading time.</p>
                 </div>
 
                 <div class="mt-4">
@@ -913,7 +1219,7 @@
                         aria-label="Text input for statistics"></textarea>
                 </div>
 
-                <div class="mt-4 grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
+                <div class="mt-4 grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
                     <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
                         <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Words</span>
                         <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().words }}</p>
@@ -923,7 +1229,7 @@
                         <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().chars }}</p>
                     </div>
                     <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
-                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Chars (no space)</span>
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">No Space</span>
                         <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().charsNoSpaces }}</p>
                     </div>
                     <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
@@ -931,8 +1237,16 @@
                         <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().lines }}</p>
                     </div>
                     <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Sentences</span>
+                        <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().sentences }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
                         <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Bytes</span>
                         <p class="mt-1 text-2xl font-bold text-(--postonsteroids-text-primary)">{{ textStatResult().bytes }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-4 flex flex-col items-center justify-center">
+                        <span class="text-xs uppercase text-(--postonsteroids-text-muted) font-semibold">Read Time</span>
+                        <p class="mt-1 text-2xl font-bold text-(--postonsteroids-accent)">{{ textStatResult().readingTime }}</p>
                     </div>
                 </div>
             </section>

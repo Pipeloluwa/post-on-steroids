@@ -8,6 +8,7 @@ import { CurlModalComponent } from '../../../shared/components/curl-modal.compon
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
 import { TabStateService, RequestState } from '../../../shared/services/tab.state.service';
 import { copyTextToClipboard } from '../../../shared/utils/clipboard.util';
+import { convertCapsuleToPostmanCollection } from '../../../shared/utils/postman-export.util';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { VariableService } from '../../../shared/services/variable.service';
 import { inject } from '@angular/core';
@@ -55,7 +56,7 @@ export class RequestDetailsComponent {
     onNameChange(newName: string) {
         this.tabStateService.updateState(this.tabId(), { name: newName });
     }
-    saveOptions = ['Copy as cURL', 'View cURL...', 'Copy to Capsule...', 'Move to Capsule...', 'Export Endpoint', 'Export Capsule'];
+    saveOptions = ['Copy as cURL', 'View cURL...', 'Copy to Capsule...', 'Move to Capsule...', 'Export Endpoint', 'Export Capsule', 'Export as Postman'];
 
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
@@ -133,8 +134,10 @@ export class RequestDetailsComponent {
                     const kLower = (v.key || '').trim().toLowerCase();
                     return { ...v, source: v.source ?? varSources[kLower] };
                 });
+                const examples = await this.tabStateService.getExamples(state.id).catch(() => []);
                 const endpointExport = {
                     ...state,
+                    ...(examples.length > 0 ? { examples } : {}),
                     variables: vars,
                     variableSources: varSources
                 };
@@ -142,7 +145,7 @@ export class RequestDetailsComponent {
                 this.onNotify.emit('Endpoint exported successfully.');
             } else if (option === 'Export Capsule') {
                 const capsuleId = this.tabStateService.activeCapsuleId();
-                const fullCapsule = this.tabStateService.getFullCapsuleExportDataSync(capsuleId);
+                const fullCapsule = await this.tabStateService.getFullCapsuleExportData(capsuleId);
                 const collectionName = fullCapsule.name || 'My Capsule';
                 const exportData = {
                     version: "1.0.0",
@@ -161,6 +164,14 @@ export class RequestDetailsComponent {
                 const safeName = collectionName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
                 this.downloadJson(exportData, `capsule_${safeName}.json`);
                 this.onNotify.emit(`Capsule "${collectionName}" exported successfully (${fullCapsule.requests.length} request${fullCapsule.requests.length !== 1 ? 's' : ''}).`);
+            } else if (option === 'Export as Postman') {
+                const capsuleId = this.tabStateService.activeCapsuleId();
+                const fullCapsule = await this.tabStateService.getFullCapsuleExportData(capsuleId);
+                const collectionName = fullCapsule.name || 'My Capsule';
+                const pmCollection = convertCapsuleToPostmanCollection(fullCapsule);
+                const safeName = collectionName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'capsule';
+                this.downloadJson(pmCollection, `${safeName}.postman_collection.json`);
+                this.onNotify.emit(`Postman Collection "${collectionName}" exported (${fullCapsule.requests.length} request${fullCapsule.requests.length !== 1 ? 's' : ''}).`);
             }
         } finally {
             setTimeout(() => this.isExporting.set(false), 300);

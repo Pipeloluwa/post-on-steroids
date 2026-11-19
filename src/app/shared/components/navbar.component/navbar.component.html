@@ -101,6 +101,14 @@
                                 </div>
                             </button>
 
+                            <button (click)="exportPostmanCollection()"
+                                class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
+                                <div class="flex items-center gap-2">
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-orange-500 transition-colors">send</mat-icon>
+                                    <span>Export as Postman</span>
+                                </div>
+                            </button>
+
                             <div class="h-px bg-(--postonsteroids-border) my-1"></div>
 
                             <button (click)="closeActiveTab()"
