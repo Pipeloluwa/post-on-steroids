@@ -230,7 +230,7 @@ export function getAllXmlPathsByLine(lines: string[]): (string | null)[] {
   const nodeByTagOpenSeq: XmlCounterNode[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const l = (lines[i] || '').trim();
+    const l = (lines[i] || '').replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '__CDATA__').trim();
     if (!l || l.startsWith('<!--') || l.startsWith('<?')) continue;
     const tagMatches = Array.from(l.matchAll(/<\/?([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?(\/?)>/g));
     for (const m of tagMatches) {
@@ -272,7 +272,7 @@ export function getAllXmlPathsByLine(lines: string[]): (string | null)[] {
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i] || '';
-    const l = rawLine.trim();
+    const l = rawLine.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '__CDATA__').trim();
     if (!l || l.startsWith('<!--') || l.startsWith('<?')) continue;
 
     let firstPathOnLine: string | null = null;
@@ -372,7 +372,7 @@ export function extractAllBodyLeafPaths(bodyStr: string, isXml: boolean): string
     const allPaths = getAllXmlPathsByLine(lines);
     const leafPaths: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const l = lines[i].trim();
+      const l = lines[i].replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '__CDATA__').trim();
       const leafMatch = l.match(/<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?>([^<]*)<\/\1>|<([a-zA-Z0-9_\-:]+)(?:\s+[^>]*)?\/>/);
       if (leafMatch && allPaths[i] && !leafPaths.includes(allPaths[i]!)) {
         leafPaths.push(allPaths[i]!);

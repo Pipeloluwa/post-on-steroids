@@ -230,8 +230,8 @@ export function formatXmlPretty(xml: string): string {
         const tagNameMatch = token.match(/^<([a-zA-Z0-9_\-:]+)/);
         const tagName = tagNameMatch ? tagNameMatch[1] : '';
 
-        if (tagName && next1 && !next1.startsWith('<') && next2 === `</${tagName}>`) {
-          // Compact single-line leaf node: <tag>text</tag>
+        if (tagName && next1 && (!next1.startsWith('<') || next1.startsWith('<![CDATA[')) && next2 === `</${tagName}>`) {
+          // Compact single-line leaf node: <tag>text</tag> or <tag><![CDATA[text]]></tag>
           lines.push(PADDING.repeat(pad) + token + next1 + next2);
           i += 2;
           continue;
@@ -297,6 +297,15 @@ export function formatXmlByField(xml: string): string {
     for (let i = 0; i < innerContent.length; i++) {
       const ch = innerContent[i];
       currentChild += ch;
+
+      if (innerContent.slice(i, i + 9) === '<![CDATA[') {
+        const endCdata = innerContent.indexOf(']]>', i + 9);
+        if (endCdata !== -1) {
+          currentChild += innerContent.slice(i + 1, endCdata + 3);
+          i = endCdata + 2;
+          continue;
+        }
+      }
 
       if (ch === '<') {
         if (innerContent[i + 1] === '/') {
@@ -381,7 +390,13 @@ export function extractSoapActionFromXml(xml: string): string | null {
       } else {
         const docDefNsMatch = xml.match(/<(?:\w+:)?Envelope[^>]*\sxmlns\s*=\s*["']([^"']+)["']/i);
         if (docDefNsMatch && docDefNsMatch[1]) {
-          nsUri = docDefNsMatch[1].trim();
+          const candidateNs = docDefNsMatch[1].trim();
+          const isSoapEnvNs =
+            candidateNs.includes('schemas.xmlsoap.org/soap/envelope') ||
+            candidateNs.includes('www.w3.org/2003/05/soap-envelope');
+          if (!isSoapEnvNs) {
+            nsUri = candidateNs;
+          }
         }
       }
     }

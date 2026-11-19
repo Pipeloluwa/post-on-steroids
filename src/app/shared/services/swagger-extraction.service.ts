@@ -77,19 +77,46 @@ export class SwaggerExtractionService {
     }
 
     private async fetchWsdlImports(wsdlXml: string, baseUrl: string): Promise<string[]> {
-        const schemaLocs = extractWsdlSchemaLocations(wsdlXml, baseUrl).slice(0, 8);
-        if (schemaLocs.length === 0) return [];
-        const results = await Promise.all(
-            schemaLocs.map(async loc => {
-                try {
-                    const res = await this.fetchWithProxy(loc, 'application/xml,text/xml,*/*');
-                    return res.ok && res.text ? res.text : '';
-                } catch {
-                    return '';
+        const collectedXmls: string[] = [];
+        const visitedUrls = new Set<string>([baseUrl]);
+        let frontier: { xml: string; url: string }[] = [{ xml: wsdlXml, url: baseUrl }];
+        const maxHops = 3;
+        const maxDocs = 15;
+
+        for (let hop = 0; hop < maxHops && frontier.length > 0 && collectedXmls.length < maxDocs; hop++) {
+            const nextLocations: string[] = [];
+            for (const item of frontier) {
+                const locs = extractWsdlSchemaLocations(item.xml, item.url);
+                for (const loc of locs) {
+                    if (!visitedUrls.has(loc) && visitedUrls.size <= maxDocs) {
+                        visitedUrls.add(loc);
+                        nextLocations.push(loc);
+                    }
                 }
-            })
-        );
-        return results.filter(Boolean);
+            }
+            if (nextLocations.length === 0) break;
+
+            const fetchedBatch = await Promise.all(
+                nextLocations.map(async loc => {
+                    try {
+                        const res = await this.fetchWithProxy(loc, 'application/xml,text/xml,*/*');
+                        return res.ok && res.text ? { xml: res.text, url: loc } : null;
+                    } catch {
+                        return null;
+                    }
+                })
+            );
+
+            frontier = [];
+            for (const entry of fetchedBatch) {
+                if (entry && entry.xml) {
+                    collectedXmls.push(entry.xml);
+                    frontier.push(entry);
+                }
+            }
+        }
+
+        return collectedXmls;
     }
 
     private async tryExtractSoapSpec(targetUrl: string): Promise<ExtractedApiSpecResult | null> {
