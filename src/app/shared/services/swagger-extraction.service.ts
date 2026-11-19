@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
+import { getGlobalRequestTimeoutMs } from '../utils/request-timeout.util';
 import { isWsdlXml, inspectAsmxOrSvcHtml, extractWsdlSchemaLocations } from '../utils/wsdl-parser.util';
 
 export type ExtractedApiSpecResult =
@@ -264,6 +265,7 @@ export class SwaggerExtractionService {
         }
 
         // In browser version, route all non-loopback calls through proxy
+        const timeoutMs = getGlobalRequestTimeoutMs();
         if (!isElectron) {
             const proxyEndpoints = [this.proxyUrl, this.proxyFallbackUrl];
             for (const proxyEndpoint of proxyEndpoints) {
@@ -272,7 +274,8 @@ export class SwaggerExtractionService {
                         url: targetUrl,
                         method: 'GET',
                         headers: { 'Accept': accept },
-                        verifySsl: false
+                        verifySsl: false,
+                        timeoutMs
                     };
 
                     const res = await firstValueFrom(
@@ -313,7 +316,8 @@ export class SwaggerExtractionService {
                         method: 'GET',
                         headers: { 'Accept': accept },
                         verifySsl: false,
-                        followRedirects: true
+                        followRedirects: true,
+                        timeoutMs
                     });
                     if (eRes && eRes.statusCode >= 200 && eRes.statusCode < 400) {
                         const text = typeof eRes.body === 'string' ? eRes.body : JSON.stringify(eRes.body ?? '');

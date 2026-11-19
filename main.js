@@ -903,7 +903,7 @@ function parseSetCookieObjects(hostname, setCookieHeaders) {
   }).filter(c => !!c.name);
 }
 
-function formatElectronNetworkError(err, targetUrl) {
+function formatElectronNetworkError(err, targetUrl, timeoutMs) {
   const code = (err && err.code) || '';
   let hostname = targetUrl;
   let origin = targetUrl;
@@ -921,7 +921,12 @@ function formatElectronNetworkError(err, targetUrl) {
       return { code, message: `Connection refused: no server is accepting connections at ${origin}. Verify the server is running and the port is correct.` };
     case 'ETIMEDOUT':
     case 'ESOCKETTIMEDOUT':
-      return { code, message: `Request timed out while waiting for a response from ${targetUrl}.` };
+      return {
+        code,
+        message: timeoutMs > 0
+          ? `Request timed out after ${timeoutMs} ms while waiting for a response from ${targetUrl}. You can adjust the global Request Timeout in Settings.`
+          : `Request timed out while waiting for a response from ${targetUrl}.`
+      };
     case 'EHOSTUNREACH':
     case 'ENETUNREACH':
       return { code, message: `Network or host unreachable for ${targetUrl}. Check your network connection, VPN, or firewall.` };
@@ -1003,6 +1008,11 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
       }
     }
 
+    const resolvedTimeoutMs =
+      typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs >= 0
+        ? Math.floor(options.timeoutMs)
+        : 120000;
+
     const reqOpts = {
       protocol: parsedUrl.protocol,
       hostname: parsedUrl.hostname,
@@ -1010,7 +1020,7 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
       path: `${parsedUrl.pathname}${parsedUrl.search}`,
       method,
       headers: outHeaders,
-      timeout: options.timeoutMs || 120000
+      ...(resolvedTimeoutMs > 0 ? { timeout: resolvedTimeoutMs } : {})
     };
 
     if (isHttps) {
@@ -1023,9 +1033,14 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
     }
 
     let settled = false;
+    let hardTimeoutTimer = null;
     const finish = (payload) => {
       if (settled) return;
       settled = true;
+      if (hardTimeoutTimer) {
+        clearTimeout(hardTimeoutTimer);
+        hardTimeoutTimer = null;
+      }
       if (requestId) activeHttpRequests.delete(requestId);
       resolve(payload);
     };
@@ -1101,6 +1116,12 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
       activeHttpRequests.set(requestId, req);
     }
 
+    if (resolvedTimeoutMs > 0) {
+      hardTimeoutTimer = setTimeout(() => {
+        req.destroy(Object.assign(new Error('Request timed out'), { code: 'ETIMEDOUT' }));
+      }, resolvedTimeoutMs);
+    }
+
     req.on('timeout', () => {
       req.destroy(Object.assign(new Error('Request timed out'), { code: 'ETIMEDOUT' }));
     });
@@ -1116,7 +1137,7 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
         });
         return;
       }
-      const formatted = formatElectronNetworkError(err, options.url);
+      const formatted = formatElectronNetworkError(err, options.url, resolvedTimeoutMs);
       finish({
         ok: false,
         errorCode: formatted.code,

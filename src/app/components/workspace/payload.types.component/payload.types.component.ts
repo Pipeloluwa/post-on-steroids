@@ -20,6 +20,7 @@ import { DialogService } from '../../../shared/services/dialog.service';
 import { sanitizeJsonBodyForScripts } from '../../../shared/utils/format.utils';
 import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../../../shared/utils/encryption-path.util';
 import { isElectronApp } from '../../../shared/utils/url.util';
+import { formatTimeoutLabel } from '../../../shared/utils/request-timeout.util';
 
 @Component({
   selector: 'app-payload-types-component',
@@ -1041,6 +1042,23 @@ export class PayloadTypesComponent {
   }
 
   // ── Settings ─────────────────────────────────────────────────────────
+  requestTimeoutMs = this.tabStateService.requestTimeoutMs;
+  requestTimeoutLabel = computed(() => formatTimeoutLabel(this.requestTimeoutMs()));
+  requestTimeoutPresets = [
+    { label: '5s', ms: 5000 },
+    { label: '15s', ms: 15000 },
+    { label: '30s', ms: 30000 },
+    { label: '60s', ms: 60000 },
+    { label: '120s', ms: 120000 },
+    { label: '∞', ms: 0 }
+  ];
+
+  updateRequestTimeoutMs(val: string | number) {
+    const parsed = typeof val === 'number' ? val : Number(String(val).trim());
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    this.tabStateService.setRequestTimeoutMs(parsed);
+  }
+
   toggleSetting(field: keyof SettingsState, val: boolean) {
     const current = this.settings();
     const updated: SettingsState = { ...current, [field]: val };

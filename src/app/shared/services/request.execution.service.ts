@@ -1,7 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
+import { timeout } from 'rxjs';
 import { generateUUID } from '../utils/uuid.util';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
+import { formatTimeoutLabel } from '../utils/request-timeout.util';
 import { environment } from '../../../environments/environment';
 import { TabStateService, FormDataRow, KeyValue } from './tab.state.service';
 import { VariableService } from './variable.service';
@@ -635,6 +637,7 @@ export class RequestExecutionService {
                         electronApi.cancelHttpRequest?.(electronReqId);
                     };
 
+                    const timeoutMs = this.tabStateService.requestTimeoutMs();
                     const electronRes = await electronApi.executeHttpRequest({
                         requestId: electronReqId,
                         url: targetUrl,
@@ -644,7 +647,8 @@ export class RequestExecutionService {
                         multipartParts,
                         verifySsl: freshState.settings?.verifySsl ?? false,
                         followRedirects: freshState.settings?.followRedirects ?? true,
-                        enableCookies: freshState.settings?.enableCookies ?? true
+                        enableCookies: freshState.settings?.enableCookies ?? true,
+                        timeoutMs
                     });
 
                     if (electronRes?.cancelled || cancelToken.cancelled) {
@@ -737,6 +741,7 @@ export class RequestExecutionService {
                     }
 
                     const proxyEndpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));
+                    const timeoutMs = this.tabStateService.requestTimeoutMs();
                     let lastResult: any = null;
 
                     for (const currentProxyUrl of proxyEndpoints) {
@@ -746,6 +751,7 @@ export class RequestExecutionService {
                             fd.append('method', freshState.method);
                             fd.append('headers', JSON.stringify(headersObj));
                             fd.append('verifySsl', String(freshState.settings?.verifySsl ?? false));
+                            fd.append('timeoutMs', String(timeoutMs));
                             fd.append('bodyType', 'form-data');
                             
                             // Append original files and fields
@@ -768,12 +774,17 @@ export class RequestExecutionService {
                                 method: freshState.method,
                                 headers: headersObj,
                                 body: bodyPayload,
-                                verifySsl: freshState.settings?.verifySsl ?? false
+                                verifySsl: freshState.settings?.verifySsl ?? false,
+                                timeoutMs
                             };
                             reqObservable = this.http.post<any>(currentProxyUrl, proxyPayload, {
                                 headers: new HttpHeaders({ 'Content-Type': 'application/json' }),
                                 observe: 'response' as const
                             });
+                        }
+
+                        if (timeoutMs > 0) {
+                            reqObservable = reqObservable.pipe(timeout(timeoutMs));
                         }
 
                         lastResult = await new Promise((resolve, reject) => {
@@ -786,6 +797,11 @@ export class RequestExecutionService {
                                 reject(new Error('Request cancelled'));
                             };
                         });
+
+                        // If timed out, stop retrying fallback proxy immediately
+                        if (lastResult?.name === 'TimeoutError') {
+                            break;
+                        }
 
                         // If not a network/connection error (status 0 or 502/503), accept this result
                         if (!(lastResult instanceof HttpErrorResponse) || (lastResult.status > 0 && lastResult.status < 500)) {
@@ -814,6 +830,11 @@ export class RequestExecutionService {
                         case 'HEAD': reqObservable = this.http.head(finalUrl, reqOptions); break;
                         case 'OPTIONS': reqObservable = this.http.options(finalUrl, reqOptions); break;
                         default: reqObservable = this.http.request(freshState.method, finalUrl, { ...reqOptions, body: finalBody }); break;
+                    }
+
+                    const timeoutMs = this.tabStateService.requestTimeoutMs();
+                    if (timeoutMs > 0) {
+                        reqObservable = reqObservable.pipe(timeout(timeoutMs));
                     }
 
                     const rawResult: any = await new Promise((resolve, reject) => {
@@ -863,11 +884,23 @@ export class RequestExecutionService {
                 }
             } else if (electronNetworkError) {
                 status = 0;
+                const isTimeoutErr = electronNetworkError.code === 'ETIMEDOUT' || electronNetworkError.code === 'ESOCKETTIMEDOUT';
                 rawResponseBody = {
-                    error: 'API Unreachable',
+                    error: isTimeoutErr ? 'Request Timed Out' : 'API Unreachable',
                     code: electronNetworkError.code || 'NETWORK_ERROR',
                     url: finalUrl,
+                    ...(isTimeoutErr ? { timeoutMs: this.tabStateService.requestTimeoutMs() } : {}),
                     message: electronNetworkError.message || `Could not reach API at ${finalUrl}.`
+                };
+            } else if ((httpResponse as any)?.name === 'TimeoutError') {
+                const timeoutMs = this.tabStateService.requestTimeoutMs();
+                status = 0;
+                rawResponseBody = {
+                    error: 'Request Timed Out',
+                    code: 'ETIMEDOUT',
+                    url: finalUrl,
+                    timeoutMs,
+                    message: `Request timed out after ${timeoutMs} ms (${formatTimeoutLabel(timeoutMs)}) while waiting for a response from ${finalUrl}. You can adjust the global Request Timeout in Settings.`
                 };
             } else {
                 status = httpResponse?.status || 0;

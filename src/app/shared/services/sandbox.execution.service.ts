@@ -4,6 +4,7 @@ import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http
 import { firstValueFrom } from 'rxjs';
 import { generateUUID } from '../utils/uuid.util';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
+import { getGlobalRequestTimeoutMs } from '../utils/request-timeout.util';
 import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
 import { environment } from '../../../environments/environment';
 
@@ -476,6 +477,7 @@ window.addEventListener("message", async (event) => {
 
   private async directFetch(req: SandboxFetchRequest): Promise<FetchOutcome> {
     const method = (req.method || 'GET').toUpperCase();
+    const timeoutMs = getGlobalRequestTimeoutMs();
     const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
     if (isElectronApp() && electronApi && typeof electronApi.executeHttpRequest === 'function') {
       const res = await electronApi.executeHttpRequest({
@@ -484,7 +486,8 @@ window.addEventListener("message", async (event) => {
         headers: req.headers || {},
         body: req.body,
         verifySsl: false,
-        followRedirects: true
+        followRedirects: true,
+        timeoutMs
       });
       if (!res.ok) {
         throw new Error(res.errorMessage || `Request failed for: ${req.url}`);
@@ -499,24 +502,40 @@ window.addEventListener("message", async (event) => {
     }
 
     const hasBody = method !== 'GET' && method !== 'HEAD' && req.body !== null;
-    const res = await fetch(req.url, {
-      method,
-      headers: req.headers || {},
-      body: hasBody ? req.body : undefined
-    });
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => { headers[k] = v; });
-    const body = await res.text();
-    return { ok: true, status: res.status, statusText: res.statusText, headers, body };
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller && timeoutMs > 0
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+    try {
+      const res = await fetch(req.url, {
+        method,
+        headers: req.headers || {},
+        body: hasBody ? req.body : undefined,
+        ...(controller ? { signal: controller.signal } : {})
+      });
+      const headers: Record<string, string> = {};
+      res.headers.forEach((v, k) => { headers[k] = v; });
+      const body = await res.text();
+      return { ok: true, status: res.status, statusText: res.statusText, headers, body };
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeoutMs} ms for: ${req.url}`);
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private async proxyFetch(req: SandboxFetchRequest): Promise<FetchOutcome> {
+    const timeoutMs = getGlobalRequestTimeoutMs();
     const proxyPayload = {
       url: req.url,
       method: (req.method || 'GET').toUpperCase(),
       headers: req.headers || {},
       body: req.body,
-      verifySsl: false
+      verifySsl: false,
+      timeoutMs
     };
 
     const endpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));

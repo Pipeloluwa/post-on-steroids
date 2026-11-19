@@ -10,6 +10,11 @@ import { VariableService } from './variable.service';
 import { AutoAuthService } from './auto-auth.service';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractRequestsVariables } from '../utils/import-variable.util';
+import {
+    globalRequestTimeoutMs,
+    setGlobalRequestTimeoutMs,
+    GLOBAL_TIMEOUT_STORAGE_KEY
+} from '../utils/request-timeout.util';
 import { getAppBaseUrl } from '../utils/url.util';
 import { buildCurlCommand, CurlBuildOptions } from '../utils/curl-generator.util';
 import { copyTextToClipboard } from '../utils/clipboard.util';
@@ -650,6 +655,9 @@ export class TabStateService {
                 localStorage.setItem('onsteroids_autosave', session.autoSaveEnabled ? 'true' : 'false');
             }
         }
+        if (session.responses && session.responses['__global_request_timeout_ms__'] !== undefined) {
+            setGlobalRequestTimeoutMs(session.responses['__global_request_timeout_ms__'], this.isBrowser);
+        }
     }
 
     /** Debounced (or immediate) sync of workspace state to backend for cross-device persistence */
@@ -715,6 +723,7 @@ export class TabStateService {
                 storedResponses['__capsule_groups_map__'] = Object.fromEntries(cleanGroupsEntries);
                 storedResponses['__capsule_order_map__'] = Object.fromEntries(cleanOrderEntries);
                 storedResponses['__capsule_structure_ts_map__'] = tsMap;
+                storedResponses['__global_request_timeout_ms__'] = this.requestTimeoutMs();
 
                 const payload = {
                     activeCapsuleId: this.activeCapsuleId(),
@@ -2229,6 +2238,7 @@ export class TabStateService {
     private inFlightExampleRequests = new Map<string, Promise<any[]>>();
     
     autoSaveEnabled = signal<boolean>(false);
+    requestTimeoutMs = globalRequestTimeoutMs;
     private autoSaveTimeout: any = null;
     private capsuleSwitchVersion = 0;
 
@@ -2314,6 +2324,11 @@ export class TabStateService {
         const autoSavePref = localStorage.getItem('onsteroids_autosave');
         if (autoSavePref === 'true') {
             this.autoSaveEnabled.set(true);
+        }
+
+        const storedTimeout = localStorage.getItem(GLOBAL_TIMEOUT_STORAGE_KEY);
+        if (storedTimeout !== null && storedTimeout.trim() !== '') {
+            setGlobalRequestTimeoutMs(storedTimeout, false);
         }
 
         if (this.authService.isLoggedIn()) {
@@ -5513,6 +5528,13 @@ export class TabStateService {
                 // Flush any pending unsaved edits immediately when enabling auto-save
                 this.runAutoSave();
             }
+        }
+    }
+
+    setRequestTimeoutMs(timeoutMs: number) {
+        setGlobalRequestTimeoutMs(timeoutMs, this.isBrowser);
+        if (this.authService.isLoggedIn()) {
+            this.syncWorkspaceStateToBackend();
         }
     }
 
