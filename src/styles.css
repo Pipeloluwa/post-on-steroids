@@ -363,4 +363,15 @@ input[type="password"]::-ms-clear {
   overflow-wrap: normal !important;
 }
 
+/* Remove native browser number spinner up/down arrows across numeric inputs (including timeout/delay inputs) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 

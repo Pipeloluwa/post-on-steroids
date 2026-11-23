@@ -919,13 +919,20 @@ function formatElectronNetworkError(err, targetUrl, timeoutMs) {
       return { code, message: `DNS lookup failed: could not resolve host "${hostname}". Verify the domain name and your internet connection.` };
     case 'ECONNREFUSED':
       return { code, message: `Connection refused: no server is accepting connections at ${origin}. Verify the server is running and the port is correct.` };
+    case 'ERR_REQUEST_TIMEOUT':
+      return {
+        code: 'ETIMEDOUT',
+        message: timeoutMs > 0
+          ? `Request timed out after ${timeoutMs} ms while waiting for a response from ${targetUrl}. You can adjust the global Request Timeout in Settings.`
+          : `Request timed out while waiting for a response from ${targetUrl}.`
+      };
     case 'ETIMEDOUT':
     case 'ESOCKETTIMEDOUT':
       return {
         code,
         message: timeoutMs > 0
           ? `Request timed out after ${timeoutMs} ms while waiting for a response from ${targetUrl}. You can adjust the global Request Timeout in Settings.`
-          : `Request timed out while waiting for a response from ${targetUrl}.`
+          : `Network connection timed out while connecting to ${origin}. Check that the host is reachable and accepting connections.`
       };
     case 'EHOSTUNREACH':
     case 'ENETUNREACH':
@@ -1019,16 +1026,19 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
       port: parsedUrl.port || (isHttps ? 443 : 80),
       path: `${parsedUrl.pathname}${parsedUrl.search}`,
       method,
-      headers: outHeaders,
-      ...(resolvedTimeoutMs > 0 ? { timeout: resolvedTimeoutMs } : {})
+      headers: outHeaders
     };
 
     if (isHttps) {
       // Disable TLS session caching so toggling Verify SSL ON <-> OFF takes effect immediately.
       // SSL verification is OFF by default and enforced strictly when options.verifySsl === true.
+      // Always use a dedicated agent with timeout: 0 and keepAlive: false so Node's globalAgent
+      // default timeout (5000ms) never aborts long-running or Infinity requests.
       const agentOpts = {
         rejectUnauthorized: options.verifySsl === true,
-        maxCachedSessions: 0
+        maxCachedSessions: 0,
+        keepAlive: false,
+        timeout: 0
       };
       if (options.clientCert && typeof options.clientCert === 'object') {
         if (options.clientCert.type === 'pfx' && options.clientCert.pfxBase64) {
@@ -1042,10 +1052,16 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
         }
       }
       reqOpts.agent = new https.Agent(agentOpts);
+    } else {
+      reqOpts.agent = new http.Agent({
+        keepAlive: false,
+        timeout: 0
+      });
     }
 
     let settled = false;
     let hardTimeoutTimer = null;
+    let hardTimeoutTriggered = false;
     const finish = (payload) => {
       if (settled) return;
       settled = true;
@@ -1070,6 +1086,10 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
       const location = res.headers['location'];
       const isRedirect = [301, 302, 303, 307, 308].includes(statusCode) && !!location;
       if (isRedirect && options.followRedirects !== false && redirectCount < 10) {
+        if (hardTimeoutTimer) {
+          clearTimeout(hardTimeoutTimer);
+          hardTimeoutTimer = null;
+        }
         res.resume();
         let nextUrl;
         try {
@@ -1087,9 +1107,13 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
             }
           }
         }
+        const remainingTimeoutMs = resolvedTimeoutMs > 0
+          ? Math.max(1, resolvedTimeoutMs - (Date.now() - startTime))
+          : 0;
         executeNodeHttpRequest(
           {
             ...options,
+            timeoutMs: remainingTimeoutMs,
             url: nextUrl,
             method: nextMethod,
             headers: nextHeaders,
@@ -1104,6 +1128,15 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
 
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
+      res.on('error', (err) => {
+        const formatted = formatElectronNetworkError(err, options.url, hardTimeoutTriggered ? resolvedTimeoutMs : 0);
+        finish({
+          ok: false,
+          errorCode: formatted.code,
+          errorMessage: formatted.message,
+          responseTimeMs: Date.now() - startTime
+        });
+      });
       res.on('end', () => {
         const resBody = Buffer.concat(chunks).toString('utf8');
         const flatHeaders = {};
@@ -1128,16 +1161,33 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
       activeHttpRequests.set(requestId, req);
     }
 
-    if (resolvedTimeoutMs > 0) {
-      hardTimeoutTimer = setTimeout(() => {
-        req.destroy(Object.assign(new Error('Request timed out'), { code: 'ETIMEDOUT' }));
-      }, resolvedTimeoutMs);
-    } else if (typeof req.setTimeout === 'function') {
+    req.on('socket', (socket) => {
+      try {
+        socket.setTimeout(0);
+        socket.setKeepAlive(true, 15000);
+      } catch {}
+    });
+
+    if (typeof req.setTimeout === 'function') {
       req.setTimeout(0);
     }
 
+    if (resolvedTimeoutMs > 0) {
+      hardTimeoutTimer = setTimeout(() => {
+        hardTimeoutTriggered = true;
+        req.destroy(Object.assign(new Error('Request timed out'), { code: 'ERR_REQUEST_TIMEOUT' }));
+      }, resolvedTimeoutMs);
+    }
+
     req.on('timeout', () => {
-      req.destroy(Object.assign(new Error('Request timed out'), { code: 'ETIMEDOUT' }));
+      if (resolvedTimeoutMs === 0) {
+        try {
+          req.socket?.setTimeout(0);
+        } catch {}
+        return;
+      }
+      hardTimeoutTriggered = true;
+      req.destroy(Object.assign(new Error('Request timed out'), { code: 'ERR_REQUEST_TIMEOUT' }));
     });
 
     req.on('error', (err) => {
@@ -1151,7 +1201,10 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
         });
         return;
       }
-      const formatted = formatElectronNetworkError(err, options.url, resolvedTimeoutMs);
+      const effectiveTimeoutMs = err && err.code === 'ERR_REQUEST_TIMEOUT'
+        ? resolvedTimeoutMs
+        : (hardTimeoutTriggered ? resolvedTimeoutMs : 0);
+      const formatted = formatElectronNetworkError(err, options.url, effectiveTimeoutMs);
       finish({
         ok: false,
         errorCode: formatted.code,

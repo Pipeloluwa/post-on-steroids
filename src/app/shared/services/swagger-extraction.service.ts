@@ -302,7 +302,12 @@ export class SwaggerExtractionService {
         // In browser version, route all non-loopback calls through proxy
         const timeoutMs = getGlobalRequestTimeoutMs();
         if (!isElectron) {
-            const proxyEndpoints = [this.proxyUrl, this.proxyFallbackUrl];
+            const hasHttpOrigin = typeof window !== 'undefined' && /^https?:$/i.test(window.location?.protocol || '');
+            const proxyEndpoints = Array.from(new Set([
+                this.proxyUrl,
+                this.proxyFallbackUrl,
+                ...(hasHttpOrigin ? ['/api/v1/Proxy'] : [])
+            ].filter(Boolean)));
             for (const proxyEndpoint of proxyEndpoints) {
                 try {
                     const proxyPayload = {
@@ -310,7 +315,7 @@ export class SwaggerExtractionService {
                         method: 'GET',
                         headers: { 'Accept': accept },
                         verifySsl: false,
-                        timeoutMs: timeoutMs > 0 ? timeoutMs : 3600000
+                        timeoutMs: timeoutMs > 0 ? timeoutMs : 0
                     };
 
                     const res = await firstValueFrom(

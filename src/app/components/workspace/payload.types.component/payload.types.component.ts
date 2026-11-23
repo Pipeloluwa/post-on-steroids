@@ -1134,6 +1134,7 @@ export class PayloadTypesComponent {
 
       const bodyStr = form.toString();
       const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
+      const timeoutMs = this.requestTimeoutMs();
       let parsed: any = null;
 
       if (this.isElectron && electronApi?.executeHttpRequest) {
@@ -1143,7 +1144,8 @@ export class PayloadTypesComponent {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
           body: bodyStr,
           verifySsl: false,
-          followRedirects: true
+          followRedirects: true,
+          timeoutMs
         });
         if (!res?.ok) throw new Error(res?.errorMessage || 'Failed to fetch OAuth2 token.');
         parsed = typeof res.body === 'string' ? JSON.parse(res.body) : res.body;
@@ -1156,12 +1158,13 @@ export class PayloadTypesComponent {
           );
         } catch {
           const proxyRes = await firstValueFrom(
-            this.http.post<any>(environment.proxyUrl, {
+            this.http.post<any>(environment.proxyUrl || '/api/v1/Proxy', {
               url: rawUrl,
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
               body: bodyStr,
-              verifySsl: false
+              verifySsl: false,
+              timeoutMs: timeoutMs > 0 ? timeoutMs : 0
             })
           );
           const inner = proxyRes?.data ?? proxyRes;

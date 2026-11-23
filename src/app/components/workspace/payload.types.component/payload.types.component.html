@@ -751,7 +751,7 @@
                     </button>
                     }
                 </div>
-                <div class="flex items-center gap-1">
+                <div class="inline-flex items-center overflow-hidden rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) focus-within:border-(--postonsteroids-accent) transition-colors">
                     <input #timeoutInputEl type="text" inputmode="numeric"
                         [value]="timeoutInputDraft()"
                         (focus)="onTimeoutInputFocus($event)"
@@ -760,8 +760,8 @@
                         (keydown.enter)="commitRequestTimeoutOnBlur($event)"
                         (blur)="commitRequestTimeoutOnBlur($event)"
                         aria-label="Global request timeout in milliseconds"
-                        class="w-24 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-2 py-1 text-right font-mono text-[12px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
-                    <span class="text-[11px] font-mono text-(--postonsteroids-text-muted)">ms</span>
+                        class="w-24 appearance-none bg-transparent px-2.5 py-1 text-right font-mono text-[12px] text-(--postonsteroids-text-primary) outline-none" />
+                    <span class="px-2 py-1 text-[11px] font-mono text-(--postonsteroids-text-muted) bg-(--postonsteroids-bg-tertiary)/60 border-l border-(--postonsteroids-border) select-none">ms</span>
                 </div>
             </div>
         </div>

@@ -178,6 +178,7 @@ export class SandboxExecutionService {
 // ── Network bridge: all requests are executed by the parent app (real origin) ──
 const __osbPending = new Map();
 let __osbSeq = 0;
+let __osbTimeoutMs = 120000;
 
 window.addEventListener("message", (event) => {
   if (event.source !== window.parent) return;
@@ -186,7 +187,7 @@ window.addEventListener("message", (event) => {
   const entry = __osbPending.get(d.fetchId);
   if (!entry) return;
   __osbPending.delete(d.fetchId);
-  clearTimeout(entry.timer);
+  if (entry.timer) clearTimeout(entry.timer);
   if (d.ok) {
     entry.resolve(d);
   } else {
@@ -197,10 +198,12 @@ window.addEventListener("message", (event) => {
 function __osbBridgeFetch(payload) {
   return new Promise((resolve, reject) => {
     const fetchId = "f" + Date.now().toString(36) + "_" + (++__osbSeq);
-    const timer = setTimeout(() => {
-      __osbPending.delete(fetchId);
-      reject(new Error("Request timed out: " + payload.url));
-    }, 120000);
+    const timer = __osbTimeoutMs > 0
+      ? setTimeout(() => {
+          __osbPending.delete(fetchId);
+          reject(new Error("Request timed out after " + __osbTimeoutMs + " ms: " + payload.url));
+        }, __osbTimeoutMs)
+      : null;
     __osbPending.set(fetchId, { resolve: resolve, reject: reject, timer: timer });
     window.parent.postMessage(Object.assign({ type: "__osb_fetch__", fetchId: fetchId }, payload), "*");
   });
@@ -208,7 +211,10 @@ function __osbBridgeFetch(payload) {
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window.parent) return;
-  const { id, code, context } = event.data || {};
+  const { id, code, context, timeoutMs } = event.data || {};
+  if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs >= 0) {
+    __osbTimeoutMs = Math.floor(timeoutMs);
+  }
   if (!id) return;
 
   let logs = [];
@@ -1009,16 +1015,21 @@ window.addEventListener("message", async (event) => {
 
   private async proxyFetch(req: SandboxFetchRequest): Promise<FetchOutcome> {
     const timeoutMs = getGlobalRequestTimeoutMs();
+    const hasHttpOrigin = typeof window !== 'undefined' && /^https?:$/i.test(window.location?.protocol || '');
     const proxyPayload = {
       url: req.url,
       method: (req.method || 'GET').toUpperCase(),
       headers: req.headers || {},
       body: req.body,
       verifySsl: false,
-      timeoutMs: timeoutMs > 0 ? timeoutMs : 3600000
+      timeoutMs: timeoutMs > 0 ? timeoutMs : 0
     };
 
-    const endpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));
+    const endpoints = Array.from(new Set([
+      environment.proxyUrl,
+      environment.proxyFallbackUrl,
+      ...(hasHttpOrigin ? ['/api/v1/Proxy'] : [])
+    ].filter(Boolean)));
     let lastError: unknown = null;
 
     for (let i = 0; i < endpoints.length; i++) {
@@ -1211,7 +1222,8 @@ window.addEventListener("message", async (event) => {
       this.iframe.contentWindow.postMessage({
         id: executionId,
         code: safeCode,
-        context: safeContext
+        context: safeContext,
+        timeoutMs: getGlobalRequestTimeoutMs()
       }, '*');
     });
   }

@@ -688,21 +688,21 @@ export class RequestExecutionService {
                     httpHeaders = httpHeaders.delete(contentTypeKey);
                 }
             } else if (freshState.bodyType === 'x-www-form-urlencoded') {
-                const urlParams = new URLSearchParams();
-                if (Array.isArray(body)) {
-                    for (const row of body) {
-                        if (row && row.key) {
-                            urlParams.append(row.key, row.value ?? '');
+                if (typeof body === 'string') {
+                    finalBody = body;
+                } else {
+                    const urlParams = new URLSearchParams();
+                    if (Array.isArray(body)) {
+                        for (const row of body) {
+                            if (row && row.key) {
+                                urlParams.append(row.key, row.value ?? '');
+                            }
+                        }
+                    } else if (body && typeof body === 'object') {
+                        for (const [k, v] of Object.entries(body)) {
+                            urlParams.append(k, String(v ?? ''));
                         }
                     }
-                } else if (body && typeof body === 'object') {
-                    for (const [k, v] of Object.entries(body)) {
-                        urlParams.append(k, String(v ?? ''));
-                    }
-                } else if (typeof body === 'string') {
-                    finalBody = body;
-                }
-                if (!finalBody) {
                     finalBody = urlParams.toString();
                 }
                 if (!httpHeaders.has('Content-Type')) {
@@ -932,7 +932,11 @@ export class RequestExecutionService {
 
                     let bodyPayload: string | null = null;
                     if (freshState.bodyType === 'x-www-form-urlencoded' || freshState.bodyType === 'graphql' || (freshState.bodyType === 'raw' && freshState.rawType === 'Text')) {
-                        bodyPayload = typeof finalBody === 'string' ? finalBody : (finalBody ? JSON.stringify(finalBody) : null);
+                        bodyPayload = typeof finalBody === 'string'
+                            ? finalBody
+                            : (finalBody instanceof HttpParams ? finalBody.toString() : (finalBody !== null && finalBody !== undefined ? JSON.stringify(finalBody) : null));
+                    } else if (finalBody !== undefined && finalBody !== null && !(finalBody instanceof FormData)) {
+                        bodyPayload = typeof finalBody === 'string' ? finalBody : JSON.stringify(finalBody);
                     } else if (body !== undefined && body !== null) {
                         bodyPayload = typeof body === 'string' ? body : JSON.stringify(body);
                     }
@@ -988,13 +992,18 @@ export class RequestExecutionService {
                         targetUrl += (targetUrl.includes('?') ? '&' : '?') + queryString;
                     }
 
-                    const proxyEndpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));
+                    const hasHttpOrigin = typeof window !== 'undefined' && /^https?:$/i.test(window.location?.protocol || '');
+                    const proxyEndpoints = Array.from(new Set([
+                        environment.proxyUrl,
+                        environment.proxyFallbackUrl,
+                        ...(hasHttpOrigin ? ['/api/v1/Proxy'] : [])
+                    ].filter(Boolean)));
                     const timeoutMs = this.tabStateService.requestTimeoutMs();
-                    const proxyTimeoutMs = timeoutMs > 0 ? timeoutMs : 3600000;
+                    const proxyTimeoutMs = timeoutMs > 0 ? timeoutMs : 0;
                     let lastResult: any = null;
 
                     for (const currentProxyUrl of proxyEndpoints) {
-                        if (freshState.bodyType === 'form-data' && finalBody instanceof FormData) {
+                        if (freshState.bodyType === 'form-data') {
                             const fd = new FormData();
                             fd.append('url', targetUrl);
                             fd.append('method', freshState.method);
@@ -1002,15 +1011,17 @@ export class RequestExecutionService {
                             fd.append('verifySsl', String(freshState.settings?.verifySsl ?? false));
                             fd.append('timeoutMs', String(proxyTimeoutMs));
                             fd.append('bodyType', 'form-data');
-                            
+
                             // Append original files and fields
-                            const rawFormData = freshState.formData;
-                            for (const row of body) {
-                                const originalRow = rawFormData.find((f: any) => f.key === row.key);
+                            const rawFormData = Array.isArray(freshState.formData) ? freshState.formData : [];
+                            const formRows = Array.isArray(body) ? body : [];
+                            for (const row of formRows) {
+                                if (!row || !row.key) continue;
+                                const originalRow = rawFormData.find((f: any) => this.variableService.resolve(f.key || '') === row.key || f.key === row.key);
                                 if (originalRow && originalRow.type === 'file' && originalRow.file) {
                                     fd.append(row.key, originalRow.file, originalRow.file.name);
                                 } else {
-                                    fd.append(row.key, row.value);
+                                    fd.append(row.key, row.value ?? '');
                                 }
                             }
 
@@ -1047,12 +1058,17 @@ export class RequestExecutionService {
                             };
                         });
 
-                        // If timed out, stop retrying fallback proxy immediately
-                        if (lastResult?.name === 'TimeoutError') {
+                        // If timed out (client RxJS timer or proxy timeout response), stop retrying fallback proxies
+                        const isProxyTimeoutErr = lastResult instanceof HttpErrorResponse && (
+                            lastResult.status === 408 ||
+                            lastResult.status === 504 ||
+                            (typeof lastResult.error?.message === 'string' && /timed out/i.test(lastResult.error.message))
+                        );
+                        if (lastResult?.name === 'TimeoutError' || isProxyTimeoutErr) {
                             break;
                         }
 
-                        // If not a network/connection error (status 0 or 502/503), accept this result
+                        // If not a network/connection error (status 0 or 5xx), accept this result
                         if (!(lastResult instanceof HttpErrorResponse) || (lastResult.status > 0 && lastResult.status < 500)) {
                             break;
                         }
@@ -1141,15 +1157,26 @@ export class RequestExecutionService {
                     ...(isTimeoutErr ? { timeoutMs: this.tabStateService.requestTimeoutMs() } : {}),
                     message: electronNetworkError.message || `Could not reach API at ${finalUrl}.`
                 };
-            } else if ((httpResponse as any)?.name === 'TimeoutError') {
+            } else if ((httpResponse as any)?.name === 'TimeoutError' || (
+                httpResponse instanceof HttpErrorResponse && (
+                    httpResponse.status === 408 ||
+                    httpResponse.status === 504 ||
+                    (typeof httpResponse.error?.message === 'string' && /timed out/i.test(httpResponse.error.message))
+                )
+            )) {
                 const timeoutMs = this.tabStateService.requestTimeoutMs();
+                const proxyTimeoutMsg = httpResponse instanceof HttpErrorResponse && typeof httpResponse.error?.message === 'string'
+                    ? httpResponse.error.message
+                    : '';
                 status = 0;
                 rawResponseBody = {
                     error: 'Request Timed Out',
                     code: 'ETIMEDOUT',
                     url: finalUrl,
                     timeoutMs,
-                    message: `Request timed out after ${timeoutMs} ms (${formatTimeoutLabel(timeoutMs)}) while waiting for a response from ${finalUrl}. You can adjust the global Request Timeout in Settings.`
+                    message: proxyTimeoutMsg || (timeoutMs > 0
+                        ? `Request timed out after ${timeoutMs} ms (${formatTimeoutLabel(timeoutMs)}) while waiting for a response from ${finalUrl}. You can adjust the global Request Timeout in Settings.`
+                        : `Request timed out while waiting for a response from ${finalUrl}.`)
                 };
             } else {
                 status = httpResponse?.status || 0;

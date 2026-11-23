@@ -600,6 +600,7 @@ export class EnterpriseSuiteModalComponent {
 
     const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
     const useElectron = isElectronApp() && electronApi?.executeHttpRequest;
+    const timeoutMs = this.tabState.requestTimeoutMs();
 
     const runOne = async () => {
       const t0 = performance.now();
@@ -610,18 +611,34 @@ export class EnterpriseSuiteModalComponent {
             method,
             headers: hdrs,
             body: resolvedBody ?? null,
-            verifySsl: req.settings?.verifySsl ?? false
+            verifySsl: req.settings?.verifySsl ?? false,
+            timeoutMs
           });
           if (r?.ok && r.statusCode >= 200 && r.statusCode < 400) successCount++;
           else errorCount++;
         } else {
-          const r = await fetch(environment.proxyUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: targetUrl, method, headers: hdrs, body: resolvedBody ?? null, verifySsl: false })
-          });
-          if (r.ok) successCount++;
-          else errorCount++;
+          const controller = timeoutMs > 0 && typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+          try {
+            const proxyUrl = environment.proxyUrl || '/api/v1/Proxy';
+            const r = await fetch(proxyUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: targetUrl,
+                method,
+                headers: hdrs,
+                body: resolvedBody ?? null,
+                verifySsl: false,
+                timeoutMs: timeoutMs > 0 ? timeoutMs : 0
+              }),
+              ...(controller ? { signal: controller.signal } : {})
+            });
+            if (r.ok) successCount++;
+            else errorCount++;
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
         }
       } catch {
         errorCount++;
