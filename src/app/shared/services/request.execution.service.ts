@@ -18,6 +18,7 @@ import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../uti
 import { generateAwsSigV4Headers } from '../utils/aws-sigv4.util';
 import { CookieJarService } from './cookie-jar.service';
 import { EnvironmentService } from './environment.service';
+import { applyRequestFieldLinksToTabState, RequestFieldLinkMutation } from '../utils/script-field-link.util';
 
 export interface ClientCertConfig {
     id?: string;
@@ -496,10 +497,14 @@ export class RequestExecutionService {
                     autoEncryptBody: preparedEnc.autoEncryptBody,
                     autoEncryptHeaders: autoEncHeaders
                 });
-                const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
+                const encResult = await this.sandboxService.executeScript(
+                    encryptionScriptCode,
+                    encContext,
+                    freshState.encryption?.scriptLanguage
+                );
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 encryptionLogs = encResult.logs || '';
-                this.applyScriptMutations(encResult.context);
+                this.applyScriptMutations(encResult.context, effectiveTabId);
 
                 if (encResult.success && encResult.context) {
                     headers = encResult.context.headers || headers;
@@ -509,8 +514,10 @@ export class RequestExecutionService {
                     if (hasFieldEncryptToggledOn && !isAutoAuthRetry) {
                         const fnBodyOnly = encryptionScriptCode
                             .replace(/^(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*\{/, '')
+                            .replace(/^(?:async\s+)?def\s+\w+\s*\([^)]*\)\s*(?:->\s*[^:]+)?:/, '')
                             .replace(/\}\s*$/, '')
-                            .replace(/"(?:[^"\\]|\\.)*"|(\/\*[\s\S]*?\*\/|\/\/.*)/g, (m, c) => (c ? '' : m))
+                            .replace(/"(?:[^"\\]|\\.)*"|(\/\*[\s\S]*?\*\/|\/\/.*|#.*)/g, (m, c) => (c ? '' : m))
+                            .replace(/^\s*pass\s*$/gm, '')
                             .trim();
                         if (!fnBodyOnly) {
                             this.notificationService.notify('Encryption Failed: Encryption script is empty', 'error');
@@ -568,16 +575,23 @@ export class RequestExecutionService {
                     graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
                     rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
                 });
-                const result = await this.sandboxService.executeScript(preScriptCode, context);
+                const result = await this.sandboxService.executeScript(
+                    preScriptCode,
+                    context,
+                    freshState.scripts?.preRequestLanguage
+                );
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 preRequestLogs += result.logs || '';
-                const mutated = this.applyScriptMutations(result.context);
+                const mutated = this.applyScriptMutations(result.context, effectiveTabId);
                 if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
 
                 if (result.success && result.context) {
                     headers = result.context.headers || headers;
                     body = result.context.body !== undefined ? result.context.body : body;
                     params = result.context.params || params;
+                    if (typeof result.context.rawText === 'string' && freshState.bodyType === 'raw' && freshState.rawType === 'Text') {
+                        body = result.context.rawText;
+                    }
                 } else if (result.error) {
                     if (!this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                     preRequestLogs += `\nError: ${result.error}`;
@@ -1241,9 +1255,13 @@ export class RequestExecutionService {
                     graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
                     rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
                 });
-                const result = await this.sandboxService.executeScript(postScriptCode, context);
+                const result = await this.sandboxService.executeScript(
+                    postScriptCode,
+                    context,
+                    freshState.scripts?.postResponseLanguage
+                );
                 postResponseLogs = result.logs || '';
-                const mutated = this.applyScriptMutations(result.context);
+                const mutated = this.applyScriptMutations(result.context, effectiveTabId);
                 if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
 
                 if (result.success && result.context) {
@@ -1278,8 +1296,12 @@ export class RequestExecutionService {
                     graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
                     rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
                 });
-                const testResult = await this.sandboxService.executeScript(testScriptCode, testContext);
-                const mutated = this.applyScriptMutations(testResult.context);
+                const testResult = await this.sandboxService.executeScript(
+                    testScriptCode,
+                    testContext,
+                    freshState.scripts?.testScriptLanguage
+                );
+                const mutated = this.applyScriptMutations(testResult.context, effectiveTabId);
                 if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
                 if (testResult.context?.testResults && Array.isArray(testResult.context.testResults)) {
                     testResults = [...testResults, ...testResult.context.testResults];
@@ -1597,7 +1619,7 @@ export class RequestExecutionService {
         };
     }
 
-    private applyScriptMutations(resultContext?: Record<string, any>): { nextRequest?: string | null } {
+    private applyScriptMutations(resultContext?: Record<string, any>, currentTabId?: string): { nextRequest?: string | null } {
         if (!resultContext || typeof resultContext !== 'object') {
             return {};
         }
@@ -1625,6 +1647,40 @@ export class RequestExecutionService {
                 }
             }
         }
+
+        const fieldLinks = resultContext['__requestFieldLinks'];
+        if (Array.isArray(fieldLinks) && fieldLinks.length > 0) {
+            const byTargetId = new Map<string, RequestFieldLinkMutation[]>();
+            const allReqs = this.tabStateService.allCapsuleRequests();
+            for (const rawLink of fieldLinks as RequestFieldLinkMutation[]) {
+                if (!rawLink) continue;
+                let destId = currentTabId ? this.tabStateService.resolveTabId(currentTabId) : '';
+                if (rawLink.request && String(rawLink.request).trim()) {
+                    const needle = String(rawLink.request).trim().toLowerCase();
+                    const matched = allReqs.find(r => r.id.toLowerCase() === needle)
+                        || allReqs.find(r => (r.name || '').trim().toLowerCase() === needle)
+                        || allReqs.find(r => (r.name || '').toLowerCase().includes(needle));
+                    if (matched) {
+                        destId = this.tabStateService.resolveTabId(matched.id);
+                    }
+                }
+                if (destId) {
+                    const arr = byTargetId.get(destId) || [];
+                    arr.push(rawLink);
+                    byTargetId.set(destId, arr);
+                }
+            }
+            for (const [destId, linksForTab] of byTargetId.entries()) {
+                const targetState = this.tabStateService.getState(destId);
+                if (targetState) {
+                    const patch = applyRequestFieldLinksToTabState(targetState, linksForTab);
+                    if (Object.keys(patch).length > 0) {
+                        this.tabStateService.updateState(destId, patch);
+                    }
+                }
+            }
+        }
+
         return {
             nextRequest: '__nextRequest' in resultContext ? (resultContext['__nextRequest'] as string | null) : undefined
         };

@@ -391,7 +391,7 @@
     <!-- ─── SCRIPTS ─── -->
     @if (payloadType() === 'scripts') {
     <div class="p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-x-2">
                 <app-scrollable-select-component [activeValue]="displayScriptTab()" [optionValues]="scriptOptions()"
                     [verticalPosition]="28" [modalWidth]="150" (outputSelectedValue)="setScriptTab($event)">
@@ -404,10 +404,41 @@
                             class="text-[14px]! size-[14px]! ml-2 text-(--postonsteroids-text-muted)">expand_more</mat-icon>
                     </div>
                 </app-scrollable-select-component>
+
+                <!-- Language Switcher: JavaScript / Python -->
+                <div class="inline-flex items-center rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-0.5"
+                     role="group" aria-label="Script language">
+                    <button type="button" (click)="setPhaseScriptLanguage('javascript')"
+                        class="px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                        [class.bg-(--postonsteroids-accent)]="activePhaseLanguage() === 'javascript'"
+                        [class.text-white]="activePhaseLanguage() === 'javascript'"
+                        [class.text-(--postonsteroids-text-muted)]="activePhaseLanguage() !== 'javascript'">
+                        JS
+                    </button>
+                    <button type="button" (click)="setPhaseScriptLanguage('python')"
+                        class="px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                        [class.bg-(--postonsteroids-accent)]="activePhaseLanguage() === 'python'"
+                        [class.text-white]="activePhaseLanguage() === 'python'"
+                        [class.text-(--postonsteroids-text-muted)]="activePhaseLanguage() !== 'python'">
+                        Python
+                    </button>
+                </div>
             </div>
 
             <div class="flex items-center gap-x-2">
-                <button (click)="resetScript()"
+                <button type="button" (click)="runCurrentPhaseScript()" [disabled]="isRunningPhaseScript()"
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-green-500/50 rounded px-3 py-1 transition-colors group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Run current script">
+                    <mat-icon class="text-[14px]! size-[14px]! mr-1 text-status-success">play_arrow</mat-icon>
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-status-success transition-colors">
+                        @if (isRunningPhaseScript()) {
+                            Running...
+                        } @else {
+                            Run
+                        }
+                    </span>
+                </button>
+                <button type="button" (click)="resetScript()"
                     class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-3 py-1 transition-colors group cursor-pointer">
                     <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">restart_alt</mat-icon>
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">Reset</span>
@@ -420,6 +451,66 @@
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">Delete</span>
                 </button>
             </div>
+        </div>
+
+        <!-- Direct Response -> Request Field Linking Bar -->
+        <div class="flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/70 text-[11px]">
+            <div class="flex items-center gap-1 text-(--postonsteroids-text-secondary) font-semibold shrink-0 mr-1">
+                <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">link</mat-icon>
+                <span>Link Response &rarr; Field</span>
+            </div>
+
+            <select aria-label="Target Request Section"
+                [ngModel]="linkTargetType()"
+                (ngModelChange)="linkTargetType.set($event)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer">
+                @for (opt of linkTargetOptions; track opt.value) {
+                    <option [value]="opt.value" class="bg-(--postonsteroids-bg-secondary)">{{ opt.label }}</option>
+                }
+            </select>
+
+            <input type="text"
+                aria-label="Response source path"
+                list="script-response-field-paths"
+                [ngModel]="linkSourcePath()"
+                (ngModelChange)="linkSourcePath.set($event)"
+                placeholder="Response path (e.g. data.token)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) min-w-[165px] flex-1 max-w-[230px]" />
+
+            <span class="text-(--postonsteroids-text-muted) font-mono">&rarr;</span>
+
+            <input type="text"
+                aria-label="Target request field path"
+                list="script-request-field-paths"
+                [ngModel]="linkTargetField()"
+                (ngModelChange)="linkTargetField.set($event)"
+                placeholder="Target field (e.g. auth.token or Authorization)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) min-w-[175px] flex-1 max-w-[250px]" />
+
+            <datalist id="script-response-field-paths">
+                @for (rp of responseFieldSuggestions(); track rp) {
+                    <option [value]="rp"></option>
+                }
+            </datalist>
+            <datalist id="script-request-field-paths">
+                @for (tp of requestFieldSuggestions(); track tp) {
+                    <option [value]="tp"></option>
+                }
+            </datalist>
+
+            <button type="button" (click)="insertResponseFieldLinkCode()"
+                title="Insert code linking this response path into the target request field"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/60 text-(--postonsteroids-text-primary) font-medium cursor-pointer transition-colors">
+                <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">add_circle_outline</mat-icon>
+                <span>Insert Code</span>
+            </button>
+
+            <button type="button" (click)="populateRequestFieldFromResponse()"
+                title="Extract from latest response and populate the target request field immediately"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 border border-(--postonsteroids-accent)/40 text-(--postonsteroids-accent) font-semibold cursor-pointer transition-colors">
+                <mat-icon class="text-[13px]! size-[13px]!">bolt</mat-icon>
+                <span>Populate Now</span>
+            </button>
         </div>
 
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
@@ -533,12 +624,14 @@
                 @if (activeScriptTab() === 'test') {
                     <app-monaco-editor [ngModel]="scripts().testScript"
                         (ngModelChange)="updateScript('test', $event)" [restrictToFunctionBody]="true"
+                        [language]="activePhaseLanguage()"
                         [enableFloatingVar]="false"
                         class="flex-1 min-h-0 block w-full" [editorId]="'script-test'" [ownerTabId]="tabId()">
                     </app-monaco-editor>
                 } @else {
                     <app-monaco-editor [ngModel]="getScriptContent()"
                         (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="true"
+                        [language]="activePhaseLanguage()"
                         [enableFloatingVar]="false"
                         class="flex-1 min-h-0 block w-full" [editorId]="'script-' + activeScriptTab()" [ownerTabId]="tabId()">
                     </app-monaco-editor>
@@ -552,9 +645,26 @@
     <!-- ─── ENCRYPTION ─── -->
     @if (payloadType() === 'encryption') {
     <div class="p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full">
-        <div class="flex items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-x-2">
                 <div class="text-[12px] text-(--postonsteroids-text-primary) font-semibold mr-2">Encryption Script</div>
+                <div class="inline-flex items-center rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-0.5"
+                     role="group" aria-label="Encryption script language">
+                    <button type="button" (click)="setEncryptionScriptLanguage('javascript')"
+                        class="px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                        [class.bg-(--postonsteroids-accent)]="activeEncryptionLanguage() === 'javascript'"
+                        [class.text-white]="activeEncryptionLanguage() === 'javascript'"
+                        [class.text-(--postonsteroids-text-muted)]="activeEncryptionLanguage() !== 'javascript'">
+                        JS
+                    </button>
+                    <button type="button" (click)="setEncryptionScriptLanguage('python')"
+                        class="px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                        [class.bg-(--postonsteroids-accent)]="activeEncryptionLanguage() === 'python'"
+                        [class.text-white]="activeEncryptionLanguage() === 'python'"
+                        [class.text-(--postonsteroids-text-muted)]="activeEncryptionLanguage() !== 'python'">
+                        Python
+                    </button>
+                </div>
             </div>
             
             <div class="flex items-center gap-x-2">
@@ -605,6 +715,7 @@
                 </div>
                 <app-monaco-editor [ngModel]="encryption().script"
                     (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="true"
+                    [language]="activeEncryptionLanguage()"
                     [enableFloatingVar]="false"
                     class="flex-1 min-h-0 block w-full" [editorId]="'encryption-script'" [ownerTabId]="tabId()">
                 </app-monaco-editor>

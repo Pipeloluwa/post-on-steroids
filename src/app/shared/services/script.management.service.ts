@@ -7,11 +7,14 @@ import { firstValueFrom } from 'rxjs';
 import { LocalStorageService } from './local.storage.service';
 import { generateUUID } from '../utils/uuid.util';
 import {
-    DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
-    DEFAULT_DECRYPTION_SCRIPT_SKELETON,
-    DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
-    DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
-    DEFAULT_TEST_SCRIPT_SKELETON
+    DEFAULT_ENCRYPTION_SCRIPTS,
+    DEFAULT_DECRYPTION_SCRIPTS,
+    DEFAULT_PRE_REQUEST_SCRIPTS,
+    DEFAULT_POST_RESPONSE_SCRIPTS,
+    DEFAULT_TEST_SCRIPTS,
+    DefaultScriptEntry,
+    ScriptLanguage,
+    getDefaultScriptCode
 } from '../constants/script.snippets.constants';
 
 export interface ScriptDto {
@@ -20,6 +23,7 @@ export interface ScriptDto {
     type: string;
     name: string;
     content: string;
+    language?: ScriptLanguage;
     isDefault: boolean;
     originalContent?: string;
     createdAt: string;
@@ -38,40 +42,36 @@ export interface BuiltInDefaultScriptDef {
     type: string;
     name: string;
     virtualId: string;
-    getDefaultContent: () => string;
+    getDefaultContent: (language?: ScriptLanguage) => string;
+}
+
+function toScriptSlug(name: string): string {
+    return (name || 'default')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'default';
+}
+
+function buildDefaultDefsForList(
+    type: string,
+    entries: DefaultScriptEntry[],
+    primaryVirtualId: string
+): BuiltInDefaultScriptDef[] {
+    return entries.map((entry, idx) => ({
+        type,
+        name: entry.name,
+        virtualId: idx === 0 ? primaryVirtualId : `default_${type.toLowerCase()}_${toScriptSlug(entry.name)}`,
+        getDefaultContent: (lang: ScriptLanguage = 'javascript') =>
+            (lang === 'python' && entry.pythonCode) ? entry.pythonCode : entry.code
+    }));
 }
 
 export const BUILT_IN_DEFAULT_SCRIPTS: BuiltInDefaultScriptDef[] = [
-    {
-        type: 'Encryption',
-        name: 'Encrypt',
-        virtualId: 'default_encrypt_fallback',
-        getDefaultContent: () => DEFAULT_ENCRYPTION_SCRIPT_SKELETON
-    },
-    {
-        type: 'Encryption',
-        name: 'Decrypt',
-        virtualId: 'default_decrypt_fallback',
-        getDefaultContent: () => DEFAULT_DECRYPTION_SCRIPT_SKELETON
-    },
-    {
-        type: 'PreRequest',
-        name: 'Pre-request',
-        virtualId: 'default_prerequest_fallback',
-        getDefaultContent: () => DEFAULT_PRE_REQUEST_SCRIPT_SKELETON
-    },
-    {
-        type: 'PostRequest',
-        name: 'Post-response',
-        virtualId: 'default_postresponse_fallback',
-        getDefaultContent: () => DEFAULT_POST_RESPONSE_SCRIPT_SKELETON
-    },
-    {
-        type: 'Test',
-        name: 'Test',
-        virtualId: 'default_test_fallback',
-        getDefaultContent: () => DEFAULT_TEST_SCRIPT_SKELETON
-    }
+    ...buildDefaultDefsForList('Encryption', DEFAULT_ENCRYPTION_SCRIPTS, 'default_encrypt_fallback'),
+    ...buildDefaultDefsForList('Encryption', DEFAULT_DECRYPTION_SCRIPTS, 'default_decrypt_fallback'),
+    ...buildDefaultDefsForList('PreRequest', DEFAULT_PRE_REQUEST_SCRIPTS, 'default_prerequest_fallback'),
+    ...buildDefaultDefsForList('PostRequest', DEFAULT_POST_RESPONSE_SCRIPTS, 'default_postresponse_fallback'),
+    ...buildDefaultDefsForList('Test', DEFAULT_TEST_SCRIPTS, 'default_test_fallback')
 ];
 
 @Injectable({
@@ -105,24 +105,13 @@ export class ScriptManagementService {
         if (id && id.startsWith('default_')) return true;
         if (isDefault) return true;
         const lowerName = (name || '').trim().toLowerCase();
-        if (type === 'Encryption' && (lowerName === 'encrypt' || lowerName === 'decrypt')) return true;
-        if (type === 'PreRequest' && lowerName === 'pre-request') return true;
-        if (type === 'PostRequest' && lowerName === 'post-response') return true;
-        if (type === 'Test' && lowerName === 'test') return true;
-        return false;
+        return BUILT_IN_DEFAULT_SCRIPTS.some(
+            def => (!type || def.type === type) && def.name.trim().toLowerCase() === lowerName
+        );
     }
 
-    getDefaultContentForScript(type: string, name?: string): string {
-        const lowerName = (name || '').trim().toLowerCase();
-        if (type === 'Encryption') {
-            return lowerName.includes('decrypt')
-                ? DEFAULT_DECRYPTION_SCRIPT_SKELETON
-                : DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
-        }
-        if (type === 'PreRequest') return DEFAULT_PRE_REQUEST_SCRIPT_SKELETON;
-        if (type === 'PostRequest') return DEFAULT_POST_RESPONSE_SCRIPT_SKELETON;
-        if (type === 'Test') return DEFAULT_TEST_SCRIPT_SKELETON;
-        return '';
+    getDefaultContentForScript(type: string, name?: string, language: ScriptLanguage = 'javascript'): string {
+        return getDefaultScriptCode(type, name, language);
     }
 
     getScriptContent(type: string, name: string): string {
@@ -350,7 +339,7 @@ export class ScriptManagementService {
         }
     }
 
-    async createScript(type: string, name: string, content: string): Promise<ScriptDto | null> {
+    async createScript(type: string, name: string, content: string, language: ScriptLanguage = 'javascript'): Promise<ScriptDto | null> {
         if (!this.authService.isLoggedIn()) {
             const script: ScriptDto = { 
                 id: generateUUID(), 
@@ -358,6 +347,7 @@ export class ScriptManagementService {
                 type, 
                 name, 
                 content, 
+                language,
                 isDefault: false,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -517,11 +507,15 @@ export class ScriptManagementService {
         }
     }
 
-    async resetScript(id: string): Promise<ScriptDto | null> {
+    async resetScript(id: string, language?: ScriptLanguage): Promise<ScriptDto | null> {
         const targetScript = this.scripts().find(s => s.id === id);
         if (!targetScript) return null;
 
-        const defaultContent = this.getDefaultContentForScript(targetScript.type, targetScript.name);
+        const defaultContent = this.getDefaultContentForScript(
+            targetScript.type,
+            targetScript.name,
+            language || targetScript.language || 'javascript'
+        );
         const isVirtual = id.startsWith('default_');
 
         let updatedScript: ScriptDto | null = null;

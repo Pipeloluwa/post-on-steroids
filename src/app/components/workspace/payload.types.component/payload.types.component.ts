@@ -9,6 +9,7 @@ import { TabStateService, KeyValue, AuthState, EncryptionState, SettingsState, O
 import { environment } from '../../../../environments/environment';
 import { SandboxExecutionService } from '../../../shared/services/sandbox.execution.service';
 import { VariableService } from '../../../shared/services/variable.service';
+import { EnvironmentService } from '../../../shared/services/environment.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ScriptManagementService } from '../../../shared/services/script.management.service';
 import { ChangeDetectionStrategy, input } from '@angular/core';
@@ -17,7 +18,27 @@ import { BodyTypesComponent } from "../body.types.component/body.types.component
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
 import { VariableInputComponent } from '../../../shared/components/variable-input.component/variable-input.component';
 import { STANDARD_TEST_SNIPPETS, TestSnippet } from '../../../shared/constants/test.snippets.constants';
-import { PRE_REQUEST_SNIPPETS, POST_RESPONSE_SNIPPETS, ScriptSnippet, DEFAULT_ENCRYPTION_SCRIPT_SKELETON, DEFAULT_DECRYPTION_SCRIPT_SKELETON, DEFAULT_PRE_REQUEST_SCRIPT_SKELETON, DEFAULT_POST_RESPONSE_SCRIPT_SKELETON, DEFAULT_TEST_SCRIPT_SKELETON } from '../../../shared/constants/script.snippets.constants';
+import {
+  PRE_REQUEST_SNIPPETS,
+  POST_RESPONSE_SNIPPETS,
+  ScriptSnippet,
+  ScriptLanguage,
+  DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
+  DEFAULT_DECRYPTION_SCRIPT_SKELETON,
+  DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
+  DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
+  DEFAULT_TEST_SCRIPT_SKELETON,
+  isDefaultSkeletonCode
+} from '../../../shared/constants/script.snippets.constants';
+import { detectScriptLanguage } from '../../../shared/utils/python-script-engine.util';
+import {
+  RequestFieldTarget,
+  RequestFieldLinkMutation,
+  extractValueByPath,
+  applyRequestFieldLinksToTabState,
+  collectJsonFieldPaths,
+  buildFieldLinkCodeSnippet
+} from '../../../shared/utils/script-field-link.util';
 import { DialogService } from '../../../shared/services/dialog.service';
 import { sanitizeJsonBodyForScripts } from '../../../shared/utils/format.utils';
 import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../../../shared/utils/encryption-path.util';
@@ -37,6 +58,7 @@ import { formatTimeoutLabel, parseTimeoutInputValue } from '../../../shared/util
 export class PayloadTypesComponent {
   tabStateService = inject(TabStateService);
   variableService = inject(VariableService);
+  private environmentService = inject(EnvironmentService);
   private http = inject(HttpClient);
   private notificationService = inject(NotificationService);
   scriptManagementService = inject(ScriptManagementService);
@@ -201,10 +223,9 @@ export class PayloadTypesComponent {
     if (name === '+ Add New Script') {
         const scriptName = await this.dialogService.prompt('Enter new script name:');
         if (scriptName) {
-            const defaultContent = scriptName.toLowerCase().includes('decrypt')
-                ? DEFAULT_DECRYPTION_SCRIPT_SKELETON
-                : DEFAULT_ENCRYPTION_SCRIPT_SKELETON;
-            const newScript = await this.scriptManagementService.createScript('Encryption', scriptName, defaultContent);
+            const lang = this.activeEncryptionLanguage();
+            const defaultContent = this.scriptManagementService.getDefaultContentForScript('Encryption', scriptName, lang);
+            const newScript = await this.scriptManagementService.createScript('Encryption', scriptName, defaultContent, lang);
             if (newScript) {
                 this.activeEncryptionScriptId.set(newScript.id);
                 this.setEncryptionField('script', newScript.content, false);
@@ -215,9 +236,13 @@ export class PayloadTypesComponent {
     const s = this.encryptionScripts().find(x => x.name === name);
     if (s) {
         this.activeEncryptionScriptId.set(s.id);
-        const content = (s.content && s.content.trim())
+        const lang = this.activeEncryptionLanguage();
+        let content = (s.content && s.content.trim())
             ? s.content
-            : this.scriptManagementService.getDefaultContentForScript(s.type, s.name);
+            : this.scriptManagementService.getDefaultContentForScript(s.type, s.name, lang);
+        if (s.id.startsWith('default_') && isDefaultSkeletonCode(content) && lang === 'python') {
+            content = this.scriptManagementService.getDefaultContentForScript(s.type, s.name, 'python');
+        }
         this.setEncryptionField('script', content, false);
     }
   }
@@ -227,7 +252,8 @@ export class PayloadTypesComponent {
   async runActiveEncryptionScript() {
         this.isRunningEncryptionScript.set(true);
         try {
-      const code = this.variableService.resolveScript(this.encryption().script || '');
+      const encScriptRaw = this.encryption().script || '';
+      const code = this.variableService.resolveScript(encScriptRaw);
       const state = this.tabState();
       const currentScriptsBefore = state?.scripts || {} as any;
       // Immediately clear encryption console output before running
@@ -320,7 +346,7 @@ export class PayloadTypesComponent {
           autoEncryptHeaders: autoEncryptHeaders,
       };
 
-      const result = await this.sandboxService.executeScript(code, context);
+      const result = await this.sandboxService.executeScript(code, context, this.activeEncryptionLanguage());
       const currentScripts = state?.scripts || {} as any;
 
       if (result.success) {
@@ -420,13 +446,14 @@ export class PayloadTypesComponent {
   }
 
     async loadCurrentPhaseScript(name: string) {
+    const lang = this.activePhaseLanguage();
     if (name === '+ Add New Script') {
         const scriptName = await this.dialogService.prompt('Enter new script name:');
         if (scriptName) {
             const phase = this.activeScriptTab();
             const type = phase === 'preRequest' ? 'PreRequest' : phase === 'postResponse' ? 'PostRequest' : 'Test';
-            const defaultContent = this.scriptManagementService.getDefaultContentForScript(type, scriptName);
-            const newScript = await this.scriptManagementService.createScript(type, scriptName, defaultContent);
+            const defaultContent = this.scriptManagementService.getDefaultContentForScript(type, scriptName, lang);
+            const newScript = await this.scriptManagementService.createScript(type, scriptName, defaultContent, lang);
             if (newScript) {
                 if (phase === 'preRequest') this.activePreRequestScriptId.set(newScript.id);
                 if (phase === 'postResponse') this.activePostRequestScriptId.set(newScript.id);
@@ -436,58 +463,332 @@ export class PayloadTypesComponent {
         }
         return;
     }
+    const resolveSelectedContent = (s: { id: string; type: string; name: string; content: string }) => {
+        let content = (s.content && s.content.trim())
+            ? s.content
+            : this.scriptManagementService.getDefaultContentForScript(s.type, s.name, lang);
+        if (s.id.startsWith('default_') && isDefaultSkeletonCode(content) && lang === 'python') {
+            content = this.scriptManagementService.getDefaultContentForScript(s.type, s.name, 'python');
+        }
+        return content;
+    };
     if (this.activeScriptTab() === 'preRequest') {
         const s = this.preRequestScripts().find(x => x.name === name);
         if (s) {
             this.activePreRequestScriptId.set(s.id);
-            const content = (s.content && s.content.trim())
-                ? s.content
-                : this.scriptManagementService.getDefaultContentForScript('PreRequest', s.name);
-            this.updateScript('preRequest', content, false);
+            this.updateScript('preRequest', resolveSelectedContent(s), false);
         }
     } else if (this.activeScriptTab() === 'postResponse') {
         const s = this.postRequestScripts().find(x => x.name === name);
         if (s) {
             this.activePostRequestScriptId.set(s.id);
-            const content = (s.content && s.content.trim())
-                ? s.content
-                : this.scriptManagementService.getDefaultContentForScript('PostRequest', s.name);
-            this.updateScript('postResponse', content, false);
+            this.updateScript('postResponse', resolveSelectedContent(s), false);
         }
     } else if (this.activeScriptTab() === 'test') {
         const s = this.testScripts().find(x => x.name === name);
         if (s) {
             this.activeTestScriptId.set(s.id);
-            const content = (s.content && s.content.trim())
-                ? s.content
-                : this.scriptManagementService.getDefaultContentForScript('Test', s.name);
-            this.updateScript('test', content, false);
+            this.updateScript('test', resolveSelectedContent(s), false);
         }
     }
   }
-  
 
+  isRunningPhaseScript = signal(false);
+
+  activePhaseLanguage = computed<ScriptLanguage>(() => {
+    const tab = this.activeScriptTab();
+    const s = this.scripts();
+    if (tab === 'preRequest') return s.preRequestLanguage || detectScriptLanguage(s.preRequest || '');
+    if (tab === 'postResponse') return s.postResponseLanguage || detectScriptLanguage(s.postResponse || '');
+    return s.testScriptLanguage || detectScriptLanguage(s.testScript || '');
+  });
+
+  activeEncryptionLanguage = computed<ScriptLanguage>(() => {
+    const enc = this.encryption();
+    return enc.scriptLanguage || detectScriptLanguage(enc.script || '');
+  });
+
+  setPhaseScriptLanguage(lang: ScriptLanguage) {
+    const tab = this.activeScriptTab();
+    const currentScripts = this.scripts();
+    const phaseType = tab === 'preRequest' ? 'PreRequest' : tab === 'postResponse' ? 'PostRequest' : 'Test';
+    const currentCode = tab === 'preRequest'
+      ? currentScripts.preRequest
+      : tab === 'postResponse'
+        ? currentScripts.postResponse
+        : currentScripts.testScript;
+    const activeName = tab === 'preRequest'
+      ? this.activePreRequestScriptName
+      : tab === 'postResponse'
+        ? this.activePostRequestScriptName
+        : this.activeTestScriptName;
+    const langField = tab === 'preRequest'
+      ? 'preRequestLanguage'
+      : tab === 'postResponse'
+        ? 'postResponseLanguage'
+        : 'testScriptLanguage';
+    const codeField = tab === 'test' ? 'testScript' : tab;
+
+    const patch: Record<string, any> = { [langField]: lang };
+    if (!currentCode || !currentCode.trim() || isDefaultSkeletonCode(currentCode)) {
+      patch[codeField] = this.scriptManagementService.getDefaultContentForScript(phaseType, activeName, lang);
+    }
+    this.tabStateService.updateState(this.tabId(), { scripts: { ...currentScripts, ...patch } });
+  }
+
+  setEncryptionScriptLanguage(lang: ScriptLanguage) {
+    const currentEnc = this.encryption();
+    const patch: Partial<EncryptionState> = { scriptLanguage: lang };
+    if (!currentEnc.script || !currentEnc.script.trim() || isDefaultSkeletonCode(currentEnc.script)) {
+      patch.script = this.scriptManagementService.getDefaultContentForScript('Encryption', this.activeEncryptionScriptName, lang);
+    }
+    this.tabStateService.updateState(this.tabId(), { encryption: { ...currentEnc, ...patch } });
+  }
+
+  // Response -> Request Field Direct Linking state
+  linkTargetType = signal<RequestFieldTarget>('body');
+  linkTargetField = signal<string>('');
+  linkSourcePath = signal<string>('');
+  linkTargetOptions: Array<{ value: RequestFieldTarget; label: string }> = [
+    { value: 'body', label: 'Body' },
+    { value: 'param', label: 'Param' },
+    { value: 'query', label: 'Query' },
+    { value: 'header', label: 'Header' }
+  ];
+
+  responseFieldSuggestions = computed<string[]>(() => {
+    const st = this.tabState();
+    const bodySuggestions = collectJsonFieldPaths(st?.responseBody, '', 30);
+    const hdrSuggestions = (st?.responseHeaders || [])
+      .filter(h => h && h.key)
+      .slice(0, 12)
+      .map(h => `responseHeaders.${h.key}`);
+    return Array.from(new Set([...bodySuggestions, ...hdrSuggestions]));
+  });
+
+  requestFieldSuggestions = computed<string[]>(() => {
+    const target = this.linkTargetType();
+    const st = this.tabState();
+    if (!st) return [];
+    if (target === 'header') {
+      return Array.from(new Set((st.headers || []).map(h => (h.key || '').trim()).filter(Boolean)));
+    }
+    if (target === 'param' || target === 'query') {
+      return Array.from(new Set((st.params || []).map(p => (p.key || '').trim()).filter(Boolean)));
+    }
+    if (st.bodyType === 'form-data') {
+      return Array.from(new Set((st.formData || []).map(f => (f.key || '').trim()).filter(Boolean)));
+    }
+    if (st.bodyType === 'x-www-form-urlencoded') {
+      return Array.from(new Set((st.urlEncodedData || []).map(u => (u.key || '').trim()).filter(Boolean)));
+    }
+    return collectJsonFieldPaths(st.rawBodyJson || st.rawBody || '{}', '', 30);
+  });
+
+  private insertCodeBlockIntoScript(code: string, snippetLine: string, lang: ScriptLanguage, emptyFallbackType: string, emptyFallbackName: string): string {
+    const base = (!code || !code.trim())
+      ? this.scriptManagementService.getDefaultContentForScript(emptyFallbackType, emptyFallbackName, lang)
+      : code;
+
+    if (lang === 'python') {
+      if (/^[ \t]+pass\s*$/m.test(base)) {
+        return base.replace(/^[ \t]+pass\s*$/m, snippetLine);
+      }
+      if (/^[ \t]+return\s+passed\b/m.test(base)) {
+        return base.replace(/^[ \t]+return\s+passed\b/m, `${snippetLine}\n    return passed`);
+      }
+      return `${base.trimEnd()}\n${snippetLine}`;
+    }
+
+    if (base.includes('return passed;')) {
+      return base.replace('return passed;', `${snippetLine}\n    return passed;`);
+    }
+    const lastBrace = base.lastIndexOf('}');
+    if (lastBrace !== -1) {
+      return base.slice(0, lastBrace).trimEnd() + `\n${snippetLine}\n` + base.slice(lastBrace);
+    }
+    return `${base}\n${snippetLine}`;
+  }
+
+  insertResponseFieldLinkCode() {
+    const field = this.linkTargetField().trim();
+    const sourceExpr = this.linkSourcePath().trim() || 'data.token';
+    if (!field) {
+      this.notificationService.notify('Enter the destination request field name or path first.', 'warning');
+      return;
+    }
+    const phase = this.activeScriptTab();
+    const lang = this.activePhaseLanguage();
+    const codeLine = buildFieldLinkCodeSnippet({
+      target: this.linkTargetType(),
+      field,
+      sourceExpr,
+      language: lang
+    });
+    const current = this.scripts();
+    const curCode = phase === 'preRequest'
+      ? current.preRequest
+      : phase === 'postResponse'
+        ? current.postResponse
+        : current.testScript;
+    const phaseType = phase === 'preRequest' ? 'PreRequest' : phase === 'postResponse' ? 'PostRequest' : 'Test';
+    const activeName = phase === 'preRequest'
+      ? this.activePreRequestScriptName
+      : phase === 'postResponse'
+        ? this.activePostRequestScriptName
+        : this.activeTestScriptName;
+    const nextCode = this.insertCodeBlockIntoScript(curCode, codeLine, lang, phaseType, activeName);
+    this.updateScript(phase, nextCode, true);
+    this.notificationService.notify(`Inserted ${lang === 'python' ? 'Python' : 'JS'} link to ${this.linkTargetType()}.${field}`);
+  }
+
+  populateRequestFieldFromResponse() {
+    const state = this.tabState();
+    if (!state) return;
+    const field = this.linkTargetField().trim();
+    const sourcePath = this.linkSourcePath().trim();
+    if (!field || !sourcePath) {
+      this.notificationService.notify('Specify both response path and target request field.', 'warning');
+      return;
+    }
+
+    let extracted = /^(?:responseHeaders\.|response_headers\.)/i.test(sourcePath)
+      ? extractValueByPath(state.responseHeaders || [], sourcePath)
+      : extractValueByPath(state.responseBody, sourcePath);
+
+    if (extracted === undefined && state.responseHeaders?.length) {
+      extracted = extractValueByPath(state.responseHeaders, sourcePath);
+    }
+
+    if (extracted === undefined) {
+      this.notificationService.notify(`No value found at response path "${sourcePath}". Send a request first or check the path.`, 'warning');
+      return;
+    }
+
+    const patch = applyRequestFieldLinksToTabState(state, [
+      { target: this.linkTargetType(), field, value: extracted }
+    ]);
+    if (Object.keys(patch).length > 0) {
+      this.tabStateService.updateState(this.tabId(), patch);
+      const preview = typeof extracted === 'string' ? extracted : JSON.stringify(extracted);
+      const shortPreview = preview.length > 48 ? `${preview.slice(0, 45)}...` : preview;
+      this.notificationService.notify(`Populated ${this.linkTargetType()} "${field}" = ${shortPreview}`, 'success');
+    }
+  }
 
   async runCurrentPhaseScript() {
-      const code = this.variableService.resolveScript(this.getScriptContent() || '');
+      const state = this.tabState();
+      if (!state) return;
+      const phase = this.activeScriptTab();
+      const lang = this.activePhaseLanguage();
+      const rawCode = this.getScriptContent() || '';
+      const code = this.variableService.resolveScript(rawCode);
+      if (!code.trim()) return;
+
+      this.isRunningPhaseScript.set(true);
       try {
-          const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-          // Simple sandbox stub for pre/post scripts
-          const mockPm = {
-              environment: { get: () => 'mock', set: () => {} },
-              variables: { get: () => 'mock', set: () => {} },
-              test: (name: string, fn: Function) => {
-                  try { fn(); console.log('Test passed:', name); }
-                  catch (e) { console.error('Test failed:', name, e); }
-              },
-              response: { to: { have: { status: () => {} } } }
+          const envVars: Record<string, string> = {};
+          const activeEnv = this.environmentService.activeEnvironment();
+          for (const v of activeEnv?.variables || []) {
+              if (v.enabled && v.key?.trim()) envVars[v.key.trim()] = v.value ?? '';
+          }
+          const capsuleVars: Record<string, string> = {};
+          for (const v of this.variableService.variables()) {
+              if (v.enabled && v.key?.trim()) capsuleVars[v.key.trim()] = v.value ?? '';
+          }
+
+          const prepared = buildEncryptionPayloadContext({
+              bodyType: state.bodyType || 'none',
+              rawType: state.rawType || 'JSON',
+              rawBodyJson: state.rawBodyJson ? this.variableService.resolveJson(state.rawBodyJson) : undefined,
+              rawBodyXml: state.rawBodyXml ? this.variableService.resolve(state.rawBodyXml) : undefined,
+              rawBodyText: state.rawBodyText ? this.variableService.resolve(state.rawBodyText) : undefined,
+              rawBody: state.rawBody ? this.variableService.resolve(state.rawBody) : undefined,
+              formData: state.formData || [],
+              urlEncodedData: state.urlEncodedData || [],
+              graphqlQuery: state.graphqlQuery || '',
+              graphqlVariables: state.graphqlVariables || '{}'
+          });
+
+          const context = {
+              url: state.url || '',
+              method: state.method || 'GET',
+              headers: (state.headers || []).filter(h => h.enabled && h.key),
+              body: prepared.body,
+              params: (state.params || []).filter(p => p.enabled && p.key),
+              bodyType: prepared.bodyType,
+              rawType: prepared.rawType,
+              formData: prepared.formData,
+              urlEncodedData: prepared.urlEncodedData,
+              graphql: prepared.graphql,
+              rawText: prepared.rawText,
+              responseStatus: state.responseStatus ?? 200,
+              responseTime: state.responseTime ?? 0,
+              responseBody: state.responseBody ?? null,
+              responseHeaders: state.responseHeaders ?? [],
+              responseHeader: state.responseHeaders ?? [],
+              __envVars: envVars,
+              __capsuleVars: capsuleVars
           };
-          const fn = new AsyncFunction('pm', 'console', code);
-          await fn(mockPm, console);
-          this.notificationService.notify('Script ran successfully. Check console.');
-      } catch (err: any) {
-          console.error("Script run error:", err);
-          this.notificationService.notify('Script error: ' + err.message);
+
+          const result = await this.sandboxService.executeScript(code, context, lang);
+          const curScripts = this.scripts();
+          const consoleKey = phase === 'preRequest' ? 'preRequestConsole' : 'postResponseConsole';
+          const outLogs = result.logs || (result.error ? `Error:\n${result.error}` : 'Executed cleanly with no console output.');
+
+          if (result.context && typeof result.context === 'object') {
+              const envSet = result.context['__envSet'];
+              if (envSet && typeof envSet === 'object') {
+                  for (const [k, v] of Object.entries(envSet)) {
+                      if (k) this.environmentService.setActiveVariable(k, String(v ?? ''));
+                  }
+              }
+              const envUnset = result.context['__envUnset'];
+              if (Array.isArray(envUnset)) {
+                  for (const k of envUnset) {
+                      if (typeof k === 'string' && k) this.environmentService.unsetActiveVariable(k);
+                  }
+              }
+              const varSet = result.context['__varSet'];
+              if (varSet && typeof varSet === 'object') {
+                  for (const [k, v] of Object.entries(varSet)) {
+                      if (k) this.variableService.addVariable(k, String(v ?? ''), undefined, 'global');
+                  }
+              }
+
+              const fieldLinks = result.context['__requestFieldLinks'] as RequestFieldLinkMutation[] | undefined;
+              if (Array.isArray(fieldLinks) && fieldLinks.length > 0) {
+                  const latest = this.tabState() || state;
+                  const linkPatch = applyRequestFieldLinksToTabState(latest, fieldLinks);
+                  if (Object.keys(linkPatch).length > 0) {
+                      this.tabStateService.updateState(this.tabId(), linkPatch);
+                  }
+              }
+
+              const nextTestResults = Array.isArray(result.context['testResults']) && phase === 'test'
+                  ? result.context['testResults']
+                  : undefined;
+
+              this.tabStateService.updateState(this.tabId(), {
+                  ...(nextTestResults ? { testResults: nextTestResults } : {}),
+                  scripts: {
+                      ...this.scripts(),
+                      [consoleKey]: result.error ? `Error:\n${result.error}\n\nLogs:\n${result.logs || ''}` : outLogs
+                  }
+              });
+          } else {
+              this.tabStateService.updateState(this.tabId(), {
+                  scripts: { ...curScripts, [consoleKey]: outLogs }
+              });
+          }
+
+          if (result.success) {
+              this.notificationService.notify(`${lang === 'python' ? 'Python' : 'JavaScript'} script executed cleanly.`, 'success');
+          } else {
+              this.notificationService.notify('Script error: ' + (result.error || 'Unknown error'), 'error');
+          }
+      } finally {
+          this.isRunningPhaseScript.set(false);
       }
   }
 
@@ -533,38 +834,14 @@ export class PayloadTypesComponent {
     const snippet = snippets.find(s => s.name === snippetName);
     if (!snippet) return;
 
+    const lang = this.activePhaseLanguage();
+    const snippetCode = (lang === 'python' && snippet.pythonCode) ? snippet.pythonCode : snippet.code;
     const currentScript = phase === 'preRequest' ? this.scripts().preRequest : this.scripts().postResponse;
-    let updatedScript = '';
-    
-    const defPre = 'function preScript(headers, body, params){\n    //only code written within this code block will be executed\n}';
-    const defPost = 'function postScript(responseHeader, responseBody){\n    //only code written within this code block will be executed\n}';
+    const phaseType = phase === 'preRequest' ? 'PreRequest' : 'PostRequest';
+    const activeName = phase === 'preRequest' ? this.activePreRequestScriptName : this.activePostRequestScriptName;
 
-    const isSkeleton = !currentScript || !currentScript.trim()
-        || currentScript === DEFAULT_PRE_REQUEST_SCRIPT_SKELETON
-        || currentScript === DEFAULT_POST_RESPONSE_SCRIPT_SKELETON
-        || currentScript === defPre
-        || currentScript === defPost;
-
-    if (isSkeleton) {
-      if (phase === 'preRequest') {
-        updatedScript = `async function preScript(headers, body, params) {\n${snippet.code}\n}`;
-      } else {
-        updatedScript = `async function postScript(responseHeaders, responseBody, headers, body, params) {\n${snippet.code}\n}`;
-      }
-    } else if (currentScript.lastIndexOf('}') !== -1) {
-      const lastCloseBrace = currentScript.lastIndexOf('}');
-      updatedScript = currentScript.slice(0, lastCloseBrace) + `\n${snippet.code}\n` + currentScript.slice(lastCloseBrace);
-    } else {
-      updatedScript = currentScript + `\n\n${snippet.code}`;
-    }
-
-    const currentScripts = this.scripts();
-    this.tabStateService.updateState(this.tabId(), {
-      scripts: {
-        ...currentScripts,
-        [phase]: updatedScript
-      }
-    });
+    const updatedScript = this.insertCodeBlockIntoScript(currentScript, snippetCode, lang, phaseType, activeName);
+    this.updateScript(phase, updatedScript, true);
 
     this.notificationService.notify(`Added snippet: ${snippet.name}`);
     if (phase === 'preRequest') this.selectedPreRequestSnippet.set('Add Snippet...');
@@ -931,28 +1208,30 @@ export class PayloadTypesComponent {
   async resetScript() {
     const current = this.scripts();
     const tab = this.activeScriptTab();
+    const lang = this.activePhaseLanguage();
     if (tab === 'test') {
       const activeId = this.activeTestScriptId();
       if (activeId) {
-          const resetDto = await this.scriptManagementService.resetScript(activeId);
+          const resetDto = await this.scriptManagementService.resetScript(activeId, lang);
           if (resetDto) {
               this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScript: resetDto.content } });
               return;
           }
       }
-      const defaultScript = this.scriptManagementService.getDefaultContentForScript('Test', this.activeTestScriptName);
+      const defaultScript = this.scriptManagementService.getDefaultContentForScript('Test', this.activeTestScriptName, lang);
       this.tabStateService.updateState(this.tabId(), { scripts: { ...current, testScript: defaultScript } });
     } else {
       const activeId = tab === 'preRequest' ? this.activePreRequestScriptId() : this.activePostRequestScriptId();
       const phaseType = tab === 'preRequest' ? 'PreRequest' : 'PostRequest';
+      const activeName = tab === 'preRequest' ? this.activePreRequestScriptName : this.activePostRequestScriptName;
       if (activeId) {
-          const resetDto = await this.scriptManagementService.resetScript(activeId);
+          const resetDto = await this.scriptManagementService.resetScript(activeId, lang);
           if (resetDto) {
               this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [tab]: resetDto.content } });
               return;
           }
       }
-      const defaultScript = this.scriptManagementService.getDefaultContentForScript(phaseType, tab === 'preRequest' ? this.activePreRequestScriptName : this.activePostRequestScriptName);
+      const defaultScript = this.scriptManagementService.getDefaultContentForScript(phaseType, activeName, lang);
       this.tabStateService.updateState(this.tabId(), { scripts: { ...current, [tab]: defaultScript } });
     }
   }
@@ -967,25 +1246,10 @@ export class PayloadTypesComponent {
     const snippet = this.standardTestSnippets().find(s => s.name === snippetName);
     if (!snippet) return;
 
+    const lang = this.activePhaseLanguage();
+    const snippetCode = (lang === 'python' && snippet.pythonCode) ? snippet.pythonCode : snippet.code;
     const currentScript = this.scripts().testScript || '';
-    let updatedScript = '';
-
-    if (!currentScript.trim()) {
-      updatedScript = `function testScript(responseStatus, responseTime, responseBody){\n    let passed = true;\n\n${snippet.code}\n\n    return passed;\n}`;
-    } else if (currentScript.includes('return passed;')) {
-      updatedScript = currentScript.replace(
-        'return passed;',
-        `${snippet.code}\n\n    return passed;`
-      );
-    } else if (currentScript.includes('return ')) {
-      const lastReturnIndex = currentScript.lastIndexOf('return ');
-      updatedScript = currentScript.slice(0, lastReturnIndex) + `${snippet.code}\n\n    ` + currentScript.slice(lastReturnIndex);
-    } else if (currentScript.lastIndexOf('}') !== -1) {
-      const lastCloseBrace = currentScript.lastIndexOf('}');
-      updatedScript = currentScript.slice(0, lastCloseBrace) + `\n${snippet.code}\n` + currentScript.slice(lastCloseBrace);
-    } else {
-      updatedScript = currentScript + `\n\n${snippet.code}`;
-    }
+    const updatedScript = this.insertCodeBlockIntoScript(currentScript, snippetCode, lang, 'Test', this.activeTestScriptName);
 
     const currentScripts = this.scripts();
     this.tabStateService.updateState(this.tabId(), {
@@ -1004,19 +1268,21 @@ export class PayloadTypesComponent {
     const tab = this.activeScriptTab();
     if (tab === 'preRequest') return this.scripts().preRequest;
     if (tab === 'postResponse') return this.scripts().postResponse;
+    if (tab === 'test') return this.scripts().testScript;
     return '';
   }
 
   async resetEncryptionScript() {
     const id = this.activeEncryptionScriptId();
+    const lang = this.activeEncryptionLanguage();
     if (id) {
-        const resetDto = await this.scriptManagementService.resetScript(id);
+        const resetDto = await this.scriptManagementService.resetScript(id, lang);
         if (resetDto) {
             this.setEncryptionField('script', resetDto.content, false);
             return;
         }
     }
-    const defaultScript = this.scriptManagementService.getDefaultContentForScript('Encryption', this.activeEncryptionScriptName);
+    const defaultScript = this.scriptManagementService.getDefaultContentForScript('Encryption', this.activeEncryptionScriptName, lang);
     this.setEncryptionField('script', defaultScript, false);
   }
 

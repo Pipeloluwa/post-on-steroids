@@ -216,6 +216,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               // onChange below) does NOT call model.setValue(), which would destroy history
               this.isRestoringModel = true;
               this.isSwappingModel = true;
+              const formValue = this.value();
+              if (formValue && cachedModel.getValue() !== formValue) {
+                cachedModel.setValue(formValue);
+              }
               editor.setModel(cachedModel);
               this.scheduleDecorationsUpdate();
               // Sync the Angular value signal with the restored model's content without emitting a fake user edit
@@ -388,7 +392,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
           });
         }
 
-        const targetLanguages = Array.from(new Set(['json', 'javascript', 'typescript', 'text', 'plaintext', 'html', 'xml', this.language()]));
+        const targetLanguages = Array.from(new Set(['json', 'javascript', 'typescript', 'python', 'text', 'plaintext', 'html', 'xml', this.language()]));
         for (const lang of targetLanguages) {
           if (!MonacoEditorComponent.completionProvidersRegistered.has(lang)) {
             monacoGlobal.languages.registerCompletionItemProvider(lang, {
@@ -1008,8 +1012,33 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const trimmed = currentContent.trim();
       const lines = trimmed.split('\n');
       const lastLine = lines[lines.length - 1]?.trim() || '';
+      const isPython = (this.language() || '').toLowerCase() === 'python' || /^\s*(?:async\s+)?def\s+\w+\s*\(/m.test(currentContent);
 
-      // Find the boilerplate function header (allowing optional leading import/comment lines above it)
+      if (isPython) {
+        let pyHeaderIdx = -1;
+        for (let i = 0; i < lines.length; i++) {
+          const t = lines[i].trim();
+          if (!t || t.startsWith('#') || /^import\s+/.test(t) || /^from\s+[A-Za-z_][\w.]*\s+import\s+/.test(t)) {
+            continue;
+          }
+          if (/^(?:async\s+)?def\s+\w+\s*\(.*\)\s*(?:->\s*[^:]+)?:/.test(t)) {
+            pyHeaderIdx = i;
+          }
+          break;
+        }
+        if (pyHeaderIdx === -1) {
+          if (this.lastValidContent && this.lastValidContent !== currentContent && /^\s*(?:async\s+)?def\s+/m.test(this.lastValidContent)) {
+            this.isReverting = true;
+            model.setValue(this.lastValidContent);
+            this.isReverting = false;
+          }
+          return;
+        }
+        this.lastValidContent = currentContent;
+        return;
+      }
+
+      // Find the boilerplate JS function header (allowing optional leading import/comment lines above it)
       let fnHeaderIdx = -1;
       for (let i = 0; i < lines.length; i++) {
         const t = lines[i].trim();

@@ -9,6 +9,8 @@ import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
 import { environment } from '../../../environments/environment';
 import { SandboxPackagesService } from './sandbox-packages.service';
 import { APP_EDITION } from '../../../environments/edition';
+import type { ScriptLanguage } from '../constants/script.snippets.constants';
+import { detectScriptLanguage, getPythonRuntimeBootstrapScript, transpilePythonToJs } from '../utils/python-script-engine.util';
 
 /**
  * Transforms ES module `import` statements inside user scripts (including inside boilerplate
@@ -425,6 +427,13 @@ window.addEventListener("message", async (event) => {
     return promise;
   };
 
+  ${getPythonRuntimeBootstrapScript()}
+
+  const __osbIsPythonRun = context.__scriptLanguage === 'python';
+  if (__osbIsPythonRun) {
+    __py.installProtoShims();
+  }
+
   try {
     const installedPkgs = context.__installedPackages || {};
     const allowPackages = !!context.__allowSandboxPackages;
@@ -486,6 +495,7 @@ window.addEventListener("message", async (event) => {
     const __envSet = {};
     const __envUnset = [];
     const __varSet = {};
+    const __requestFieldLinks = [];
     let __nextRequest = undefined;
 
     const getEnv = (k) => Object.prototype.hasOwnProperty.call(environment, k) ? environment[k] : envMap[k];
@@ -628,7 +638,7 @@ window.addEventListener("message", async (event) => {
 
     const reservedContextKeys = new Set([
       '__installedPackages', '__allowSandboxPackages', '__envVars', '__capsuleVars',
-      '__envSet', '__envUnset', '__varSet', '__nextRequest'
+      '__envSet', '__envUnset', '__varSet', '__nextRequest', '__requestFieldLinks', '__scriptLanguage'
     ]);
     const contextKeys = Object.keys(context).filter(k => !reservedContextKeys.has(k));
     
@@ -637,10 +647,105 @@ window.addEventListener("message", async (event) => {
       "let " + k + " = context['" + k + "'];"
     ).join(String.fromCharCode(10));
 
-    // Write back any mutations to pm
-    const paramWriteBack = contextKeys.map(k => 
-      "pm['" + k + "'] = " + k + ";"
-    ).join(String.fromCharCode(10));
+    // Request field link helper declarations inside sandbox execution scope
+    const fieldLinkHelpersCode = [
+      "const __osbParsePath = (p) => String(p || '').trim().replace(/^(?:\\\\$\\\\.|responseBody\\\\.|response_body\\\\.|body\\\\.)/, '').split(/\\\\.|\\\\[['\\"]?|['\\"]?\\\\]/).filter(Boolean);",
+      "const __osbExtractPath = (src, p) => {",
+      "  const clean = String(p || '').trim();",
+      "  let cur = src;",
+      "  if (typeof cur === 'string' && (cur.trim().startsWith('{') || cur.trim().startsWith('['))) { try { cur = JSON.parse(cur); } catch {} }",
+      "  if (!clean || clean === '$' || clean === 'responseBody' || clean === 'response_body') return cur;",
+      "  if (Array.isArray(cur) && !clean.startsWith('[') && !/^\\\\d+(\\\\.|$)/.test(clean) && cur.length > 0 && cur.every(x => x && typeof x === 'object' && 'key' in x && 'value' in x)) {",
+      "    const tk = clean.replace(/^(?:responseHeaders\\\\.|response_headers\\\\.|headers\\\\.)/i, '').toLowerCase();",
+      "    const found = cur.find(x => String(x.key || '').trim().toLowerCase() === tk);",
+      "    return found ? found.value : undefined;",
+      "  }",
+      "  const segs = __osbParsePath(clean);",
+      "  for (const s of segs) { if (cur == null) return undefined; cur = Array.isArray(cur) && /^\\\\d+$/.test(s) ? cur[Number(s)] : cur[s]; }",
+      "  return cur;",
+      "};",
+      "const __osbUpsertKv = (arr, k, v) => {",
+      "  if (!Array.isArray(arr)) return arr;",
+      "  const ck = String(k || '').trim(); if (!ck) return arr;",
+      "  const sv = typeof v === 'string' ? v : (v == null ? '' : JSON.stringify(v));",
+      "  const kl = ck.toLowerCase();",
+      "  const ex = arr.find(r => r && String(r.key || '').trim().toLowerCase() === kl);",
+      "  if (ex) { ex.key = ck; ex.value = sv; ex.enabled = true; } else { arr.push({ enabled: true, key: ck, value: sv }); }",
+      "  return arr;",
+      "};",
+      "const __osbSetBodyPath = (curBody, fieldPath, val) => {",
+      "  const segs = __osbParsePath(fieldPath);",
+      "  if (segs.length === 0) return val;",
+      "  let wasStr = typeof curBody === 'string';",
+      "  let obj = curBody;",
+      "  if (wasStr) { try { obj = JSON.parse(curBody || '{}'); } catch { obj = {}; } }",
+      "  if (!obj || typeof obj !== 'object') obj = /^\\\\d+$/.test(segs[0]) ? [] : {};",
+      "  let cur = obj;",
+      "  for (let i = 0; i < segs.length - 1; i++) {",
+      "    const k = Array.isArray(cur) && /^\\\\d+$/.test(segs[i]) ? Number(segs[i]) : segs[i];",
+      "    if (!cur[k] || typeof cur[k] !== 'object') cur[k] = /^\\\\d+$/.test(segs[i + 1]) ? [] : {};",
+      "    cur = cur[k];",
+      "  }",
+      "  const last = Array.isArray(cur) && /^\\\\d+$/.test(segs[segs.length - 1]) ? Number(segs[segs.length - 1]) : segs[segs.length - 1];",
+      "  cur[last] = val;",
+      "  return wasStr ? JSON.stringify(obj, null, 2) : obj;",
+      "};",
+      "const __normTarget = (t) => { const s = String(t || '').trim().toLowerCase(); return (s === 'header' || s === 'headers') ? 'header' : (s === 'query' || s === 'querystring' || s === 'queryparams') ? 'query' : (s === 'param' || s === 'params') ? 'param' : 'body'; };",
+      "const linkToRequest = (target, field, value, targetRequest) => {",
+      "  const nt = __normTarget(target);",
+      "  const f = String(field || '').trim();",
+      "  context.__requestFieldLinks.push({ target: nt, field: f, value: value, request: targetRequest || undefined });",
+      "  if (!targetRequest) {",
+      "    if (nt === 'header') { if (!Array.isArray(headers)) headers = []; __osbUpsertKv(headers, f, value); }",
+      "    else if (nt === 'param' || nt === 'query') { if (!Array.isArray(params)) params = []; __osbUpsertKv(params, f, value); }",
+      "    else if (nt === 'body') { body = __osbSetBodyPath(body, f, value); }",
+      "  }",
+      "  return value;",
+      "};",
+      "const setRequestField = linkToRequest;",
+      "const link_to_request = linkToRequest;",
+      "const set_request_field = linkToRequest;",
+      "const setBodyField = (field, value, targetRequest) => linkToRequest('body', field, value, targetRequest);",
+      "const set_body_field = setBodyField;",
+      "const setParam = (field, value, targetRequest) => linkToRequest('param', field, value, targetRequest);",
+      "const set_param = setParam;",
+      "const setQuery = (field, value, targetRequest) => linkToRequest('query', field, value, targetRequest);",
+      "const set_query = setQuery;",
+      "const setHeader = (field, value, targetRequest) => linkToRequest('header', field, value, targetRequest);",
+      "const set_header = setHeader;",
+      "const linkResponseToRequest = (sourcePath, target, field, sourceObj, targetRequest) => {",
+      "  const nt = __normTarget(target);",
+      "  const src = sourceObj !== undefined ? sourceObj : (typeof responseBody !== 'undefined' ? responseBody : (typeof responseHeaders !== 'undefined' ? responseHeaders : undefined));",
+      "  const extracted = __osbExtractPath(src, sourcePath);",
+      "  return linkToRequest(nt, field, extracted, targetRequest);",
+      "};",
+      "const link_response_to_request = linkResponseToRequest;",
+      "pm.linkToRequest = linkToRequest;",
+      "pm.setBodyField = setBodyField;",
+      "pm.setParam = setParam;",
+      "pm.setQuery = setQuery;",
+      "pm.setHeader = setHeader;",
+      "pm.linkResponseToRequest = linkResponseToRequest;",
+      "if (pm.request) { pm.request.setHeader = setHeader; pm.request.setParam = setParam; pm.request.setQuery = setQuery; pm.request.setBodyField = setBodyField; }"
+    ].join(String.fromCharCode(10));
+
+    // Sync expando key assignments like headers['X-Foo'] = 'bar' or params['q'] = '1' back into arrays + write back pm
+    const paramWriteBack = [
+      "const __flushExpandos = (arr) => {",
+      "  if (!Array.isArray(arr)) return arr;",
+      "  for (const k of Object.keys(arr)) {",
+      "    if (!/^\\\\d+$/.test(k)) {",
+      "      const ex = arr.find(r => r && String(r.key || '').trim().toLowerCase() === k.toLowerCase());",
+      "      if (ex) { ex.value = String(arr[k] ?? ''); ex.enabled = true; }",
+      "      else { arr.push({ enabled: true, key: k, value: String(arr[k] ?? '') }); }",
+      "    }",
+      "  }",
+      "  return arr;",
+      "};",
+      "if (typeof headers !== 'undefined') headers = __flushExpandos(headers);",
+      "if (typeof params !== 'undefined') params = __flushExpandos(params);",
+      ...contextKeys.map(k => "pm['" + k + "'] = " + k + ";")
+    ].join(String.fromCharCode(10));
 
     let testResults = [];
     let testPassed = true;
@@ -660,16 +765,58 @@ window.addEventListener("message", async (event) => {
     };
     pm.test = test;
 
+    context.__requestFieldLinks = __requestFieldLinks;
+
+    const pyPrelude = __osbIsPythonRun ? [
+      "const { print, len, str, int, float, bool, list, dict, set, tuple, range, enumerate, zip, isinstance, abs, min, max, sum, round, sorted, reversed, any, all, chr, ord } = __py.builtins;",
+      "let response_headers = typeof responseHeaders !== 'undefined' ? responseHeaders : undefined;",
+      "let response_header = typeof responseHeader !== 'undefined' ? responseHeader : response_headers;",
+      "let response_body = typeof responseBody !== 'undefined' ? responseBody : undefined;",
+      "let response_status = typeof responseStatus !== 'undefined' ? responseStatus : undefined;",
+      "let response_time = typeof responseTime !== 'undefined' ? responseTime : undefined;",
+      "let body_type = typeof bodyType !== 'undefined' ? bodyType : undefined;",
+      "let raw_type = typeof rawType !== 'undefined' ? rawType : undefined;",
+      "let form_data = typeof formData !== 'undefined' ? formData : undefined;",
+      "let url_encoded_data = typeof urlEncodedData !== 'undefined' ? urlEncodedData : undefined;",
+      "let raw_text = typeof rawText !== 'undefined' ? rawText : undefined;",
+      "let encrypted_headers = typeof encryptedHeaders !== 'undefined' ? encryptedHeaders : undefined;",
+      "let encrypted_body_paths = typeof encryptedBodyPaths !== 'undefined' ? encryptedBodyPaths : undefined;",
+      "let encrypted_form_data = typeof encryptedFormData !== 'undefined' ? encryptedFormData : undefined;",
+      "let encrypted_url_encoded_data = typeof encryptedUrlEncodedData !== 'undefined' ? encryptedUrlEncodedData : undefined;",
+      "let encrypted_graphql_paths = typeof encryptedGraphqlPaths !== 'undefined' ? encryptedGraphqlPaths : undefined;",
+      "let encrypt_raw_text = typeof encryptRawText !== 'undefined' ? encryptRawText : undefined;",
+      "const get_env = getEnv; const set_env = setEnv; const unset_env = unsetEnv;",
+      "const get_variable = getVariable; const set_variable = setVariable;",
+      "const set_next_request = setNextRequest;"
+    ].join(String.fromCharCode(10)) : "";
+
+    const pyEntryInvoke = __osbIsPythonRun ? [
+      "if (typeof pre_script === 'function') { const _pyPre = await pre_script(headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text); if (_pyPre !== undefined && _pyPre !== null) { body = _pyPre; } }",
+      "if (typeof post_script === 'function') { await post_script(response_headers || response_header, response_body, headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text); }",
+      "if (typeof test_script === 'function') { const _pyTest = await test_script(response_status, response_time, response_body, response_headers || response_header, headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text); if (_pyTest !== undefined && _pyTest !== null) { testPassed = !!_pyTest; } }",
+      "if (typeof encrypt_script === 'function') { const _pyEnc = await encrypt_script(headers, body, params, encrypted_headers, encrypted_body_paths, body_type, raw_type, form_data, encrypted_form_data, url_encoded_data, encrypted_url_encoded_data, graphql, encrypted_graphql_paths, raw_text, encrypt_raw_text); if (_pyEnc !== undefined && _pyEnc !== null) { body = _pyEnc; } }",
+      "if (typeof decrypt_script === 'function') { const _pyDec = await decrypt_script(headers, body, params, encrypted_headers, encrypted_body_paths, body_type, raw_type, form_data, encrypted_form_data, url_encoded_data, encrypted_url_encoded_data, graphql, encrypted_graphql_paths, raw_text, encrypt_raw_text); if (_pyDec !== undefined && _pyDec !== null) { body = _pyDec; } }",
+      "if (encrypted_headers !== undefined) encryptedHeaders = encrypted_headers;",
+      "if (encrypted_body_paths !== undefined) encryptedBodyPaths = encrypted_body_paths;",
+      "if (form_data !== undefined) formData = form_data;",
+      "if (url_encoded_data !== undefined) urlEncodedData = url_encoded_data;",
+      "if (raw_text !== undefined) rawText = raw_text;",
+      "if (encrypt_raw_text !== undefined) encryptRawText = encrypt_raw_text;"
+    ].join(String.fromCharCode(10)) : "";
+
     const fnBodyLines = [
       "return (async () => {",
       "const fetch = _proxyFetch;",
       paramDeclarations,
+      fieldLinkHelpersCode,
+      pyPrelude,
       code,
       "if (typeof preScript === 'function') { const _preReturn = await preScript(headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText); if (_preReturn !== undefined) { body = _preReturn; } }",
       "if (typeof postScript === 'function') { await postScript(responseHeaders || responseHeader, responseBody, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText); }",
       "if (typeof testScript === 'function') { const _testReturn = await testScript(responseStatus, responseTime, responseBody, responseHeaders || responseHeader, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText); if (_testReturn !== undefined) { testPassed = !!_testReturn; } }",
       "if (typeof encryptScript === 'function') { const _encReturn = await encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText); if (_encReturn !== undefined) { body = _encReturn; } }",
       "if (typeof decryptScript === 'function') { const _decReturn = await decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText); if (_decReturn !== undefined) { body = _decReturn; } }",
+      pyEntryInvoke,
       paramWriteBack,
       "})();"
     ];
@@ -678,13 +825,13 @@ window.addEventListener("message", async (event) => {
     const executeInSandbox = new Function(
       "pm", "context", "test", "expect", "_proxyFetch", "__osbImport", "require",
       "postman", "setNextRequest", "environment", "variables",
-      "getEnv", "setEnv", "unsetEnv", "getVariable", "setVariable",
+      "getEnv", "setEnv", "unsetEnv", "getVariable", "setVariable", "__py",
       fnBody
     );
     await executeInSandbox(
       pm, context, test, pm.expect, _proxyFetch, __osbImport, require,
       postman, setNextRequest, environment, variables,
-      getEnv, setEnv, unsetEnv, getVariable, setVariable
+      getEnv, setEnv, unsetEnv, getVariable, setVariable, __py
     );
 
     // Sync direct object mutations made on exposed \`environment\` and \`variables\` objects
@@ -726,12 +873,19 @@ window.addEventListener("message", async (event) => {
     pm['__envSet'] = __envSet;
     pm['__envUnset'] = __envUnset;
     pm['__varSet'] = __varSet;
+    pm['__requestFieldLinks'] = __requestFieldLinks;
     if (__nextRequest !== undefined) {
       pm['__nextRequest'] = __nextRequest;
     }
 
     delete pm.sendRequest;
     delete pm.traverseFields;
+    delete pm.linkToRequest;
+    delete pm.setBodyField;
+    delete pm.setParam;
+    delete pm.setQuery;
+    delete pm.setHeader;
+    delete pm.linkResponseToRequest;
     delete pm.environment;
     delete pm.variables;
     delete pm.globals;
@@ -746,6 +900,7 @@ window.addEventListener("message", async (event) => {
     delete pm.__allowSandboxPackages;
     delete pm.__envVars;
     delete pm.__capsuleVars;
+    delete pm.__scriptLanguage;
     const cleanContext = {};
     for (const key of Object.keys(pm)) {
       if (typeof pm[key] !== 'function') {
@@ -761,6 +916,9 @@ window.addEventListener("message", async (event) => {
   } catch (err) {
     parent.postMessage({ id, success: false, error: err ? (err.message || err.toString()) : "Execution error", logs: logs.join("\\n") }, "*");
   } finally {
+    if (__osbIsPythonRun) {
+      __py.removeProtoShims();
+    }
     console.log = originalConsoleLog;
   }
 });`;
@@ -921,7 +1079,7 @@ window.addEventListener("message", async (event) => {
     };
   }
 
-  async executeScript(code: string, context: any): Promise<SandboxResult> {
+  async executeScript(code: string, context: any, language?: ScriptLanguage): Promise<SandboxResult> {
     if (!isPlatformBrowser(this.platformId)) {
       return { success: false, error: 'Sandbox not available', context };
     }
@@ -1025,13 +1183,20 @@ window.addEventListener("message", async (event) => {
         }
       }
 
-      // Transform `import ... from '...'` (inside or outside boilerplate functions) & upgrade naive comment regexes
-      const importedCode = transformScriptImports(code || '');
-      const safeCode = importedCode
-        .split(".replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, '')")
-        .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? \'\' : m)')
-        .split('.replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, "")')
-        .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)');
+      const scriptLang = detectScriptLanguage(code || '', language);
+      let safeCode = '';
+      if (scriptLang === 'python') {
+        safeCode = transpilePythonToJs(code || '');
+      } else {
+        // Transform `import ... from '...'` (inside or outside boilerplate functions) & upgrade naive comment regexes
+        const importedCode = transformScriptImports(code || '');
+        safeCode = importedCode
+          .split(".replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, '')")
+          .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? \'\' : m)')
+          .split('.replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, "")')
+          .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)');
+      }
+      safeContext.__scriptLanguage = scriptLang;
 
       if (APP_EDITION.isProOrHigher) {
         safeContext.__allowSandboxPackages = true;

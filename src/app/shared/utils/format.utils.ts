@@ -786,6 +786,40 @@ export function formatJsPretty(code: string, restrictToFunctionBody = false): st
   }
 }
 
+/**
+ * Formats Python scripts cleanly with 4-space indentation while preserving Python block indentation
+ * (`def`, `if`, `elif`, `else`, `for`, `while`, `try`, `except`, `finally`, `with`) and blank lines.
+ */
+export function formatPythonPretty(code: string, _restrictToFunctionBody = false): string {
+  if (!code || typeof code !== 'string') return '';
+  try {
+    const rawLines = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const formatted: string[] = [];
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const raw = rawLines[i].replace(/\t/g, '    ');
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        if (formatted.length > 0 && formatted[formatted.length - 1] !== '') {
+          formatted.push('');
+        }
+        continue;
+      }
+
+      const leadingSpaces = (raw.match(/^[ ]*/) || [''])[0].length;
+      const normalizedSpaces = Math.round(leadingSpaces / 4) * 4;
+      formatted.push(' '.repeat(normalizedSpaces) + trimmed);
+    }
+
+    while (formatted.length > 0 && formatted[formatted.length - 1] === '') {
+      formatted.pop();
+    }
+    return formatted.join('\n');
+  } catch {
+    return code;
+  }
+}
+
 export function beautifyByLanguage(content: string, language: string, restrictToFunctionBody = false): string {
   const lang = (language || '').toLowerCase();
   if (!content || !content.trim()) return content || '';
@@ -800,6 +834,9 @@ export function beautifyByLanguage(content: string, language: string, restrictTo
   }
   if (lang === 'javascript' || lang === 'typescript') {
     return formatJsPretty(content, restrictToFunctionBody);
+  }
+  if (lang === 'python' || lang === 'py') {
+    return formatPythonPretty(content, restrictToFunctionBody);
   }
   return content;
 }

@@ -22,8 +22,10 @@ import {
     DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
     DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
     DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
-    DEFAULT_TEST_SCRIPT_SKELETON
+    DEFAULT_TEST_SCRIPT_SKELETON,
+    ScriptLanguage
 } from '../constants/script.snippets.constants';
+import { detectScriptLanguage } from '../utils/python-script-engine.util';
 
 export interface KeyValue {
     enabled: boolean;
@@ -77,6 +79,9 @@ export interface ScriptsState {
     encryptionConsole: string;
     testScript: string;
     testScriptEnabled: boolean;
+    preRequestLanguage?: ScriptLanguage;
+    postResponseLanguage?: ScriptLanguage;
+    testScriptLanguage?: ScriptLanguage;
 }
 
 export interface CookieRow {
@@ -101,6 +106,7 @@ export interface EncryptionState {
     encryptedHeaders: string[];
     encryptedBodyPaths: string[];
     script: string;
+    scriptLanguage?: ScriptLanguage;
 }
 
 export interface SettingsState {
@@ -6442,7 +6448,10 @@ export class TabStateService {
                 preRequest: dto.preRequestScript || DEFAULT_PRE_REQUEST_SCRIPT_SKELETON,
                 postResponse: dto.postResponseScript || DEFAULT_POST_RESPONSE_SCRIPT_SKELETON,
                 testScript: dto.testScript || DEFAULT_TEST_SCRIPT_SKELETON,
-                testScriptEnabled: dto.testScriptEnabled || false
+                testScriptEnabled: dto.testScriptEnabled || false,
+                preRequestLanguage: (dto as any).preRequestLanguage || detectScriptLanguage(dto.preRequestScript || ''),
+                postResponseLanguage: (dto as any).postResponseLanguage || detectScriptLanguage(dto.postResponseScript || ''),
+                testScriptLanguage: (dto as any).testScriptLanguage || detectScriptLanguage(dto.testScript || '')
             },
             encryption: {
                 ...base.encryption,
@@ -6452,7 +6461,8 @@ export class TabStateService {
                 autoEncryptHeaders: dto.autoEncryptHeaders ?? false,
                 encryptedHeaders: encHeaders,
                 encryptedBodyPaths: encBodyPaths,
-                script: dto.encryptionScript || base.encryption.script
+                script: dto.encryptionScript || base.encryption.script,
+                scriptLanguage: (dto as any).encryptionScriptLanguage || detectScriptLanguage(dto.encryptionScript || base.encryption.script || '')
             },
             settings: {
                 followRedirects: dto.followRedirects ?? true,
@@ -6620,7 +6630,10 @@ export class TabStateService {
                 postResponseConsole: '',
                 encryptionConsole: '',
                 testScript: DEFAULT_TEST_SCRIPT_SKELETON,
-                testScriptEnabled: false
+                testScriptEnabled: false,
+                preRequestLanguage: 'javascript',
+                postResponseLanguage: 'javascript',
+                testScriptLanguage: 'javascript'
             },
             encryption: {
                 algorithm: 'none',
@@ -6629,7 +6642,8 @@ export class TabStateService {
                 autoEncryptHeaders: false,
                 encryptedHeaders: [],
                 encryptedBodyPaths: [],
-                script: DEFAULT_ENCRYPTION_SCRIPT_SKELETON
+                script: DEFAULT_ENCRYPTION_SCRIPT_SKELETON,
+                scriptLanguage: 'javascript'
             },
             settings: { followRedirects: true, verifySsl: false, enableCookies: true, bypassCors: true },
             bodyType: 'none',
