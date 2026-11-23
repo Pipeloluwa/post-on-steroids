@@ -1,7 +1,8 @@
 import { signal } from '@angular/core';
 
-export const DEFAULT_REQUEST_TIMEOUT_MS = 120000;
+export const DEFAULT_REQUEST_TIMEOUT_MS = 0;
 export const GLOBAL_TIMEOUT_STORAGE_KEY = 'onsteroids_request_timeout_ms';
+export const DEFAULT_TIMEOUT_MIGRATION_KEY = 'onsteroids_timeout_default_infinity_v1';
 
 function readStoredTimeoutMs(): number {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
@@ -9,6 +10,14 @@ function readStoredTimeoutMs(): number {
     }
     try {
         const raw = localStorage.getItem(GLOBAL_TIMEOUT_STORAGE_KEY);
+        const migrated = localStorage.getItem(DEFAULT_TIMEOUT_MIGRATION_KEY) === '1';
+        if (!migrated) {
+            localStorage.setItem(DEFAULT_TIMEOUT_MIGRATION_KEY, '1');
+            if (raw === null || raw.trim() === '' || raw.trim() === '120000') {
+                localStorage.setItem(GLOBAL_TIMEOUT_STORAGE_KEY, String(DEFAULT_REQUEST_TIMEOUT_MS));
+                return DEFAULT_REQUEST_TIMEOUT_MS;
+            }
+        }
         if (raw === null || raw.trim() === '') {
             return DEFAULT_REQUEST_TIMEOUT_MS;
         }

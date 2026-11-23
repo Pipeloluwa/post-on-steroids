@@ -249,9 +249,19 @@ export class RequestUrlComponent {
         this.updateTriggerConfig({ delayMs: num });
     }
 
+    onRetryInput(rawVal: string | number) {
+        const str = String(rawVal ?? '').trim();
+        if (!str) return;
+        const parsed = Number(str);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+            this.updateTriggerConfig({ retryCountOnFail: Math.floor(parsed) });
+        }
+    }
+
     onRetryChange(rawVal: string | number) {
-        const num = Math.max(0, Math.min(5, Math.round(Number(rawVal) || 0)));
-        this.updateTriggerConfig({ retryCountOnFail: num });
+        const parsed = Number(rawVal);
+        const count = Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 0;
+        this.updateTriggerConfig({ retryCountOnFail: count });
     }
 
     onScheduleSecondsChange(rawVal: string | number) {

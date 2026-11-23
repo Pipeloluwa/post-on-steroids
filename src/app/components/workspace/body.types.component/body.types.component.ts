@@ -13,6 +13,7 @@ import { VariableInputComponent } from '../../../shared/components/variable-inpu
 
 import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle, parseJsonSafe } from '../../../shared/utils/format.utils';
 import { extractAllBodyLeafPaths } from '../../../shared/utils/encryption-path.util';
+import { stringifyBulkKeyValues, parseBulkKeyValues } from '../../../shared/utils/bulk-edit.util';
 
 @Component({
   selector: 'app-body-types-component',
@@ -256,7 +257,27 @@ export class BodyTypesComponent {
     }
   }
 
-  // URL-Encoded CRUD
+  // URL-Encoded CRUD & Bulk Edit
+  isBulkUrlEncoded = signal<boolean>(false);
+  rawUrlEncodedText = signal<string>('');
+
+  toggleBulkUrlEncoded() {
+    if (!this.isBulkUrlEncoded()) {
+      this.rawUrlEncodedText.set(stringifyBulkKeyValues(this.urlEncodedData()));
+    } else {
+      this.onRawUrlEncodedChange(this.rawUrlEncodedText());
+    }
+    this.isBulkUrlEncoded.update(v => !v);
+  }
+
+  onRawUrlEncodedChange(text: string) {
+    this.rawUrlEncodedText.set(text);
+    const id = this.tabId();
+    if (!id) return;
+    const rows = parseBulkKeyValues(text);
+    this.tabStateService.updateState(id, { urlEncodedData: rows });
+  }
+
   addUrlEncodedRow() {
     const id = this.tabId();
     if (!id) return;
@@ -293,7 +314,33 @@ export class BodyTypesComponent {
     }
   }
 
-  // Form-data CRUD
+  // Form-data CRUD & Bulk Edit
+  isBulkFormData = signal<boolean>(false);
+  rawFormDataText = signal<string>('');
+
+  toggleBulkFormData() {
+    if (!this.isBulkFormData()) {
+      this.rawFormDataText.set(stringifyBulkKeyValues(this.formData()));
+    } else {
+      this.onRawFormDataChange(this.rawFormDataText());
+    }
+    this.isBulkFormData.update(v => !v);
+  }
+
+  onRawFormDataChange(text: string) {
+    this.rawFormDataText.set(text);
+    const id = this.tabId();
+    if (!id) return;
+    const fileRows = this.formData().filter(r => r.type === 'file');
+    const parsedTextRows: FormDataRow[] = parseBulkKeyValues(text)
+      .filter(r => r.key || r.value)
+      .map(r => ({ enabled: r.enabled, key: r.key, value: r.value, type: 'text' }));
+    const combined: FormDataRow[] = [...parsedTextRows, ...fileRows];
+    this.tabStateService.updateState(id, {
+      formData: combined.length > 0 ? combined : [{ enabled: true, key: '', value: '', type: 'text' }]
+    });
+  }
+
   addFormDataRow() {
     const id = this.tabId();
     if (!id) return;

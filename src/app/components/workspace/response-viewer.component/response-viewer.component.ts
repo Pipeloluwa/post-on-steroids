@@ -1,6 +1,7 @@
 import { Component, signal, computed, inject, effect, ViewChild, ChangeDetectionStrategy, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
@@ -14,6 +15,21 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { DialogService } from '../../../shared/services/dialog.service';
 
 import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle } from '../../../shared/utils/format.utils';
+import {
+    buildPreviewTree,
+    PreviewTreeResult,
+    PreviewPropertyNode,
+    formatPreviewCellText,
+    getPreviewScalarType,
+    PreviewScalarType
+} from '../../../shared/utils/response-preview.util';
+import {
+    inferJsonSchema,
+    validateAgainstJsonSchema,
+    computeResponseLineDiff,
+    SchemaValidationResult,
+    ResponseDiffResult
+} from '../../../shared/utils/json-schema.util';
 
 @Component({
     selector: 'app-response-viewer-component',
@@ -28,6 +44,7 @@ export class ResponseViewerComponent {
     readonly appEdition = APP_EDITION;
     private variableService = inject(VariableService);
     private notificationService = inject(NotificationService);
+    private sanitizer = inject(DomSanitizer);
 
     activeTab = signal('Body');
 
@@ -39,19 +56,35 @@ export class ResponseViewerComponent {
                 this.activeTab.set('Body');
             }
         });
+
+        effect(() => {
+            const schemaJson = this.inferredSchemaText();
+            if (!this.isCustomSchemaEdited()) {
+                this.editableSchemaText.set(schemaJson);
+            }
+        });
     }
-    activeMode = computed<'Pretty' | 'Raw' | 'Visualize'>(() => {
+    activeMode = computed<'Pretty' | 'Raw' | 'Preview'>(() => {
         const stateMode = this.tabState()?.responseActiveMode;
-        if (stateMode === 'Pretty' || stateMode === 'Raw' || stateMode === 'Visualize') return stateMode;
+        if (stateMode === 'Preview' || stateMode === 'Visualize') return 'Preview';
+        if (stateMode === 'Pretty' || stateMode === 'Raw') return stateMode;
         if (typeof localStorage !== 'undefined') {
             const saved = localStorage.getItem('onsteroids_response_active_mode');
-            if (saved === 'Pretty' || saved === 'Raw' || saved === 'Visualize') return saved;
+            if (saved === 'Preview' || saved === 'Visualize') return 'Preview';
+            if (saved === 'Pretty' || saved === 'Raw') return saved;
         }
         return 'Pretty';
     });
     visualizerFilter = signal<string>('');
     visualizerSortCol = signal<string>('');
     visualizerSortAsc = signal<boolean>(true);
+    collapsedPreviewPaths = signal<Set<string>>(new Set());
+    expandedPreviewCells = signal<Set<string>>(new Set());
+    activeRightPanel = signal<'none' | 'schema' | 'compare'>('none');
+    isCustomSchemaEdited = signal<boolean>(false);
+    editableSchemaText = signal<string>('{}');
+    selectedCompareExampleId = signal<string>('__baseline__');
+    pinnedBaselineText = signal<string>('');
     manualResponseType = signal<string | null>(null);
     responseTypes = signal(['JSON', 'XML']);
     responseType = computed(() => {
@@ -202,13 +235,14 @@ export class ResponseViewerComponent {
             this.terminalService.close();
         }
     }
-    setMode(mode: 'Pretty' | 'Raw' | 'Visualize') {
+    setMode(mode: 'Pretty' | 'Raw' | 'Preview' | 'Visualize') {
+        const normalized: 'Pretty' | 'Raw' | 'Preview' = mode === 'Visualize' ? 'Preview' : mode;
         if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('onsteroids_response_active_mode', mode);
+            localStorage.setItem('onsteroids_response_active_mode', normalized);
         }
         const id = this.tabId();
         if (id) {
-            this.tabStateService.updateState(id, { responseActiveMode: mode }, false);
+            this.tabStateService.updateState(id, { responseActiveMode: normalized }, false);
         }
     }
 
@@ -218,15 +252,286 @@ export class ResponseViewerComponent {
         if (typeof body === 'object') return body;
         if (typeof body === 'string') {
             const trimmed = body.trim();
-            if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) return null;
-            try {
-                return JSON.parse(trimmed);
-            } catch {
-                return null;
+            if (!trimmed) return null;
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                try {
+                    return JSON.parse(trimmed);
+                } catch {
+                    return null;
+                }
+            }
+            if ((trimmed.startsWith('<?xml') || (trimmed.startsWith('<') && !/^<!doctype\s+html|^<html\b/i.test(trimmed)))
+                && typeof DOMParser !== 'undefined') {
+                try {
+                    const doc = new DOMParser().parseFromString(trimmed, 'text/xml');
+                    if (!doc.querySelector('parsererror') && doc.documentElement) {
+                        return { [doc.documentElement.nodeName]: this.xmlElementToObject(doc.documentElement) };
+                    }
+                } catch { }
             }
         }
         return null;
     });
+
+    private xmlElementToObject(el: Element): unknown {
+        const children = Array.from(el.children);
+        if (children.length === 0) {
+            return (el.textContent ?? '').trim();
+        }
+        const result: Record<string, unknown> = {};
+        for (const child of children) {
+            const val = this.xmlElementToObject(child);
+            const name = child.nodeName;
+            if (name in result) {
+                const existing = result[name];
+                if (Array.isArray(existing)) {
+                    existing.push(val);
+                } else {
+                    result[name] = [existing, val];
+                }
+            } else {
+                result[name] = val;
+            }
+        }
+        return result;
+    }
+
+    isHtmlResponse = computed<boolean>(() => {
+        if (this.parsedResponseValue() !== null) return false;
+        const body = this.responseBody();
+        if (typeof body !== 'string') return false;
+        const trimmed = body.trim().toLowerCase();
+        return trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html') || (trimmed.startsWith('<') && trimmed.includes('</') && !trimmed.startsWith('<?xml'));
+    });
+
+    sanitizedHtmlPreview = computed<SafeHtml>(() => {
+        const body = this.responseBody();
+        const html = typeof body === 'string' ? body : '';
+        return this.sanitizer.bypassSecurityTrustHtml(html);
+    });
+
+    previewTree = computed<PreviewTreeResult>(() => {
+        return buildPreviewTree(
+            this.parsedResponseValue(),
+            this.visualizerFilter(),
+            this.visualizerSortCol(),
+            this.visualizerSortAsc()
+        );
+    });
+
+    togglePreviewNode(path: string) {
+        this.collapsedPreviewPaths.update(set => {
+            const next = new Set(set);
+            if (next.has(path)) next.delete(path);
+            else next.add(path);
+            return next;
+        });
+    }
+
+    isPreviewNodeCollapsed(path: string): boolean {
+        return this.collapsedPreviewPaths().has(path);
+    }
+
+    collapseAllPreviewNodes() {
+        const next = new Set<string>();
+        const collect = (nodes: PreviewPropertyNode[]) => {
+            for (const n of nodes) {
+                if (n.kind !== 'scalar') {
+                    next.add(n.path);
+                    if (n.children) collect(n.children);
+                }
+            }
+        };
+        collect(this.previewTree().nodes);
+        this.collapsedPreviewPaths.set(next);
+    }
+
+    expandAllPreviewNodes() {
+        this.collapsedPreviewPaths.set(new Set());
+        this.expandedPreviewCells.set(new Set());
+    }
+
+    togglePreviewCellExpand(cellKey: string, event: Event) {
+        event.stopPropagation();
+        this.expandedPreviewCells.update(set => {
+            const next = new Set(set);
+            if (next.has(cellKey)) next.delete(cellKey);
+            else next.add(cellKey);
+            return next;
+        });
+    }
+
+    isPreviewCellExpanded(cellKey: string): boolean {
+        return this.expandedPreviewCells().has(cellKey);
+    }
+
+    getCellScalarType(val: unknown): PreviewScalarType {
+        return getPreviewScalarType(val);
+    }
+
+    isCellExpandable(val: unknown): boolean {
+        return val !== null && typeof val === 'object';
+    }
+
+    getCellSummaryLabel(val: unknown): string {
+        if (Array.isArray(val)) return `[${val.length}]`;
+        if (val !== null && typeof val === 'object') return `{${Object.keys(val as object).length}}`;
+        return formatPreviewCellText(val);
+    }
+
+    formatCellDisplay(val: unknown): string {
+        return formatPreviewCellText(val);
+    }
+
+    getObjectEntriesList(val: unknown): Array<{ key: string; value: unknown; text: string; type: PreviewScalarType; isObject: boolean }> {
+        if (Array.isArray(val)) {
+            return val.slice(0, 50).map((item, idx) => ({
+                key: String(idx),
+                value: item,
+                text: formatPreviewCellText(item),
+                type: getPreviewScalarType(item),
+                isObject: item !== null && typeof item === 'object'
+            }));
+        }
+        if (val !== null && typeof val === 'object') {
+            return Object.entries(val as Record<string, unknown>).slice(0, 50).map(([k, v]) => ({
+                key: k,
+                value: v,
+                text: formatPreviewCellText(v),
+                type: getPreviewScalarType(v),
+                isObject: v !== null && typeof v === 'object'
+            }));
+        }
+        return [];
+    }
+
+    // ── JSON Schema Inference & Validation ─────────────────────────────
+    inferredSchema = computed(() => {
+        const parsed = this.parsedResponseValue();
+        if (parsed === null || parsed === undefined) return null;
+        return inferJsonSchema(parsed);
+    });
+
+    inferredSchemaText = computed(() => {
+        const schema = this.inferredSchema();
+        if (!schema) return '{}';
+        return JSON.stringify(schema, null, 2);
+    });
+
+    schemaValidationResult = computed<SchemaValidationResult & { parseError?: string }>(() => {
+        const parsed = this.parsedResponseValue();
+        if (parsed === null || parsed === undefined) {
+            return { valid: false, errors: [], parseError: 'Response body is not valid JSON/XML' };
+        }
+        try {
+            const schemaObj = JSON.parse(this.editableSchemaText() || '{}');
+            return validateAgainstJsonSchema(parsed, schemaObj);
+        } catch (err: any) {
+            return {
+                valid: false,
+                errors: [],
+                parseError: `Invalid JSON Schema syntax: ${err?.message || 'Parse error'}`
+            };
+        }
+    });
+
+    toggleSchemaPanel() {
+        if (this.activeRightPanel() === 'schema') {
+            this.activeRightPanel.set('none');
+            return;
+        }
+        if (!this.isCustomSchemaEdited()) {
+            this.editableSchemaText.set(this.inferredSchemaText());
+        }
+        this.activeRightPanel.set('schema');
+    }
+
+    onSchemaTextChange(val: string) {
+        this.isCustomSchemaEdited.set(true);
+        this.editableSchemaText.set(val ?? '{}');
+    }
+
+    resetToInferredSchema() {
+        this.isCustomSchemaEdited.set(false);
+        this.editableSchemaText.set(this.inferredSchemaText());
+    }
+
+    copySchema() {
+        this.copyToClipboard(this.editableSchemaText(), 'JSON Schema copied to clipboard', 'schema');
+    }
+
+    // ── Response Compare / Diff ────────────────────────────────────────
+    savedExamples = computed<Array<{ id: string; name: string; status: number | null; bodyText: string }>>(() => {
+        const state = this.tabState();
+        const reqId = state?.id || this.tabId();
+        const rawList = reqId ? (this.tabStateService.requestExamplesMap().get(reqId) || []) : [];
+        return rawList.map(ex => {
+            let snap: any = {};
+            try {
+                snap = typeof ex.requestSnapshot === 'string' ? JSON.parse(ex.requestSnapshot) : (ex.requestSnapshot || {});
+            } catch { }
+            const rb = snap.responseBody;
+            let bodyText = '';
+            if (rb !== null && rb !== undefined) {
+                bodyText = typeof rb === 'string' ? rb : JSON.stringify(rb, null, 2);
+                try {
+                    const parsed = typeof rb === 'string' ? JSON.parse(rb) : rb;
+                    bodyText = JSON.stringify(parsed, null, 2);
+                } catch { }
+            }
+            return {
+                id: String(ex.id),
+                name: String(ex.name || 'Example'),
+                status: snap.responseStatus ?? null,
+                bodyText
+            };
+        });
+    });
+
+    toggleComparePanel() {
+        if (this.activeRightPanel() === 'compare') {
+            this.activeRightPanel.set('none');
+            return;
+        }
+        const reqId = this.tabState()?.id || this.tabId();
+        if (reqId) {
+            this.tabStateService.getExamples(reqId).catch(() => { });
+        }
+        const examples = this.savedExamples();
+        if (examples.length > 0 && this.selectedCompareExampleId() === '__baseline__' && !this.pinnedBaselineText()) {
+            this.selectedCompareExampleId.set(examples[0].id);
+        }
+        this.activeRightPanel.set('compare');
+    }
+
+    pinCurrentAsBaseline() {
+        const text = this.formattedResponseBody() || (typeof this.responseBody() === 'string' ? String(this.responseBody()) : JSON.stringify(this.responseBody() ?? '', null, 2));
+        this.pinnedBaselineText.set(text);
+        this.selectedCompareExampleId.set('__baseline__');
+        this.notificationService.notify('Pinned current response as compare baseline');
+    }
+
+    compareBaselineText = computed<string>(() => {
+        const selectedId = this.selectedCompareExampleId();
+        if (selectedId === '__baseline__') {
+            return this.pinnedBaselineText();
+        }
+        const match = this.savedExamples().find(ex => ex.id === selectedId);
+        return match?.bodyText ?? '';
+    });
+
+    responseDiff = computed<ResponseDiffResult>(() => {
+        const expected = this.compareBaselineText();
+        const parsed = this.parsedResponseValue();
+        const actual = parsed !== null && parsed !== undefined
+            ? JSON.stringify(parsed, null, 2)
+            : (this.formattedResponseBody() || '');
+        return computeResponseLineDiff(expected, actual);
+    });
+
+    closeRightPanel() {
+        this.activeRightPanel.set('none');
+    }
 
     visualizerData = computed<{
         kind: 'table' | 'kv' | 'empty';

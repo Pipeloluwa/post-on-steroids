@@ -127,6 +127,14 @@
     <!-- ─── FORM-DATA ─── -->
     @if (bodyType() === 'form-data') {
     <div class="flex-1 flex flex-col min-h-[180px] overflow-y-auto">
+        <div class="flex items-center justify-between px-2 py-1 border-b border-(--postonsteroids-border)/20 shrink-0">
+            <span class="text-[11px] text-(--postonsteroids-text-muted) uppercase font-semibold">Form Data Fields</span>
+            <button type="button" (click)="toggleBulkFormData()"
+                class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                {{ isBulkFormData() ? 'Key-Value Edit' : 'Bulk Edit' }}
+            </button>
+        </div>
+        @if (!isBulkFormData()) {
         <table class="w-full table-fixed text-[12px] border-collapse">
             <thead>
                 <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/40">
@@ -217,12 +225,25 @@
             class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors shrink-0">
             <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Field
         </button>
+        } @else {
+        <textarea [ngModel]="rawFormDataText()" (ngModelChange)="onRawFormDataChange($event)"
+            placeholder="key: value&#10;//disabledKey: value"
+            class="w-full flex-1 min-h-[140px] bg-transparent outline-none p-2 text-[12px] font-mono text-(--postonsteroids-text-primary) resize-none placeholder:text-(--postonsteroids-text-muted)"></textarea>
+        }
     </div>
     }
 
     <!-- ─── X-WWW-FORM-URLENCODED ─── -->
     @if (bodyType() === 'x-www-form-urlencoded') {
     <div class="flex-1 flex flex-col min-h-[180px] overflow-y-auto">
+        <div class="flex items-center justify-between px-2 py-1 border-b border-(--postonsteroids-border)/20 shrink-0">
+            <span class="text-[11px] text-(--postonsteroids-text-muted) uppercase font-semibold">URL Encoded Fields</span>
+            <button type="button" (click)="toggleBulkUrlEncoded()"
+                class="text-[11px] text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                {{ isBulkUrlEncoded() ? 'Key-Value Edit' : 'Bulk Edit' }}
+            </button>
+        </div>
+        @if (!isBulkUrlEncoded()) {
         <table class="w-full table-fixed text-[12px] border-collapse">
             <thead>
                 <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/40">
@@ -283,6 +304,11 @@
             class="mt-1.5 flex items-center gap-x-1 px-2 py-1 text-[11px] text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover)/40 rounded cursor-pointer w-fit transition-colors shrink-0">
             <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon> Add Field
         </button>
+        } @else {
+        <textarea [ngModel]="rawUrlEncodedText()" (ngModelChange)="onRawUrlEncodedChange($event)"
+            placeholder="key: value&#10;//disabledKey: value"
+            class="w-full flex-1 min-h-[140px] bg-transparent outline-none p-2 text-[12px] font-mono text-(--postonsteroids-text-primary) resize-none placeholder:text-(--postonsteroids-text-muted)"></textarea>
+        }
     </div>
     }
 

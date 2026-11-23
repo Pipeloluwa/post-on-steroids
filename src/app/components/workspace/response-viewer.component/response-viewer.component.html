@@ -56,9 +56,21 @@
 
     <!-- Actions Bar (only for Body tab) -->
     @if (activeTab() === 'Body') {
-    <div class="flex items-center justify-between px-2 py-2 border-b border-(--postonsteroids-border)/50">
+    <div class="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 border-b border-(--postonsteroids-border)/50">
         <div class="flex items-center gap-x-2">
-            <!-- Pretty / Raw / Visualize toggle -->
+            <!-- Conforming JSON / Type Selector Card -->
+            <app-scrollable-select-component [activeValue]="responseType()" [optionValues]="responseTypes()"
+                [verticalPosition]="28" [modalWidth]="100" (outputSelectedValue)="setResponseType($event)">
+                <div
+                    class="flex items-center gap-x-1 px-2.5 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors h-[28px]">
+                    <span class="font-mono text-[11px] text-(--postonsteroids-accent)">{{ '{}' }}</span>
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-secondary)">{{ responseType() }}</span>
+                    <mat-icon
+                        class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                </div>
+            </app-scrollable-select-component>
+
+            <!-- Pretty / Raw / Preview toggle -->
             <div
                 class="flex p-0.5 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 h-[28px] items-center">
                 <button (click)="setMode('Pretty')"
@@ -75,29 +87,18 @@
                     [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Raw'">
                     Raw
                 </button>
-                <button (click)="setMode('Visualize')"
+                <button (click)="setMode('Preview')"
                     class="h-full px-3 flex items-center justify-center gap-1 text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
-                    [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Visualize'"
-                    [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Visualize'"
-                    [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Visualize'">
-                    <mat-icon class="text-[13px]! size-[13px]! text-blue-400">table_chart</mat-icon>
-                    <span>Visualize</span>
+                    [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Preview'"
+                    [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Preview'"
+                    [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Preview'">
+                    <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">smart_display</mat-icon>
+                    <span>Preview</span>
                 </button>
             </div>
-
-            <!-- Conforming JSON / Type Selector Card -->
-            <app-scrollable-select-component [activeValue]="responseType()" [optionValues]="responseTypes()"
-                [verticalPosition]="28" [modalWidth]="100" (outputSelectedValue)="setResponseType($event)">
-                <div
-                    class="flex items-center gap-x-1.5 px-3 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 cursor-pointer hover:bg-(--postonsteroids-bg-hover) transition-colors h-[28px]">
-                    <span class="text-[11px] font-medium text-(--postonsteroids-text-secondary)">{{ responseType() }}</span>
-                    <mat-icon
-                        class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">expand_more</mat-icon>
-                </div>
-            </app-scrollable-select-component>
         </div>
 
-        <div class="flex items-center gap-x-1.5">
+        <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <!-- 4 Dedicated Wrapping Style Buttons -->
             <div
                 class="flex p-0.5 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 h-[28px] items-center">
@@ -144,6 +145,28 @@
                 <mat-icon class="text-[14px]! size-[14px]!">bookmark_add</mat-icon>
                 <span>Example</span>
             </button>
+            <button type="button" (click)="toggleComparePanel()" title="Compare Response with Saved Example or Baseline"
+                class="flex items-center gap-x-1 px-2 h-[28px] rounded-lg text-[11px] font-medium border transition-colors cursor-pointer"
+                [class.bg-(--postonsteroids-accent)/15]="activeRightPanel() === 'compare'"
+                [class.border-(--postonsteroids-accent)]="activeRightPanel() === 'compare'"
+                [class.text-(--postonsteroids-accent)]="activeRightPanel() === 'compare'"
+                [class.bg-(--postonsteroids-bg-tertiary)/50]="activeRightPanel() !== 'compare'"
+                [class.border-(--postonsteroids-border)/30]="activeRightPanel() !== 'compare'"
+                [class.text-(--postonsteroids-text-secondary)]="activeRightPanel() !== 'compare'">
+                <mat-icon class="text-[14px]! size-[14px]!">compare_arrows</mat-icon>
+                <span>Compare</span>
+            </button>
+            <button type="button" (click)="toggleSchemaPanel()" title="Inspect & Validate Response JSON Schema"
+                class="flex items-center gap-x-1 px-2.5 h-[28px] rounded-lg text-[11px] font-medium border transition-colors cursor-pointer"
+                [class.bg-(--postonsteroids-accent)/15]="activeRightPanel() === 'schema'"
+                [class.border-(--postonsteroids-accent)]="activeRightPanel() === 'schema'"
+                [class.text-(--postonsteroids-accent)]="activeRightPanel() === 'schema'"
+                [class.bg-(--postonsteroids-bg-tertiary)/50]="activeRightPanel() !== 'schema'"
+                [class.border-(--postonsteroids-border)/30]="activeRightPanel() !== 'schema'"
+                [class.text-(--postonsteroids-text-secondary)]="activeRightPanel() !== 'schema'">
+                <mat-icon class="text-[14px]! size-[14px]!">tune</mat-icon>
+                <span>Schema</span>
+            </button>
             <button (click)="copyResponse()" [title]="copiedButton() === 'response' ? 'Copied!' : 'Copy Response'"
                 class="h-[28px] px-2.5 flex items-center justify-center gap-x-1 rounded-lg border transition-all duration-200 cursor-pointer"
                 [class.bg-emerald-500/15]="copiedButton() === 'response'"
@@ -175,108 +198,373 @@
 
         <!-- ─── BODY ─── -->
         @if (activeTab() === 'Body') {
-        <div class="w-full h-full flex flex-col overflow-hidden relative">
-            @if (isLoading()) {
-                <div class="absolute inset-0 z-50 p-4 space-y-4 bg-(--postonsteroids-bg-primary)">
-                    <div class="h-6 w-1/3 animate-shimmer"></div>
-                    <div class="h-4 w-full animate-shimmer"></div>
-                    <div class="h-4 w-5/6 animate-shimmer"></div>
-                    <div class="h-4 w-4/6 animate-shimmer"></div>
-                    <div class="h-32 w-full animate-shimmer"></div>
+        <div class="w-full h-full flex overflow-hidden relative">
+            <div class="flex-1 min-w-0 h-full flex flex-col overflow-hidden relative">
+                @if (isLoading()) {
+                    <div class="absolute inset-0 z-50 p-4 space-y-4 bg-(--postonsteroids-bg-primary)">
+                        <div class="h-6 w-1/3 animate-shimmer"></div>
+                        <div class="h-4 w-full animate-shimmer"></div>
+                        <div class="h-4 w-5/6 animate-shimmer"></div>
+                        <div class="h-4 w-4/6 animate-shimmer"></div>
+                        <div class="h-32 w-full animate-shimmer"></div>
+                    </div>
+                }
+                @if (!hasResponse() && !isLoading()) {
+                <div class="flex flex-col items-center justify-center h-full gap-y-2 text-(--postonsteroids-text-muted)">
+                    <mat-icon class="text-[40px]! size-[40px]! opacity-30">send</mat-icon>
+                    <span class="text-[13px]">Hit <strong class="text-(--postonsteroids-text-secondary)">Send</strong> to
+                        get a response</span>
                 </div>
-            }
-            @if (!hasResponse() && !isLoading()) {
-            <div class="flex flex-col items-center justify-center h-full gap-y-2 text-(--postonsteroids-text-muted)">
-                <mat-icon class="text-[40px]! size-[40px]! opacity-30">send</mat-icon>
-                <span class="text-[13px]">Hit <strong class="text-(--postonsteroids-text-secondary)">Send</strong> to
-                    get a response</span>
-            </div>
-            } @else if (activeMode() === 'Pretty') {
-            <div class="flex-1 min-h-0 w-full relative">
-                <app-monaco-editor [ngModel]="formattedResponseBody()"
-                    [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="isWordWrap()" [editorId]="'response-body'" [ownerTabId]="tabId()"
-                    (addVariableClick)="addResponseToVariable()"
-                    class="absolute inset-0 w-full h-full block">
-                </app-monaco-editor>
+                } @else if (activeMode() === 'Pretty') {
+                <div class="flex-1 min-h-0 w-full relative">
+                    <app-monaco-editor [ngModel]="formattedResponseBody()"
+                        [language]="responseType().toLowerCase()" [readOnly]="true" [wordWrap]="isWordWrap()" [editorId]="'response-body'" [ownerTabId]="tabId()"
+                        (addVariableClick)="addResponseToVariable()"
+                        class="absolute inset-0 w-full h-full block">
+                    </app-monaco-editor>
+                </div>
+
+                } @else if (activeMode() === 'Preview') {
+                    @if (isHtmlResponse()) {
+                        <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
+                            <div class="px-3 py-1.5 border-b border-(--postonsteroids-border)/50 flex items-center justify-between bg-(--postonsteroids-bg-secondary)/60 shrink-0 text-[11px] text-(--postonsteroids-text-muted)">
+                                <span>HTML Safe Preview (sandboxed)</span>
+                            </div>
+                            <iframe sandbox="" [srcdoc]="sanitizedHtmlPreview()" class="flex-1 w-full bg-white border-0"></iframe>
+                        </div>
+                    } @else {
+                        @let pTree = previewTree();
+                        <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
+                            <div class="px-2.5 py-1.5 border-b border-(--postonsteroids-border)/50 flex flex-wrap items-center justify-between gap-2 bg-(--postonsteroids-bg-secondary)/40 shrink-0">
+                                <div class="flex items-center gap-2 text-[11px]">
+                                    <span class="text-(--postonsteroids-text-muted) font-mono">
+                                        {{ pTree.rootKind === 'array' ? (pTree.totalNodes + ' item(s)') : (pTree.nodes.length + ' field(s)') }}
+                                    </span>
+                                    <button type="button" (click)="expandAllPreviewNodes()" title="Expand All Nodes"
+                                        class="px-1.5 py-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) cursor-pointer flex items-center gap-0.5">
+                                        <mat-icon class="text-[13px]! size-[13px]!">unfold_more</mat-icon>
+                                        <span>Expand</span>
+                                    </button>
+                                    <button type="button" (click)="collapseAllPreviewNodes()" title="Collapse All Nodes"
+                                        class="px-1.5 py-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) cursor-pointer flex items-center gap-0.5">
+                                        <mat-icon class="text-[13px]! size-[13px]!">unfold_less</mat-icon>
+                                        <span>Collapse</span>
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <input type="text" [value]="visualizerFilter()" (input)="onVisualizerFilterChange($any($event.target).value)"
+                                        placeholder="Filter keys or cells..."
+                                        class="w-52 px-2 py-0.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
+                                    @if (visualizerFilter()) {
+                                        <button type="button" (click)="onVisualizerFilterChange('')"
+                                            class="px-2 py-0.5 rounded text-[11px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
+                                            Clear
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            @if (pTree.rootKind === 'empty') {
+                                <div class="flex-1 flex flex-col items-center justify-center gap-2 text-(--postonsteroids-text-muted) p-6 text-center">
+                                    <mat-icon class="text-[36px]! size-[36px]! opacity-30">table_chart</mat-icon>
+                                    <span class="text-[12px]">Preview supports JSON, XML, and HTML responses. Switch to Pretty or Raw for plain text payloads.</span>
+                                </div>
+                            } @else if (pTree.rootKind === 'scalar' && pTree.rootScalar) {
+                                <div class="flex-1 overflow-auto p-2">
+                                    <div class="flex items-stretch border border-(--postonsteroids-border)/60 text-[12px]">
+                                        <div class="w-[180px] shrink-0 px-3 py-1.5 font-semibold text-(--postonsteroids-text-primary) border-r border-(--postonsteroids-border)/60">
+                                            value
+                                        </div>
+                                        <div class="flex-1 px-3 py-1.5 font-mono text-(--postonsteroids-text-secondary) break-all">
+                                            {{ pTree.rootScalar.display }}
+                                        </div>
+                                    </div>
+                                </div>
+                            } @else {
+                                <div class="flex-1 overflow-auto bg-(--postonsteroids-bg-primary)">
+                                    <ng-container *ngTemplateOutlet="previewNodesTpl; context: { $implicit: pTree.nodes, depth: 0 }"></ng-container>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                } @else {
+                <pre
+                    class="p-4 font-mono text-[12px] text-(--postonsteroids-text-secondary) cursor-text overflow-auto"
+                    [class.whitespace-pre-wrap]="isWordWrap()"
+                    [class.break-all]="isWordWrap()"
+                    [class.whitespace-pre]="!isWordWrap()">{{ formattedResponseBody() }}</pre>
+                }
             </div>
 
-            } @else if (activeMode() === 'Visualize') {
-                @let vData = visualizerData();
-                <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
-                    <div class="px-3 py-2 border-b border-(--postonsteroids-border)/50 flex flex-wrap items-center justify-between gap-2 bg-(--postonsteroids-bg-secondary)/60 shrink-0">
-                        <div class="flex items-center gap-2 text-[11px]">
-                            <span class="px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 font-semibold border border-blue-500/25">
-                                {{ vData.sourceLabel || 'Visualizer' }}
-                            </span>
-                            <span class="text-(--postonsteroids-text-muted)">
-                                Showing {{ vData.rows.length }} of {{ vData.totalCount }} {{ vData.kind === 'kv' ? 'field(s)' : 'row(s)' }}
-                            </span>
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <input type="text" [value]="visualizerFilter()" (input)="onVisualizerFilterChange($any($event.target).value)"
-                                placeholder="Filter rows or keys..."
-                                class="w-56 px-2.5 py-1 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-blue-500" />
-                            @if (visualizerFilter()) {
-                                <button type="button" (click)="onVisualizerFilterChange('')"
-                                    class="px-2 py-1 rounded text-[11px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
-                                    Clear
-                                </button>
+            <!-- ─── RIGHT PANEL: JSON SCHEMA OR COMPARE DIFF ─── -->
+            @if (activeRightPanel() === 'schema') {
+                @let valRes = schemaValidationResult();
+                <div class="w-full md:w-[44%] max-w-[560px] shrink-0 border-l border-(--postonsteroids-border) flex flex-col bg-(--postonsteroids-bg-secondary)/30 min-h-0">
+                    <div class="px-3 py-2 border-b border-(--postonsteroids-border)/60 flex items-center justify-between gap-2 shrink-0">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-[12px] font-semibold text-(--postonsteroids-text-primary) truncate">JSON Schema</span>
+                            @if (valRes.parseError) {
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-400">Schema Notice</span>
+                            } @else if (valRes.valid) {
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-status-success">Valid</span>
+                            } @else {
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-status-danger">{{ valRes.errors.length }} mismatch(es)</span>
                             }
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button type="button" (click)="resetToInferredSchema()" title="Reset to inferred Draft 2020-12 schema"
+                                class="px-2 py-0.5 rounded text-[10.5px] font-medium bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) cursor-pointer">
+                                Inferred
+                            </button>
+                            <button type="button" (click)="copySchema()" title="Copy JSON Schema"
+                                class="px-2 py-0.5 rounded text-[10.5px] font-medium bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-secondary) cursor-pointer">
+                                {{ copiedButton() === 'schema' ? 'Copied' : 'Copy' }}
+                            </button>
+                            <button type="button" (click)="closeRightPanel()" title="Close Schema Panel"
+                                class="p-0.5 rounded text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                                <mat-icon class="text-[16px]! size-[16px]!">close</mat-icon>
+                            </button>
                         </div>
                     </div>
 
-                    @if (vData.kind === 'empty' || vData.columns.length === 0) {
-                        <div class="flex-1 flex flex-col items-center justify-center gap-2 text-(--postonsteroids-text-muted) p-6 text-center">
-                            <mat-icon class="text-[36px]! size-[36px]! opacity-30">table_chart</mat-icon>
-                            <span class="text-[12px]">Table Visualizer supports JSON objects and arrays. Switch to Pretty or Raw to inspect XML/plain text payloads.</span>
+                    @if (valRes.parseError) {
+                        <div class="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/30 text-[11px] text-amber-300 shrink-0">
+                            {{ valRes.parseError }}
                         </div>
-                    } @else {
-                        <div class="flex-1 overflow-auto">
-                            <table class="w-full text-[11.5px] border-collapse">
-                                <thead class="sticky top-0 bg-(--postonsteroids-bg-secondary) z-10 border-b border-(--postonsteroids-border)">
-                                    <tr>
-                                        <th class="px-3 py-2 text-left font-semibold text-(--postonsteroids-text-muted) w-10">#</th>
-                                        @for (col of vData.columns; track col) {
-                                            <th (click)="toggleVisualizerSort(col)"
-                                                class="px-3 py-2 text-left font-semibold text-(--postonsteroids-text-primary) cursor-pointer hover:bg-(--postonsteroids-bg-hover) select-none whitespace-nowrap">
-                                                <div class="flex items-center gap-1">
-                                                    <span>{{ col }}</span>
-                                                    @if (visualizerSortCol() === col) {
-                                                        <mat-icon class="text-[13px]! size-[13px]! text-blue-400">
-                                                            {{ visualizerSortAsc() ? 'arrow_upward' : 'arrow_downward' }}
-                                                        </mat-icon>
-                                                    }
-                                                </div>
-                                            </th>
-                                        }
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-(--postonsteroids-border)/30">
-                                    @for (row of vData.rows; track $index) {
-                                        <tr class="hover:bg-(--postonsteroids-bg-hover)/60 transition-colors">
-                                            <td class="px-3 py-1.5 font-mono text-[10px] text-(--postonsteroids-text-muted)">{{ $index + 1 }}</td>
-                                            @for (col of vData.columns; track col) {
-                                                <td class="px-3 py-1.5 font-mono text-(--postonsteroids-text-secondary) max-w-[340px] truncate" [title]="row[col]">
-                                                    {{ row[col] }}
-                                                </td>
-                                            }
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                    } @else if (!valRes.valid) {
+                        <div class="max-h-32 overflow-y-auto px-3 py-1.5 bg-red-500/10 border-b border-red-500/30 text-[11px] text-red-300 space-y-1 shrink-0">
+                            @for (err of valRes.errors; track $index) {
+                                <div class="font-mono"><strong class="text-red-200">{{ err.path }}</strong>: {{ err.message }}</div>
+                            }
                         </div>
                     }
-                </div>
 
-            } @else {
-            <pre
-                class="p-4 font-mono text-[12px] text-(--postonsteroids-text-secondary) cursor-text overflow-auto"
-                [class.whitespace-pre-wrap]="isWordWrap()"
-                [class.break-all]="isWordWrap()"
-                [class.whitespace-pre]="!isWordWrap()">{{ formattedResponseBody() }}</pre>
+                    <textarea [ngModel]="editableSchemaText()" (ngModelChange)="onSchemaTextChange($event)"
+                        spellcheck="false"
+                        placeholder="Paste or edit JSON Schema to validate live response..."
+                        class="flex-1 w-full p-3 bg-(--postonsteroids-bg-primary) text-[11.5px] font-mono text-(--postonsteroids-text-primary) outline-none resize-none leading-relaxed"></textarea>
+                </div>
+            } @else if (activeRightPanel() === 'compare') {
+                @let diffRes = responseDiff();
+                <div class="w-full md:w-[46%] max-w-[600px] shrink-0 border-l border-(--postonsteroids-border) flex flex-col bg-(--postonsteroids-bg-secondary)/30 min-h-0">
+                    <div class="px-3 py-2 border-b border-(--postonsteroids-border)/60 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[12px] font-semibold text-(--postonsteroids-text-primary)">Compare Response</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-status-success">+{{ diffRes.added }}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-red-500/15 text-status-danger">-{{ diffRes.removed }}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <select [ngModel]="selectedCompareExampleId()" (ngModelChange)="selectedCompareExampleId.set($event)"
+                                class="px-2 py-0.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-[11px] text-(--postonsteroids-text-primary) outline-none max-w-[170px]">
+                                <option value="__baseline__">Pinned Baseline Snapshot</option>
+                                @for (ex of savedExamples(); track ex.id) {
+                                    <option [value]="ex.id">{{ ex.name }}{{ ex.status ? (' (' + ex.status + ')') : '' }}</option>
+                                }
+                            </select>
+                            <button type="button" (click)="pinCurrentAsBaseline()" title="Pin current response as baseline snapshot"
+                                class="px-2 py-0.5 rounded text-[10.5px] font-medium bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) cursor-pointer">
+                                Pin Current
+                            </button>
+                            <button type="button" (click)="closeRightPanel()" title="Close Compare Panel"
+                                class="p-0.5 rounded text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                                <mat-icon class="text-[16px]! size-[16px]!">close</mat-icon>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-auto bg-(--postonsteroids-bg-primary) font-mono text-[11px]">
+                        @if (!compareBaselineText()) {
+                            <div class="p-4 text-center text-(--postonsteroids-text-muted) italic">
+                                Save an Example or click <strong>Pin Current</strong> to compare future responses side-by-side.
+                            </div>
+                        } @else if (diffRes.identical) {
+                            <div class="p-4 text-center text-status-success font-medium">
+                                Response matches the selected baseline identically ({{ diffRes.unchanged }} lines).
+                            </div>
+                        } @else {
+                            @for (line of diffRes.lines; track $index) {
+                                <div class="flex items-start px-2 py-0.5 border-b border-(--postonsteroids-border)/15 whitespace-pre-wrap break-all"
+                                    [class.bg-emerald-500/12]="line.type === 'added'"
+                                    [class.text-emerald-300]="line.type === 'added'"
+                                    [class.bg-red-500/12]="line.type === 'removed'"
+                                    [class.text-red-300]="line.type === 'removed'"
+                                    [class.text-(--postonsteroids-text-secondary)]="line.type === 'same'">
+                                    <span class="w-5 shrink-0 select-none opacity-70">{{ line.type === 'added' ? '+' : (line.type === 'removed' ? '-' : ' ') }}</span>
+                                    <span class="flex-1">{{ line.text }}</span>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
             }
         </div>
         }
+
+        <!-- ─── RECURSIVE PREVIEW TREE-TABLE TEMPLATE ─── -->
+        <ng-template #previewNodesTpl let-nodes let-depth="depth">
+            <div class="w-full" [class.border-t]="depth === 0" [class.border-(--postonsteroids-border)/60]="depth === 0">
+                @for (node of nodes; track node.path) {
+                    @if (node.kind === 'scalar') {
+                        <div class="flex items-stretch border-b border-(--postonsteroids-border)/60 hover:bg-(--postonsteroids-bg-hover)/25 text-[12px]">
+                            <div class="w-[180px] sm:w-[210px] shrink-0 px-3 py-1.5 font-semibold text-(--postonsteroids-text-primary) border-r border-(--postonsteroids-border)/60 break-words flex items-center">
+                                {{ node.key }}
+                            </div>
+                            <div class="flex-1 min-w-0 px-3 py-1.5 text-(--postonsteroids-text-secondary) font-mono break-all flex items-center">
+                                @if (node.scalarType === 'null') {
+                                    <span class="inline-block px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-muted) text-[11px] font-mono leading-none">null</span>
+                                } @else {
+                                    <span>{{ node.scalarDisplay }}</span>
+                                }
+                            </div>
+                        </div>
+                    } @else if (node.kind === 'object-array') {
+                        <div class="flex flex-col border-b border-(--postonsteroids-border)/60">
+                            <button type="button" (click)="togglePreviewNode(node.path)"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover)/30 transition-colors cursor-pointer text-[12px]">
+                                <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) shrink-0">
+                                    {{ isPreviewNodeCollapsed(node.path) ? 'chevron_right' : 'expand_more' }}
+                                </mat-icon>
+                                <span class="font-semibold text-(--postonsteroids-text-primary)">{{ node.key }}</span>
+                                <span class="px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-secondary) text-[11px] font-mono leading-none">
+                                    [{{ node.itemCount ?? 0 }}]
+                                </span>
+                            </button>
+                            @if (!isPreviewNodeCollapsed(node.path)) {
+                                <div class="flex border-t border-(--postonsteroids-border)/60">
+                                    <div class="w-[52px] shrink-0 border-r border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-secondary)/15"></div>
+                                    <div class="flex-1 min-w-0 overflow-x-auto">
+                                        @if ((node.rows?.length ?? 0) === 0) {
+                                            <div class="px-3 py-2 text-[11px] italic text-(--postonsteroids-text-muted)">
+                                                {{ (node.itemCount ?? 0) === 0 ? 'Empty array []' : 'No matching rows' }}
+                                            </div>
+                                        } @else {
+                                            <table class="w-full border-collapse text-[12px]">
+                                                <thead>
+                                                    <tr class="bg-(--postonsteroids-bg-secondary)/30">
+                                                        <th class="w-10 min-w-10 px-2 py-1.5 border-r border-b border-(--postonsteroids-border)/60"></th>
+                                                        @for (col of (node.columns || []); track col) {
+                                                            <th (click)="toggleVisualizerSort(col)"
+                                                                class="px-3 py-1.5 text-left font-semibold text-(--postonsteroids-text-primary) border-r border-b border-(--postonsteroids-border)/60 whitespace-nowrap cursor-pointer hover:bg-(--postonsteroids-bg-hover)/40 select-none">
+                                                                <div class="flex items-center gap-1">
+                                                                    <span>{{ col }}</span>
+                                                                    @if (visualizerSortCol() === col) {
+                                                                        <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">
+                                                                            {{ visualizerSortAsc() ? 'arrow_upward' : 'arrow_downward' }}
+                                                                        </mat-icon>
+                                                                    }
+                                                                </div>
+                                                            </th>
+                                                        }
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @for (row of (node.rows || []); track $index; let rIdx = $index) {
+                                                        <tr class="hover:bg-(--postonsteroids-bg-hover)/25">
+                                                            <td class="px-2.5 py-1.5 text-center font-semibold text-(--postonsteroids-text-primary) border-r border-b border-(--postonsteroids-border)/50 font-mono align-top select-none">
+                                                                {{ rIdx }}
+                                                            </td>
+                                                            @for (col of (node.columns || []); track col) {
+                                                                @let cellVal = row[col];
+                                                                @let cellKey = node.path + '[' + rIdx + '].' + col;
+                                                                <td class="px-3 py-1.5 border-r border-b border-(--postonsteroids-border)/50 text-(--postonsteroids-text-secondary) align-top min-w-[75px] max-w-[320px] break-words">
+                                                                    @if (cellVal === null) {
+                                                                        <span class="inline-block px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-muted) font-mono text-[11px] leading-none">null</span>
+                                                                    } @else if (cellVal === undefined) {
+                                                                        <span class="opacity-0 select-none">-</span>
+                                                                    } @else if (isCellExpandable(cellVal)) {
+                                                                        <button type="button" (click)="togglePreviewCellExpand(cellKey, $event)"
+                                                                            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) font-mono text-[11px] cursor-pointer">
+                                                                            <mat-icon class="text-[13px]! size-[13px]!">{{ isPreviewCellExpanded(cellKey) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                                                                            <span>{{ getCellSummaryLabel(cellVal) }}</span>
+                                                                        </button>
+                                                                        @if (isPreviewCellExpanded(cellKey)) {
+                                                                            <div class="mt-1.5 border border-(--postonsteroids-border)/60 rounded overflow-hidden">
+                                                                                @for (entry of getObjectEntriesList(cellVal); track entry.key) {
+                                                                                    <div class="flex border-b last:border-b-0 border-(--postonsteroids-border)/40 text-[11px]">
+                                                                                        <span class="px-2 py-1 font-semibold bg-(--postonsteroids-bg-secondary)/40 border-r border-(--postonsteroids-border)/40 min-w-[80px]">{{ entry.key }}</span>
+                                                                                        <span class="px-2 py-1 font-mono break-all flex-1">{{ entry.text }}</span>
+                                                                                    </div>
+                                                                                }
+                                                                            </div>
+                                                                        }
+                                                                    } @else {
+                                                                        <span class="font-mono text-[12px] whitespace-pre-wrap">{{ formatCellDisplay(cellVal) }}</span>
+                                                                    }
+                                                                </td>
+                                                            }
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    } @else if (node.kind === 'scalar-array') {
+                        <div class="flex flex-col border-b border-(--postonsteroids-border)/60">
+                            <button type="button" (click)="togglePreviewNode(node.path)"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover)/30 transition-colors cursor-pointer text-[12px]">
+                                <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) shrink-0">
+                                    {{ isPreviewNodeCollapsed(node.path) ? 'chevron_right' : 'expand_more' }}
+                                </mat-icon>
+                                <span class="font-semibold text-(--postonsteroids-text-primary)">{{ node.key }}</span>
+                                <span class="px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-secondary) text-[11px] font-mono leading-none">
+                                    [{{ node.itemCount ?? 0 }}]
+                                </span>
+                            </button>
+                            @if (!isPreviewNodeCollapsed(node.path)) {
+                                <div class="flex border-t border-(--postonsteroids-border)/60">
+                                    <div class="w-[52px] shrink-0 border-r border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-secondary)/15"></div>
+                                    <div class="flex-1 min-w-0">
+                                        @if ((node.scalarItems?.length ?? 0) === 0) {
+                                            <div class="px-3 py-2 text-[11px] italic text-(--postonsteroids-text-muted)">Empty array []</div>
+                                        } @else {
+                                            @for (item of (node.scalarItems || []); track $index; let idx = $index) {
+                                                <div class="flex items-stretch border-b last:border-b-0 border-(--postonsteroids-border)/50 text-[12px]">
+                                                    <div class="w-12 shrink-0 px-2.5 py-1.5 text-center font-semibold text-(--postonsteroids-text-primary) border-r border-(--postonsteroids-border)/50 font-mono">
+                                                        {{ idx }}
+                                                    </div>
+                                                    <div class="flex-1 px-3 py-1.5 font-mono text-(--postonsteroids-text-secondary) break-all">
+                                                        @if (item === null) {
+                                                            <span class="inline-block px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-muted) text-[11px] leading-none">null</span>
+                                                        } @else {
+                                                            <span>{{ formatCellDisplay(item) }}</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    } @else if (node.kind === 'object') {
+                        <div class="flex flex-col border-b border-(--postonsteroids-border)/60">
+                            <button type="button" (click)="togglePreviewNode(node.path)"
+                                class="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover)/30 transition-colors cursor-pointer text-[12px]">
+                                <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted) shrink-0">
+                                    {{ isPreviewNodeCollapsed(node.path) ? 'chevron_right' : 'expand_more' }}
+                                </mat-icon>
+                                <span class="font-semibold text-(--postonsteroids-text-primary)">{{ node.key }}</span>
+                                <span class="px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-secondary) text-[11px] font-mono leading-none">
+                                    {{ '{' }}{{ node.itemCount ?? 0 }}{{ '}' }}
+                                </span>
+                            </button>
+                            @if (!isPreviewNodeCollapsed(node.path)) {
+                                <div class="flex border-t border-(--postonsteroids-border)/60">
+                                    <div class="w-[32px] shrink-0 border-r border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-secondary)/15"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <ng-container *ngTemplateOutlet="previewNodesTpl; context: { $implicit: node.children || [], depth: depth + 1 }"></ng-container>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </ng-template>
 
         <!-- ─── COOKIES ─── -->
         @if (activeTab() === 'Cookies') {

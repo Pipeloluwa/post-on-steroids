@@ -44,6 +44,7 @@ import { sanitizeJsonBodyForScripts } from '../../../shared/utils/format.utils';
 import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../../../shared/utils/encryption-path.util';
 import { isElectronApp } from '../../../shared/utils/url.util';
 import { formatTimeoutLabel, parseTimeoutInputValue } from '../../../shared/utils/request-timeout.util';
+import { stringifyBulkKeyValues, parseBulkKeyValues } from '../../../shared/utils/bulk-edit.util';
 
 @Component({
   selector: 'app-payload-types-component',
@@ -1023,24 +1024,11 @@ export class PayloadTypesComponent {
 
   // ── KV Utilities ─────────────────────────────────────────────────────
   private stringifyKV(kv: KeyValue[]): string {
-    return kv
-      .filter(r => r.key || r.value)
-      .map(r => `${r.key}: ${r.value}`)
-      .join('\n');
+    return stringifyBulkKeyValues(kv);
   }
 
   private parseRawKV(text: string): KeyValue[] {
-    const lines = text.split('\n').filter(l => l.trim());
-    const result = lines.map(line => {
-      const index = line.indexOf(':');
-      if (index === -1) return { enabled: true, key: line.trim(), value: '' };
-      return {
-        enabled: true,
-        key: line.substring(0, index).trim(),
-        value: line.substring(index + 1).trim()
-      };
-    });
-    return result.length ? result : [{ enabled: true, key: '', value: '' }];
+    return parseBulkKeyValues(text);
   }
 
   // ── Auth ─────────────────────────────────────────────────────────────

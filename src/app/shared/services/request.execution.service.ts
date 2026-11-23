@@ -1544,7 +1544,7 @@ export class RequestExecutionService {
                 retryCountOnFail: 0,
                 scheduleIntervalMs: 0
             };
-            const maxRetries = Math.max(0, Math.min(5, Number(triggerCfg.retryCountOnFail ?? 0)));
+            const maxRetries = Math.max(0, Math.floor(Number(triggerCfg.retryCountOnFail) || 0));
             if (!isAutoAuthRetry && (status === 0 || status >= 500) && retryAttempt < maxRetries) {
                 const retryDelayMs = Math.max(250, Math.min(10000, Number(triggerCfg.delayMs ?? 350)));
                 this.notificationService.notify(
@@ -1693,7 +1693,7 @@ export class RequestExecutionService {
 
         } catch (globalErr: any) {
             const latestCfgState = this.tabStateService.getState(effectiveTabId);
-            const catchMaxRetries = Math.max(0, Math.min(5, Number(latestCfgState?.triggerConfig?.retryCountOnFail ?? 0)));
+            const catchMaxRetries = Math.max(0, Math.floor(Number(latestCfgState?.triggerConfig?.retryCountOnFail) || 0));
             if (!isAutoAuthRetry && !cancelToken.cancelled && retryAttempt < catchMaxRetries) {
                 const catchDelayMs = Math.max(250, Math.min(10000, Number(latestCfgState?.triggerConfig?.delayMs ?? 350)));
                 this.notificationService.notify(

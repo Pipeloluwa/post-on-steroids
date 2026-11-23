@@ -1018,7 +1018,7 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
     const resolvedTimeoutMs =
       typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs >= 0
         ? Math.floor(options.timeoutMs)
-        : 120000;
+        : 0;
 
     const reqOpts = {
       protocol: parsedUrl.protocol,

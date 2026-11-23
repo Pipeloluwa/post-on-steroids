@@ -178,7 +178,7 @@ export class SandboxExecutionService {
 // ── Network bridge: all requests are executed by the parent app (real origin) ──
 const __osbPending = new Map();
 let __osbSeq = 0;
-let __osbTimeoutMs = 120000;
+let __osbTimeoutMs = 0;
 
 window.addEventListener("message", (event) => {
   if (event.source !== window.parent) return;
