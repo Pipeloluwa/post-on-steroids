@@ -5,6 +5,8 @@ import { MatIcon } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
 import { CurlModalComponent } from '../../../shared/components/curl-modal.component';
+import { CookieManagerModalComponent } from '../../../shared/components/cookie-manager.modal.component';
+import { CookieJarService } from '../../../shared/services/cookie-jar.service';
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
 import { TabStateService, RequestState } from '../../../shared/services/tab.state.service';
 import { copyTextToClipboard } from '../../../shared/utils/clipboard.util';
@@ -15,7 +17,7 @@ import { inject } from '@angular/core';
 
 @Component({
     selector: 'app-request-details-component',
-    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, TransferCapsuleModalComponent],
+    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, CookieManagerModalComponent, TransferCapsuleModalComponent],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -30,9 +32,12 @@ export class RequestDetailsComponent {
     tabStateService = inject(TabStateService);
     notificationService = inject(NotificationService);
     variableService = inject(VariableService);
+    cookieJarService = inject(CookieJarService);
     isSaving = computed(() => this.tabStateService.isSaving());
     isSharing = signal<boolean>(false);
     isExporting = signal<boolean>(false);
+    isCookieModalOpen = signal<boolean>(false);
+    cookieCount = computed(() => this.cookieJarService.cookies().length);
 
     tabId = input.required<string>();
     

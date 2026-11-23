@@ -8,6 +8,7 @@ import { VariableService } from '../../services/variable.service';
 import { MatIcon } from '@angular/material/icon';
 import { UTILITIES, generateUtilityValue, getUtilityDescription } from '../../utils/utility-variables';
 import { getAllJsonPathsByLine, getAllXmlPathsByLine, resolvePathMatch } from '../../utils/encryption-path.util';
+import { beautifyByLanguage } from '../../utils/format.utils';
 
 @Component({
   selector: 'app-monaco-editor',
@@ -45,7 +46,16 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   autoEncrypt = input<boolean>(false);
   toggleEncryption = output<string>();
   enableFloatingVar = input<boolean>(true);
+  showBeautifyButton = input<boolean>(true);
   addVariableClick = output<void>();
+
+  beautified = signal<boolean>(false);
+  canShowBeautify = computed(() => {
+    if (!this.showBeautifyButton() || this.readOnly() || this.disabled()) return false;
+    const lang = (this.language() || '').toLowerCase();
+    return ['json', 'jsonc', 'xml', 'html', 'graphql', 'javascript', 'typescript'].includes(lang);
+  });
+  private beautifyResetTimeout: any = null;
 
   showFloatingVar = signal<boolean>(false);
   floatingVarPosition = signal<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -306,6 +316,22 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     });
 
     this.setupCompactHoverBoundaryGuard(editor);
+
+    if (this.isBrowser) {
+      const monacoGlobal = (window as any).monaco;
+      if (monacoGlobal?.KeyMod && monacoGlobal?.KeyCode && typeof editor.addAction === 'function') {
+        editor.addAction({
+          id: 'onsteroid.beautify',
+          label: 'Beautify / Format Document',
+          keybindings: [monacoGlobal.KeyMod.Shift | monacoGlobal.KeyMod.Alt | monacoGlobal.KeyCode.KeyF],
+          run: () => {
+            if (!this.readOnly() && !this.disabled()) {
+              this.beautifyContent();
+            }
+          }
+        });
+      }
+    }
 
     if (this.enableFloatingVar()) {
       const selSub = editor.onDidChangeCursorSelection?.(() => {
@@ -804,6 +830,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       clearTimeout(this.hoverClearTimeout);
       this.hoverClearTimeout = null;
     }
+    if (this.beautifyResetTimeout) {
+      clearTimeout(this.beautifyResetTimeout);
+      this.beautifyResetTimeout = null;
+    }
   }
 
   onPopupMouseLeave(): void {
@@ -817,6 +847,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     if (this.hoverClearTimeout) {
       clearTimeout(this.hoverClearTimeout);
       this.hoverClearTimeout = null;
+    }
+    if (this.beautifyResetTimeout) {
+      clearTimeout(this.beautifyResetTimeout);
+      this.beautifyResetTimeout = null;
     }
 
     this.selectionDisposables.forEach(d => d?.dispose?.());
@@ -1020,6 +1054,28 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       }
     }
     this.onChange(safeVal);
+  }
+
+  beautifyContent(event?: Event): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (this.readOnly() || this.disabled()) return;
+
+    const current = this.getEditorValue();
+    if (!current || !current.trim()) return;
+
+    const formatted = beautifyByLanguage(current, this.language(), this.restrictToFunctionBody());
+    if (formatted && formatted !== current) {
+      this.setEditorValue(formatted);
+    }
+
+    this.beautified.set(true);
+    if (this.beautifyResetTimeout) {
+      clearTimeout(this.beautifyResetTimeout);
+    }
+    this.beautifyResetTimeout = setTimeout(() => {
+      this.beautified.set(false);
+    }, 1200);
   }
 
   extractCurrentKeyValue(): { key: string; value: string } {

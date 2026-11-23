@@ -122,9 +122,14 @@ const devUpdateBaseUrl = extractUpdateBaseUrl(
 const now = new Date();
 const buildTime = now.getTime();
 const buildDate = now.toISOString();
+const argEdition = (process.argv[2] || '').trim().toLowerCase();
+const activeEdition = ['community', 'professional', 'enterprise'].includes(argEdition)
+  ? argEdition
+  : 'enterprise';
 
 const versionData = {
   version,
+  edition: activeEdition,
   buildTime,
   buildDate,
   updateBaseUrl: prodUpdateBaseUrl,
@@ -161,6 +166,7 @@ const versionTsPath = path.join(envDir, 'version.ts');
 const versionTsContent = `// Auto-generated during build. Do not edit manually.
 export const APP_VERSION_INFO = {
   version: '${version}',
+  edition: '${activeEdition}',
   buildTime: ${buildTime},
   buildDate: '${buildDate}'
 } as const;

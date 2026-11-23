@@ -14,6 +14,7 @@ import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/c
 import { DESKTOP_DOWNLOADS_CONFIG, DesktopPackage, buildDownloadLink } from '../../constants/desktop-downloads.constants';
 import { isElectronApp } from '../../utils/url.util';
 import { convertCapsuleToPostmanCollection } from '../../utils/postman-export.util';
+import { APP_EDITION } from '../../../../environments/edition';
 
 @Component({
     selector: 'app-navbar-component',
@@ -37,6 +38,7 @@ import { convertCapsuleToPostmanCollection } from '../../utils/postman-export.ut
 })
 export class NavbarComponent {
     isElectron = isElectronApp();
+    readonly appEdition = APP_EDITION;
     title = input.required<string>();
     isLoggedIn = input.required<boolean>();
     userEmail = input.required<string>();

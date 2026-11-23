@@ -293,6 +293,7 @@ class InstanceElement extends InstanceGroup {
     fixedValue: string | null = null;
     defaultValue: string | null = null;
     isStringType = false;
+    fromNamedComplexType = false;
 
     addAttribute(attr: InstanceAttribute): void {
         if (!this.firstAttribute) {
@@ -365,11 +366,14 @@ export class XmlSampleGenerator {
         const impl = ownerDoc?.implementation || (typeof document !== 'undefined' ? document.implementation : null);
         if (!impl) return null;
 
+        // Only wrap in CDATA when the SOAP Body represents a raw body string (not a class-based complexType model)
+        const allowCdata = useCdataForStrings && this.isRawBodyStringElement(root);
+
         const doc = impl.createDocument(root.qname?.ns || '', root.qname?.localName || 'root', null);
         const el = doc.documentElement;
         this.processElementAttrs(doc, root, el);
-        this.processGroup(doc, root, el, useCdataForStrings);
-        this.processElementValue(doc, root, el, useCdataForStrings);
+        this.processGroup(doc, root, el, allowCdata);
+        this.processElementValue(doc, root, el, allowCdata);
         return el;
     }
 
@@ -389,6 +393,7 @@ export class XmlSampleGenerator {
 
         const typeEl = this.globalTypes[typeQName.full] || this.globalTypesByLocal[typeQName.localName] || null;
         if (typeEl && getLocalName(typeEl) === 'complexType') {
+            elem.fromNamedComplexType = true;
             this.elementTypesProcessed.push(typeEl);
             this.processComplexType(typeEl, elem);
             this.elementTypesProcessed.pop();
@@ -406,12 +411,46 @@ export class XmlSampleGenerator {
         const impl = refDoc?.implementation || (typeof document !== 'undefined' ? document.implementation : null);
         if (!impl) return null;
 
+        const allowCdata = useCdataForStrings && !elem.fromNamedComplexType && !elem.child && elem.isStringType;
+
         const doc = impl.createDocument(elem.qname.ns || '\0', elem.qname.localName, null);
         const el = doc.documentElement;
         this.processElementAttrs(doc, elem, el);
-        this.processGroup(doc, elem, el, useCdataForStrings);
-        this.processElementValue(doc, elem, el, useCdataForStrings);
+        this.processGroup(doc, elem, el, allowCdata);
+        this.processElementValue(doc, elem, el, allowCdata);
         return el;
+    }
+
+    private isRawBodyStringElement(root: InstanceElement): boolean {
+        if (root.fromNamedComplexType) {
+            return false;
+        }
+        // Direct simple string element (e.g. <RequestXml><![CDATA[[string]]]></RequestXml>)
+        if (!root.child) {
+            return root.isStringType;
+        }
+        // Operation wrapper element containing a single direct simple string parameter (not a class DTO)
+        const directElements = this.collectChildInstanceElements(root);
+        if (directElements.length === 1) {
+            const single = directElements[0];
+            return !single.fromNamedComplexType && !single.child && single.isStringType;
+        }
+        return false;
+    }
+
+    private collectChildInstanceElements(grp: InstanceGroup): InstanceElement[] {
+        const result: InstanceElement[] = [];
+        const count = grp.getNumberOfChildren();
+        for (let i = 0; i < count; i++) {
+            const ch = grp.getChildGroup(i);
+            if (!ch) continue;
+            if (ch instanceof InstanceElement) {
+                result.push(ch);
+            } else {
+                result.push(...this.collectChildInstanceElements(ch));
+            }
+        }
+        return result;
     }
 
     private processElementAttrs(_doc: Document, elem: InstanceElement, el: Element): void {
@@ -563,6 +602,10 @@ export class XmlSampleGenerator {
 
         const typeEl = this.getType(targetDecl);
         if (typeEl && getLocalName(typeEl) === 'complexType') {
+            // If typeEl has a global name attribute (referenced via type="tns:SomeModel"), it is a class-based model
+            if (typeEl.getAttribute('name')) {
+                elem.fromNamedComplexType = true;
+            }
             if (!this.isEntered(typeEl)) {
                 this.elementTypesProcessed.push(typeEl);
                 this.processComplexType(typeEl, elem);
@@ -1572,11 +1615,13 @@ export function parseAsmxOperationPageToRequest(
         || opHtml.match(/&lt;soap(?:12)?:Envelope[\s\S]*?&lt;\/soap(?:12)?:Envelope&gt;/i)
         || opHtml.match(/<soap(?:12)?:Envelope[\s\S]*?<\/soap(?:12)?:Envelope>/i);
     if (preMatch) {
+        const valueMatches = preMatch[0].match(/<font[^>]*class=["']?value["']?[^>]*>[\s\S]*?<\/font>/gi) || [];
+        const useCdataForPre = valueMatches.length === 1;
         const withTypedPlaceholders = preMatch[0].replace(
             /<font[^>]*class=["']?value["']?[^>]*>\s*([^<]+?)\s*<\/font>/gi,
             (_m, typeName: string) => {
                 const cleanType = typeName.trim();
-                return isStringXsdType(cleanType)
+                return useCdataForPre && isStringXsdType(cleanType)
                     ? `&lt;![CDATA[[${cleanType}]]]&gt;`
                     : `[${cleanType}]`;
             }
@@ -1600,8 +1645,9 @@ export function parseAsmxOperationPageToRequest(
                 inputFields.push(m[1]);
             }
         }
+        const useCdataForInputs = inputFields.length === 1;
         const inner = inputFields.length > 0
-            ? `<${opName} xmlns="${defaultNamespace}">\n${inputFields.map(f => `  <${f}><![CDATA[[string]]]></${f}>`).join('\n')}\n</${opName}>`
+            ? `<${opName} xmlns="${defaultNamespace}">\n${inputFields.map(f => `  <${f}>${useCdataForInputs ? '<![CDATA[[string]]]>' : '[string]'}</${f}>`).join('\n')}\n</${opName}>`
             : `<${opName} xmlns="${defaultNamespace}"/>`;
         soapXml = formatXmlPretty([
             `<Envelope xmlns="${SOAP11_ENV_NS}">`,

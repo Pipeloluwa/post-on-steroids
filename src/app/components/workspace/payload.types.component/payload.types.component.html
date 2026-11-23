@@ -80,45 +80,219 @@
     </div>
 
     <!-- ─── AUTH ─── -->
-    <div [class]="payloadType() === 'auth' ? 'p-2 flex flex-col gap-y-3' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
-        <div class="flex items-center gap-x-3">
+    <div [class]="payloadType() === 'auth' ? 'p-3 flex flex-col gap-y-3 overflow-y-auto' : 'invisible absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden'">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 pb-2 border-b border-(--postonsteroids-border)/40">
             <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[80px]">Auth Type</span>
-            <div class="flex items-center gap-x-2">
+            <div class="flex flex-wrap items-center gap-2">
                 @for (type of authTypes; track type) {
-                <label class="flex items-center gap-x-1.5 cursor-pointer">
+                <label class="flex items-center gap-x-1.5 px-2.5 py-1 rounded-md border text-[12px] cursor-pointer transition-colors"
+                       [class.border-(--postonsteroids-accent)]="auth().type === type"
+                       [class.bg-(--postonsteroids-accent)/10]="auth().type === type"
+                       [class.text-(--postonsteroids-accent)]="auth().type === type"
+                       [class.border-(--postonsteroids-border)]="auth().type !== type"
+                       [class.text-(--postonsteroids-text-secondary)]="auth().type !== type">
                     <input type="radio" [value]="type" [checked]="auth().type === type"
                         (change)="setAuthType($any(type))" class="accent-(--postonsteroids-accent) cursor-pointer" />
-                    <span class="text-[12px] capitalize text-(--postonsteroids-text-primary)">{{ type }}</span>
+                    <span>{{ authTypeLabel(type) }}</span>
                 </label>
                 }
             </div>
         </div>
 
         @if (auth().type === 'bearer') {
-        <div class="flex flex-col gap-y-1 relative">
+        <div class="flex flex-col gap-y-2 max-w-2xl">
             <div class="flex items-center gap-x-3">
-                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[80px]">Token</span>
-                <div
-                    class="flex-1 flex items-center relative bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[100px]">Token</span>
+                <div class="flex-1 flex items-center relative bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
                     <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().token"
                         (ngModelChange)="updateAuth('token', $event)"
-                        placeholder="Bearer token or var_name"
+                        placeholder="Bearer token or {{ '{{token}}' }}"
                         customClass="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono">
                     </app-variable-input>
-
-                    <button (click)="toggleTokenVisibility()"
+                    <button type="button" (click)="toggleTokenVisibility()"
                         class="ml-2 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer focus:outline-none">
-                        <mat-icon class="text-[16px]! size-[16px]!">{{ isTokenVisible() ? 'visibility_off' :
-                            'visibility' }}</mat-icon>
+                        <mat-icon class="text-[16px]! size-[16px]!">{{ isTokenVisible() ? 'visibility_off' : 'visibility' }}</mat-icon>
                     </button>
                 </div>
             </div>
         </div>
         }
 
+        @if (auth().type === 'basic') {
+        <div class="flex flex-col gap-y-2.5 max-w-2xl">
+            <div class="flex items-center gap-x-3">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[100px]">Username</span>
+                <div class="flex-1 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
+                    <app-variable-input [ngModel]="auth().username || ''" (ngModelChange)="updateAuth('username', $event)"
+                        placeholder="Username or {{ '{{username}}' }}"
+                        customClass="w-full bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                </div>
+            </div>
+            <div class="flex items-center gap-x-3">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[100px]">Password</span>
+                <div class="flex-1 flex items-center bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
+                    <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().password || ''" (ngModelChange)="updateAuth('password', $event)"
+                        placeholder="Password or {{ '{{password}}' }}"
+                        customClass="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                    <button type="button" (click)="toggleTokenVisibility()"
+                        class="ml-2 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer focus:outline-none">
+                        <mat-icon class="text-[16px]! size-[16px]!">{{ isTokenVisible() ? 'visibility_off' : 'visibility' }}</mat-icon>
+                    </button>
+                </div>
+            </div>
+        </div>
+        }
+
+        @if (auth().type === 'apikey') {
+        <div class="flex flex-col gap-y-2.5 max-w-2xl">
+            <div class="flex items-center gap-x-3">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[100px]">Key</span>
+                <div class="flex-1 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
+                    <app-variable-input [ngModel]="auth().apiKeyName || ''" (ngModelChange)="updateAuth('apiKeyName', $event)"
+                        placeholder="e.g. X-API-Key"
+                        customClass="w-full bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                </div>
+            </div>
+            <div class="flex items-center gap-x-3">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[100px]">Value</span>
+                <div class="flex-1 flex items-center bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
+                    <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().apiKeyValue ?? auth().token" (ngModelChange)="updateAuth('apiKeyValue', $event)"
+                        placeholder="API Key value or {{ '{{apiKey}}' }}"
+                        customClass="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                    <button type="button" (click)="toggleTokenVisibility()"
+                        class="ml-2 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer focus:outline-none">
+                        <mat-icon class="text-[16px]! size-[16px]!">{{ isTokenVisible() ? 'visibility_off' : 'visibility' }}</mat-icon>
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-x-3">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[100px]">Add to</span>
+                <div class="flex items-center gap-3 text-[12px]">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="radio" [checked]="(auth().apiKeyIn || 'header') === 'header'" (change)="updateAuth('apiKeyIn', 'header')" class="accent-(--postonsteroids-accent)" />
+                        <span>Header</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="radio" [checked]="auth().apiKeyIn === 'query'" (change)="updateAuth('apiKeyIn', 'query')" class="accent-(--postonsteroids-accent)" />
+                        <span>Query Params</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        }
+
+        @if (auth().type === 'oauth2') {
+        <div class="flex flex-col gap-y-2.5 max-w-3xl">
+            <div class="flex items-center gap-x-3">
+                <span class="text-[12px] text-(--postonsteroids-text-muted) min-w-[120px]">Current Token</span>
+                <div class="flex-1 flex items-center bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 focus-within:border-(--postonsteroids-accent)/50">
+                    <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().token" (ngModelChange)="updateAuth('token', $event)"
+                        placeholder="Access token (auto-populated on Fetch)"
+                        customClass="flex-1 bg-transparent text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                    <button type="button" (click)="toggleTokenVisibility()" class="ml-2 text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                        <mat-icon class="text-[16px]! size-[16px]!">{{ isTokenVisible() ? 'visibility_off' : 'visibility' }}</mat-icon>
+                    </button>
+                </div>
+                <button type="button" (click)="fetchOAuth2Token()" [disabled]="isFetchingOAuth2Token()"
+                        class="px-3 py-1.5 rounded bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white text-[11px] font-semibold cursor-pointer disabled:opacity-50 whitespace-nowrap flex items-center gap-1">
+                    <mat-icon class="text-[14px]! size-[14px]!" [class.animate-spin]="isFetchingOAuth2Token()">{{ isFetchingOAuth2Token() ? 'sync' : 'key' }}</mat-icon>
+                    <span>{{ isFetchingOAuth2Token() ? 'Fetching...' : 'Get New Access Token' }}</span>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Grant Type</span>
+                    <select [ngModel]="auth().oauth2?.grantType || 'client_credentials'" (ngModelChange)="updateOAuth2('grantType', $event)"
+                            class="flex-1 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none">
+                        <option value="client_credentials">Client Credentials</option>
+                        <option value="password">Password Credentials</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Header Prefix</span>
+                    <input type="text" [ngModel]="auth().oauth2?.headerPrefix || 'Bearer'" (ngModelChange)="updateOAuth2('headerPrefix', $event)"
+                           class="flex-1 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono" />
+                </div>
+                <div class="flex items-center gap-2 md:col-span-2">
+                    <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Token URL</span>
+                    <app-variable-input [ngModel]="auth().oauth2?.accessTokenUrl || ''" (ngModelChange)="updateOAuth2('accessTokenUrl', $event)"
+                        placeholder="https://auth.example.com/oauth/token"
+                        class="flex-1"
+                        customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Client ID</span>
+                    <app-variable-input [ngModel]="auth().oauth2?.clientId || ''" (ngModelChange)="updateOAuth2('clientId', $event)"
+                        placeholder="client_id" class="flex-1"
+                        customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Client Secret</span>
+                    <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().oauth2?.clientSecret || ''" (ngModelChange)="updateOAuth2('clientSecret', $event)"
+                        placeholder="client_secret" class="flex-1"
+                        customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                </div>
+                <div class="flex items-center gap-2 md:col-span-2">
+                    <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Scope</span>
+                    <app-variable-input [ngModel]="auth().oauth2?.scope || ''" (ngModelChange)="updateOAuth2('scope', $event)"
+                        placeholder="read write (optional)" class="flex-1"
+                        customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                </div>
+                @if (auth().oauth2?.grantType === 'password') {
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Username</span>
+                        <app-variable-input [ngModel]="auth().oauth2?.username || ''" (ngModelChange)="updateOAuth2('username', $event)"
+                            placeholder="username" class="flex-1"
+                            customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Password</span>
+                        <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().oauth2?.password || ''" (ngModelChange)="updateOAuth2('password', $event)"
+                            placeholder="password" class="flex-1"
+                            customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+                    </div>
+                }
+            </div>
+        </div>
+        }
+
+        @if (auth().type === 'aws-sigv4') {
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-w-3xl">
+            <div class="flex items-center gap-2">
+                <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Access Key</span>
+                <app-variable-input [ngModel]="auth().awsSigV4?.accessKey || ''" (ngModelChange)="updateAwsSigV4('accessKey', $event)"
+                    placeholder="AKIA..." class="flex-1"
+                    customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Secret Key</span>
+                <app-variable-input [type]="isTokenVisible() ? 'text' : 'password'" [ngModel]="auth().awsSigV4?.secretKey || ''" (ngModelChange)="updateAwsSigV4('secretKey', $event)"
+                    placeholder="Secret key" class="flex-1"
+                    customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">AWS Region</span>
+                <app-variable-input [ngModel]="auth().awsSigV4?.region || 'us-east-1'" (ngModelChange)="updateAwsSigV4('region', $event)"
+                    placeholder="us-east-1" class="flex-1"
+                    customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Service Name</span>
+                <app-variable-input [ngModel]="auth().awsSigV4?.service || 'execute-api'" (ngModelChange)="updateAwsSigV4('service', $event)"
+                    placeholder="execute-api / s3" class="flex-1"
+                    customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+            </div>
+            <div class="flex items-center gap-2 md:col-span-2">
+                <span class="text-[11px] text-(--postonsteroids-text-muted) min-w-[95px]">Session Token</span>
+                <app-variable-input [ngModel]="auth().awsSigV4?.sessionToken || ''" (ngModelChange)="updateAwsSigV4('sessionToken', $event)"
+                    placeholder="Optional temporary STS session token" class="flex-1"
+                    customClass="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[12px] text-(--postonsteroids-text-primary) outline-none font-mono"></app-variable-input>
+            </div>
+        </div>
+        }
+
         @if (auth().type === 'none') {
-        <p class="text-[12px] text-(--postonsteroids-text-muted) italic">No authorization configured for this request.
-        </p>
+        <p class="text-[12px] text-(--postonsteroids-text-muted) italic">No authorization configured for this request.</p>
         }
     </div>
 

@@ -11,6 +11,18 @@
                 <span class="text-[14px] font-bold tracking-wider text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
                     OnSteroid
                 </span>
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border"
+                      [class.bg-amber-500/15]="appEdition.id === 'enterprise'"
+                      [class.text-amber-500]="appEdition.id === 'enterprise'"
+                      [class.border-amber-500/35]="appEdition.id === 'enterprise'"
+                      [class.bg-indigo-500/15]="appEdition.id === 'professional'"
+                      [class.text-indigo-500]="appEdition.id === 'professional'"
+                      [class.border-indigo-500/35]="appEdition.id === 'professional'"
+                      [class.bg-(--postonsteroids-bg-tertiary)]="appEdition.id === 'community'"
+                      [class.text-(--postonsteroids-text-muted)]="appEdition.id === 'community'"
+                      [class.border-(--postonsteroids-border)]="appEdition.id === 'community'">
+                    {{ appEdition.id === 'professional' ? 'Pro' : appEdition.label }}
+                </span>
             </a>
 
             <!-- Sidebar Toggle -->
@@ -145,8 +157,12 @@
             </div>
         </div>
 
-        <!-- Center Section: Flexible Space -->
-        <div class="flex-1"></div>
+        <!-- Center Section: Edition Features Toolbar (excluded from Community build at compile time) -->
+        <div class="flex-1 flex items-center justify-end px-2 min-w-0">
+            @if (appEdition.toolbarComponent) {
+                <ng-container *ngComponentOutlet="appEdition.toolbarComponent" />
+            }
+        </div>
 
         <!-- Right Section: Utilities + Auth (Permanently pinned to far right) -->
         <div class="flex items-center justify-end gap-x-2 sm:gap-x-3 shrink-0" style="-webkit-app-region: no-drag;">

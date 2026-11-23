@@ -511,6 +511,7 @@ export class ImportComponent implements OnInit {
             urlEncodedData,
             ...(Array.isArray(rawReq.examples) ? { examples: rawReq.examples } : {}),
             auth: {
+                ...(rawReq.auth && typeof rawReq.auth === 'object' ? rawReq.auth : {}),
                 type: rawReq.auth?.type || (rawReq.authType as any) || 'none',
                 token: rawReq.auth?.token || rawReq.authToken || ''
             },
@@ -620,7 +621,7 @@ export class ImportComponent implements OnInit {
         urlEncodedData: { enabled: boolean; key: string; value: string }[];
         graphqlQuery: string;
         graphqlVariables: string;
-        auth: { type: 'none' | 'bearer' | 'basic'; token: string };
+        auth: any;
     } {
         const headers: { enabled: boolean; key: string; value: string }[] = [];
         if (Array.isArray(req?.header)) {
@@ -635,30 +636,59 @@ export class ImportComponent implements OnInit {
 
         // Extract Auth (request auth takes precedence over folder/collection auth)
         const resolvedAuth = req?.auth || inheritedAuth;
-        let authType: 'none' | 'bearer' | 'basic' = 'none';
-        let authToken = '';
+        let authObj: any = { type: 'none', token: '' };
         if (resolvedAuth && resolvedAuth.type !== 'noauth') {
+            const getAuthParam = (arr: any[], key: string) => arr?.find((x: any) => x?.key === key)?.value ?? '';
             if (resolvedAuth.type === 'bearer') {
-                authType = 'bearer';
                 const tokenObj = resolvedAuth.bearer?.find((b: any) => b.key === 'token') || resolvedAuth.bearer?.[0];
-                authToken = tokenObj?.value || '';
+                authObj = { type: 'bearer', token: tokenObj?.value || '' };
             } else if (resolvedAuth.type === 'basic') {
-                authType = 'basic';
-                const userObj = resolvedAuth.basic?.find((b: any) => b.key === 'username');
-                const passObj = resolvedAuth.basic?.find((b: any) => b.key === 'password');
-                if (userObj?.value || passObj?.value) {
-                    authToken = `${userObj?.value || ''}:${passObj?.value || ''}`;
-                }
+                const username = String(getAuthParam(resolvedAuth.basic, 'username') || '');
+                const password = String(getAuthParam(resolvedAuth.basic, 'password') || '');
+                authObj = {
+                    type: 'basic',
+                    token: (username || password) ? `${username}:${password}` : '',
+                    username,
+                    password
+                };
             } else if (resolvedAuth.type === 'apikey' && Array.isArray(resolvedAuth.apikey)) {
-                const keyObj = resolvedAuth.apikey.find((a: any) => a.key === 'key');
-                const valObj = resolvedAuth.apikey.find((a: any) => a.key === 'value');
-                const inObj = resolvedAuth.apikey.find((a: any) => a.key === 'in');
-                if (keyObj?.value && (inObj?.value || 'header') === 'header') {
-                    const alreadyHas = headers.some(h => h.key.toLowerCase() === String(keyObj.value).toLowerCase());
-                    if (!alreadyHas) {
-                        headers.push({ enabled: true, key: String(keyObj.value), value: String(valObj?.value || '') });
+                const keyName = String(getAuthParam(resolvedAuth.apikey, 'key') || '');
+                const valStr = String(getAuthParam(resolvedAuth.apikey, 'value') || '');
+                const inStr = String(getAuthParam(resolvedAuth.apikey, 'in') || 'header') === 'query' ? 'query' : 'header';
+                authObj = {
+                    type: 'apikey',
+                    token: valStr,
+                    apiKeyName: keyName,
+                    apiKeyValue: valStr,
+                    apiKeyIn: inStr
+                };
+            } else if (resolvedAuth.type === 'oauth2' && Array.isArray(resolvedAuth.oauth2)) {
+                authObj = {
+                    type: 'oauth2',
+                    token: String(getAuthParam(resolvedAuth.oauth2, 'accessToken') || ''),
+                    oauth2: {
+                        grantType: getAuthParam(resolvedAuth.oauth2, 'grant_type') === 'password' ? 'password' : 'client_credentials',
+                        accessTokenUrl: String(getAuthParam(resolvedAuth.oauth2, 'accessTokenUrl') || ''),
+                        clientId: String(getAuthParam(resolvedAuth.oauth2, 'clientId') || ''),
+                        clientSecret: String(getAuthParam(resolvedAuth.oauth2, 'clientSecret') || ''),
+                        scope: String(getAuthParam(resolvedAuth.oauth2, 'scope') || ''),
+                        username: String(getAuthParam(resolvedAuth.oauth2, 'username') || ''),
+                        password: String(getAuthParam(resolvedAuth.oauth2, 'password') || ''),
+                        headerPrefix: String(getAuthParam(resolvedAuth.oauth2, 'headerPrefix') || 'Bearer')
                     }
-                }
+                };
+            } else if (resolvedAuth.type === 'awsv4' && Array.isArray(resolvedAuth.awsv4)) {
+                authObj = {
+                    type: 'aws-sigv4',
+                    token: '',
+                    awsSigV4: {
+                        accessKey: String(getAuthParam(resolvedAuth.awsv4, 'accessKey') || ''),
+                        secretKey: String(getAuthParam(resolvedAuth.awsv4, 'secretKey') || ''),
+                        region: String(getAuthParam(resolvedAuth.awsv4, 'region') || 'us-east-1'),
+                        service: String(getAuthParam(resolvedAuth.awsv4, 'service') || 'execute-api'),
+                        sessionToken: String(getAuthParam(resolvedAuth.awsv4, 'sessionToken') || '')
+                    }
+                };
             }
         }
 
@@ -747,7 +777,7 @@ export class ImportComponent implements OnInit {
             urlEncodedData,
             graphqlQuery,
             graphqlVariables,
-            auth: { type: authType, token: authToken }
+            auth: authObj
         };
     }
 

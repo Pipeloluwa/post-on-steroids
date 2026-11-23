@@ -40,7 +40,11 @@
             }
           },
           "configurations": {
-            "production": { "fileReplacements": [ { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" } ],
+            "production": {
+              "fileReplacements": [
+                { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" },
+                { "replace": "src/environments/edition.ts", "with": "src/environments/edition.enterprise.ts" }
+              ],
               "budgets": [
                 {
                   "type": "initial",
@@ -60,7 +64,67 @@
                 "fonts": false
               }
             },
+            "community": {
+              "fileReplacements": [
+                { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" },
+                { "replace": "src/environments/edition.ts", "with": "src/environments/edition.community.ts" }
+              ],
+              "budgets": [
+                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
+              ],
+              "outputHashing": "all",
+              "optimization": { "scripts": true, "styles": true, "fonts": false }
+            },
+            "professional": {
+              "fileReplacements": [
+                { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" },
+                { "replace": "src/environments/edition.ts", "with": "src/environments/edition.professional.ts" }
+              ],
+              "budgets": [
+                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
+              ],
+              "outputHashing": "all",
+              "optimization": { "scripts": true, "styles": true, "fonts": false }
+            },
+            "enterprise": {
+              "fileReplacements": [
+                { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" },
+                { "replace": "src/environments/edition.ts", "with": "src/environments/edition.enterprise.ts" }
+              ],
+              "budgets": [
+                { "type": "initial", "maximumWarning": "1MB", "maximumError": "2MB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
+              ],
+              "outputHashing": "all",
+              "optimization": { "scripts": true, "styles": true, "fonts": false }
+            },
             "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            },
+            "development-community": {
+              "fileReplacements": [
+                { "replace": "src/environments/edition.ts", "with": "src/environments/edition.community.ts" }
+              ],
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            },
+            "development-professional": {
+              "fileReplacements": [
+                { "replace": "src/environments/edition.ts", "with": "src/environments/edition.professional.ts" }
+              ],
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            },
+            "development-enterprise": {
+              "fileReplacements": [
+                { "replace": "src/environments/edition.ts", "with": "src/environments/edition.enterprise.ts" }
+              ],
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
@@ -76,11 +140,20 @@
             "allowedHosts": true
           },
           "configurations": {
-            "production": { "fileReplacements": [ { "replace": "src/environments/environment.ts", "with": "src/environments/environment.prod.ts" } ],
+            "production": {
               "buildTarget": "post-on-steroids:build:production"
             },
             "development": {
               "buildTarget": "post-on-steroids:build:development"
+            },
+            "community": {
+              "buildTarget": "post-on-steroids:build:development-community"
+            },
+            "professional": {
+              "buildTarget": "post-on-steroids:build:development-professional"
+            },
+            "enterprise": {
+              "buildTarget": "post-on-steroids:build:development-enterprise"
             }
           },
           "defaultConfiguration": "development"

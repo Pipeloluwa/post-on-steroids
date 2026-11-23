@@ -13,13 +13,25 @@
             placeholder="Request Name" />
     </div>
 
-    <!-- Right Section: cURL + Share Button + Auto-Save Toggle + Save Button Group -->
-    <div class="flex items-center gap-x-2.5 shrink-0">
-        <!-- Request as cURL Button -->
+    <!-- Right Section: Cookies + Code Snippet + Share Button + Auto-Save Toggle + Save Button Group -->
+    <div class="flex items-center gap-x-2 shrink-0">
+        <!-- Cookie Jar Manager Button -->
+        <button (click)="isCookieModalOpen.set(true)" type="button"
+            class="h-[30px] px-2.5 flex items-center gap-x-1 rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-colors duration-200 cursor-pointer shrink-0"
+            title="Manage Domain Cookies">
+            <mat-icon class="text-[14px]! size-[14px]! text-amber-500">cookie</mat-icon>
+            <span class="text-[11px] font-semibold tracking-tight">Cookies</span>
+            @if (cookieCount() > 0) {
+                <span class="text-[9px] px-1 rounded bg-amber-500/20 text-amber-500 font-bold tabular-nums">{{ cookieCount() }}</span>
+            }
+        </button>
+
+        <!-- Code Snippet / cURL Button -->
         <button (click)="openCurlModal()" type="button"
-            class="h-[30px] px-2.5 flex items-center rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-colors duration-200 cursor-pointer shrink-0"
-            title="Convert this request to a cURL command">
-            <span class="text-[11px] font-semibold tracking-tight">cURL</span>
+            class="h-[30px] px-2.5 flex items-center gap-x-1 rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-colors duration-200 cursor-pointer shrink-0"
+            title="Generate cURL, C#, Python, PowerShell, JavaScript, Java, or Go code snippets">
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">code</mat-icon>
+            <span class="text-[11px] font-semibold tracking-tight">Code</span>
         </button>
 
         <!-- Share Capsule Button -->
@@ -95,6 +107,9 @@
 <app-curl-modal [isOpen]="isCurlModalOpen()"
     [request]="currentRequestState()"
     (closed)="isCurlModalOpen.set(false)" />
+<app-cookie-manager-modal [isOpen]="isCookieModalOpen()"
+    [defaultUrl]="currentRequestState()?.url || ''"
+    (closed)="isCookieModalOpen.set(false)" />
 <app-transfer-capsule-modal [isOpen]="isTransferModalOpen()"
     [requestIds]="[tabId()]"
     [initialMode]="transferMode()"

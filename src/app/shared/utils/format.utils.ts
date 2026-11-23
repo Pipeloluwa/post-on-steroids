@@ -412,3 +412,270 @@ export function extractSoapActionFromXml(xml: string): string | null {
   }
   return null;
 }
+
+/**
+ * Pretty-formats GraphQL queries, mutations, subscriptions, and fragments with 2-space indentation.
+ */
+export function formatGraphqlPretty(gql: string): string {
+  if (!gql || typeof gql !== 'string') return '';
+  const trimmed = gql.trim();
+  if (!trimmed) return '';
+
+  try {
+    const out: string[] = [];
+    let indent = 0;
+    let inString = false;
+    let inBlockString = false;
+    let inComment = false;
+    let parenDepth = 0;
+    let lineBuf = '';
+
+    const pushLine = () => {
+      const cleaned = lineBuf.trim();
+      if (cleaned) {
+        out.push('  '.repeat(Math.max(0, indent)) + cleaned);
+      }
+      lineBuf = '';
+    };
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      const next3 = trimmed.slice(i, i + 3);
+
+      if (inComment) {
+        if (ch === '\n' || ch === '\r') {
+          pushLine();
+          inComment = false;
+        } else {
+          lineBuf += ch;
+        }
+        continue;
+      }
+
+      if (inBlockString) {
+        lineBuf += ch;
+        if (next3 === '"""') {
+          lineBuf += '""';
+          i += 2;
+          inBlockString = false;
+        }
+        continue;
+      }
+
+      if (inString) {
+        lineBuf += ch;
+        if (ch === '\\' && i + 1 < trimmed.length) {
+          lineBuf += trimmed[++i];
+          continue;
+        }
+        if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (next3 === '"""') {
+        lineBuf += '"""';
+        i += 2;
+        inBlockString = true;
+        continue;
+      }
+
+      if (ch === '"') {
+        lineBuf += ch;
+        inString = true;
+        continue;
+      }
+
+      if (ch === '#') {
+        if (lineBuf.trim()) {
+          lineBuf += ' ';
+        }
+        inComment = true;
+        lineBuf += ch;
+        continue;
+      }
+
+      if (ch === '(') {
+        parenDepth++;
+        lineBuf += ch;
+        continue;
+      }
+
+      if (ch === ')') {
+        parenDepth = Math.max(0, parenDepth - 1);
+        lineBuf += ch;
+        continue;
+      }
+
+      if (ch === '{' && parenDepth === 0) {
+        const before = lineBuf.trim();
+        lineBuf = before ? `${before} {` : '{';
+        pushLine();
+        indent++;
+        continue;
+      }
+
+      if (ch === '}' && parenDepth === 0) {
+        pushLine();
+        indent = Math.max(0, indent - 1);
+        out.push('  '.repeat(indent) + '}');
+        continue;
+      }
+
+      if (ch === '\n' || ch === '\r') {
+        if (parenDepth === 0) {
+          pushLine();
+        } else {
+          lineBuf += ' ';
+        }
+        continue;
+      }
+
+      if (ch === ' ' || ch === '\t') {
+        if (!lineBuf.endsWith(' ') && !lineBuf.endsWith('(')) {
+          lineBuf += ' ';
+        }
+        continue;
+      }
+
+      lineBuf += ch;
+    }
+
+    pushLine();
+    return out.join('\n').replace(/\{\s+\}/g, '{}').trim();
+  } catch {
+    return gql;
+  }
+}
+
+/**
+ * Formats JavaScript / TypeScript code with consistent 2-space indentation.
+ * When `restrictToFunctionBody` is true, keeps the outer function header/closing brace lines intact.
+ */
+export function formatJsPretty(code: string, restrictToFunctionBody = false): string {
+  if (!code || typeof code !== 'string') return '';
+  try {
+    const rawLines = code.replace(/\r\n/g, '\n').split('\n');
+    let startIdx = 0;
+    let endIdx = rawLines.length - 1;
+    let prefixLine = '';
+    let suffixLine = '';
+
+    if (restrictToFunctionBody && rawLines.length >= 2) {
+      const firstTrim = rawLines[0].trim();
+      const lastTrim = rawLines[rawLines.length - 1].trim();
+      if (/^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{$/.test(firstTrim) && lastTrim === '}') {
+        prefixLine = rawLines[0];
+        suffixLine = rawLines[rawLines.length - 1];
+        startIdx = 1;
+        endIdx = rawLines.length - 2;
+      }
+    }
+
+    let braceDepth = restrictToFunctionBody && prefixLine ? 1 : 0;
+    const formatted: string[] = [];
+    let inBlockComment = false;
+
+    for (let i = startIdx; i <= endIdx; i++) {
+      const trimmed = rawLines[i].trim();
+      if (!trimmed) {
+        if (formatted.length > 0 && formatted[formatted.length - 1] !== '') {
+          formatted.push('');
+        }
+        continue;
+      }
+
+      if (inBlockComment) {
+        formatted.push('  '.repeat(braceDepth) + trimmed);
+        if (trimmed.includes('*/')) {
+          inBlockComment = false;
+        }
+        continue;
+      }
+
+      // Count net brace change ignoring strings and comments
+      let leadingClosers = 0;
+      for (const ch of trimmed) {
+        if (ch === '}' || ch === ']' || ch === ')') {
+          leadingClosers++;
+        } else {
+          break;
+        }
+      }
+
+      const effectiveDepth = Math.max(restrictToFunctionBody && prefixLine ? 1 : 0, braceDepth - leadingClosers);
+      formatted.push('  '.repeat(effectiveDepth) + trimmed);
+
+      // Strip strings, line comments, and inline block comments for depth tracking
+      let sanitized = '';
+      let quote: string | null = null;
+      for (let j = 0; j < trimmed.length; j++) {
+        const ch = trimmed[j];
+        const next = trimmed[j + 1];
+        if (quote) {
+          if (ch === '\\') {
+            j++;
+            continue;
+          }
+          if (ch === quote) {
+            quote = null;
+          }
+          continue;
+        }
+        if (ch === '/' && next === '/') break;
+        if (ch === '/' && next === '*') {
+          const endComment = trimmed.indexOf('*/', j + 2);
+          if (endComment === -1) {
+            inBlockComment = true;
+            break;
+          }
+          j = endComment + 1;
+          continue;
+        }
+        if (ch === '"' || ch === '\'' || ch === '`') {
+          quote = ch;
+          continue;
+        }
+        sanitized += ch;
+      }
+
+      for (const ch of sanitized) {
+        if (ch === '{' || ch === '[' || ch === '(') braceDepth++;
+        else if (ch === '}' || ch === ']' || ch === ')') {
+          braceDepth = Math.max(restrictToFunctionBody && prefixLine ? 1 : 0, braceDepth - 1);
+        }
+      }
+    }
+
+    // Trim trailing blank lines inside body
+    while (formatted.length > 0 && formatted[formatted.length - 1] === '') {
+      formatted.pop();
+    }
+
+    if (restrictToFunctionBody && prefixLine) {
+      return [prefixLine, ...formatted, suffixLine].join('\n');
+    }
+    return formatted.join('\n');
+  } catch {
+    return code;
+  }
+}
+
+export function beautifyByLanguage(content: string, language: string, restrictToFunctionBody = false): string {
+  const lang = (language || '').toLowerCase();
+  if (!content || !content.trim()) return content || '';
+  if (lang === 'json' || lang === 'jsonc') {
+    return formatJsonPretty(content);
+  }
+  if (lang === 'xml' || lang === 'html') {
+    return formatXmlPretty(content);
+  }
+  if (lang === 'graphql') {
+    return formatGraphqlPretty(content);
+  }
+  if (lang === 'javascript' || lang === 'typescript') {
+    return formatJsPretty(content, restrictToFunctionBody);
+  }
+  return content;
+}

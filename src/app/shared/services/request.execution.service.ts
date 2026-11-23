@@ -15,6 +15,29 @@ import { NetworkService } from './network.service';
 import { API_BASE_URL } from '../constants/api.constants';
 import { sanitizeJsonBodyForScripts, extractSoapActionFromXml } from '../utils/format.utils';
 import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../utils/encryption-path.util';
+import { generateAwsSigV4Headers } from '../utils/aws-sigv4.util';
+import { CookieJarService } from './cookie-jar.service';
+
+export interface ClientCertConfig {
+    id?: string;
+    host: string;
+    type: 'pfx' | 'pem';
+    pfxBase64?: string;
+    certPem?: string;
+    keyPem?: string;
+    passphrase?: string;
+}
+
+export interface ExecutionAuditEvent {
+    tabId: string;
+    capsuleId?: string;
+    requestName: string;
+    method: string;
+    url: string;
+    status: number;
+    responseTimeMs: number;
+    timestamp: number;
+}
 
 @Injectable({
     providedIn: 'root'
@@ -28,8 +51,41 @@ export class RequestExecutionService {
     private authService = inject(AuthService);
     private notificationService = inject(NotificationService);
     private networkService = inject(NetworkService);
+    private cookieJar = inject(CookieJarService);
 
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
+    private clientCertProviders: Array<(targetUrl: string) => ClientCertConfig | null> = [];
+    private executionObservers: Array<(event: ExecutionAuditEvent) => void> = [];
+
+    registerClientCertProvider(provider: (targetUrl: string) => ClientCertConfig | null): () => void {
+        this.clientCertProviders.push(provider);
+        return () => {
+            this.clientCertProviders = this.clientCertProviders.filter(p => p !== provider);
+        };
+    }
+
+    registerExecutionObserver(observer: (event: ExecutionAuditEvent) => void): () => void {
+        this.executionObservers.push(observer);
+        return () => {
+            this.executionObservers = this.executionObservers.filter(o => o !== observer);
+        };
+    }
+
+    private resolveClientCert(targetUrl: string): ClientCertConfig | null {
+        for (const p of this.clientCertProviders) {
+            const cert = p(targetUrl);
+            if (cert) return cert;
+        }
+        return null;
+    }
+
+    private encodeBasicCredentials(raw: string): string {
+        try {
+            return btoa(unescape(encodeURIComponent(raw)));
+        } catch {
+            return raw;
+        }
+    }
 
     cancelRequest(tabId: string) {
         const effectiveId = this.tabStateService.resolveTabId(tabId);
@@ -145,33 +201,65 @@ export class RequestExecutionService {
                 }))
                 .filter(h => !!h.key);
 
-            // Inject Auth Header if applicable
-            if (freshState.auth.type === 'bearer' && freshState.auth.token) {
+            // 3. Prepare Params (needs to exist before apikey query injection)
+            let params = freshState.params.filter(p => p.enabled && p.key).map(p => ({
+                key: this.variableService.resolve(p.key),
+                value: this.variableService.resolve(p.value)
+            }));
+
+            // Inject Auth Header / Query if applicable
+            if ((freshState.auth.type === 'bearer' || freshState.auth.type === 'oauth2') && freshState.auth.token) {
                 const token = this.variableService.resolve(freshState.auth.token).trim().replace(/[\r\n]+/g, '');
-                headers.push({ key: 'Authorization', value: `Bearer ${token}` });
-            } else if (freshState.auth.type === 'basic' && freshState.auth.token) {
-                const tokenStr = this.variableService.resolve(freshState.auth.token).trim().replace(/[\r\n]+/g, '');
-                headers.push({ key: 'Authorization', value: `Basic ${tokenStr}` });
+                const prefix = freshState.auth.type === 'oauth2'
+                    ? (freshState.auth.oauth2?.headerPrefix || 'Bearer')
+                    : 'Bearer';
+                if (token) {
+                    headers.push({ enabled: true, key: 'Authorization', value: `${prefix} ${token}` });
+                }
+            } else if (freshState.auth.type === 'basic') {
+                if (freshState.auth.username !== undefined || freshState.auth.password !== undefined) {
+                    const user = this.variableService.resolve(freshState.auth.username || '');
+                    const pass = this.variableService.resolve(freshState.auth.password || '');
+                    if (user || pass) {
+                        headers.push({
+                            enabled: true,
+                            key: 'Authorization',
+                            value: `Basic ${this.encodeBasicCredentials(`${user}:${pass}`)}`
+                        });
+                    }
+                } else if (freshState.auth.token) {
+                    const tokenStr = this.variableService.resolve(freshState.auth.token).trim().replace(/[\r\n]+/g, '');
+                    const encoded = tokenStr.includes(':') ? this.encodeBasicCredentials(tokenStr) : tokenStr;
+                    if (encoded) {
+                        headers.push({ enabled: true, key: 'Authorization', value: `Basic ${encoded}` });
+                    }
+                }
+            } else if (freshState.auth.type === 'apikey' && freshState.auth.apiKeyName) {
+                const apiKeyName = this.variableService.resolve(freshState.auth.apiKeyName).trim();
+                const apiKeyVal = this.variableService.resolve(freshState.auth.apiKeyValue ?? freshState.auth.token ?? '').trim();
+                if (apiKeyName) {
+                    if (freshState.auth.apiKeyIn === 'query') {
+                        if (!params.some(p => p.key === apiKeyName)) {
+                            params.push({ key: apiKeyName, value: apiKeyVal });
+                        }
+                    } else if (!headers.some(h => h.key.toLowerCase() === apiKeyName.toLowerCase())) {
+                        headers.push({ enabled: true, key: apiKeyName, value: apiKeyVal.replace(/[\r\n]+/g, '') });
+                    }
+                }
             }
 
             // Inject globally cached Auto-Auth token if no tab-level auth is configured
             const autoAuthEnabled = this.autoAuthService.isAutoAuthEnabled(tabId);
-            if (autoAuthEnabled && !freshState.auth.token) {
+            if (autoAuthEnabled && !freshState.auth.token && freshState.auth.type === 'none') {
                 const cachedToken = this.autoAuthService.getCachedToken();
                 if (cachedToken) {
                     const alreadyHasAuth = headers.some(h => h.key.toLowerCase() === 'authorization');
                     if (!alreadyHasAuth) {
                         const token = cachedToken.trim().replace(/[\r\n]+/g, '');
-                        headers.push({ key: 'Authorization', value: `Bearer ${token}` });
+                        headers.push({ enabled: true, key: 'Authorization', value: `Bearer ${token}` });
                     }
                 }
             }
-
-            // 3. Prepare Params
-            let params = freshState.params.filter(p => p.enabled && p.key).map(p => ({
-                key: this.variableService.resolve(p.key),
-                value: this.variableService.resolve(p.value)
-            }));
 
             // 4. Prepare Body
             let body: any = null;
@@ -547,6 +635,52 @@ export class RequestExecutionService {
                 finalUrl = (isLoopback ? 'http://' : 'https://') + finalUrl;
             }
 
+            // Inject managed Cookie Jar cookies if enabled and no explicit Cookie header exists
+            if (freshState.settings?.enableCookies !== false) {
+                const hasCookieHdr = httpHeaders.keys().some(k => k.toLowerCase() === 'cookie');
+                if (!hasCookieHdr) {
+                    const jarHeader = this.cookieJar.getCookieHeaderForUrl(finalUrl);
+                    if (jarHeader) {
+                        httpHeaders = httpHeaders.set('Cookie', jarHeader);
+                    }
+                }
+            }
+
+            // Apply AWS Signature v4 headers if configured
+            if (freshState.auth.type === 'aws-sigv4' && freshState.auth.awsSigV4) {
+                const cfg = freshState.auth.awsSigV4;
+                const accessKey = this.variableService.resolve(cfg.accessKey || '').trim();
+                const secretKey = this.variableService.resolve(cfg.secretKey || '').trim();
+                if (accessKey && secretKey) {
+                    try {
+                        let signUrl = finalUrl;
+                        const qs = httpParams.toString();
+                        if (qs) signUrl += (signUrl.includes('?') ? '&' : '?') + qs;
+                        const hdrRecord: Record<string, string> = {};
+                        httpHeaders.keys().forEach(k => { hdrRecord[k] = httpHeaders.get(k) || ''; });
+                        const signBody = typeof finalBody === 'string'
+                            ? finalBody
+                            : (finalBody && !(finalBody instanceof FormData) ? JSON.stringify(finalBody) : '');
+                        const sigHeaders = await generateAwsSigV4Headers({
+                            method: freshState.method,
+                            url: signUrl,
+                            headers: hdrRecord,
+                            body: signBody,
+                            accessKey,
+                            secretKey,
+                            region: this.variableService.resolve(cfg.region || 'us-east-1'),
+                            service: this.variableService.resolve(cfg.service || 'execute-api'),
+                            sessionToken: cfg.sessionToken ? this.variableService.resolve(cfg.sessionToken) : undefined
+                        });
+                        for (const [k, v] of Object.entries(sigHeaders)) {
+                            httpHeaders = httpHeaders.set(k, v);
+                        }
+                    } catch (sigErr) {
+                        console.warn('[AWS SigV4] Failed to sign request:', sigErr);
+                    }
+                }
+            }
+
             // Check if running inside Electron wrapper
             const isElectron = isElectronApp();
             const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
@@ -638,6 +772,7 @@ export class RequestExecutionService {
                     };
 
                     const timeoutMs = this.tabStateService.requestTimeoutMs();
+                    const clientCert = this.resolveClientCert(targetUrl);
                     const electronRes = await electronApi.executeHttpRequest({
                         requestId: electronReqId,
                         url: targetUrl,
@@ -648,7 +783,8 @@ export class RequestExecutionService {
                         verifySsl: freshState.settings?.verifySsl ?? false,
                         followRedirects: freshState.settings?.followRedirects ?? true,
                         enableCookies: freshState.settings?.enableCookies ?? true,
-                        timeoutMs
+                        timeoutMs,
+                        ...(clientCert ? { clientCert } : {})
                     });
 
                     if (electronRes?.cancelled || cancelToken.cancelled) {
@@ -1132,6 +1268,27 @@ export class RequestExecutionService {
                 isLoading: false,
                 ...responseData
             });
+
+            // Persist returned cookies into local Cookie Jar
+            if (freshState.settings?.enableCookies !== false && responseCookies.length > 0) {
+                this.cookieJar.captureResponseCookies(finalUrl, responseCookies);
+            }
+
+            // Notify execution observers (Enterprise Audit Log)
+            for (const observer of this.executionObservers) {
+                try {
+                    observer({
+                        tabId: targetId,
+                        capsuleId: freshState.capsuleId,
+                        requestName: freshState.name || finalUrl,
+                        method: freshState.method,
+                        url: finalUrl,
+                        status,
+                        responseTimeMs: responseTime,
+                        timestamp: Date.now()
+                    });
+                } catch {}
+            }
 
             const latestReqState = this.tabStateService.getState(targetId) || freshState;
 

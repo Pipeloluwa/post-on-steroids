@@ -60,6 +60,14 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
         }))
         .filter(p => p.key !== '');
 
+    if (state.auth?.type === 'apikey' && state.auth.apiKeyIn === 'query' && state.auth.apiKeyName) {
+        const k = resolveStr(state.auth.apiKeyName).trim();
+        const v = resolveStr(state.auth.apiKeyValue ?? state.auth.token ?? '');
+        if (k && !enabledParams.some(p => p.key === k)) {
+            enabledParams.push({ key: k, value: v });
+        }
+    }
+
     const fullUrl = appendQueryParams(rawUrl, enabledParams, resolveVariables);
 
     const headers: { key: string; value: string }[] = (state.headers || [])
@@ -79,12 +87,26 @@ export function buildCurlCommand(state: RequestState, options: CurlBuildOptions 
     const hasHeader = (name: string) =>
         headers.some(h => h.key.toLowerCase() === name.toLowerCase());
 
-    if (state.auth?.type === 'bearer' && state.auth.token && !hasHeader('authorization')) {
+    if ((state.auth?.type === 'bearer' || state.auth?.type === 'oauth2') && state.auth.token && !hasHeader('authorization')) {
         const token = resolveStr(state.auth.token).trim().replace(/[\r\n]+/g, '');
-        if (token) headers.push({ key: 'Authorization', value: `Bearer ${token}` });
-    } else if (state.auth?.type === 'basic' && state.auth.token && !hasHeader('authorization')) {
-        const token = resolveStr(state.auth.token).trim().replace(/[\r\n]+/g, '');
-        if (token) headers.push({ key: 'Authorization', value: `Basic ${token}` });
+        const prefix = state.auth?.type === 'oauth2' ? (state.auth.oauth2?.headerPrefix || 'Bearer') : 'Bearer';
+        if (token) headers.push({ key: 'Authorization', value: `${prefix} ${token}` });
+    } else if (state.auth?.type === 'basic' && !hasHeader('authorization')) {
+        if (state.auth.username !== undefined || state.auth.password !== undefined) {
+            const creds = `${resolveStr(state.auth.username || '')}:${resolveStr(state.auth.password || '')}`;
+            if (creds !== ':') {
+                const encoded = typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(creds))) : creds;
+                headers.push({ key: 'Authorization', value: `Basic ${encoded}` });
+            }
+        } else if (state.auth.token) {
+            const token = resolveStr(state.auth.token).trim().replace(/[\r\n]+/g, '');
+            const encoded = token.includes(':') && typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(token))) : token;
+            if (encoded) headers.push({ key: 'Authorization', value: `Basic ${encoded}` });
+        }
+    } else if (state.auth?.type === 'apikey' && (state.auth.apiKeyIn || 'header') === 'header' && state.auth.apiKeyName) {
+        const k = resolveStr(state.auth.apiKeyName).trim();
+        const v = resolveStr(state.auth.apiKeyValue ?? state.auth.token ?? '').trim();
+        if (k && !hasHeader(k)) headers.push({ key: k, value: v });
     } else if (autoAuthToken && state.autoAuthEnabled && resolveVariables && !hasHeader('authorization')) {
         const cleanToken = autoAuthToken.trim().replace(/[\r\n]+/g, '');
         if (cleanToken) headers.push({ key: 'Authorization', value: `Bearer ${cleanToken}` });

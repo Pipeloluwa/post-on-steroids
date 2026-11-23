@@ -38,9 +38,35 @@ export interface FormDataRow {
     file?: File;
 }
 
+export interface OAuth2Config {
+    grantType: 'client_credentials' | 'password';
+    accessTokenUrl: string;
+    clientId: string;
+    clientSecret: string;
+    scope?: string;
+    username?: string;
+    password?: string;
+    headerPrefix?: string;
+}
+
+export interface AwsSigV4Config {
+    accessKey: string;
+    secretKey: string;
+    region: string;
+    service: string;
+    sessionToken?: string;
+}
+
 export interface AuthState {
-    type: 'none' | 'bearer' | 'basic';
+    type: 'none' | 'bearer' | 'basic' | 'apikey' | 'oauth2' | 'aws-sigv4';
     token: string;
+    username?: string;
+    password?: string;
+    apiKeyName?: string;
+    apiKeyValue?: string;
+    apiKeyIn?: 'header' | 'query';
+    oauth2?: OAuth2Config;
+    awsSigV4?: AwsSigV4Config;
 }
 
 export interface ScriptsState {
@@ -172,6 +198,24 @@ export class TabStateService {
     private injector = inject(Injector);
     private states = signal<Map<string, RequestState>>(new Map());
     openTabIds = signal<string[]>([]);
+    private editGuards: Array<(capsuleId: string) => string | null> = [];
+    private lastEditBlockToastAt = 0;
+
+    registerEditGuard(guard: (capsuleId: string) => string | null): () => void {
+        this.editGuards.push(guard);
+        return () => {
+            this.editGuards = this.editGuards.filter(g => g !== guard);
+        };
+    }
+
+    getEditBlockReason(capsuleId?: string): string | null {
+        const capId = capsuleId || this.activeCapsuleId();
+        for (const guard of this.editGuards) {
+            const msg = guard(capId);
+            if (msg) return msg;
+        }
+        return null;
+    }
 
     private getVariableService(): VariableService | null {
         try {
@@ -5330,6 +5374,19 @@ export class TabStateService {
         const effectiveId = this.resolveTabId(id);
         const ignorableKeys = ['isLoading', 'responseBody', 'responseStatus', 'responseTime', 'responseSize', 'responseCookies', 'responseHeaders', 'testResults', 'editorScrollPositions', 'isDirty', 'executionToken', 'bodyWrapStyle', 'responseWrapStyle', 'responseActiveMode', 'consoleWrap'];
         const explicitDirty = Object.prototype.hasOwnProperty.call(partialState, 'isDirty');
+        const currentExisting = this.states().get(effectiveId) || this.states().get(id);
+        const isSignificantTop = Object.keys(partialState).some(k => !ignorableKeys.includes(k));
+        if (recordHistory && isSignificantTop && currentExisting) {
+            const blockReason = this.getEditBlockReason(currentExisting.capsuleId || this.activeCapsuleId());
+            if (blockReason) {
+                const now = Date.now();
+                if (now - this.lastEditBlockToastAt > 2500) {
+                    this.lastEditBlockToastAt = now;
+                    this.notificationService.notify(blockReason, 'warning');
+                }
+                return;
+            }
+        }
         let becameDirty = false;
 
         this.states.update(map => {
@@ -6342,8 +6399,9 @@ export class TabStateService {
             graphqlQuery: dto.graphqlQuery || '',
             graphqlVariables: dto.graphqlVariables || '{\n  \n}',
             auth: {
-                type: (dto.authType as any) || 'none',
-                token: dto.authToken || ''
+                ...(dto.auth && typeof dto.auth === 'object' ? dto.auth : {}),
+                type: (dto.auth?.type || dto.authType || 'none') as AuthState['type'],
+                token: dto.auth?.token ?? dto.authToken ?? ''
             },
             scripts: {
                 ...base.scripts,

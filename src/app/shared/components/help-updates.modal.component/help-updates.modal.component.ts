@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, effect, input, output, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
+import { APP_EDITION } from '../../../../environments/edition';
 
 @Component({
     selector: 'app-help-updates-modal-component',
@@ -19,6 +20,7 @@ export class HelpUpdatesModalComponent {
 
     activeTab = signal<'guide' | 'updates'>('guide');
 
+    readonly appEdition = APP_EDITION;
     appVersion = 'v3.0.0-steroids';
 
     private wasShown = false;

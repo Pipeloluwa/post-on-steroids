@@ -177,11 +177,18 @@ function buildPostmanAuth(auth: any): any | undefined {
         };
     }
     if (auth.type === 'basic') {
+        let user = String(auth.username || '');
+        let pass = String(auth.password || '');
+        if (!user && !pass && auth.token && String(auth.token).includes(':')) {
+            const idx = String(auth.token).indexOf(':');
+            user = String(auth.token).slice(0, idx);
+            pass = String(auth.token).slice(idx + 1);
+        }
         return {
             type: 'basic',
             basic: [
-                { key: 'username', value: String(auth.username || ''), type: 'string' },
-                { key: 'password', value: String(auth.password || ''), type: 'string' }
+                { key: 'username', value: user, type: 'string' },
+                { key: 'password', value: pass, type: 'string' }
             ]
         };
     }
@@ -189,9 +196,34 @@ function buildPostmanAuth(auth: any): any | undefined {
         return {
             type: 'apikey',
             apikey: [
-                { key: 'key', value: String(auth.key || ''), type: 'string' },
-                { key: 'value', value: String(auth.value || auth.token || ''), type: 'string' },
-                { key: 'in', value: String(auth.in || 'header'), type: 'string' }
+                { key: 'key', value: String(auth.apiKeyName || auth.key || ''), type: 'string' },
+                { key: 'value', value: String(auth.apiKeyValue ?? auth.value ?? auth.token ?? ''), type: 'string' },
+                { key: 'in', value: String(auth.apiKeyIn || auth.in || 'header'), type: 'string' }
+            ]
+        };
+    }
+    if (auth.type === 'oauth2') {
+        return {
+            type: 'oauth2',
+            oauth2: [
+                { key: 'accessToken', value: String(auth.token || ''), type: 'string' },
+                { key: 'grant_type', value: String(auth.oauth2?.grantType || 'client_credentials'), type: 'string' },
+                { key: 'accessTokenUrl', value: String(auth.oauth2?.accessTokenUrl || ''), type: 'string' },
+                { key: 'clientId', value: String(auth.oauth2?.clientId || ''), type: 'string' },
+                { key: 'clientSecret', value: String(auth.oauth2?.clientSecret || ''), type: 'string' },
+                { key: 'scope', value: String(auth.oauth2?.scope || ''), type: 'string' }
+            ]
+        };
+    }
+    if (auth.type === 'aws-sigv4' && auth.awsSigV4) {
+        return {
+            type: 'awsv4',
+            awsv4: [
+                { key: 'accessKey', value: String(auth.awsSigV4.accessKey || ''), type: 'string' },
+                { key: 'secretKey', value: String(auth.awsSigV4.secretKey || ''), type: 'string' },
+                { key: 'region', value: String(auth.awsSigV4.region || 'us-east-1'), type: 'string' },
+                { key: 'service', value: String(auth.awsSigV4.service || 'execute-api'), type: 'string' },
+                { key: 'sessionToken', value: String(auth.awsSigV4.sessionToken || ''), type: 'string' }
             ]
         };
     }

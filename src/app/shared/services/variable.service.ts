@@ -43,6 +43,24 @@ export class VariableService {
 
     private inFlightLoads = new Map<string, Promise<void>>();
     private lastLoadedCapId: string | null = null;
+    private externalResolvers: Array<(key: string) => string | undefined> = [];
+
+    registerExternalResolver(resolver: (key: string) => string | undefined): () => void {
+        this.externalResolvers.push(resolver);
+        return () => {
+            this.externalResolvers = this.externalResolvers.filter(r => r !== resolver);
+        };
+    }
+
+    private resolveExternalKey(rawKey: string): string | undefined {
+        const cleanKey = (rawKey || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim();
+        if (!cleanKey) return undefined;
+        for (const r of this.externalResolvers) {
+            const val = r(cleanKey);
+            if (val !== undefined) return val;
+        }
+        return undefined;
+    }
 
     constructor() {
         effect(() => {
@@ -1222,6 +1240,14 @@ export class VariableService {
         if (!text) return text;
         let resolvedText = text;
 
+        // 0. Check external resolvers first (Enterprise {{vault:key}} and active Pro Environment overrides)
+        if (this.externalResolvers.length > 0) {
+            resolvedText = resolvedText.replace(/\{\{\s*([^{}\r\n]+?)\s*\}\}/g, (match, rawKey) => {
+                const ext = this.resolveExternalKey(rawKey);
+                return ext !== undefined ? ext : match;
+            });
+        }
+
         // Sort variables by key length descending to prevent partial replacements (e.g. 'calendarId' before 'calendar')
         const sortedVars = [...this.variables()].sort((a, b) => (b.key?.length || 0) - (a.key?.length || 0));
 
@@ -1323,6 +1349,16 @@ export class VariableService {
     private lookupEnabledVariable(rawKey: string): IGlobalVariable | undefined {
         const cleanTarget = (rawKey || '').replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase();
         if (!cleanTarget) return undefined;
+        const extVal = this.resolveExternalKey(rawKey);
+        if (extVal !== undefined) {
+            return {
+                id: `ext_${cleanTarget}`,
+                key: rawKey.trim(),
+                value: extVal,
+                enabled: true,
+                type: 'global'
+            };
+        }
         return this.variables().find(v => {
             if (!v.enabled || !v.key) return false;
             const cleanK = v.key.replace(/^[:{]+/, '').replace(/[}]+$/, '').trim().toLowerCase();

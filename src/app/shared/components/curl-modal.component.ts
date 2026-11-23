@@ -3,7 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { RequestState, TabStateService } from '../services/tab.state.service';
 import { NotificationService } from '../services/notification.service';
+import { VariableService } from '../services/variable.service';
+import { AutoAuthService } from '../services/auto-auth.service';
 import { copyTextToClipboard } from '../utils/clipboard.util';
+import { CODE_LANGUAGE_OPTIONS, CodeLanguageId, buildCodeSnippet } from '../utils/code-generator.util';
 
 @Component({
     selector: 'app-curl-modal',
@@ -19,7 +22,7 @@ import { copyTextToClipboard } from '../utils/clipboard.util';
                 <div role="dialog"
                      aria-modal="true"
                      aria-labelledby="curl-modal-title"
-                     class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+                     class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
                      (click)="$event.stopPropagation()">
 
                     <!-- Header -->
@@ -30,7 +33,7 @@ import { copyTextToClipboard } from '../utils/clipboard.util';
                             </div>
                             <div class="min-w-0">
                                 <h3 id="curl-modal-title" class="text-[14px] font-bold text-(--postonsteroids-text-primary) leading-tight">
-                                    Request as cURL
+                                    Code Snippet Generator
                                 </h3>
                                 <p class="text-[11px] text-(--postonsteroids-text-muted) truncate">
                                     {{ requestTitle() }}
@@ -39,10 +42,28 @@ import { copyTextToClipboard } from '../utils/clipboard.util';
                         </div>
                         <button type="button"
                                 (click)="close()"
-                                aria-label="Close cURL modal"
+                                aria-label="Close code snippet modal"
                                 class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer">
                             <mat-icon class="text-[18px]! size-[18px]!">close</mat-icon>
                         </button>
+                    </div>
+
+                    <!-- Language Selector Strip -->
+                    <div class="px-5 py-2 border-b border-(--postonsteroids-border)/50 flex items-center gap-1.5 overflow-x-auto bg-(--postonsteroids-bg-primary)/30 shrink-0">
+                        @for (lang of languageOptions; track lang.id) {
+                            <button type="button"
+                                    (click)="selectedLanguage.set(lang.id); copied.set(false)"
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors cursor-pointer border"
+                                    [class.bg-(--postonsteroids-accent)]="selectedLanguage() === lang.id"
+                                    [class.text-white]="selectedLanguage() === lang.id"
+                                    [class.border-(--postonsteroids-accent)]="selectedLanguage() === lang.id"
+                                    [class.bg-(--postonsteroids-bg-tertiary)]="selectedLanguage() !== lang.id"
+                                    [class.text-(--postonsteroids-text-secondary)]="selectedLanguage() !== lang.id"
+                                    [class.border-(--postonsteroids-border)]="selectedLanguage() !== lang.id"
+                                    [class.hover:bg-(--postonsteroids-bg-hover)]="selectedLanguage() !== lang.id">
+                                {{ lang.label }}
+                            </button>
+                        }
                     </div>
 
                     <!-- Options bar -->
@@ -55,35 +76,37 @@ import { copyTextToClipboard } from '../utils/clipboard.util';
                                        class="accent-(--postonsteroids-accent) cursor-pointer" />
                                 <span>Resolve variables</span>
                             </label>
-                            <label class="flex items-center gap-1.5 cursor-pointer select-none">
-                                <input type="checkbox"
-                                       [ngModel]="multiline()"
-                                       (ngModelChange)="multiline.set($event)"
-                                       class="accent-(--postonsteroids-accent) cursor-pointer" />
-                                <span>Multi-line format</span>
-                            </label>
-                            @if (hasVerifySslDisabled()) {
+                            @if (selectedLanguage() === 'curl') {
                                 <label class="flex items-center gap-1.5 cursor-pointer select-none">
                                     <input type="checkbox"
-                                           [ngModel]="includeInsecureFlag()"
-                                           (ngModelChange)="includeInsecureFlag.set($event)"
+                                           [ngModel]="multiline()"
+                                           (ngModelChange)="multiline.set($event)"
                                            class="accent-(--postonsteroids-accent) cursor-pointer" />
-                                    <span>Include <code>-k</code> (insecure)</span>
+                                    <span>Multi-line format</span>
                                 </label>
+                                @if (hasVerifySslDisabled()) {
+                                    <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                                        <input type="checkbox"
+                                               [ngModel]="includeInsecureFlag()"
+                                               (ngModelChange)="includeInsecureFlag.set($event)"
+                                               class="accent-(--postonsteroids-accent) cursor-pointer" />
+                                        <span>Include <code>-k</code> (insecure)</span>
+                                    </label>
+                                }
                             }
                         </div>
 
                         <button type="button"
-                                (click)="copyCurl()"
+                                (click)="copyCode()"
                                 class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white text-[12px] font-semibold shadow-sm transition-colors cursor-pointer">
                             <mat-icon class="text-[15px]! size-[15px]!">{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
-                            <span>{{ copied() ? 'Copied' : 'Copy cURL' }}</span>
+                            <span>{{ copied() ? 'Copied' : 'Copy Code' }}</span>
                         </button>
                     </div>
 
-                    <!-- Command Preview -->
+                    <!-- Code Preview -->
                     <div class="p-5 overflow-auto flex-1 min-h-0">
-                        <pre class="p-4 rounded-xl bg-(--postonsteroids-bg-darker) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-all select-all m-0">{{ curlCommand() }}</pre>
+                        <pre class="p-4 rounded-xl bg-(--postonsteroids-bg-darker) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-all select-all m-0">{{ generatedCode() }}</pre>
                     </div>
                 </div>
             </div>
@@ -93,10 +116,15 @@ import { copyTextToClipboard } from '../utils/clipboard.util';
 export class CurlModalComponent {
     private tabStateService = inject(TabStateService);
     private notificationService = inject(NotificationService);
+    private variableService = inject(VariableService);
+    private autoAuthService = inject(AutoAuthService);
 
     isOpen = input<boolean>(false);
     request = input<RequestState | null>(null);
     closed = output<void>();
+
+    languageOptions = CODE_LANGUAGE_OPTIONS;
+    selectedLanguage = signal<CodeLanguageId>('curl');
 
     resolveVariables = signal<boolean>(true);
     multiline = signal<boolean>(true);
@@ -111,13 +139,19 @@ export class CurlModalComponent {
 
     hasVerifySslDisabled = computed(() => this.request()?.settings?.verifySsl === false);
 
-    curlCommand = computed(() => {
+    generatedCode = computed(() => {
         const req = this.request();
         if (!req) return '';
-        return this.tabStateService.buildCurlFromState(req, {
+        const cachedToken = this.autoAuthService.isAutoAuthEnabled(req.id)
+            ? this.autoAuthService.getCachedToken()
+            : null;
+        return buildCodeSnippet(this.selectedLanguage(), req, {
             resolveVariables: this.resolveVariables(),
             multiline: this.multiline(),
-            includeInsecureFlag: this.includeInsecureFlag()
+            includeInsecureFlag: this.includeInsecureFlag(),
+            resolveText: (s: string) => this.variableService.resolve(s),
+            resolveJson: (s: string) => this.variableService.resolveJson(s),
+            autoAuthToken: cachedToken
         });
     });
 
@@ -132,16 +166,17 @@ export class CurlModalComponent {
         this.closed.emit();
     }
 
-    async copyCurl(): Promise<void> {
-        const cmd = this.curlCommand();
+    async copyCode(): Promise<void> {
+        const cmd = this.generatedCode();
         if (!cmd) return;
         const ok = await copyTextToClipboard(cmd);
         if (ok) {
             this.copied.set(true);
-            this.notificationService.notify('cURL command copied to clipboard!', 'success');
+            const label = this.languageOptions.find(l => l.id === this.selectedLanguage())?.label || 'Code';
+            this.notificationService.notify(`${label} snippet copied to clipboard!`, 'success');
             setTimeout(() => this.copied.set(false), 1800);
         } else {
-            this.notificationService.notify('Failed to copy cURL command.', 'error');
+            this.notificationService.notify('Failed to copy snippet.', 'error');
         }
     }
 }

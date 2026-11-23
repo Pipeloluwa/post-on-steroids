@@ -1,10 +1,12 @@
 import { Component, inject, computed, signal, ViewChild, ElementRef, effect } from '@angular/core';
-import { Subject } from 'rxjs';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Subject, firstValueFrom } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
-import { TabStateService, KeyValue, AuthState, EncryptionState, SettingsState } from '../../../shared/services/tab.state.service';
+import { TabStateService, KeyValue, AuthState, EncryptionState, SettingsState, OAuth2Config, AwsSigV4Config } from '../../../shared/services/tab.state.service';
+import { environment } from '../../../../environments/environment';
 import { SandboxExecutionService } from '../../../shared/services/sandbox.execution.service';
 import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -35,6 +37,7 @@ import { formatTimeoutLabel } from '../../../shared/utils/request-timeout.util';
 export class PayloadTypesComponent {
   tabStateService = inject(TabStateService);
   variableService = inject(VariableService);
+  private http = inject(HttpClient);
   private notificationService = inject(NotificationService);
   scriptManagementService = inject(ScriptManagementService);
   sandboxService = inject(SandboxExecutionService);
@@ -144,7 +147,20 @@ export class PayloadTypesComponent {
   }
 
   payloadTypes = ['params', 'auth', 'headers', 'body', 'scripts', 'encryption', 'settings'];
-  authTypes: AuthState['type'][] = ['none', 'bearer'];
+  authTypes: AuthState['type'][] = ['none', 'bearer', 'basic', 'apikey', 'oauth2', 'aws-sigv4'];
+  isFetchingOAuth2Token = signal<boolean>(false);
+
+  authTypeLabel(type: AuthState['type']): string {
+    switch (type) {
+      case 'none': return 'No Auth';
+      case 'bearer': return 'Bearer Token';
+      case 'basic': return 'Basic Auth';
+      case 'apikey': return 'API Key';
+      case 'oauth2': return 'OAuth 2.0';
+      case 'aws-sigv4': return 'AWS SigV4';
+      default: return type;
+    }
+  }
 
   // State for Bulk Edit
   isRawParams = signal(false);
@@ -753,10 +769,30 @@ export class PayloadTypesComponent {
   // ── Auth ─────────────────────────────────────────────────────────────
   setAuthType(type: AuthState['type']) {
     const current = this.auth();
-    const updated: AuthState = { type, token: current.token };
+    const updated: AuthState = {
+      ...current,
+      type,
+      token: current.token || '',
+      oauth2: current.oauth2 || {
+        grantType: 'client_credentials',
+        accessTokenUrl: '',
+        clientId: '',
+        clientSecret: '',
+        scope: '',
+        headerPrefix: 'Bearer'
+      },
+      awsSigV4: current.awsSigV4 || {
+        accessKey: '',
+        secretKey: '',
+        region: 'us-east-1',
+        service: 'execute-api',
+        sessionToken: ''
+      }
+    };
     this.tabStateService.updateState(this.tabId(), { auth: updated });
   }
-  updateAuth(field: keyof Omit<AuthState, 'type'>, val: string) {
+
+  updateAuth(field: keyof Omit<AuthState, 'type' | 'oauth2' | 'awsSigV4'>, val: string) {
     if (field === 'token') {
       const trimmed = val.trimStart();
       if (trimmed.startsWith('{')) {
@@ -768,6 +804,105 @@ export class PayloadTypesComponent {
     const current = this.auth();
     const updated: AuthState = { ...current, [field]: val };
     this.tabStateService.updateState(this.tabId(), { auth: updated });
+  }
+
+  updateOAuth2(field: keyof OAuth2Config, val: string) {
+    const current = this.auth();
+    const existing: OAuth2Config = current.oauth2 || {
+      grantType: 'client_credentials',
+      accessTokenUrl: '',
+      clientId: '',
+      clientSecret: '',
+      scope: '',
+      headerPrefix: 'Bearer'
+    };
+    this.tabStateService.updateState(this.tabId(), {
+      auth: { ...current, oauth2: { ...existing, [field]: val } }
+    });
+  }
+
+  updateAwsSigV4(field: keyof AwsSigV4Config, val: string) {
+    const current = this.auth();
+    const existing: AwsSigV4Config = current.awsSigV4 || {
+      accessKey: '',
+      secretKey: '',
+      region: 'us-east-1',
+      service: 'execute-api',
+      sessionToken: ''
+    };
+    this.tabStateService.updateState(this.tabId(), {
+      auth: { ...current, awsSigV4: { ...existing, [field]: val } }
+    });
+  }
+
+  async fetchOAuth2Token() {
+    const cfg = this.auth().oauth2;
+    const rawUrl = cfg?.accessTokenUrl ? this.variableService.resolve(cfg.accessTokenUrl).trim() : '';
+    if (!rawUrl) {
+      this.notificationService.notify('Please enter an Access Token URL first.', 'warning');
+      return;
+    }
+
+    this.isFetchingOAuth2Token.set(true);
+    try {
+      const form = new URLSearchParams();
+      form.set('grant_type', cfg?.grantType || 'client_credentials');
+      if (cfg?.clientId) form.set('client_id', this.variableService.resolve(cfg.clientId));
+      if (cfg?.clientSecret) form.set('client_secret', this.variableService.resolve(cfg.clientSecret));
+      if (cfg?.scope) form.set('scope', this.variableService.resolve(cfg.scope));
+      if (cfg?.grantType === 'password') {
+        if (cfg.username) form.set('username', this.variableService.resolve(cfg.username));
+        if (cfg.password) form.set('password', this.variableService.resolve(cfg.password));
+      }
+
+      const bodyStr = form.toString();
+      const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
+      let parsed: any = null;
+
+      if (this.isElectron && electronApi?.executeHttpRequest) {
+        const res = await electronApi.executeHttpRequest({
+          url: rawUrl,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+          body: bodyStr,
+          verifySsl: false,
+          followRedirects: true
+        });
+        if (!res?.ok) throw new Error(res?.errorMessage || 'Failed to fetch OAuth2 token.');
+        parsed = typeof res.body === 'string' ? JSON.parse(res.body) : res.body;
+      } else {
+        try {
+          parsed = await firstValueFrom(
+            this.http.post<any>(rawUrl, bodyStr, {
+              headers: new HttpHeaders({ 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' })
+            })
+          );
+        } catch {
+          const proxyRes = await firstValueFrom(
+            this.http.post<any>(environment.proxyUrl, {
+              url: rawUrl,
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+              body: bodyStr,
+              verifySsl: false
+            })
+          );
+          const inner = proxyRes?.data ?? proxyRes;
+          parsed = typeof inner?.body === 'string' ? JSON.parse(inner.body) : (inner?.body ?? inner);
+        }
+      }
+
+      const accessToken = parsed?.access_token || parsed?.token || parsed?.id_token;
+      if (!accessToken) {
+        throw new Error('Response did not contain an access_token field.');
+      }
+      this.updateAuth('token', String(accessToken));
+      this.notificationService.notify('OAuth 2.0 access token fetched and applied!', 'success');
+    } catch (err: any) {
+      this.notificationService.notify(err?.message || 'Failed to fetch OAuth 2.0 access token.', 'error');
+    } finally {
+      this.isFetchingOAuth2Token.set(false);
+    }
   }
 
   toggleTokenVisibility() {

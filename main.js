@@ -1026,10 +1026,22 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
     if (isHttps) {
       // Disable TLS session caching so toggling Verify SSL ON <-> OFF takes effect immediately.
       // SSL verification is OFF by default and enforced strictly when options.verifySsl === true.
-      reqOpts.agent = new https.Agent({
+      const agentOpts = {
         rejectUnauthorized: options.verifySsl === true,
         maxCachedSessions: 0
-      });
+      };
+      if (options.clientCert && typeof options.clientCert === 'object') {
+        if (options.clientCert.type === 'pfx' && options.clientCert.pfxBase64) {
+          agentOpts.pfx = Buffer.from(options.clientCert.pfxBase64, 'base64');
+        } else if (options.clientCert.type === 'pem') {
+          if (options.clientCert.certPem) agentOpts.cert = options.clientCert.certPem;
+          if (options.clientCert.keyPem) agentOpts.key = options.clientCert.keyPem;
+        }
+        if (options.clientCert.passphrase) {
+          agentOpts.passphrase = options.clientCert.passphrase;
+        }
+      }
+      reqOpts.agent = new https.Agent(agentOpts);
     }
 
     let settled = false;
@@ -1153,11 +1165,63 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
   });
 }
 
+let activeMockServer = null;
+let activeMockRoutes = [];
+
 app.on('ready', () => {
   evaluatePostUpdateWhatsNew();
 
   ipcMain.handle('execute-http-request', async (_event, options) => {
     return executeNodeHttpRequest(options || {});
+  });
+
+  ipcMain.handle('start-mock-server', async (_event, payload) => {
+    try {
+      if (activeMockServer) {
+        await new Promise((resolve) => activeMockServer.close(() => resolve()));
+        activeMockServer = null;
+      }
+      const port = Number(payload?.port) || 4050;
+      activeMockRoutes = Array.isArray(payload?.routes) ? payload.routes : [];
+
+      activeMockServer = http.createServer((req, res) => {
+        const reqMethod = (req.method || 'GET').toUpperCase();
+        const reqPath = (req.url || '/').split('?')[0];
+        const match = activeMockRoutes.find(
+          (r) => String(r.method || 'GET').toUpperCase() === reqMethod && String(r.path || '/') === reqPath
+        );
+        if (!match) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Mock route not found', method: reqMethod, path: reqPath }));
+          return;
+        }
+        const status = Number(match.statusCode) || 200;
+        const headers = { 'Content-Type': 'application/json', ...(match.headers || {}) };
+        res.writeHead(status, headers);
+        res.end(match.body || '');
+      });
+
+      await new Promise((resolve, reject) => {
+        activeMockServer.once('error', reject);
+        activeMockServer.listen(port, '127.0.0.1', resolve);
+      });
+      return { ok: true, port };
+    } catch (err) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  });
+
+  ipcMain.handle('stop-mock-server', async () => {
+    if (activeMockServer) {
+      await new Promise((resolve) => activeMockServer.close(() => resolve()));
+      activeMockServer = null;
+    }
+    return { ok: true };
+  });
+
+  ipcMain.handle('update-mock-routes', (_event, routes) => {
+    activeMockRoutes = Array.isArray(routes) ? routes : [];
+    return { ok: true, count: activeMockRoutes.length };
   });
 
   ipcMain.on('cancel-http-request', (_event, requestId) => {
