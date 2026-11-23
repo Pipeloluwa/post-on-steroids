@@ -69,4 +69,7 @@ Please ensure your code follows the established Angular guidelines found in `AGE
 
 ## 📄 License
 
-This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](LICENSE) file for the full license text.
+PostOnSteroid (OnSteroid) uses an **Open-Core Dual License** (see [LICENSE](LICENSE)):
+
+- **Community Edition (`build:community`):** Open source under the **MIT License**.
+- **Professional & Enterprise Editions (`build:professional`, `build:enterprise`, `src/app/editions/professional/**`, `src/app/editions/enterprise/**`):** **Proprietary Commercial Software — All Rights Reserved.** Not open source; public distribution, opening source access, or modification of the Professional and Enterprise extensions is prohibited without explicit commercial authorization.

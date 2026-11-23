@@ -5,6 +5,11 @@ import { environment } from '../../../environments/environment';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 import { getGlobalRequestTimeoutMs } from '../utils/request-timeout.util';
 import { isWsdlXml, inspectAsmxOrSvcHtml, extractWsdlSchemaLocations } from '../utils/wsdl-parser.util';
+import {
+    parseYamlToObject,
+    extractDocHtmlSpecReference,
+    extractServiceBaseFromDocUrl
+} from '../utils/api-import-parsers.util';
 
 export type ExtractedApiSpecResult =
     | {
@@ -47,9 +52,9 @@ export class SwaggerExtractionService {
             return { kind: 'openapi', spec: openApiSpec, sourceUrl: trimmedUrl };
         }
 
-        // Check direct response first: might be OpenAPI JSON or WSDL XML
+        // Check direct response first: might be OpenAPI JSON/YAML, Doc UI HTML (Redoc/Scalar/Stoplight/RapiDoc/Swagger), or WSDL XML
         try {
-            const directRes = await this.fetchWithProxy(trimmedUrl, 'application/json,application/xml,text/xml,text/html,*/*');
+            const directRes = await this.fetchWithProxy(trimmedUrl, 'application/json,application/yaml,text/yaml,application/xml,text/xml,text/html,*/*');
             if (directRes.ok) {
                 if (directRes.json && (directRes.json['openapi'] || directRes.json['swagger'] || directRes.json['paths'])) {
                     return { kind: 'openapi', spec: directRes.json, sourceUrl: trimmedUrl };
@@ -58,10 +63,16 @@ export class SwaggerExtractionService {
                     const xsdXmls = await this.fetchWsdlImports(directRes.text, trimmedUrl);
                     return { kind: 'wsdl', wsdlXml: directRes.text, xsdXmls, serviceUrl: trimmedUrl };
                 }
-                const asmxCheck = inspectAsmxOrSvcHtml(directRes.text, trimmedUrl);
-                if (asmxCheck.wsdlUrls.length > 0 || asmxCheck.operationNames.length > 0) {
-                    const soapRes = await this.tryExtractSoapSpec(trimmedUrl);
-                    if (soapRes) return soapRes;
+                if (directRes.text) {
+                    const htmlSpec = await this.tryResolveDocFromHtmlContent(directRes.text, trimmedUrl);
+                    if (htmlSpec) {
+                        return { kind: 'openapi', spec: htmlSpec, sourceUrl: trimmedUrl };
+                    }
+                    const asmxCheck = inspectAsmxOrSvcHtml(directRes.text, trimmedUrl);
+                    if (asmxCheck.wsdlUrls.length > 0 || asmxCheck.operationNames.length > 0) {
+                        const soapRes = await this.tryExtractSoapSpec(trimmedUrl);
+                        if (soapRes) return soapRes;
+                    }
                 }
             }
         } catch { }
@@ -270,10 +281,7 @@ export class SwaggerExtractionService {
                         headers: { 'Accept': accept }
                     })
                 );
-                let parsedJson: any = null;
-                try {
-                    parsedJson = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;
-                } catch { }
+                const parsedJson = this.parseStructuredSpecText(rawText);
 
                 return {
                     ok: true,
@@ -302,7 +310,7 @@ export class SwaggerExtractionService {
                         method: 'GET',
                         headers: { 'Accept': accept },
                         verifySsl: false,
-                        timeoutMs
+                        timeoutMs: timeoutMs > 0 ? timeoutMs : 3600000
                     };
 
                     const res = await firstValueFrom(
@@ -314,10 +322,7 @@ export class SwaggerExtractionService {
 
                     const data = res.body?.data || res.body;
                     if (data && data.statusCode >= 200 && data.statusCode < 400) {
-                        let parsedJson: any = null;
-                        try {
-                            parsedJson = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
-                        } catch { }
+                        const parsedJson = this.parseStructuredSpecText(data.body);
 
                         return {
                             ok: true,
@@ -348,10 +353,7 @@ export class SwaggerExtractionService {
                     });
                     if (eRes && eRes.statusCode >= 200 && eRes.statusCode < 400) {
                         const text = typeof eRes.body === 'string' ? eRes.body : JSON.stringify(eRes.body ?? '');
-                        let parsedJson: any = null;
-                        try {
-                            parsedJson = JSON.parse(text);
-                        } catch { }
+                        const parsedJson = this.parseStructuredSpecText(text);
                         return {
                             ok: true,
                             status: eRes.statusCode,
@@ -369,10 +371,7 @@ export class SwaggerExtractionService {
                         headers: { 'Accept': accept }
                     })
                 );
-                let parsedJson: any = null;
-                try {
-                    parsedJson = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;
-                } catch { }
+                const parsedJson = this.parseStructuredSpecText(rawText);
 
                 return {
                     ok: true,
@@ -398,30 +397,57 @@ export class SwaggerExtractionService {
         };
     }
 
+    private parseStructuredSpecText(raw: any): any {
+        if (raw && typeof raw === 'object') return raw;
+        if (typeof raw !== 'string') return null;
+        const trimmed = raw.trim();
+        if (!trimmed) return null;
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            // Try YAML OpenAPI / Swagger fallback when text looks like YAML (not HTML/XML)
+            if (!trimmed.startsWith('<') && /(?:^|\n)\s*(?:openapi|swagger|paths)\s*:/i.test(trimmed)) {
+                try {
+                    return parseYamlToObject(trimmed);
+                } catch { }
+            }
+            return null;
+        }
+    }
+
     /**
-     * Tries common direct JSON endpoints (most reliable method) using proxy to avoid CORS
+     * Tries common direct JSON/YAML OpenAPI endpoints using proxy to avoid CORS
      */
     private async tryDirectJsonEndpoints(baseUrl: string): Promise<Record<string, any> | null> {
         const endpoints = [
             '/swagger/v1/swagger.json',
             '/v3/api-docs',
+            '/v3/api-docs.yaml',
             '/v1/swagger.json',
             '/v2/swagger.json',
             '/api-docs',
             '/openapi.json',
+            '/openapi.yaml',
+            '/openapi.yml',
             '/v1/openapi.json',
             '/swagger.json',
+            '/swagger.yaml',
+            '/swagger.yml',
             '/swagger/index.json',
             '/api/swagger.json',
             '/api/v1/swagger.json',
             '/api/v1/openapi.json',
+            '/api/openapi.yaml',
+            '/docs/json',
+            '/docs/yaml',
+            '/api-doc.json',
             '/v3/api-docs/swagger-config'
         ];
 
         for (const endpoint of endpoints) {
             try {
                 const jsonUrl = this.joinUrlPath(baseUrl, endpoint);
-                const res = await this.fetchWithProxy(jsonUrl, 'application/json');
+                const res = await this.fetchWithProxy(jsonUrl, 'application/json,application/yaml,text/yaml,*/*');
 
                 if (res.ok && res.json) {
                     if (res.json['openapi'] || res.json['swagger'] || res.json['paths']) {
@@ -431,7 +457,7 @@ export class SwaggerExtractionService {
                         const targetUrl = /^https?:\/\//i.test(res.json.url)
                             ? res.json.url
                             : this.joinUrlPath(baseUrl, res.json.url);
-                        const subRes = await this.fetchWithProxy(targetUrl, 'application/json');
+                        const subRes = await this.fetchWithProxy(targetUrl, 'application/json,application/yaml,text/yaml,*/*');
                         if (subRes.ok && subRes.json && (subRes.json['openapi'] || subRes.json['swagger'] || subRes.json['paths'])) {
                             return subRes.json;
                         }
@@ -445,170 +471,57 @@ export class SwaggerExtractionService {
         return null;
     }
 
+    private async tryResolveDocFromHtmlContent(html: string, pageUrl: string): Promise<Record<string, any> | null> {
+        const match = extractDocHtmlSpecReference(html);
+        if (!match) return null;
+        if (match.kind === 'inline-spec') return match.spec;
+        if (match.kind === 'spec-url') {
+            return await this.resolveAndFetchSpec(match.url, pageUrl);
+        }
+        for (const scriptSrc of match.urls) {
+            try {
+                const scriptUrl = new URL(scriptSrc, pageUrl).toString();
+                const scriptRes = await this.fetchWithProxy(scriptUrl, '*/*');
+                if (!scriptRes.ok || !scriptRes.text) continue;
+                const scriptRef = extractDocHtmlSpecReference(scriptRes.text);
+                if (scriptRef?.kind === 'inline-spec') return scriptRef.spec;
+                if (scriptRef?.kind === 'spec-url') {
+                    const spec = await this.resolveAndFetchSpec(scriptRef.url, scriptUrl);
+                    if (spec) return spec;
+                }
+            } catch { }
+        }
+        return null;
+    }
+
     /**
-     * Extracts JSON endpoint from Swagger UI HTML or JavaScript fallback
-     * Handles bundle-based HTML shells and index.js config content
+     * Extracts OpenAPI spec from HTML shells used by Swagger UI, Redoc, Scalar, Stoplight Elements, and RapiDoc.
      */
     private async extractFromHtml(swaggerUrl: string): Promise<Record<string, any> | null> {
         try {
             const htmlRes = await this.fetchWithProxy(swaggerUrl, 'text/html,application/xhtml+xml,*/*');
             if (!htmlRes.ok || !htmlRes.text) {
-                throw new Error(`Unable to load Swagger UI content from ${swaggerUrl}.`);
+                throw new Error(`Unable to load API docs content from ${swaggerUrl}.`);
             }
-            const html = htmlRes.text;
-
-            let jsonUrl =
-                this.extractUrlFromSwaggerUIBundle(html) ||
-                this.extractUrlFromJsonParse(html) ||
-                this.extractUrlFromConfigObject(html);
-
-            if (!jsonUrl) {
-                const scriptUrl = new URL('index.js', swaggerUrl).toString();
-                const scriptRes = await this.fetchWithProxy(scriptUrl, '*/*');
-                if (!scriptRes.ok || !scriptRes.text) {
-                    throw new Error(
-                        `Unable to load Swagger UI script at ${scriptUrl}. ` +
-                        'Ensure the Swagger UI bundle is served correctly and index.js is reachable.'
-                    );
-                }
-                const script = scriptRes.text;
-
-                jsonUrl =
-                    this.extractUrlFromJsonParse(script) ||
-                    this.extractUrlFromSwaggerUIBundle(script) ||
-                    this.extractUrlFromConfigObject(script) ||
-                    this.extractJsonUrlLiteral(script);
-
-                if (!jsonUrl) {
-                    throw new Error(
-                        `Could not find an OpenAPI JSON URL in Swagger UI assets for ${swaggerUrl}. ` +
-                        'Look for a configuration object containing a URL ending with .json in index.html or index.js.'
-                    );
-                }
-
-                const spec = await this.resolveAndFetchSpec(jsonUrl, scriptUrl);
-                if (!spec) {
-                    throw new Error(`Failed to download OpenAPI spec for ${jsonUrl}.`);
-                }
-
-                return spec;
+            const resolved = await this.tryResolveDocFromHtmlContent(htmlRes.text, swaggerUrl);
+            if (!resolved) {
+                throw new Error(
+                    `Could not find an OpenAPI/Swagger specification in API docs HTML or assets for ${swaggerUrl}.`
+                );
             }
-
-            const spec = await this.resolveAndFetchSpec(jsonUrl, swaggerUrl);
-            if (!spec) {
-                throw new Error(`Failed to download OpenAPI spec for ${jsonUrl}.`);
-            }
-
-            return spec;
+            return resolved;
         } catch (error: any) {
             if (error instanceof Error) {
                 throw error;
             }
-            throw new Error('Unable to extract Swagger spec from the provided URL.');
+            throw new Error('Unable to extract API specification from the provided URL.');
         }
-    }
-
-    /**
-     * Extract URL from SwaggerUIBundle configuration: url: "[url]"
-     * Handles newer Swagger UI implementations
-     */
-    private extractUrlFromSwaggerUIBundle(html: string): string | null {
-        // Pattern: url: "[url]" or url: '[url]'
-        const match = html.match(/url\s*:\s*["']([^"']+)["']/);
-        if (match && match[1]) {
-            return match[1];
-        }
-
-        // Alternative pattern: urls: [{url: "[url]" ...}]
-        const urlsMatch = html.match(/urls\s*:\s*\[\s*{[^}]*url\s*:\s*["']([^"']+)["']/);
-        if (urlsMatch && urlsMatch[1]) {
-            return urlsMatch[1];
-        }
-
-        return null;
-    }
-
-    /**
-     * Extract URL from JSON.parse() pattern
-     * Handles older Swagger UI implementations
-     */
-    private extractUrlFromJsonParse(html: string): string | null {
-        // Pattern: JSON.parse('[json-string]')
-        const parseMatch = html.match(/JSON\.parse\(\s*["']([^"']*)["']\s*\)/);
-        if (!parseMatch || !parseMatch[1]) {
-            return null;
-        }
-
-        try {
-            // The matched string might be escaped, so we need to process it
-            let jsonString = parseMatch[1];
-
-            // Handle escaped characters
-            jsonString = jsonString
-                .replace(/\\"/g, '"')
-                .replace(/\\'/g, "'")
-                .replace(/\\\\/g, '\\');
-
-            const configObject = JSON.parse(jsonString);
-
-            // Extract URL from urls array or single url property
-            if (Array.isArray(configObject.urls)) {
-                const urlEntry = configObject.urls.find(
-                    (entry: any) => typeof entry?.url === 'string' && entry.url.toLowerCase().endsWith('.json')
-                );
-                if (urlEntry?.url) {
-                    return urlEntry.url;
-                }
-            }
-
-            if (typeof configObject.url === 'string' && configObject.url.toLowerCase().endsWith('.json')) {
-                return configObject.url;
-            }
-        } catch {
-            return null;
-        }
-
-        return null;
-    }
-
-    /**
-     * Extract URL from window.swaggerSpec or similar global config
-     * Handles additional edge cases
-     */
-    private extractUrlFromConfigObject(html: string): string | null {
-        // Pattern: "url":"[url]" (JSON in script tag)
-        const jsonMatch = html.match(/"url"\s*:\s*"([^"]+)"/);
-        if (jsonMatch && jsonMatch[1]) {
-            return jsonMatch[1];
-        }
-
-        // Pattern: urls:[...] with JSON structure in HTML
-        const urlsJsonMatch = html.match(/"urls"\s*:\s*\[\s*{\s*"url"\s*:\s*"([^"]+)"/);
-        if (urlsJsonMatch && urlsJsonMatch[1]) {
-            return urlsJsonMatch[1];
-        }
-
-        return null;
-    }
-
-    /**
-     * Extract any .json URL literal from JavaScript content
-     * This is the most reliable fallback when config is embedded inside index.js
-     */
-    private extractJsonUrlLiteral(source: string): string | null {
-        const match = source.match(/(["'])(\/[^"']+\.json)\1/);
-        if (match && match[2]) {
-            return match[2];
-        }
-
-        const alternateMatch = source.match(/(["'])([^"']+\.json)\1/);
-        return alternateMatch && alternateMatch[2] ? alternateMatch[2] : null;
     }
 
     private async fetchOpenApiSpec(absoluteUrl: string): Promise<Record<string, any> | null> {
         try {
-            const res = await this.fetchWithProxy(absoluteUrl, 'application/json');
-            if (res.ok && res.json && (res.json['openapi'] || res.json['swagger'])) {
+            const res = await this.fetchWithProxy(absoluteUrl, 'application/json,application/yaml,text/yaml,*/*');
+            if (res.ok && res.json && (res.json['openapi'] || res.json['swagger'] || res.json['paths'])) {
                 return res.json;
             }
         } catch {
@@ -660,52 +573,6 @@ export class SwaggerExtractionService {
      * subpaths/suffixes after the domain name (e.g. /customer-service, /api/v1).
      */
     private normalizeSwaggerUrl(url: string): string {
-        const normalized = url.trim();
-
-        try {
-            const parsed = new URL(normalized);
-            let pathname = parsed.pathname;
-
-            const swaggerSuffixPatterns = [
-                /\/swagger\/index\.html\/?$/i,
-                /\/swagger\/v\d+\/swagger\.json\/?$/i,
-                /\/swagger\/index\.json\/?$/i,
-                /\/swagger\/[a-zA-Z0-9_.-]+\.json\/?$/i,
-                /\/v\d+\/swagger\.json\/?$/i,
-                /\/v\d+\/openapi\.json\/?$/i,
-                /\/v3\/api-docs(\/[^/]+)?\/?$/i,
-                /\/api-docs(\/[^/]+)?\/?$/i,
-                /\/swagger\.json\/?$/i,
-                /\/openapi\.json\/?$/i,
-                /\/index\.html\/?$/i,
-                /\/swagger\/?$/i,
-                /\/docs\/?$/i,
-                /\/api-docs\/?$/i
-            ];
-
-            for (const pattern of swaggerSuffixPatterns) {
-                if (pattern.test(pathname)) {
-                    pathname = pathname.replace(pattern, '');
-                    break;
-                }
-            }
-
-            // If it still ends with any generic .json file (e.g. /myspec.json)
-            if (/\.json$/i.test(pathname)) {
-                pathname = pathname.replace(/\/[^/]+\.json$/i, '');
-            }
-
-            pathname = pathname.replace(/\/+$/, '');
-            return `${parsed.origin}${pathname}`;
-        } catch {
-            return normalized
-                .replace(/\/swagger\/index\.html\/?$/i, '')
-                .replace(/\/swagger\/v\d+\/swagger\.json\/?$/i, '')
-                .replace(/\/v\d+\/swagger\.json\/?$/i, '')
-                .replace(/\/swagger\/?$/i, '')
-                .replace(/\/index\.html\/?$/i, '')
-                .replace(/\/[^/]+\.json\/?$/i, '')
-                .replace(/\/+$/, '');
-        }
+        return extractServiceBaseFromDocUrl(url) || url.trim().replace(/\/+$/, '');
     }
 }

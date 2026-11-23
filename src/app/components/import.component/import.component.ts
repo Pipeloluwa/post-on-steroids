@@ -9,6 +9,27 @@ import { SwaggerImportModalComponent } from '../../shared/components/swagger-imp
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractPostmanVariables, extractRequestsVariables } from '../../shared/utils/import-variable.util';
 import { isWsdlXml, parseWsdlToRequests } from '../../shared/utils/wsdl-parser.util';
+import {
+    parseYamlToObject,
+    isOpenApiSpec,
+    buildOpenApiImportCollection,
+    isInsomniaExport,
+    parseInsomniaToCollections,
+    isThunderClientExport,
+    parseThunderClientToCollection,
+    isHoppscotchExport,
+    parseHoppscotchToCollection,
+    isBrunoCollectionExport,
+    parseBrunoToCollection,
+    isHarExport,
+    parseHarToCollection,
+    isWadlXml,
+    parseWadlToCollection,
+    isRamlObject,
+    parseRamlToCollection,
+    cleanEndpointTitle,
+    cleanSoapOperationTitle
+} from '../../shared/utils/api-import-parsers.util';
 
 interface ParsedCapsuleGroup {
     name: string;
@@ -117,12 +138,34 @@ export class ImportComponent implements OnInit {
                     if (parsedWsdl.requests.length === 0) {
                         throw new Error('No SOAP operations were found inside this WSDL file.');
                     }
+                    const svcName = parsedWsdl.serviceName || file.name.replace(/\.wsdl$/i, '');
                     data = {
-                        name: parsedWsdl.serviceName || file.name.replace(/\.wsdl$/i, ''),
-                        requests: parsedWsdl.requests
+                        name: svcName,
+                        requests: parsedWsdl.requests.map(r => ({
+                            ...r,
+                            name: cleanSoapOperationTitle(r.name, svcName)
+                        }))
                     };
+                } else if (isWadlXml(content) || /\.wadl$/i.test(file.name)) {
+                    const parsedWadl = parseWadlToCollection(content, file.name);
+                    if (parsedWadl.requests.length === 0) {
+                        throw new Error('No endpoints were found inside this WADL file.');
+                    }
+                    data = { name: parsedWadl.name, requests: parsedWadl.requests };
                 } else {
-                    data = JSON.parse(content);
+                    const trimmed = (content || '').trim();
+                    const looksYaml = /\.(ya?ml|raml)$/i.test(file.name) || /^#%RAML/i.test(trimmed) || (!trimmed.startsWith('{') && !trimmed.startsWith('['));
+                    if (looksYaml) {
+                        const yamlParsed = parseYamlToObject(content);
+                        if (isRamlObject(yamlParsed, content)) {
+                            const raml = parseRamlToCollection(yamlParsed, file.name.replace(/\.(ya?ml|raml)$/i, ''));
+                            data = { name: raml.name, requests: raml.requests };
+                        } else {
+                            data = yamlParsed;
+                        }
+                    } else {
+                        data = JSON.parse(content);
+                    }
                 }
                 const pending = this.prepareImportData(data, file.name);
                 
@@ -131,7 +174,7 @@ export class ImportComponent implements OnInit {
                 this.showSavePrompt.set(true);
             } catch (err: any) {
                 console.error('Import validation failed:', err);
-                const msg = err?.message || 'Invalid file format. Please upload an OnSteroid export JSON, Postman Collection JSON, or WSDL file.';
+                const msg = err?.message || 'Invalid file format. Supported: OnSteroid, Postman, Insomnia, OpenAPI/Swagger (JSON/YAML), Thunder Client, Hoppscotch, Bruno, HAR, WSDL, WADL, or RAML.';
                 this.showStatus(msg, true);
             } finally {
                 input.value = '';
@@ -217,6 +260,50 @@ export class ImportComponent implements OnInit {
                 requests: mapped,
                 variables: extractedVars
             });
+        }
+        // 1b. Insomnia Export (v4 resources or v5 collection.insomnia.rest/5.0)
+        else if (isInsomniaExport(data)) {
+            const cols = parseInsomniaToCollections(data);
+            for (const c of cols) {
+                const vars = extractRequestsVariables(c.requests, c.variables);
+                groups.push({ name: c.name, requests: c.requests, variables: vars });
+            }
+        }
+        // 1c. OpenAPI 3.x / Swagger 2.0 (JSON or YAML file)
+        else if (isOpenApiSpec(data)) {
+            const openApiCol = buildOpenApiImportCollection(data);
+            const vars = extractRequestsVariables(openApiCol.requests, openApiCol.variables);
+            groups.push({ name: openApiCol.name, requests: openApiCol.requests, variables: vars });
+        }
+        // 1d. Thunder Client Collection
+        else if (isThunderClientExport(data)) {
+            const tc = parseThunderClientToCollection(data);
+            const vars = extractRequestsVariables(tc.requests);
+            groups.push({ name: tc.name, requests: tc.requests, variables: vars });
+        }
+        // 1e. Hoppscotch Collection
+        else if (isHoppscotchExport(data)) {
+            const hop = parseHoppscotchToCollection(data);
+            const vars = extractRequestsVariables(hop.requests);
+            groups.push({ name: hop.name, requests: hop.requests, variables: vars });
+        }
+        // 1f. Bruno Collection
+        else if (isBrunoCollectionExport(data)) {
+            const br = parseBrunoToCollection(data);
+            const vars = extractRequestsVariables(br.requests, br.variables);
+            groups.push({ name: br.name, requests: br.requests, variables: vars });
+        }
+        // 1g. HAR 1.2 Archive
+        else if (isHarExport(data)) {
+            const har = parseHarToCollection(data, fileName);
+            const vars = extractRequestsVariables(har.requests);
+            groups.push({ name: har.name, requests: har.requests, variables: vars });
+        }
+        // 1h. RAML Spec Object
+        else if (isRamlObject(data)) {
+            const raml = parseRamlToCollection(data, fileName.replace(/\.(ya?ml|raml)$/i, ''));
+            const vars = extractRequestsVariables(raml.requests);
+            groups.push({ name: raml.name, requests: raml.requests, variables: vars });
         }
         // 2. OnSteroid Multi-Capsule Format: data.capsules (array or object)
         else if (data.capsules && (Array.isArray(data.capsules) || typeof data.capsules === 'object')) {
@@ -869,7 +956,7 @@ export class ImportComponent implements OnInit {
             : [];
 
         return {
-            name: item.name,
+            name: cleanEndpointTitle({ name: item.name, method, path: url }),
             url,
             method,
             payloadType: 'params',

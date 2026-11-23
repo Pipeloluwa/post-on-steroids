@@ -711,7 +711,10 @@ export class TabStateService {
             }
         }
         if (session.responses && session.responses['__global_request_timeout_ms__'] !== undefined) {
-            setGlobalRequestTimeoutMs(session.responses['__global_request_timeout_ms__'], this.isBrowser);
+            const hasLocalTimeout = this.isBrowser && localStorage.getItem(GLOBAL_TIMEOUT_STORAGE_KEY) !== null;
+            if (!hasLocalTimeout) {
+                setGlobalRequestTimeoutMs(session.responses['__global_request_timeout_ms__'], this.isBrowser);
+            }
         }
     }
 
@@ -5610,9 +5613,17 @@ export class TabStateService {
     }
 
     setRequestTimeoutMs(timeoutMs: number) {
-        setGlobalRequestTimeoutMs(timeoutMs, this.isBrowser);
+        const sanitized = setGlobalRequestTimeoutMs(timeoutMs, this.isBrowser);
+        if (this.isBrowser) {
+            try {
+                const rawResp = localStorage.getItem('onsteroids_responses');
+                const stored = rawResp ? JSON.parse(rawResp) : {};
+                stored['__global_request_timeout_ms__'] = sanitized;
+                localStorage.setItem('onsteroids_responses', JSON.stringify(stored));
+            } catch { }
+        }
         if (this.authService.isLoggedIn()) {
-            this.syncWorkspaceStateToBackend();
+            this.syncWorkspaceStateToBackend(true, true);
         }
     }
 

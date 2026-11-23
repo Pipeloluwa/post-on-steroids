@@ -9,6 +9,7 @@ import { SwaggerExtractionService } from '../../services/swagger-extraction.serv
 import { IGlobalVariable } from '../../../interfaces/services/IVariableService';
 import { extractRequestsVariables } from '../../utils/import-variable.util';
 import { parseWsdlToRequests, parseAsmxOperationPageToRequest } from '../../utils/wsdl-parser.util';
+import { buildOpenApiImportCollection, cleanSoapOperationTitle } from '../../utils/api-import-parsers.util';
 
 @Component({
     selector: 'app-swagger-import-modal',
@@ -51,7 +52,7 @@ export class SwaggerImportModalComponent {
     async importFromSwagger() {
         let url = this.swaggerUrl().trim();
         if (!url) {
-            this.setStatus('Please enter a Swagger, OpenAPI, or WSDL/SOAP URL.', true);
+            this.setStatus('Please enter a Swagger, OpenAPI, Redoc, Scalar, Stoplight, RapiDoc, or WSDL/SOAP URL.', true);
             return;
         }
 
@@ -64,7 +65,7 @@ export class SwaggerImportModalComponent {
         try {
             new URL(url);
         } catch {
-            this.setStatus('Please enter a valid URL (e.g. https://example.com/swagger or https://example.com/service.asmx?WSDL).', true);
+            this.setStatus('Please enter a valid URL (e.g. https://example.com/swagger, /redoc, /scalar, or https://example.com/service.asmx?WSDL).', true);
             return;
         }
 
@@ -85,6 +86,7 @@ export class SwaggerImportModalComponent {
             const activeCapId = this.importIntoActiveCapsule() ? (this.tabStateService.activeCapsuleId() || null) : null;
             const capId = activeCapId || this.tabStateService.createId();
             result.requests.forEach(req => req.capsuleId = capId);
+            result.groups.forEach(grp => grp.capsuleId = capId);
 
             await this.tabStateService.importData({
                 capsules: [{
@@ -107,7 +109,7 @@ export class SwaggerImportModalComponent {
             setTimeout(() => this.close(), 800);
         } catch (error: any) {
             console.error('API specification import failed', error);
-            const message = `Failed to import Swagger / SOAP: ${error?.message || error}`;
+            const message = `Failed to import API documentation: ${error?.message || error}`;
             this.onImportStatus.emit({ message, isError: true });
             this.setStatus(message, true);
         } finally {
@@ -142,7 +144,7 @@ export class SwaggerImportModalComponent {
             return {
                 ...this.tabStateService.getDefaultState(requestId),
                 id: requestId,
-                name: `${collectionName} — ${pr.name}`,
+                name: cleanSoapOperationTitle(pr.name, collectionName),
                 url: pr.url,
                 method: 'POST',
                 isDirty: true,
@@ -166,650 +168,49 @@ export class SwaggerImportModalComponent {
     }
 
     private buildRequestStates(openApi: Record<string, any>, indexUrl: string): { collectionName: string; requests: RequestState[]; groups: RequestGroup[]; variables: IGlobalVariable[] } {
-        const collectionName = typeof openApi['info']?.title === 'string' && openApi['info'].title.trim()
-            ? openApi['info'].title.trim()
-            : 'Swagger Import';
-
-        const baseServiceUrl = this.resolveServerBaseUrl(openApi, indexUrl);
-        const paths = openApi['paths'] || {};
-        const requests: RequestState[] = [];
-        const tagGroupMap = new Map<string, RequestGroup>();
-        const explicitVars: any[] = [];
-        if (baseServiceUrl) {
-            explicitVars.push({ key: 'baseUrl', value: baseServiceUrl, type: 'global', enabled: true });
-        }
-        let operationCounter = 0;
-
-        for (const pathKey of Object.keys(paths)) {
-            const pathObject = paths[pathKey];
-            if (!pathObject || typeof pathObject !== 'object') continue;
-
-            for (const methodKey of Object.keys(pathObject)) {
-                const operation = pathObject[methodKey];
-                if (!operation || typeof operation !== 'object') continue;
-
-                const method = methodKey.toUpperCase();
-                const operationName = (operation.summary || operation.operationId || `${method} ${pathKey}`).trim();
-                const displayName = `${collectionName} — ${operationName}`;
-                const requestId = this.createId();
-                const url = this.combineBaseUrlAndPath(baseServiceUrl, pathKey);
-
-                const mergedParams = this.mergeParameters(pathObject.parameters, operation.parameters, openApi);
-                let bodySource = operation.requestBody;
-                if (!bodySource && Array.isArray(mergedParams)) {
-                    bodySource = mergedParams.find(p => p && typeof p === 'object' && p.in === 'body');
+        const parsed = buildOpenApiImportCollection(openApi, indexUrl);
+        const groupMap = new Map<string, RequestGroup>();
+        const requests: RequestState[] = parsed.requests.map(pr => {
+            const requestId = this.createId();
+            const fullState: RequestState = {
+                ...this.tabStateService.getDefaultState(requestId),
+                ...pr,
+                id: requestId,
+                isDirty: true
+            };
+            const folderName = pr.__folderName;
+            if (folderName) {
+                let grp = groupMap.get(folderName);
+                if (!grp) {
+                    grp = {
+                        id: `grp_${this.createId()}`,
+                        name: folderName,
+                        capsuleId: '',
+                        isExpanded: true,
+                        requestIds: [],
+                        createdAt: Date.now()
+                    };
+                    groupMap.set(folderName, grp);
                 }
-
-                const allParams = this.extractParameters(mergedParams, openApi);
-                const params = [...allParams.queryParams, { enabled: true, key: '', value: '' }];
-                const extraJsonHeaders = [
-                    ...this.extractJsonHeaderMap(pathObject['headers'] ?? pathObject['x-headers'], openApi),
-                    ...this.extractJsonHeaderMap(operation['headers'] ?? operation['x-headers'], openApi),
-                    ...this.extractSecurityHeaderDefaults(operation.security ?? openApi['security'], openApi)
-                ];
-                const rawCombinedHeaders = [...allParams.headerParams, ...extraJsonHeaders];
-                const dedupHeaderMap = new Map<string, { enabled: boolean; key: string; value: string }>();
-                if (!rawCombinedHeaders.some(h => h.key.toLowerCase() === 'accept')) {
-                    dedupHeaderMap.set('accept', { enabled: true, key: 'Accept', value: 'application/json' });
-                }
-                for (const h of rawCombinedHeaders) {
-                    if (!h.key) continue;
-                    dedupHeaderMap.set(h.key.toLowerCase(), h);
-                }
-                const headers = Array.from(dedupHeaderMap.values());
-                const pathParams = allParams.pathParams;
-                for (const pp of pathParams) {
-                    if (pp.key) {
-                        explicitVars.push({ key: pp.key, value: pp.value || '', type: 'path', enabled: true });
-                    }
-                }
-                const body = this.extractRequestBody(bodySource, openApi);
-                const resolvedUrl = this.applyPathParameters(url, pathParams);
-
-                const requestState: RequestState = {
-                    ...this.tabStateService.getDefaultState(requestId),
-                    id: requestId,
-                    name: displayName,
-                    url: resolvedUrl,
-                    method,
-                    isDirty: true,
-                    params,
-                    headers: [...headers, { enabled: true, key: '', value: '' }],
-                    bodyType: body.rawBody ? 'raw' : 'none',
-                    rawType: 'JSON',
-                    rawBody: body.rawBody,
-                    rawBodyJson: body.rawBody,
-                    rawBodyXml: body.rawBodyXml,
-                    requestBody: body.exampleBody,
-                };
-
-                if (Array.isArray(operation.tags) && operation.tags.length > 0 && typeof operation.tags[0] === 'string') {
-                    const tagName = operation.tags[0].trim();
-                    if (tagName) {
-                        let tagGrp = tagGroupMap.get(tagName);
-                        if (!tagGrp) {
-                            tagGrp = {
-                                id: 'grp_' + this.createId(),
-                                name: tagName,
-                                capsuleId: '',
-                                isExpanded: true,
-                                requestIds: [],
-                                createdAt: Date.now()
-                            };
-                            tagGroupMap.set(tagName, tagGrp);
-                        }
-                        tagGrp.requestIds.push(requestId);
-                        requestState.groupId = tagGrp.id;
-                    }
-                }
-
-                requests.push(requestState);
-                operationCounter += 1;
+                grp.requestIds.push(requestId);
+                fullState.groupId = grp.id;
             }
-        }
+            return fullState;
+        });
 
+        const explicitVars = (parsed.variables || []).map(v => ({
+            key: v.key,
+            value: v.value,
+            type: v.type,
+            enabled: v.enabled
+        }));
         const variables = extractRequestsVariables(requests, explicitVars);
-        return { collectionName, requests, groups: Array.from(tagGroupMap.values()), variables };
-    }
-
-    private combineBaseUrlAndPath(baseUrl: string, path: string): string {
-        const cleanBase = baseUrl.trim().replace(/\/+$/, '');
-        const cleanPath = path.trim().replace(/^\/+/, '');
-        if (!cleanBase) return `/${cleanPath}`;
-        if (!cleanPath) return cleanBase;
-        return `${cleanBase}/${cleanPath}`;
-    }
-
-    private extractServiceBaseFromUrl(indexUrl: string): string {
-        const trimmed = indexUrl.trim();
-        try {
-            const parsed = new URL(trimmed);
-            let pathname = parsed.pathname;
-
-            const swaggerSuffixPatterns = [
-                /\/swagger\/index\.html\/?$/i,
-                /\/swagger\/v\d+\/swagger\.json\/?$/i,
-                /\/swagger\/index\.json\/?$/i,
-                /\/swagger\/[a-zA-Z0-9_.-]+\.json\/?$/i,
-                /\/v\d+\/swagger\.json\/?$/i,
-                /\/v\d+\/openapi\.json\/?$/i,
-                /\/v3\/api-docs(\/[^/]+)?\/?$/i,
-                /\/api-docs(\/[^/]+)?\/?$/i,
-                /\/swagger\.json\/?$/i,
-                /\/openapi\.json\/?$/i,
-                /\/index\.html\/?$/i,
-                /\/swagger\/?$/i,
-                /\/docs\/?$/i,
-                /\/api-docs\/?$/i
-            ];
-
-            for (const pattern of swaggerSuffixPatterns) {
-                if (pattern.test(pathname)) {
-                    pathname = pathname.replace(pattern, '');
-                    break;
-                }
-            }
-
-            if (/\.json$/i.test(pathname)) {
-                pathname = pathname.replace(/\/[^/]+\.json$/i, '');
-            }
-
-            pathname = pathname.replace(/\/+$/, '');
-            return `${parsed.origin}${pathname}`;
-        } catch {
-            return trimmed
-                .replace(/\/swagger\/index\.html\/?$/i, '')
-                .replace(/\/swagger\/v\d+\/swagger\.json\/?$/i, '')
-                .replace(/\/v\d+\/swagger\.json\/?$/i, '')
-                .replace(/\/swagger\/?$/i, '')
-                .replace(/\/index\.html\/?$/i, '')
-                .replace(/\/[^/]+\.json\/?$/i, '')
-                .replace(/\/+$/, '');
-        }
-    }
-
-    private resolveServerBaseUrl(openApi: Record<string, any>, indexUrl: string): string {
-        const serviceBase = this.extractServiceBaseFromUrl(indexUrl);
-        const servers = Array.isArray(openApi['servers']) ? openApi['servers'] : [];
-
-        // 1. OpenAPI 3.x servers array
-        if (servers.length > 0) {
-            let serverUrl = typeof servers[0]?.url === 'string' ? servers[0].url.trim() : '';
-
-            // Resolve server templated variables e.g. {environment}, {port}, {basePath}
-            if (serverUrl && servers[0].variables && typeof servers[0].variables === 'object') {
-                for (const [varName, varDef] of Object.entries(servers[0].variables)) {
-                    const val = (varDef as any)?.default ?? (Array.isArray((varDef as any)?.enum) ? (varDef as any).enum[0] : '');
-                    serverUrl = serverUrl.replaceAll(`{${varName}}`, String(val ?? ''));
-                }
-            }
-
-            // If server URL is empty, root slash '/', or './', use the detected serviceBase to preserve subpaths
-            if (!serverUrl || serverUrl === '/' || serverUrl === './') {
-                return serviceBase;
-            }
-
-            // If server URL is absolute (http:// or https://)
-            if (/^https?:\/\//i.test(serverUrl)) {
-                try {
-                    const parsedServer = new URL(serverUrl);
-                    const parsedServiceBase = new URL(serviceBase);
-
-                    // If server URL only has origin with no path (e.g. https://example.com or https://example.com/),
-                    // but the serviceBase has a subpath suffix after domain (e.g. https://example.com/customer-service),
-                    // preserve the subpath suffix so requests are not erroneously stripped to domain root!
-                    if ((!parsedServer.pathname || parsedServer.pathname === '/') && parsedServiceBase.pathname && parsedServiceBase.pathname !== '/') {
-                        return `${parsedServer.origin}${parsedServiceBase.pathname}`.replace(/\/+$/, '');
-                    }
-                    return serverUrl.replace(/\/+$/, '');
-                } catch {
-                    return serverUrl.replace(/\/+$/, '');
-                }
-            }
-
-            // Relative server URL (e.g. "/v1", "api/v1") - combine with serviceBase
-            const cleanRelative = serverUrl.replace(/^\/+/, '').replace(/\/+$/, '');
-            const cleanBase = serviceBase.replace(/\/+$/, '');
-            if (cleanBase.endsWith(`/${cleanRelative}`) || cleanBase.endsWith(cleanRelative)) {
-                return cleanBase;
-            }
-            return `${cleanBase}/${cleanRelative}`;
-        }
-
-        // 2. Swagger 2.0 host and basePath
-        if (openApi['host']) {
-            const scheme = (Array.isArray(openApi['schemes']) && openApi['schemes'][0]) ||
-                (serviceBase.startsWith('https') ? 'https' : 'http');
-            const host = String(openApi['host']).trim().replace(/\/+$/, '');
-            let basePath = typeof openApi['basePath'] === 'string' ? openApi['basePath'].trim() : '';
-            basePath = basePath.replace(/\/+$/, '');
-
-            try {
-                const parsedServiceBase = new URL(serviceBase);
-                const serviceSubpath = parsedServiceBase.pathname.replace(/\/+$/, '');
-                if (serviceSubpath && serviceSubpath !== '/') {
-                    if (!basePath || basePath === '/') {
-                        basePath = serviceSubpath;
-                    } else if (!basePath.startsWith(serviceSubpath)) {
-                        basePath = `${serviceSubpath}/${basePath.replace(/^\/+/, '')}`;
-                    }
-                }
-            } catch { }
-
-            const cleanBasePath = basePath ? (basePath.startsWith('/') ? basePath : `/${basePath}`) : '';
-            return `${scheme}://${host}${cleanBasePath}`;
-        }
-
-        // 3. Fallback to service base inferred from input indexUrl
-        return serviceBase;
-    }
-
-    private isHeaderContainerName(name: string): boolean {
-        const lower = (name || '').trim().toLowerCase();
-        return ['headers', 'header', 'httpheaders', 'http_headers', 'customheaders', 'custom_headers', 'requestheaders', 'request_headers', 'x-headers'].includes(lower);
-    }
-
-    private formatScalarOrJson(val: any): string {
-        if (val === undefined || val === null) return '';
-        if (typeof val === 'object') return JSON.stringify(val);
-        return String(val);
-    }
-
-    private extractJsonHeaderMap(rawHeaders: any, openApi: Record<string, any>): { enabled: boolean; key: string; value: string }[] {
-        if (!rawHeaders) return [];
-        let target = rawHeaders;
-        if (typeof target === 'string') {
-            const trimmed = target.trim();
-            if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return [];
-            try { target = JSON.parse(trimmed); } catch { return []; }
-        }
-        if (target && typeof target === 'object' && target.$ref) {
-            target = this.resolveRef(target.$ref, openApi) || target;
-        }
-        if (Array.isArray(target)) {
-            return target
-                .filter((h: any) => h && (h.key || h.name))
-                .map((h: any) => ({
-                    enabled: h.enabled ?? true,
-                    key: String(h.key || h.name),
-                    value: this.formatScalarOrJson(h.value ?? h.example ?? this.resolveExampleValue(h, openApi) ?? '')
-                }));
-        }
-        if (target && typeof target === 'object') {
-            const schemaProps = target.properties && typeof target.properties === 'object' ? target.properties : null;
-            const sourceObj = schemaProps || target;
-            const out: { enabled: boolean; key: string; value: string }[] = [];
-            for (const [k, v] of Object.entries(sourceObj)) {
-                if (!k) continue;
-                let resolvedVal: any = v;
-                if (resolvedVal && typeof resolvedVal === 'object' && !Array.isArray(resolvedVal) &&
-                    ('schema' in resolvedVal || 'example' in resolvedVal || 'default' in resolvedVal || 'type' in resolvedVal || '$ref' in resolvedVal)) {
-                    resolvedVal = this.resolveExampleValue(resolvedVal, openApi) ?? (resolvedVal as any).example ?? (resolvedVal as any).default ?? '';
-                }
-                out.push({ enabled: true, key: k, value: this.formatScalarOrJson(resolvedVal) });
-            }
-            return out;
-        }
-        return [];
-    }
-
-    private extractSecurityHeaderDefaults(securityReqs: any, openApi: Record<string, any>): { enabled: boolean; key: string; value: string }[] {
-        const schemes = openApi['components']?.securitySchemes || openApi['securityDefinitions'];
-        if (!schemes || typeof schemes !== 'object' || !Array.isArray(securityReqs) || securityReqs.length === 0) return [];
-        const headers: { enabled: boolean; key: string; value: string }[] = [];
-        for (const reqObj of securityReqs) {
-            if (!reqObj || typeof reqObj !== 'object') continue;
-            for (const schemeName of Object.keys(reqObj)) {
-                const scheme = schemes[schemeName];
-                if (!scheme || typeof scheme !== 'object') continue;
-                if (scheme.type === 'apiKey' && scheme.in === 'header' && scheme.name) {
-                    headers.push({ enabled: true, key: String(scheme.name), value: '' });
-                } else if (scheme.type === 'http' && String(scheme.scheme).toLowerCase() === 'bearer') {
-                    headers.push({ enabled: true, key: 'Authorization', value: 'Bearer {{token}}' });
-                }
-            }
-        }
-        return headers;
-    }
-
-    private extractParameters(parameters: any, openApi: Record<string, any>): { queryParams: { enabled: boolean; key: string; value: string }[]; headerParams: { enabled: boolean; key: string; value: string }[]; pathParams: { enabled: boolean; key: string; value: string }[] } {
-        const queryParams: { enabled: boolean; key: string; value: string }[] = [];
-        const headerParams: { enabled: boolean; key: string; value: string }[] = [];
-        const pathParams: { enabled: boolean; key: string; value: string }[] = [];
-
-        if (!Array.isArray(parameters)) return { queryParams, headerParams, pathParams };
-
-        for (const param of parameters) {
-            if (!param || typeof param !== 'object' || !param.name) continue;
-            const resolvedSchema = param.schema?.$ref
-                ? (this.resolveRef(param.schema.$ref, openApi) || param.schema)
-                : param.schema;
-            const exampleValue = this.resolveExampleValue(param, openApi) ?? '';
-
-            if (param.in === 'header') {
-                // Handle Swagger endpoints that describe headers as a JSON object / schema wrapper
-                let parsedObj: any = null;
-                if (exampleValue && typeof exampleValue === 'object' && !Array.isArray(exampleValue)) {
-                    parsedObj = exampleValue;
-                } else if (typeof exampleValue === 'string' && exampleValue.trim().startsWith('{')) {
-                    try {
-                        const maybe = JSON.parse(exampleValue.trim());
-                        if (maybe && typeof maybe === 'object' && !Array.isArray(maybe)) {
-                            parsedObj = maybe;
-                        }
-                    } catch { }
-                }
-
-                const hasSchemaObjectProps = resolvedSchema?.type === 'object' && resolvedSchema?.properties && typeof resolvedSchema.properties === 'object';
-                if (hasSchemaObjectProps) {
-                    headerParams.push(...this.extractJsonHeaderMap(resolvedSchema, openApi));
-                    continue;
-                }
-                if (parsedObj && (this.isHeaderContainerName(String(param.name)) || resolvedSchema?.type === 'object')) {
-                    headerParams.push(...this.extractJsonHeaderMap(parsedObj, openApi));
-                    continue;
-                }
-
-                headerParams.push({
-                    enabled: true,
-                    key: String(param.name),
-                    value: this.formatScalarOrJson(exampleValue)
-                });
-                continue;
-            }
-
-            const entryValue = this.formatScalarOrJson(exampleValue);
-            const entry = { enabled: true, key: String(param.name), value: entryValue };
-
-            if (param.in === 'query') {
-                queryParams.push(entry);
-            } else if (param.in === 'path') {
-                pathParams.push(entry);
-            }
-        }
-
-        return { queryParams, headerParams, pathParams };
-    }
-
-    private mergeParameters(pathParameters: any, operationParameters: any, openApi: Record<string, any>): any[] {
-        const merged: any[] = [];
-        const canonical = new Map<string, any>();
-
-        const resolveIfRef = (p: any): any => {
-            if (p && typeof p === 'object' && p.$ref && typeof p.$ref === 'string') {
-                return this.resolveRef(p.$ref, openApi) || p;
-            }
-            return p;
+        return {
+            collectionName: parsed.name,
+            requests,
+            groups: Array.from(groupMap.values()),
+            variables
         };
-
-        for (let param of Array.isArray(pathParameters) ? pathParameters : []) {
-            param = resolveIfRef(param);
-            if (param && typeof param === 'object' && param.in) {
-                const name = param.name || (param.in === 'body' ? 'body' : '');
-                if (name) {
-                    canonical.set(`${param.in}:${name}`, param);
-                }
-            }
-        }
-
-        for (let param of Array.isArray(operationParameters) ? operationParameters : []) {
-            param = resolveIfRef(param);
-            if (param && typeof param === 'object' && param.in) {
-                const name = param.name || (param.in === 'body' ? 'body' : '');
-                if (name) {
-                    canonical.set(`${param.in}:${name}`, param);
-                }
-            }
-        }
-
-        for (const value of canonical.values()) {
-            merged.push(value);
-        }
-
-        return merged;
-    }
-
-    private extractRequestBody(requestBody: any, openApi: Record<string, any>): { rawBody: string; rawBodyJson: string; rawBodyXml: string; exampleBody: unknown } {
-        if (!requestBody || typeof requestBody !== 'object') {
-            return { rawBody: '', rawBodyJson: '{}', rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>', exampleBody: {} };
-        }
-
-        // Resolve top-level requestBody reference if it exists
-        let resolvedRequestBody = requestBody;
-        if (requestBody.$ref && typeof requestBody.$ref === 'string') {
-            resolvedRequestBody = this.resolveRef(requestBody.$ref, openApi) || requestBody;
-        }
-
-        let exampleBody: unknown = undefined;
-        let foundDirect = false;
-
-        // 1. Check if a request body under each URL content exists with schema examples directly populated without $ref, or without the value being referenced starting with #/
-        if (resolvedRequestBody.content && typeof resolvedRequestBody.content === 'object') {
-            const keys = Object.keys(resolvedRequestBody.content);
-            const preferredOrder = ['application/json', 'application/*+json', 'text/json'];
-            const sortedKeys = [...keys].sort((a, b) => {
-                const aIdx = preferredOrder.indexOf(a);
-                const bIdx = preferredOrder.indexOf(b);
-                if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-                if (aIdx !== -1) return -1;
-                if (bIdx !== -1) return 1;
-                return 0;
-            });
-
-            for (const contentType of sortedKeys) {
-                const content = resolvedRequestBody.content[contentType];
-                if (!content || typeof content !== 'object') continue;
-
-                if (content.example !== undefined) {
-                    exampleBody = content.example;
-                    foundDirect = true;
-                    break;
-                } else if (content.examples && typeof content.examples === 'object') {
-                    const firstExample = Object.values(content.examples).find(example => example && typeof example === 'object' && 'value' in example);
-                    if (firstExample && typeof firstExample === 'object') {
-                        exampleBody = (firstExample as any).value;
-                        foundDirect = true;
-                        break;
-                    }
-                }
-
-                const schema = content.schema;
-                if (schema && typeof schema === 'object') {
-                    const hasRef = schema.$ref && typeof schema.$ref === 'string';
-                    const isInternalRef = hasRef && schema.$ref.startsWith('#/');
-                    if (!hasRef || !isInternalRef) {
-                        exampleBody = this.generateExampleFromSchema(schema, openApi);
-                        foundDirect = true;
-                        break;
-                    }
-                }
-            }
-        } else if (resolvedRequestBody.schema && typeof resolvedRequestBody.schema === 'object') {
-            const schema = resolvedRequestBody.schema;
-            const hasRef = schema.$ref && typeof schema.$ref === 'string';
-            const isInternalRef = hasRef && schema.$ref.startsWith('#/');
-            if (!hasRef || !isInternalRef) {
-                exampleBody = this.generateExampleFromSchema(schema, openApi);
-                foundDirect = true;
-            }
-        }
-
-        // 2. Fallback to extracting from the component of the json (where $ref starting with #/ is resolved)
-        if (!foundDirect) {
-            const content = this.findRequestBodyContent(resolvedRequestBody);
-            if (content) {
-                const exampleFromContent = this.resolveExampleValue(content, openApi);
-                const schema = content.schema;
-                exampleBody = exampleFromContent !== undefined && exampleFromContent !== null
-                    ? exampleFromContent
-                    : schema ? this.generateExampleFromSchema(schema, openApi) : {};
-            } else {
-                exampleBody = {};
-            }
-        }
-
-        const rawBody = typeof exampleBody === 'string'
-            ? exampleBody
-            : JSON.stringify(exampleBody, null, 2);
-
-        return { rawBody, rawBodyJson: rawBody, rawBodyXml: '<?xml version="1.0" encoding="UTF-8"?>\n<root>\n\n</root>', exampleBody };
-    }
-
-    private findRequestBodyContent(requestBody: any): any {
-        if (!requestBody || typeof requestBody !== 'object') {
-            return undefined;
-        }
-
-        // OpenAPI 3.0 content object structure
-        if (requestBody.content && typeof requestBody.content === 'object') {
-            const jsonContent = requestBody.content['application/json'] || requestBody.content['application/*+json'] || requestBody.content['text/json'];
-            if (jsonContent) return jsonContent;
-
-            const firstContentType = Object.keys(requestBody.content).find(key => typeof key === 'string');
-            return firstContentType ? requestBody.content[firstContentType] : undefined;
-        }
-
-        // Swagger 2.0 schema directly in the parameter
-        if (requestBody.schema && typeof requestBody.schema === 'object') {
-            return requestBody;
-        }
-
-        // Direct schema structure
-        if (requestBody.type || requestBody.properties || requestBody.additionalProperties || requestBody.$ref || requestBody.allOf || requestBody.anyOf || requestBody.oneOf) {
-            return { schema: requestBody };
-        }
-
-        return undefined;
-    }
-
-    private resolveExampleValue(source: any, openApi: Record<string, any>): unknown {
-        if (!source || typeof source !== 'object') {
-            return undefined;
-        }
-
-        if (source.$ref && typeof source.$ref === 'string') {
-            const resolved = this.resolveRef(source.$ref, openApi);
-            return this.resolveExampleValue(resolved, openApi);
-        }
-
-        if (source.example !== undefined) {
-            return source.example;
-        }
-
-        if (source.default !== undefined) {
-            return source.default;
-        }
-
-        if (source.examples && typeof source.examples === 'object') {
-            const firstExample = Object.values(source.examples).find(example => example && typeof example === 'object' && 'value' in example);
-            if (firstExample && typeof firstExample === 'object') {
-                return (firstExample as any).value;
-            }
-        }
-
-        if (source.schema && typeof source.schema === 'object') {
-            return this.generateExampleFromSchema(source.schema, openApi);
-        }
-
-        if (source.type === 'object' || source.properties) {
-            return this.generateExampleFromSchema(source, openApi);
-        }
-
-        return undefined;
-    }
-
-    private applyPathParameters(url: string, pathParams: { enabled: boolean; key: string; value: string }[]): string {
-        return pathParams.reduce((currentUrl, param) => {
-            if (!param.key) return currentUrl;
-            const placeholder = `{${param.key}}`;
-            return currentUrl.replaceAll(placeholder, param.value || placeholder);
-        }, url);
-    }
-
-    private resolveRef(ref: string, openApi: Record<string, any>): any {
-        if (!ref.startsWith('#/')) {
-            return undefined;
-        }
-
-        const parts = ref.slice(2).split('/').map(part => decodeURIComponent(part));
-        let target: any = openApi;
-        for (const part of parts) {
-            if (!target || typeof target !== 'object' || !(part in target)) {
-                return undefined;
-            }
-            target = target[part];
-        }
-        return target;
-    }
-
-    private generateExampleFromSchema(schema: any, openApi: Record<string, any>): any {
-        if (!schema || typeof schema !== 'object') {
-            return null;
-        }
-
-        if (schema.allOf && Array.isArray(schema.allOf)) {
-            let merged: any = {};
-            for (const sub of schema.allOf) {
-                const subExample = this.generateExampleFromSchema(sub, openApi);
-                if (subExample && typeof subExample === 'object' && !Array.isArray(subExample)) {
-                    merged = { ...merged, ...subExample };
-                } else if (subExample !== undefined && subExample !== null) {
-                    merged = subExample;
-                }
-            }
-            return merged;
-        }
-
-        if (schema.anyOf && Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
-            return this.generateExampleFromSchema(schema.anyOf[0], openApi);
-        }
-
-        if (schema.oneOf && Array.isArray(schema.oneOf) && schema.oneOf.length > 0) {
-            return this.generateExampleFromSchema(schema.oneOf[0], openApi);
-        }
-
-        if (schema.$ref && typeof schema.$ref === 'string') {
-            const resolved = this.resolveRef(schema.$ref, openApi);
-            return this.generateExampleFromSchema(resolved, openApi);
-        }
-
-        if (schema.example !== undefined) {
-            return schema.example;
-        }
-
-        if (schema.enum && Array.isArray(schema.enum)) {
-            return schema.enum[0];
-        }
-
-        if (schema.type === 'object' || schema.properties || schema.additionalProperties) {
-            const example: Record<string, unknown> = {};
-            const properties = schema.properties || {};
-            for (const key of Object.keys(properties)) {
-                example[key] = this.generateExampleFromSchema(properties[key], openApi);
-            }
-            if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
-                example['additionalProp1'] = this.generateExampleFromSchema(schema.additionalProperties, openApi);
-            }
-            return example;
-        }
-
-        if (schema.type === 'array') {
-            return [this.generateExampleFromSchema(schema.items || {}, openApi)];
-        }
-
-        if (schema.type === 'boolean') {
-            return false;
-        }
-
-        if (schema.type === 'integer' || schema.type === 'number') {
-            return 0;
-        }
-
-        if (schema.type === 'string') {
-            return schema.format === 'date-time' ? new Date().toISOString() : '';
-        }
-
-        return '';
     }
 
     private createId() {

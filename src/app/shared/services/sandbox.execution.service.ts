@@ -479,27 +479,54 @@ window.addEventListener("message", async (event) => {
 
     const envMap = Object.assign({}, context.__envVars || {});
     const globalMap = Object.assign({}, context.__capsuleVars || {});
+    const initialEnvSnapshot = Object.assign({}, envMap);
+    const initialGlobalSnapshot = Object.assign({}, globalMap);
+    const environment = Object.assign({}, envMap);
+    const variables = Object.assign({}, globalMap);
     const __envSet = {};
     const __envUnset = [];
     const __varSet = {};
     let __nextRequest = undefined;
 
+    const getEnv = (k) => Object.prototype.hasOwnProperty.call(environment, k) ? environment[k] : envMap[k];
+    const setEnv = (k, v) => {
+      const s = String(v ?? '');
+      envMap[k] = s;
+      environment[k] = s;
+      __envSet[k] = s;
+    };
+    const unsetEnv = (k) => {
+      delete envMap[k];
+      delete environment[k];
+      delete __envSet[k];
+      if (!__envUnset.includes(k)) __envUnset.push(k);
+    };
+    const getVariable = (k) => Object.prototype.hasOwnProperty.call(variables, k)
+      ? variables[k]
+      : (Object.prototype.hasOwnProperty.call(environment, k) ? environment[k] : envMap[k]);
+    const setVariable = (k, v) => {
+      const s = String(v ?? '');
+      globalMap[k] = s;
+      variables[k] = s;
+      __varSet[k] = s;
+    };
+
     pm.environment = {
-      get: (k) => envMap[k],
-      has: (k) => Object.prototype.hasOwnProperty.call(envMap, k),
-      set: (k, v) => { const s = String(v ?? ''); envMap[k] = s; __envSet[k] = s; },
-      unset: (k) => { delete envMap[k]; delete __envSet[k]; __envUnset.push(k); },
-      toObject: () => Object.assign({}, envMap)
+      get: getEnv,
+      has: (k) => Object.prototype.hasOwnProperty.call(environment, k) || Object.prototype.hasOwnProperty.call(envMap, k),
+      set: setEnv,
+      unset: unsetEnv,
+      toObject: () => Object.assign({}, environment)
     };
 
     pm.variables = {
-      get: (k) => Object.prototype.hasOwnProperty.call(envMap, k) ? envMap[k] : globalMap[k],
-      has: (k) => Object.prototype.hasOwnProperty.call(envMap, k) || Object.prototype.hasOwnProperty.call(globalMap, k),
-      set: (k, v) => { const s = String(v ?? ''); globalMap[k] = s; __varSet[k] = s; },
+      get: getVariable,
+      has: (k) => Object.prototype.hasOwnProperty.call(environment, k) || Object.prototype.hasOwnProperty.call(variables, k),
+      set: setVariable,
       replaceIn: (str) => String(str ?? '').replace(/\{\{([^}]+)\}\}/g, (m, k) => {
         const key = String(k || '').trim();
-        if (Object.prototype.hasOwnProperty.call(envMap, key)) return String(envMap[key]);
-        if (Object.prototype.hasOwnProperty.call(globalMap, key)) return String(globalMap[key]);
+        if (Object.prototype.hasOwnProperty.call(environment, key)) return String(environment[key]);
+        if (Object.prototype.hasOwnProperty.call(variables, key)) return String(variables[key]);
         return m;
       })
     };
@@ -648,8 +675,37 @@ window.addEventListener("message", async (event) => {
     ];
     const fnBody = fnBodyLines.join(String.fromCharCode(10));
       
-    const executeInSandbox = new Function("pm", "context", "test", "_proxyFetch", "__osbImport", "require", "postman", "setNextRequest", fnBody);
-    await executeInSandbox(pm, context, test, _proxyFetch, __osbImport, require, postman, setNextRequest);
+    const executeInSandbox = new Function(
+      "pm", "context", "test", "expect", "_proxyFetch", "__osbImport", "require",
+      "postman", "setNextRequest", "environment", "variables",
+      "getEnv", "setEnv", "unsetEnv", "getVariable", "setVariable",
+      fnBody
+    );
+    await executeInSandbox(
+      pm, context, test, pm.expect, _proxyFetch, __osbImport, require,
+      postman, setNextRequest, environment, variables,
+      getEnv, setEnv, unsetEnv, getVariable, setVariable
+    );
+
+    // Sync direct object mutations made on exposed \`environment\` and \`variables\` objects
+    for (const k of Object.keys(environment)) {
+      const nextVal = String(environment[k] ?? '');
+      if (!Object.prototype.hasOwnProperty.call(initialEnvSnapshot, k) || initialEnvSnapshot[k] !== nextVal) {
+        __envSet[k] = nextVal;
+      }
+    }
+    for (const origKey of Object.keys(initialEnvSnapshot)) {
+      if (!Object.prototype.hasOwnProperty.call(environment, origKey) && !__envUnset.includes(origKey)) {
+        delete __envSet[origKey];
+        __envUnset.push(origKey);
+      }
+    }
+    for (const k of Object.keys(variables)) {
+      const nextVal = String(variables[k] ?? '');
+      if (!Object.prototype.hasOwnProperty.call(initialGlobalSnapshot, k) || initialGlobalSnapshot[k] !== nextVal) {
+        __varSet[k] = nextVal;
+      }
+    }
 
     // Extract test results from PASS/FAIL console logs if any
     for (const log of logs) {
@@ -801,7 +857,7 @@ window.addEventListener("message", async (event) => {
       headers: req.headers || {},
       body: req.body,
       verifySsl: false,
-      timeoutMs
+      timeoutMs: timeoutMs > 0 ? timeoutMs : 3600000
     };
 
     const endpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));

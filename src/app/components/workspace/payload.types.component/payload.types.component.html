@@ -628,7 +628,7 @@
             <div class="flex flex-wrap items-center gap-1.5">
                 <div class="flex items-center gap-1 mr-1">
                     @for (preset of requestTimeoutPresets; track preset.ms) {
-                    <button type="button" (click)="updateRequestTimeoutMs(preset.ms)"
+                    <button type="button" (click)="selectTimeoutPreset(preset.ms)"
                         [class.bg-(--postonsteroids-accent)]="requestTimeoutMs() === preset.ms"
                         [class.text-white]="requestTimeoutMs() === preset.ms"
                         [class.border-(--postonsteroids-accent)]="requestTimeoutMs() === preset.ms"
@@ -641,9 +641,13 @@
                     }
                 </div>
                 <div class="flex items-center gap-1">
-                    <input type="number" min="0" max="3600000" step="1000"
-                        [value]="requestTimeoutMs()"
+                    <input #timeoutInputEl type="text" inputmode="numeric"
+                        [value]="timeoutInputDraft()"
+                        (focus)="onTimeoutInputFocus($event)"
                         (input)="updateRequestTimeoutMs($any($event.target).value)"
+                        (change)="updateRequestTimeoutMs($any($event.target).value)"
+                        (keydown.enter)="commitRequestTimeoutOnBlur($event)"
+                        (blur)="commitRequestTimeoutOnBlur($event)"
                         aria-label="Global request timeout in milliseconds"
                         class="w-24 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) px-2 py-1 text-right font-mono text-[12px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
                     <span class="text-[11px] font-mono text-(--postonsteroids-text-muted)">ms</span>

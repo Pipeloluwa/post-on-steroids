@@ -1,4 +1,4 @@
-import { Component, inject, computed, signal, ViewChild, ElementRef, effect } from '@angular/core';
+import { Component, inject, computed, signal, ViewChild, ElementRef, effect, viewChild } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Subject, firstValueFrom } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
@@ -22,7 +22,7 @@ import { DialogService } from '../../../shared/services/dialog.service';
 import { sanitizeJsonBodyForScripts } from '../../../shared/utils/format.utils';
 import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../../../shared/utils/encryption-path.util';
 import { isElectronApp } from '../../../shared/utils/url.util';
-import { formatTimeoutLabel } from '../../../shared/utils/request-timeout.util';
+import { formatTimeoutLabel, parseTimeoutInputValue } from '../../../shared/utils/request-timeout.util';
 
 @Component({
   selector: 'app-payload-types-component',
@@ -1177,8 +1177,11 @@ export class PayloadTypesComponent {
   }
 
   // ── Settings ─────────────────────────────────────────────────────────
+  timeoutInputRef = viewChild<ElementRef<HTMLInputElement>>('timeoutInputEl');
   requestTimeoutMs = this.tabStateService.requestTimeoutMs;
   requestTimeoutLabel = computed(() => formatTimeoutLabel(this.requestTimeoutMs()));
+  timeoutInputDraft = signal<string>(String(this.tabStateService.requestTimeoutMs()));
+  isTimeoutInputFocused = signal<boolean>(false);
   requestTimeoutPresets = [
     { label: '5s', ms: 5000 },
     { label: '15s', ms: 15000 },
@@ -1188,10 +1191,59 @@ export class PayloadTypesComponent {
     { label: '∞', ms: 0 }
   ];
 
+  private readonly syncTimeoutDraftEffect = effect(() => {
+    const ms = this.requestTimeoutMs();
+    if (!this.isTimeoutInputFocused()) {
+      const text = String(ms);
+      this.timeoutInputDraft.set(text);
+      const el = this.timeoutInputRef()?.nativeElement;
+      if (el && el.value !== text) {
+        el.value = text;
+      }
+    }
+  });
+
+  selectTimeoutPreset(ms: number) {
+    this.isTimeoutInputFocused.set(false);
+    this.tabStateService.setRequestTimeoutMs(ms);
+    const text = String(this.tabStateService.requestTimeoutMs());
+    this.timeoutInputDraft.set(text);
+    const el = this.timeoutInputRef()?.nativeElement;
+    if (el) {
+      el.value = text;
+    }
+  }
+
+  onTimeoutInputFocus(event: FocusEvent) {
+    this.isTimeoutInputFocused.set(true);
+    const inputEl = event.target as HTMLInputElement | null;
+    if (inputEl && inputEl.value.trim() === '0') {
+      inputEl.select();
+    }
+  }
+
   updateRequestTimeoutMs(val: string | number) {
-    const parsed = typeof val === 'number' ? val : Number(String(val).trim());
-    if (!Number.isFinite(parsed) || parsed < 0) return;
-    this.tabStateService.setRequestTimeoutMs(parsed);
+    const raw = String(val ?? '');
+    this.timeoutInputDraft.set(raw);
+    const parsed = parseTimeoutInputValue(raw);
+    if (parsed !== null) {
+      this.tabStateService.setRequestTimeoutMs(parsed);
+    }
+  }
+
+  commitRequestTimeoutOnBlur(event?: Event) {
+    this.isTimeoutInputFocused.set(false);
+    const inputEl = (event?.target as HTMLInputElement | null) || this.timeoutInputRef()?.nativeElement || null;
+    const raw = inputEl ? inputEl.value : this.timeoutInputDraft();
+    const parsed = parseTimeoutInputValue(raw);
+    if (parsed !== null) {
+      this.tabStateService.setRequestTimeoutMs(parsed);
+    }
+    const cleanText = String(this.requestTimeoutMs());
+    this.timeoutInputDraft.set(cleanText);
+    if (inputEl && inputEl.value !== cleanText) {
+      inputEl.value = cleanText;
+    }
   }
 
   toggleSetting(field: keyof SettingsState, val: boolean) {

@@ -287,13 +287,23 @@ input[type="password"]::-ms-clear {
   background: var(--postonsteroids-text-muted) !important;
 }
 
-/* Ensure Monaco search/replace widget and overflowing suggest widget never clip at the top */
+/* Ensure Monaco search/replace widget and overflowing suggest widget never clip or crowd close button at the top-right */
 .monaco-editor .find-widget.visible {
-  top: 28px !important;
-  right: 16px !important;
+  top: 38px !important;
+  right: 28px !important;
+  max-width: calc(100% - 44px) !important;
   border-top: 1px solid var(--vscode-widget-border, var(--postonsteroids-border)) !important;
   border-radius: 6px !important;
   z-index: 45 !important;
+}
+
+.monaco-editor .find-widget > .button.codicon-widget-close,
+.monaco-editor .find-widget .button.codicon-widget-close {
+  position: absolute !important;
+  top: 5px !important;
+  right: 4px !important;
+  margin: 0 !important;
+  z-index: 5 !important;
 }
 
 .monaco-editor .find-widget:not(.visible) {
@@ -311,24 +321,41 @@ input[type="password"]::-ms-clear {
   margin-top: 10px !important;
 }
 
-/* Prevent Monaco find-widget / toolbar compact hover tooltips from wrapping or flickering near the right screen edge */
-.monaco-editor .context-view:has(.monaco-hover.workbench-hover.compact),
-.monaco-editor .workbench-hover-container:has(.monaco-hover.workbench-hover.compact) {
+/* Prevent Monaco find-widget / toolbar compact hover tooltips from intercepting pointer events, wrapping, or flickering near the right screen edge */
+.monaco-editor .context-view:has(.monaco-hover.workbench-hover),
+.monaco-editor .workbench-hover-container:has(.monaco-hover.workbench-hover),
+.context-view:has(.monaco-hover.workbench-hover),
+.workbench-hover-container:has(.monaco-hover.workbench-hover) {
   pointer-events: none !important;
   width: max-content !important;
 }
 
-.monaco-editor .monaco-hover.workbench-hover.compact {
+.monaco-editor .monaco-hover.workbench-hover,
+.monaco-editor .monaco-hover.workbench-hover *,
+.monaco-hover.workbench-hover,
+.monaco-hover.workbench-hover * {
   pointer-events: none !important;
+}
+
+.monaco-editor .monaco-hover.workbench-hover,
+.monaco-hover.workbench-hover {
+  margin-top: 8px !important;
+  translate: 0 6px !important;
+}
+
+.monaco-editor .monaco-hover.workbench-hover.compact,
+.monaco-hover.workbench-hover.compact {
   white-space: nowrap !important;
   width: max-content !important;
   max-width: none !important;
-  margin-top: 6px !important;
 }
 
 .monaco-editor .monaco-hover.workbench-hover.compact .monaco-hover-content,
 .monaco-editor .monaco-hover.workbench-hover.compact .hover-row,
-.monaco-editor .monaco-hover.workbench-hover.compact .hover-contents {
+.monaco-editor .monaco-hover.workbench-hover.compact .hover-contents,
+.monaco-hover.workbench-hover.compact .monaco-hover-content,
+.monaco-hover.workbench-hover.compact .hover-row,
+.monaco-hover.workbench-hover.compact .hover-contents {
   white-space: nowrap !important;
   width: max-content !important;
   max-width: none !important;

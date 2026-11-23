@@ -21,7 +21,7 @@ export class HelpUpdatesModalComponent {
     activeTab = signal<'guide' | 'updates'>('guide');
 
     readonly appEdition = APP_EDITION;
-    appVersion = 'v3.0.0-steroids';
+    appVersion = 'v2026.11.0-steroids';
 
     private wasShown = false;
 

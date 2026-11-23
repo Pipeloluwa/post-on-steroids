@@ -550,8 +550,116 @@ export function formatGraphqlPretty(gql: string): string {
 }
 
 /**
+ * Expands single-line crammed JavaScript statements (e.g. `if(a){x=1;y=2;}`) onto separate lines
+ * outside of string literals, regex literals, template literals, and `for (...)` headers.
+ */
+function expandCompactJsLines(source: string): string {
+  let out = '';
+  let quote: string | null = null;
+  let parenDepth = 0;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    const next = source[i + 1];
+
+    if (inLineComment) {
+      out += ch;
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      out += ch;
+      if (ch === '*' && next === '/') {
+        out += '/';
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+    if (quote) {
+      out += ch;
+      if (ch === '\\' && i + 1 < source.length) {
+        out += source[++i];
+        continue;
+      }
+      if (ch === quote) quote = null;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      inLineComment = true;
+      out += '//';
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      out += '/*';
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === '\'' || ch === '`') {
+      quote = ch;
+      out += ch;
+      continue;
+    }
+
+    if (ch === '(') {
+      parenDepth++;
+      out += ch;
+      continue;
+    }
+    if (ch === ')') {
+      parenDepth = Math.max(0, parenDepth - 1);
+      out += ch;
+      continue;
+    }
+
+    if (ch === '{' && parenDepth === 0) {
+      const restTrimmed = source.slice(i + 1).trimStart();
+      if (restTrimmed.startsWith('}')) {
+        out += '{}';
+        i = source.indexOf('}', i + 1);
+        continue;
+      }
+      out += '{\n';
+      continue;
+    }
+
+    if (ch === '}' && parenDepth === 0) {
+      if (!out.endsWith('\n')) out += '\n';
+      out += '}';
+      const after = source.slice(i + 1).trimStart();
+      if (after && !after.startsWith('\n') && !/^(?:else|catch|finally|,|\)|;)/.test(after)) {
+        out += '\n';
+      }
+      continue;
+    }
+
+    if (ch === ';' && parenDepth === 0) {
+      out += ';';
+      const rest = source.slice(i + 1);
+      const nextNonSpaceIdx = rest.search(/\S/);
+      if (nextNonSpaceIdx !== -1 && !rest.slice(0, nextNonSpaceIdx).includes('\n')) {
+        const nextTwo = rest.slice(nextNonSpaceIdx, nextNonSpaceIdx + 2);
+        if (nextTwo !== '//' && nextTwo !== '/*') {
+          out += '\n';
+        }
+      }
+      continue;
+    }
+
+    out += ch;
+  }
+
+  return out;
+}
+
+/**
  * Formats JavaScript / TypeScript code with consistent 2-space indentation.
- * When `restrictToFunctionBody` is true, keeps the outer function header/closing brace lines intact.
+ * When `restrictToFunctionBody` is true, keeps leading import lines + outer function header/closing brace intact.
  */
 export function formatJsPretty(code: string, restrictToFunctionBody = false): string {
   if (!code || typeof code !== 'string') return '';
@@ -559,26 +667,42 @@ export function formatJsPretty(code: string, restrictToFunctionBody = false): st
     const rawLines = code.replace(/\r\n/g, '\n').split('\n');
     let startIdx = 0;
     let endIdx = rawLines.length - 1;
+    const leadingPrefixLines: string[] = [];
     let prefixLine = '';
     let suffixLine = '';
 
     if (restrictToFunctionBody && rawLines.length >= 2) {
-      const firstTrim = rawLines[0].trim();
+      let fnHeaderIdx = -1;
+      for (let i = 0; i < rawLines.length; i++) {
+        const t = rawLines[i].trim();
+        if (!t || t.startsWith('//') || t.startsWith('/*') || t.startsWith('*') || /^import\s+/.test(t) || /^const\s+\w+\s*=\s*require\(/.test(t)) {
+          continue;
+        }
+        if (/^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(t)) {
+          fnHeaderIdx = i;
+        }
+        break;
+      }
       const lastTrim = rawLines[rawLines.length - 1].trim();
-      if (/^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{$/.test(firstTrim) && lastTrim === '}') {
-        prefixLine = rawLines[0];
+      if (fnHeaderIdx !== -1 && lastTrim === '}') {
+        for (let k = 0; k < fnHeaderIdx; k++) {
+          leadingPrefixLines.push(rawLines[k]);
+        }
+        prefixLine = rawLines[fnHeaderIdx];
         suffixLine = rawLines[rawLines.length - 1];
-        startIdx = 1;
+        startIdx = fnHeaderIdx + 1;
         endIdx = rawLines.length - 2;
       }
     }
 
+    const bodySource = expandCompactJsLines(rawLines.slice(startIdx, endIdx + 1).join('\n'));
+    const workLines = bodySource.split('\n');
     let braceDepth = restrictToFunctionBody && prefixLine ? 1 : 0;
     const formatted: string[] = [];
     let inBlockComment = false;
 
-    for (let i = startIdx; i <= endIdx; i++) {
-      const trimmed = rawLines[i].trim();
+    for (let i = 0; i < workLines.length; i++) {
+      const trimmed = workLines[i].trim();
       if (!trimmed) {
         if (formatted.length > 0 && formatted[formatted.length - 1] !== '') {
           formatted.push('');
@@ -654,7 +778,7 @@ export function formatJsPretty(code: string, restrictToFunctionBody = false): st
     }
 
     if (restrictToFunctionBody && prefixLine) {
-      return [prefixLine, ...formatted, suffixLine].join('\n');
+      return [...leadingPrefixLines, prefixLine, ...formatted, suffixLine].join('\n');
     }
     return formatted.join('\n');
   } catch {

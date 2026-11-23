@@ -6,7 +6,7 @@
         <div (click)="fileInput.click()"
             class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative">
 
-            <input type="file" #fileInput class="hidden" accept=".json,.wsdl,.xml" (change)="onFileSelected($event)" />
+            <input type="file" #fileInput class="hidden" accept=".json,.yaml,.yml,.wsdl,.xml,.wadl,.raml,.har" (change)="onFileSelected($event)" />
 
             <div class="flex items-center gap-x-4">
                 <div
@@ -14,24 +14,24 @@
                     <mat-icon class="text-[22px]">file_upload</mat-icon>
                 </div>
                 <div>
-                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Import JSON / WSDL File</h3>
-                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Upload an OnSteroid JSON, Postman Collection (v2.0/v2.1), or WSDL file.</p>
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Import Collection / Spec File</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Upload Postman, Insomnia (v4/v5), OpenAPI (JSON/YAML), Thunder Client, Hoppscotch, Bruno, HAR, WSDL, WADL, or RAML.</p>
                 </div>
             </div>
         </div>
 
-        <!-- Card 2: Import from Swagger / SOAP -->
+        <!-- Card 2: Import from Swagger / Alternatives / SOAP -->
         <div (click)="swaggerModal.open()" (keydown.enter)="swaggerModal.open()" tabindex="0"
             class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative"
-            title="Import Swagger / SOAP">
+            title="Import Swagger, Redoc, Scalar, Stoplight, RapiDoc or SOAP">
             <div class="flex items-center gap-x-4">
                 <div
                     class="size-12 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-center text-(--postonsteroids-text-secondary) group-hover:border-(--postonsteroids-accent) group-hover:text-(--postonsteroids-accent) transition-all shadow-xs">
                     <mat-icon class="text-[22px]">cloud_download</mat-icon>
                 </div>
                 <div class="flex flex-col gap-y-1">
-                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Import Swagger / SOAP</h3>
-                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a Swagger / OpenAPI URL or WSDL / ASMX SOAP endpoint to import APIs and payloads.</p>
+                    <h3 class="font-bold text-(--postonsteroids-text-primary)">Import API Docs / SOAP URL</h3>
+                    <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a Swagger UI, Redoc, Scalar, Stoplight, RapiDoc, OpenAPI YAML/JSON, or WSDL / ASMX SOAP URL.</p>
                 </div>
             </div>
         </div>

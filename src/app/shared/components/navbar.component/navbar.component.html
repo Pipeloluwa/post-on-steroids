@@ -1,12 +1,12 @@
 <nav style="-webkit-app-region: drag;"
     class="w-full shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-3 sm:px-4 z-50">
-    <div class="w-full min-h-12 flex items-center justify-between gap-x-2 sm:gap-x-4 py-1">
+    <div class="w-full min-h-12 flex items-center justify-between gap-x-1.5 2xl:gap-x-4 py-1">
         
         <!-- Left Section: Logo, Sidebar Toggle & Menu Tabs -->
         <div class="flex items-center gap-x-2 shrink-0">
             <!-- Logo -->
             <a routerLink="/steroid" style="-webkit-app-region: no-drag;"
-                class="flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline mr-1 sm:mr-2">
+                class="flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline mr-0.5 2xl:mr-2">
                 <img src="icons/onsteroids-icon.svg" alt="OnSteroid" width="24" height="24" loading="eager" fetchpriority="high" class="size-6 rounded-lg shadow-sm shadow-(--postonsteroids-accent)/30 group-hover:scale-105 transition-transform" />
                 <span class="text-[14px] font-bold tracking-wider text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
                     OnSteroid
@@ -152,13 +152,13 @@
 
                 <!-- About Menu Tab -->
                 <button (click)="openAbout()"
-                    class="px-2.5 py-1 text-xs font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) rounded-md transition-all cursor-pointer select-none">
+                    class="px-2.5 py-1 text-xs font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) rounded-md transition-all cursor-pointer select-none whitespace-nowrap shrink-0">
                     About
                 </button>
 
                 <!-- Help / Updates Menu Tab -->
                 <button (click)="openHelp()"
-                    class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) rounded-md transition-all cursor-pointer select-none">
+                    class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) rounded-md transition-all cursor-pointer select-none whitespace-nowrap shrink-0">
                     <span>Help / Updates</span>
                     <span class="size-1.5 rounded-full bg-(--postonsteroids-accent)"></span>
                 </button>
@@ -166,7 +166,7 @@
         </div>
 
         <!-- Center Section: Shared Environments + Terminal + Edition Features Toolbar -->
-        <div class="flex-1 flex items-center justify-end gap-1.5 px-2 min-w-0" style="-webkit-app-region: no-drag;">
+        <div class="flex-1 flex items-center justify-start 2xl:justify-center gap-1 2xl:gap-1.5 px-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style="-webkit-app-region: no-drag;">
             <!-- Shared Multi-Environment Switcher (All Editions) -->
             <div class="flex items-center rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) px-2 py-0.5 gap-1 shrink-0">
                 <span class="size-2 rounded-full shrink-0"
@@ -188,7 +188,7 @@
 
             <!-- Shared Integrated Terminal Button (All Editions) -->
             <button type="button" (click)="terminalService.toggle()" title="Toggle Terminal (Ctrl+`)"
-                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-medium cursor-pointer transition-colors shrink-0"
+                    class="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-1 rounded-full border text-[11px] font-medium cursor-pointer transition-colors shrink-0"
                     [class.bg-(--postonsteroids-accent)]="terminalService.isOpen()"
                     [class.text-white]="terminalService.isOpen()"
                     [class.border-(--postonsteroids-accent)]="terminalService.isOpen()"
@@ -197,7 +197,7 @@
                     [class.border-(--postonsteroids-border)]="!terminalService.isOpen()"
                     [class.hover:bg-(--postonsteroids-bg-hover)]="!terminalService.isOpen()">
                 <mat-icon class="text-[14px]! size-[14px]!">terminal</mat-icon>
-                <span class="hidden xl:inline">Terminal</span>
+                <span class="hidden 2xl:inline">Terminal</span>
             </button>
 
             @if (appEdition.toolbarComponent) {
@@ -206,10 +206,10 @@
         </div>
 
         <!-- Right Section: Utilities + Auth (Permanently pinned to far right) -->
-        <div class="flex items-center justify-end gap-x-2 sm:gap-x-3 shrink-0" style="-webkit-app-region: no-drag;">
+        <div class="flex items-center justify-end gap-x-1.5 2xl:gap-x-2.5 shrink-0" style="-webkit-app-region: no-drag;">
             @if (!isElectron) {
                 <div class="flex items-center gap-x-2.5 shrink-0">
-                    <span class="text-[10px] lg:text-[11px] text-(--postonsteroids-text-muted) italic whitespace-nowrap shrink-0 hidden md:inline-flex items-center gap-1">
+                    <span class="text-[10px] lg:text-[11px] text-(--postonsteroids-text-muted) italic whitespace-nowrap shrink-0 hidden min-[2200px]:inline-flex items-center gap-1">
                         <mat-icon class="text-[13px]! size-[13px]! text-status-warning">info</mat-icon>
                         <span>* Some features and API calls may not work on web. For full performance, download the Desktop App.</span>
                     </span>

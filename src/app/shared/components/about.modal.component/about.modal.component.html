@@ -45,13 +45,24 @@
                 <strong>OnSteroid</strong> is a modern, high-performance API client designed for extreme developer velocity. Engineered from the ground up for seamless API exploration, debugging, test automation, and teamwork.
             </p>
             <p>
-                Equipped with native variable interpolation, full Monaco code editors, pre/post request scripts, live payload encryption pipelines, instant URL capsule sharing, and bi-directional Postman / Swagger imports.
+                Equipped with native variable interpolation, full Monaco code editors, pre/post request scripts, live payload encryption pipelines, instant URL capsule sharing, and multi-format imports (Postman, Insomnia v4/v5, OpenAPI/Swagger JSON &amp; YAML, Redoc, Scalar, Stoplight, RapiDoc, WSDL/SOAP, WADL, RAML, Thunder Client, Hoppscotch, Bruno, and HAR).
             </p>
+        </div>
+
+        <!-- License Tier Notice -->
+        <div class="p-2.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-[11px] text-(--postonsteroids-text-secondary)">
+            @if (appEdition.isProOrHigher) {
+                <span class="font-semibold text-(--postonsteroids-accent)">Commercial Proprietary License:</span>
+                {{ appEdition.label }} Edition extensions are proprietary, closed commercial software (All Rights Reserved — modification or public redistribution prohibited). Shared Community core is MIT licensed.
+            } @else {
+                <span class="font-semibold text-emerald-400">Community Open-Source License (MIT):</span>
+                Community Edition is open source under the MIT License. Professional &amp; Enterprise extensions remain proprietary commercial editions.
+            }
         </div>
 
         <!-- Footer -->
         <div class="flex items-center justify-between pt-2 border-t border-(--postonsteroids-border) text-[11px] text-(--postonsteroids-text-muted)">
-            <span>© 2026 OnSteroid. All rights reserved.</span>
+            <span>© 2026 OnSteroid. {{ appEdition.isProOrHigher ? 'All rights reserved.' : 'Community MIT / Pro & Ent Proprietary.' }}</span>
             <button (click)="onClose.emit()"
                 class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) text-white transition-all cursor-pointer">
                 Close

@@ -1132,6 +1132,8 @@ function executeNodeHttpRequest(options, redirectCount = 0, accumulatedCookies =
       hardTimeoutTimer = setTimeout(() => {
         req.destroy(Object.assign(new Error('Request timed out'), { code: 'ETIMEDOUT' }));
       }, resolvedTimeoutMs);
+    } else if (typeof req.setTimeout === 'function') {
+      req.setTimeout(0);
     }
 
     req.on('timeout', () => {

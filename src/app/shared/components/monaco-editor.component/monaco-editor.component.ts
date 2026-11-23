@@ -117,6 +117,8 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private lastValidContent = '';
   private resizeObserver: ResizeObserver | null = null;
   private hoverMutationObserver: MutationObserver | null = null;
+  private decorationsRafId: number | null = null;
+  private isUpdatingDecorations = false;
   private themeUpdateId = 0;
   private activeModelCacheKey = '';
 
@@ -133,7 +135,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     effect(() => {
       const vars = this.variableService.variables();
       if (this.editorInstance() && this.isBrowser) {
-        this.updateVariableDecorations();
+        this.scheduleDecorationsUpdate();
       }
     });
 
@@ -167,7 +169,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
            this.themeUpdateId++; // Increment so class name changes
            // Re-apply decorations after a single short tick to allow the editor
            // options (like theme) to sync up with Monaco's internal DOM structure.
-           setTimeout(() => this.updateDecorations(), 50);
+           setTimeout(() => this.scheduleDecorationsUpdate(), 50);
         }
       }
     });
@@ -176,7 +178,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const paths = this.encryptedPaths();
       const autoEnc = this.autoEncrypt();
       if (this.editorInstance() && this.enableEncryptionToggles()) {
-        this.updateDecorations();
+        this.scheduleDecorationsUpdate();
       }
     });
 
@@ -215,10 +217,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
               this.isRestoringModel = true;
               this.isSwappingModel = true;
               editor.setModel(cachedModel);
-              if (this.enableEncryptionToggles()) {
-                this.updateDecorations();
-              }
-              this.updateVariableDecorations();
+              this.scheduleDecorationsUpdate();
               // Sync the Angular value signal with the restored model's content without emitting a fake user edit
               const cachedValue = cachedModel.getValue();
               this.value.set(cachedValue);
@@ -251,10 +250,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
             MonacoEditorComponent.modelCache.set(cacheKey, newModel);
             this.isSwappingModel = true;
             editor.setModel(newModel);
-            if (this.enableEncryptionToggles()) {
-              this.updateDecorations();
-            }
-            this.updateVariableDecorations();
+            this.scheduleDecorationsUpdate();
 
             // Restore scroll position for this specific tab and editor
             const scrollState = owner
@@ -322,11 +318,17 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       if (monacoGlobal?.KeyMod && monacoGlobal?.KeyCode && typeof editor.addAction === 'function') {
         editor.addAction({
           id: 'onsteroid.beautify',
-          label: 'Beautify / Format Document',
-          keybindings: [monacoGlobal.KeyMod.Shift | monacoGlobal.KeyMod.Alt | monacoGlobal.KeyCode.KeyF],
+          label: 'Beautify / Format Selection or Document',
+          keybindings: [
+            monacoGlobal.KeyMod.Shift | monacoGlobal.KeyMod.Alt | monacoGlobal.KeyCode.KeyF,
+            monacoGlobal.KeyMod.chord(
+              monacoGlobal.KeyMod.CtrlCmd | monacoGlobal.KeyCode.KeyK,
+              monacoGlobal.KeyMod.CtrlCmd | monacoGlobal.KeyCode.KeyF
+            )
+          ],
           run: () => {
             if (!this.readOnly() && !this.disabled()) {
-              this.beautifyContent();
+              void this.beautifyContent();
             }
           }
         });
@@ -535,7 +537,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const model = editor.getModel();
       if (model) {
         this.onValueChange(model.getValue());
-        this.updateVariableDecorations();
+        this.scheduleDecorationsUpdate();
 
         const monacoGlobal = (window as any).monaco;
         if (monacoGlobal?.editor?.getModelMarkers) {
@@ -698,11 +700,11 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       });
 
       editor.onDidChangeModelContent(() => {
-        this.updateDecorations();
+        this.scheduleDecorationsUpdate();
       });
 
       // Ensure decorations exist immediately after the editor mounts.
-      requestAnimationFrame(() => this.updateDecorations());
+      this.scheduleDecorationsUpdate();
     }
 
     // Scroll persistence
@@ -744,6 +746,26 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
   private decorationsCollection: any;
   private oldDecorations: string[] = [];
 
+  private scheduleDecorationsUpdate(): void {
+    if (!this.isBrowser || typeof requestAnimationFrame !== 'function') return;
+    if (this.decorationsRafId !== null) {
+      cancelAnimationFrame(this.decorationsRafId);
+    }
+    this.decorationsRafId = requestAnimationFrame(() => {
+      this.decorationsRafId = null;
+      if (this.isUpdatingDecorations) return;
+      this.isUpdatingDecorations = true;
+      try {
+        if (this.enableEncryptionToggles()) {
+          this.updateDecorations();
+        }
+        this.updateVariableDecorations();
+      } finally {
+        this.isUpdatingDecorations = false;
+      }
+    });
+  }
+
   private updateDecorations() {
     const editor = this.editorInstance();
     if (!editor) return;
@@ -751,38 +773,42 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
     if (!monacoGlobal) return;
 
     const model = editor.getModel();
-    if (!model) return;
+    if (!model || model.isDisposed?.()) return;
 
-    const lines = model.getValue().split('\n');
-    const decorations: any[] = [];
-    const paths = this.encryptedPaths() || [];
-    const autoEnc = this.autoEncrypt();
-    const lang = (this.language() || '').toLowerCase();
-    const pathsByLine = lang === 'xml'
-      ? getAllXmlPathsByLine(lines)
-      : getAllJsonPathsByLine(lines);
+    try {
+      const lines = model.getValue().split('\n');
+      const decorations: any[] = [];
+      const paths = this.encryptedPaths() || [];
+      const autoEnc = this.autoEncrypt();
+      const lang = (this.language() || '').toLowerCase();
+      const pathsByLine = lang === 'xml'
+        ? getAllXmlPathsByLine(lines)
+        : getAllJsonPathsByLine(lines);
 
-    for (let i = 0; i < lines.length; i++) {
-      const path = pathsByLine[i];
-      if (path) {
-        const isEncrypted = resolvePathMatch(path, paths, autoEnc);
-        decorations.push({
-          range: new monacoGlobal.Range(i + 1, 1, i + 1, 1),
-          options: {
-            isWholeLine: false,
-            glyphMarginClassName: (isEncrypted ? 'monaco-lock-icon active ' : 'monaco-lock-icon inactive ') + `theme-sync-${this.themeUpdateId}`,
-            glyphMarginHoverMessage: { value: isEncrypted ? `Click to disable encryption (${path})` : `Click to enable encryption (${path})` }
-          }
-        });
+      for (let i = 0; i < lines.length; i++) {
+        const path = pathsByLine[i];
+        if (path) {
+          const isEncrypted = resolvePathMatch(path, paths, autoEnc);
+          decorations.push({
+            range: new monacoGlobal.Range(i + 1, 1, i + 1, 1),
+            options: {
+              isWholeLine: false,
+              glyphMarginClassName: (isEncrypted ? 'monaco-lock-icon active ' : 'monaco-lock-icon inactive ') + `theme-sync-${this.themeUpdateId}`,
+              glyphMarginHoverMessage: { value: isEncrypted ? `Click to disable encryption (${path})` : `Click to enable encryption (${path})` }
+            }
+          });
+        }
       }
-    }
 
-    if (editor.deltaDecorations) {
-      this.oldDecorations = editor.deltaDecorations(this.oldDecorations, decorations);
-    } else if (this.decorationsCollection) {
-      this.decorationsCollection.set(decorations);
-    } else {
-      this.decorationsCollection = editor.createDecorationsCollection(decorations);
+      if (editor.deltaDecorations) {
+        this.oldDecorations = editor.deltaDecorations(this.oldDecorations, decorations);
+      } else if (this.decorationsCollection) {
+        this.decorationsCollection.set(decorations);
+      } else {
+        this.decorationsCollection = editor.createDecorationsCollection(decorations);
+      }
+    } catch {
+      // Ignore if editor/model is mid-transition or updating recursively
     }
   }
 
@@ -851,6 +877,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
   ngOnDestroy() {
     this.clearPendingHoverSwitch();
+    if (this.decorationsRafId !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.decorationsRafId);
+      this.decorationsRafId = null;
+    }
     if (this.hoverClearTimeout) {
       clearTimeout(this.hoverClearTimeout);
       this.hoverClearTimeout = null;
@@ -875,7 +905,9 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
     const editor = this.editorInstance();
     if (editor?.deltaDecorations && this.variableDecorations.length > 0) {
-      editor.deltaDecorations(this.variableDecorations, []);
+      try {
+        editor.deltaDecorations(this.variableDecorations, []);
+      } catch { }
       this.variableDecorations = [];
     }
 
@@ -920,30 +952,39 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       this.hoverMutationObserver.disconnect();
     }
 
-    let isAdjusting = false;
+    let rafId: number | null = null;
     const clampHover = () => {
-      if (isAdjusting) return;
+      rafId = null;
       const contextView = editorDom.querySelector('.context-view') as HTMLElement | null;
       const hoverEl = contextView?.querySelector('.monaco-hover.workbench-hover.compact') as HTMLElement | null;
       if (!contextView || !hoverEl || contextView.style.display === 'none') return;
 
-      isAdjusting = true;
-      try {
-        hoverEl.style.transform = '';
-        const editorRect = editorDom.getBoundingClientRect();
-        const hoverRect = hoverEl.getBoundingClientRect();
-        const maxRight = Math.min(editorRect.right, window.innerWidth) - 8;
-        const overflowRight = hoverRect.right - maxRight;
-        if (overflowRight > 0) {
-          hoverEl.style.transform = `translateX(-${Math.ceil(overflowRight)}px)`;
-        }
-      } finally {
-        isAdjusting = false;
+      const prevShift = Number(hoverEl.dataset['posClampX'] || '0');
+      const hoverRect = hoverEl.getBoundingClientRect();
+      if (hoverRect.width <= 0) return;
+
+      const editorRect = editorDom.getBoundingClientRect();
+      const naturalRight = hoverRect.right + prevShift;
+      const maxRight = Math.min(editorRect.right, window.innerWidth) - 10;
+      const nextShift = Math.max(0, Math.ceil(naturalRight - maxRight));
+
+      if (nextShift !== prevShift) {
+        hoverEl.dataset['posClampX'] = String(nextShift);
+        hoverEl.style.transform = nextShift > 0 ? `translateX(-${nextShift}px)` : '';
       }
     };
 
-    this.hoverMutationObserver = new MutationObserver(() => {
-      clampHover();
+    this.hoverMutationObserver = new MutationObserver((mutations) => {
+      const onlySelfTransform = mutations.every(
+        m => m.type === 'attributes' &&
+          m.target instanceof HTMLElement &&
+          m.target.classList.contains('monaco-hover') &&
+          (m.attributeName === 'style' || m.attributeName === 'data-pos-clamp-x')
+      );
+      if (onlySelfTransform) return;
+
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(clampHover);
     });
 
     this.hoverMutationObserver.observe(editorDom, {
@@ -1031,7 +1072,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         this.isRestoringModel = false;
       }
       if (this.enableEncryptionToggles()) {
-        this.updateDecorations();
+        this.scheduleDecorationsUpdate();
       }
     }
   }
@@ -1071,25 +1112,68 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         }
       }
       if (this.enableEncryptionToggles()) {
-        this.updateDecorations();
+        this.scheduleDecorationsUpdate();
       }
     }
     this.onChange(safeVal);
   }
 
-  beautifyContent(event?: Event): void {
+  async beautifyContent(event?: Event): Promise<void> {
     event?.preventDefault();
     event?.stopPropagation();
     if (this.readOnly() || this.disabled()) return;
 
-    const current = this.getEditorValue();
-    if (!current || !current.trim()) return;
-
-    const formatted = beautifyByLanguage(current, this.language(), this.restrictToFunctionBody());
-    if (formatted && formatted !== current) {
-      this.setEditorValue(formatted);
+    const editor = this.editorInstance();
+    const model = editor?.getModel?.();
+    if (!editor || !model) {
+      const current = this.getEditorValue();
+      if (!current || !current.trim()) return;
+      const formatted = beautifyByLanguage(current, this.language(), this.restrictToFunctionBody());
+      if (formatted && formatted !== current) {
+        this.setEditorValue(formatted);
+      }
+      this.markBeautifiedSuccess();
+      return;
     }
 
+    const fullRange = model.getFullModelRange();
+    const origSelection = editor.getSelection();
+    const hasCustomSelection = Boolean(origSelection && !origSelection.isEmpty());
+    const targetRange = hasCustomSelection ? origSelection! : fullRange;
+    const beforeTargetText = model.getValueInRange(targetRange);
+    if (!beforeTargetText || !beforeTargetText.trim()) return;
+
+    // Behave like Ctrl+A + Ctrl+K Ctrl+F for full text, or Ctrl+K Ctrl+F for user selection
+    const formattedSlice = beautifyByLanguage(
+      beforeTargetText,
+      this.language(),
+      !hasCustomSelection && this.restrictToFunctionBody()
+    );
+
+    if (formattedSlice && formattedSlice !== beforeTargetText) {
+      if (typeof editor.executeEdits === 'function') {
+        editor.pushUndoStop?.();
+        editor.executeEdits('onsteroid.beautify', [{ range: targetRange, text: formattedSlice }]);
+        editor.pushUndoStop?.();
+        if (hasCustomSelection && origSelection && typeof editor.setSelection === 'function') {
+          editor.setSelection(origSelection);
+        }
+      } else {
+        this.setEditorValue(formattedSlice);
+      }
+    } else {
+      try {
+        const formatSelAction = editor.getAction?.('editor.action.formatSelection');
+        if (formatSelAction && typeof formatSelAction.run === 'function') {
+          await formatSelAction.run().catch(() => {});
+        }
+      } catch { }
+    }
+
+    this.markBeautifiedSuccess();
+  }
+
+  private markBeautifiedSuccess(): void {
     this.beautified.set(true);
     if (this.beautifyResetTimeout) {
       clearTimeout(this.beautifyResetTimeout);

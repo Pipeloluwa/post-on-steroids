@@ -17,7 +17,7 @@
     <button type="button"
         (mousedown)="$event.preventDefault(); $event.stopPropagation()"
         (click)="beautifyContent($event)"
-        title="Beautify / Format code (Shift+Alt+F)"
+        title="Beautify / Format selection or document (Shift+Alt+F or Ctrl+K Ctrl+F)"
         aria-label="Beautify code"
         class="absolute top-1.5 right-3.5 z-30 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-(--postonsteroids-bg-secondary)/85 hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) border border-(--postonsteroids-border)/70 hover:border-(--postonsteroids-accent)/45 shadow-xs backdrop-blur-xs opacity-70 hover:opacity-100 transition-all cursor-pointer select-none">
         <mat-icon class="text-[13px]! size-[13px]!">{{ beautified() ? 'check' : 'auto_fix_high' }}</mat-icon>

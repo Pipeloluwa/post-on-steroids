@@ -976,6 +976,7 @@ export class RequestExecutionService {
 
                     const proxyEndpoints = Array.from(new Set([environment.proxyUrl, environment.proxyFallbackUrl].filter(Boolean)));
                     const timeoutMs = this.tabStateService.requestTimeoutMs();
+                    const proxyTimeoutMs = timeoutMs > 0 ? timeoutMs : 3600000;
                     let lastResult: any = null;
 
                     for (const currentProxyUrl of proxyEndpoints) {
@@ -985,7 +986,7 @@ export class RequestExecutionService {
                             fd.append('method', freshState.method);
                             fd.append('headers', JSON.stringify(headersObj));
                             fd.append('verifySsl', String(freshState.settings?.verifySsl ?? false));
-                            fd.append('timeoutMs', String(timeoutMs));
+                            fd.append('timeoutMs', String(proxyTimeoutMs));
                             fd.append('bodyType', 'form-data');
                             
                             // Append original files and fields
@@ -1009,7 +1010,7 @@ export class RequestExecutionService {
                                 headers: headersObj,
                                 body: bodyPayload,
                                 verifySsl: freshState.settings?.verifySsl ?? false,
-                                timeoutMs
+                                timeoutMs: proxyTimeoutMs
                             };
                             reqObservable = this.http.post<any>(currentProxyUrl, proxyPayload, {
                                 headers: new HttpHeaders({ 'Content-Type': 'application/json' }),

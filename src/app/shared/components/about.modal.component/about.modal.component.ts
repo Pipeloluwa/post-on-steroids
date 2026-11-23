@@ -18,7 +18,7 @@ export class AboutModalComponent {
     onClose = output<void>();
 
     readonly appEdition = APP_EDITION;
-    appVersion = 'v3.0.0-steroids';
+    appVersion = 'v2026.11.0-steroids';
     engineerName = 'Pipeloluwa';
     engineerTitle = 'Software Engineer';
 }

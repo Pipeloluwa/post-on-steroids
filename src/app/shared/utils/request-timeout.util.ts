@@ -24,16 +24,23 @@ function readStoredTimeoutMs(): number {
 
 export const globalRequestTimeoutMs = signal<number>(readStoredTimeoutMs());
 
-export function sanitizeRequestTimeoutMs(value: unknown): number {
-    if (value === null || value === undefined || value === '') {
-        return DEFAULT_REQUEST_TIMEOUT_MS;
+export function parseTimeoutInputValue(value: unknown): number | null {
+    if (value === null || value === undefined) {
+        return null;
     }
-    const num = Number(value);
+    if (typeof value === 'string' && value.trim() === '') {
+        return null;
+    }
+    const num = Number(typeof value === 'string' ? value.trim() : value);
     if (!Number.isFinite(num) || num < 0) {
-        return DEFAULT_REQUEST_TIMEOUT_MS;
+        return null;
     }
-    // Cap at 1 hour (3,600,000 ms); 0 means no timeout (infinite)
     return Math.min(3600000, Math.floor(num));
+}
+
+export function sanitizeRequestTimeoutMs(value: unknown): number {
+    const parsed = parseTimeoutInputValue(value);
+    return parsed === null ? DEFAULT_REQUEST_TIMEOUT_MS : parsed;
 }
 
 export function getGlobalRequestTimeoutMs(): number {
