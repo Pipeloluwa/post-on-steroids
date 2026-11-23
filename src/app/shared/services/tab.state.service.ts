@@ -129,6 +129,16 @@ export type SidebarFocusedItem = {
     groupId: string | null;
 } | null;
 
+export type TriggerFlowCondition = 'always' | 'on-2xx' | 'on-tests-pass' | 'on-status-match' | 'script-only';
+
+export interface TriggerFlowConfig {
+    condition: TriggerFlowCondition;
+    expectedStatus?: number;
+    delayMs?: number;
+    retryCountOnFail?: number;
+    scheduleIntervalMs?: number;
+}
+
 export interface RequestState {
     id: string;
     capsuleId?: string;
@@ -140,6 +150,7 @@ export interface RequestState {
     isLoading: boolean;
     autoAuthEnabled?: boolean;
     postTriggerTabId?: string | null;
+    triggerConfig?: TriggerFlowConfig;
     // Payload type tabs
     payloadType: string;
     params: KeyValue[];
@@ -1187,6 +1198,7 @@ export class TabStateService {
             if (!r?.id) continue;
             requestMeta[r.id] = {
                 postTriggerTabId: r.postTriggerTabId || null,
+                triggerConfig: r.triggerConfig || undefined,
                 autoAuthEnabled: !!r.autoAuthEnabled,
                 groupId: r.groupId || null,
                 settings: r.settings,
@@ -1279,6 +1291,7 @@ export class TabStateService {
                     groupId: targetGId,
                     ...(meta ? {
                         postTriggerTabId: st.postTriggerTabId ?? meta.postTriggerTabId ?? null,
+                        triggerConfig: st.triggerConfig ?? meta.triggerConfig,
                         autoAuthEnabled: st.autoAuthEnabled ?? meta.autoAuthEnabled ?? false,
                         settings: meta.settings ? { ...st.settings, ...meta.settings } : st.settings,
                         encryption: meta.encryption ? { ...st.encryption, ...meta.encryption } : st.encryption,
@@ -5452,6 +5465,7 @@ export class TabStateService {
         if (
             this.authService.isLoggedIn() &&
             (partialState.postTriggerTabId !== undefined ||
+                partialState.triggerConfig !== undefined ||
                 partialState.autoAuthEnabled !== undefined ||
                 partialState.settings !== undefined ||
                 partialState.encryption !== undefined ||
@@ -5532,6 +5546,13 @@ export class TabStateService {
             !!s.settings?.enableCookies,
             !!s.settings?.bypassCors,
             s.postTriggerTabId ?? null,
+            s.triggerConfig ? {
+                condition: s.triggerConfig.condition || 'always',
+                expectedStatus: s.triggerConfig.expectedStatus ?? 200,
+                delayMs: s.triggerConfig.delayMs ?? 250,
+                retryCountOnFail: s.triggerConfig.retryCountOnFail ?? 0,
+                scheduleIntervalMs: s.triggerConfig.scheduleIntervalMs ?? 0
+            } : { condition: 'always', expectedStatus: 200, delayMs: 250, retryCountOnFail: 0, scheduleIntervalMs: 0 },
             !!s.autoAuthEnabled,
             s.groupId ?? null,
             normParams,
@@ -5923,6 +5944,7 @@ export class TabStateService {
                             encryption: tabState.encryption,
                             settings: tabState.settings,
                             postTriggerTabId: tabState.postTriggerTabId || null,
+                            triggerConfig: tabState.triggerConfig,
                             autoAuthEnabled: !!tabState.autoAuthEnabled,
                             params: this.serializeNonEmptyKvRows(tabState.params),
                             headers: this.serializeNonEmptyKvRows(tabState.headers),
@@ -5949,6 +5971,7 @@ export class TabStateService {
                                 isDirty: false,
                                 autoAuthEnabled: tabState.autoAuthEnabled,
                                 postTriggerTabId: tabState.postTriggerTabId,
+                                triggerConfig: tabState.triggerConfig ?? mappedSaved.triggerConfig,
                                 responseBody: tabState.responseBody ?? mappedSaved.responseBody,
                                 responseStatus: tabState.responseStatus ?? mappedSaved.responseStatus,
                                 responseTime: tabState.responseTime ?? mappedSaved.responseTime,
@@ -6464,6 +6487,7 @@ export class TabStateService {
             responseHeaders: cached?.responseHeaders ?? base.responseHeaders,
             testResults: cached?.testResults ?? base.testResults,
             postTriggerTabId: dto.postTriggerTabId || null,
+            triggerConfig: dto.triggerConfig || base.triggerConfig,
             autoAuthEnabled: !!dto.autoAuthEnabled,
             isDirty: false,
             isLoading: false
@@ -6564,6 +6588,13 @@ export class TabStateService {
             isLoading: false,
             autoAuthEnabled: false,
             postTriggerTabId: null,
+            triggerConfig: {
+                condition: 'always',
+                expectedStatus: 200,
+                delayMs: 250,
+                retryCountOnFail: 0,
+                scheduleIntervalMs: 0
+            },
             payloadType: 'params',
             params: [{ enabled: true, key: '', value: '' }],
             headers: [

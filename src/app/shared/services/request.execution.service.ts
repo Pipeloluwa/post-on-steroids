@@ -1,11 +1,11 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse, HttpErrorResponse } from '@angular/common/http';
 import { timeout } from 'rxjs';
 import { generateUUID } from '../utils/uuid.util';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 import { formatTimeoutLabel } from '../utils/request-timeout.util';
 import { environment } from '../../../environments/environment';
-import { TabStateService, FormDataRow, KeyValue } from './tab.state.service';
+import { TabStateService, FormDataRow, KeyValue, TriggerFlowConfig } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
@@ -17,6 +17,7 @@ import { sanitizeJsonBodyForScripts, extractSoapActionFromXml } from '../utils/f
 import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../utils/encryption-path.util';
 import { generateAwsSigV4Headers } from '../utils/aws-sigv4.util';
 import { CookieJarService } from './cookie-jar.service';
+import { EnvironmentService } from './environment.service';
 
 export interface ClientCertConfig {
     id?: string;
@@ -52,10 +53,99 @@ export class RequestExecutionService {
     private notificationService = inject(NotificationService);
     private networkService = inject(NetworkService);
     private cookieJar = inject(CookieJarService);
+    private environmentService = inject(EnvironmentService);
 
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
     private clientCertProviders: Array<(targetUrl: string) => ClientCertConfig | null> = [];
     private executionObservers: Array<(event: ExecutionAuditEvent) => void> = [];
+    private schedules = new Map<string, { timerId: ReturnType<typeof setInterval>; intervalMs: number; runCount: number }>();
+    readonly activeSchedules = signal<Record<string, { intervalMs: number; runCount: number; nextRunAt: number }>>({});
+
+    startSchedule(tabId: string, intervalMs: number): void {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        const safeMs = Math.max(1000, Math.min(86_400_000, Math.round(Number(intervalMs) || 10000)));
+        this.stopSchedule(effectiveId, true);
+
+        const entry = {
+            intervalMs: safeMs,
+            runCount: 0,
+            timerId: setInterval(() => {
+                const st = this.tabStateService.getState(effectiveId);
+                if (!st) {
+                    this.stopSchedule(effectiveId, true);
+                    return;
+                }
+                if (st.isLoading) return;
+                entry.runCount += 1;
+                this.activeSchedules.update(curr => ({
+                    ...curr,
+                    [effectiveId]: {
+                        intervalMs: safeMs,
+                        runCount: entry.runCount,
+                        nextRunAt: Date.now() + safeMs
+                    }
+                }));
+                this.executeRequest(effectiveId, false, 0, 0);
+            }, safeMs)
+        };
+        this.schedules.set(effectiveId, entry);
+        this.activeSchedules.update(curr => ({
+            ...curr,
+            [effectiveId]: {
+                intervalMs: safeMs,
+                runCount: 0,
+                nextRunAt: Date.now() + safeMs
+            }
+        }));
+        const label = this.tabStateService.getState(effectiveId)?.name || 'Request';
+        this.notificationService.notify(`Recurring schedule started for "${label}" every ${Math.round(safeMs / 1000)}s`, 'success');
+    }
+
+    stopSchedule(tabId: string, silent: boolean = false): void {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        const existing = this.schedules.get(effectiveId);
+        if (existing) {
+            clearInterval(existing.timerId);
+            this.schedules.delete(effectiveId);
+        }
+        this.activeSchedules.update(curr => {
+            if (!curr[effectiveId]) return curr;
+            const copy = { ...curr };
+            delete copy[effectiveId];
+            return copy;
+        });
+        if (!silent && existing) {
+            const label = this.tabStateService.getState(effectiveId)?.name || 'Request';
+            this.notificationService.notify(`Recurring schedule stopped for "${label}"`);
+        }
+    }
+
+    toggleSchedule(tabId: string, intervalMs: number): boolean {
+        if (this.isScheduleActive(tabId)) {
+            this.stopSchedule(tabId);
+            return false;
+        }
+        this.startSchedule(tabId, intervalMs);
+        return true;
+    }
+
+    isScheduleActive(tabId: string): boolean {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        return this.schedules.has(effectiveId);
+    }
+
+    getScheduleRunCount(tabId: string): number {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        return this.schedules.get(effectiveId)?.runCount || 0;
+    }
+
+    stopAllSchedules(): number {
+        const ids = Array.from(this.schedules.keys());
+        for (const id of ids) {
+            this.stopSchedule(id, true);
+        }
+        return ids.length;
+    }
 
     registerClientCertProvider(provider: (targetUrl: string) => ClientCertConfig | null): () => void {
         this.clientCertProviders.push(provider);
@@ -101,7 +191,7 @@ export class RequestExecutionService {
         }
     }
 
-    async executeRequest(tabId: string, isAutoAuthRetry: boolean = false, chainDepth: number = 0): Promise<void> {
+    async executeRequest(tabId: string, isAutoAuthRetry: boolean = false, chainDepth: number = 0, retryAttempt: number = 0): Promise<void> {
         const effectiveTabId = this.tabStateService.resolveTabId(tabId);
         const state = this.tabStateService.getState(effectiveTabId);
         if (!state) return;
@@ -385,10 +475,12 @@ export class RequestExecutionService {
                     }
                 }
 
-                const encContext = {
+                const encContext = this.buildScriptEnvContext({
                     headers,
                     body: preparedEnc.body,
                     params,
+                    url: resolvedUrl,
+                    method: freshState.method,
                     encryptedHeaders: normalizedEncHeaders,
                     encryptedBodyPaths: preparedEnc.encryptedBodyPaths,
                     bodyType: preparedEnc.bodyType,
@@ -403,10 +495,11 @@ export class RequestExecutionService {
                     encryptRawText: preparedEnc.encryptRawText,
                     autoEncryptBody: preparedEnc.autoEncryptBody,
                     autoEncryptHeaders: autoEncHeaders
-                };
+                });
                 const encResult = await this.sandboxService.executeScript(encryptionScriptCode, encContext);
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 encryptionLogs = encResult.logs || '';
+                this.applyScriptMutations(encResult.context);
 
                 if (encResult.success && encResult.context) {
                     headers = encResult.context.headers || headers;
@@ -457,24 +550,29 @@ export class RequestExecutionService {
             }
 
             // 5b. Pre-Request Script
+            let scriptNextRequest: string | null | undefined = undefined;
             const preScriptCode = freshState.scripts?.preRequest
                 ? this.variableService.resolveScript(freshState.scripts.preRequest)
                 : '';
             if (preScriptCode && preScriptCode.trim()) {
-                const context = {
+                const context = this.buildScriptEnvContext({
                     headers,
                     body,
                     params,
+                    url: resolvedUrl,
+                    method: freshState.method,
                     bodyType: preparedEnc.bodyType,
                     rawType: preparedEnc.rawType,
                     formData: freshState.bodyType === 'form-data' && Array.isArray(body) ? body : preparedEnc.formData,
                     urlEncodedData: freshState.bodyType === 'x-www-form-urlencoded' && Array.isArray(body) ? body : preparedEnc.urlEncodedData,
                     graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
                     rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
-                };
+                });
                 const result = await this.sandboxService.executeScript(preScriptCode, context);
                 if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
                 preRequestLogs += result.logs || '';
+                const mutated = this.applyScriptMutations(result.context);
+                if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
 
                 if (result.success && result.context) {
                     headers = result.context.headers || headers;
@@ -1122,8 +1220,13 @@ export class RequestExecutionService {
                 ? this.variableService.resolveScript(freshState.scripts.postResponse)
                 : '';
             let postResponseLogs = '';
+            let testResults: any[] = [];
             if (postScriptCode && postScriptCode.trim()) {
-                const context = {
+                const context = this.buildScriptEnvContext({
+                    url: finalUrl || resolvedUrl,
+                    method: freshState.method,
+                    responseStatus: status,
+                    responseTime,
                     responseHeaders,
                     responseHeader: responseHeaders, // alias for backwards compatibility with default script
                     responseBody: responseBodyParsed,
@@ -1136,12 +1239,16 @@ export class RequestExecutionService {
                     urlEncodedData: freshState.bodyType === 'x-www-form-urlencoded' && Array.isArray(body) ? body : preparedEnc.urlEncodedData,
                     graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
                     rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
-                };
+                });
                 const result = await this.sandboxService.executeScript(postScriptCode, context);
                 postResponseLogs = result.logs || '';
+                const mutated = this.applyScriptMutations(result.context);
+                if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
 
                 if (result.success && result.context) {
-                    // Allow scripts to read results
+                    if (Array.isArray(result.context.testResults) && result.context.testResults.length > 0) {
+                        testResults.push(...result.context.testResults);
+                    }
                 } else if (result.error) {
                     postResponseLogs += `\nError: ${result.error}`;
                 }
@@ -1151,9 +1258,10 @@ export class RequestExecutionService {
             const testScriptCode = freshState.scripts?.testScript
                 ? this.variableService.resolveScript(freshState.scripts.testScript)
                 : '';
-            let testResults: any[] = [];
             if (freshState.scripts?.testScriptEnabled && testScriptCode && testScriptCode.trim()) {
-                const testContext = {
+                const testContext = this.buildScriptEnvContext({
+                    url: finalUrl || resolvedUrl,
+                    method: freshState.method,
                     responseStatus: status,
                     responseTime,
                     responseBody: responseBodyParsed,
@@ -1168,10 +1276,12 @@ export class RequestExecutionService {
                     urlEncodedData: freshState.bodyType === 'x-www-form-urlencoded' && Array.isArray(body) ? body : preparedEnc.urlEncodedData,
                     graphql: freshState.bodyType === 'graphql' && body && typeof body === 'object' ? body : preparedEnc.graphql,
                     rawText: freshState.rawType === 'Text' && typeof body === 'string' ? body : preparedEnc.rawText
-                };
+                });
                 const testResult = await this.sandboxService.executeScript(testScriptCode, testContext);
+                const mutated = this.applyScriptMutations(testResult.context);
+                if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
                 if (testResult.context?.testResults && Array.isArray(testResult.context.testResults)) {
-                    testResults = testResult.context.testResults;
+                    testResults = [...testResults, ...testResult.context.testResults];
                 } else if (testResult.logs) {
                     const lines = testResult.logs.split('\n');
                     for (const line of lines) {
@@ -1242,6 +1352,28 @@ export class RequestExecutionService {
 
             // Check if this execution is still current before committing results
             if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) {
+                return;
+            }
+
+            // 10.5 Automated Retry on Failure (if configured in Trigger & Automation Flow)
+            const triggerCfg: TriggerFlowConfig = freshState.triggerConfig || {
+                condition: 'always',
+                expectedStatus: 200,
+                delayMs: 250,
+                retryCountOnFail: 0,
+                scheduleIntervalMs: 0
+            };
+            const maxRetries = Math.max(0, Math.min(5, Number(triggerCfg.retryCountOnFail ?? 0)));
+            if (!isAutoAuthRetry && (status === 0 || status >= 500) && retryAttempt < maxRetries) {
+                const retryDelayMs = Math.max(250, Math.min(10000, Number(triggerCfg.delayMs ?? 350)));
+                this.notificationService.notify(
+                    `Request "${freshState.name || finalUrl}" returned ${status || 'network error'} — retrying (${retryAttempt + 1}/${maxRetries})...`,
+                    'warning'
+                );
+                await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+                if (!cancelToken.cancelled && this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) {
+                    await this.executeRequest(tabId, false, chainDepth, retryAttempt + 1);
+                }
                 return;
             }
 
@@ -1323,31 +1455,76 @@ export class RequestExecutionService {
                 responseSize
             });
 
-            // Post-Response Request Chaining (Trigger Next Request)
-            if (freshState.postTriggerTabId) {
-                const targetTabId = freshState.postTriggerTabId;
+            // Post-Response Request Chaining & Script-Controlled Flow (Trigger Next Request)
+            let resolvedTriggerTargetId: string | null = null;
+            if (scriptNextRequest === null) {
+                resolvedTriggerTargetId = null;
+            } else if (typeof scriptNextRequest === 'string' && scriptNextRequest.trim()) {
+                const needle = scriptNextRequest.trim().toLowerCase();
+                const allReqs = this.tabStateService.allCapsuleRequests();
+                const matched = allReqs.find(r => r.id.toLowerCase() === needle)
+                    || allReqs.find(r => (r.name || '').trim().toLowerCase() === needle)
+                    || allReqs.find(r => (r.name || '').toLowerCase().includes(needle));
+                if (matched) {
+                    resolvedTriggerTargetId = matched.id;
+                } else {
+                    this.notificationService.notify(`Script setNextRequest target "${scriptNextRequest}" was not found in active capsule.`, 'warning');
+                }
+            } else if (freshState.postTriggerTabId && freshState.postTriggerTabId !== '__script__') {
+                const cond = triggerCfg.condition || 'always';
+                const allTestsPassed = testResults.length === 0 || testResults.every(t => !!t.passed);
+                const conditionMet =
+                    cond === 'always' ||
+                    (cond === 'on-2xx' && status >= 200 && status < 300) ||
+                    (cond === 'on-tests-pass' && allTestsPassed) ||
+                    (cond === 'on-status-match' && status === Number(triggerCfg.expectedStatus ?? 200));
+                if (conditionMet) {
+                    resolvedTriggerTargetId = freshState.postTriggerTabId;
+                }
+            }
+
+            if (resolvedTriggerTargetId && resolvedTriggerTargetId !== '__script__') {
+                const targetTabId = resolvedTriggerTargetId;
                 const authEndpointId = this.autoAuthService.getAutoAuthEndpointId();
                 const isCurrentAuthTab = !!(authEndpointId && authEndpointId === tabId);
-                const targetState = this.tabStateService.getState(targetTabId);
                 const targetReq = this.tabStateService.allCapsuleRequests().find(r => r.id === targetTabId);
+                const targetState = this.tabStateService.getState(targetTabId) || targetReq;
                 const targetHasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetTabId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
 
                 if (isCurrentAuthTab && targetHasAutoAuth) {
                     console.warn(`[Trigger] Skipped chained trigger to "${targetState?.name || targetTabId}" because it has Auto Auth enabled linked to this auth endpoint (prevents infinite loop).`);
-                } else if (chainDepth >= 5) {
-                    this.notificationService.notify('Chained request depth limit reached (max 5) to prevent infinite loops.');
-                } else {
-                    if (targetState) {
-                        this.notificationService.notify(`Triggering chained request: "${targetState.name || 'Request'}"...`);
-                        this.tabStateService.setActiveTab(targetTabId);
-                        setTimeout(() => {
-                            this.executeRequest(targetTabId, false, chainDepth + 1);
-                        }, 250);
+                } else if (chainDepth >= 10) {
+                    this.notificationService.notify('Chained request depth limit reached (max 10) to prevent infinite loops.', 'warning');
+                } else if (targetState) {
+                    const delayMs = Math.max(0, Math.min(60000, Number(triggerCfg.delayMs ?? 250)));
+                    this.notificationService.notify(
+                        `Triggering chained request: "${targetState.name || 'Request'}"${delayMs > 0 ? ` in ${delayMs}ms` : ''}...`
+                    );
+                    if (targetReq) {
+                        this.tabStateService.addOpenTab(targetReq);
                     }
+                    this.tabStateService.setActiveTab(targetTabId);
+                    setTimeout(() => {
+                        this.executeRequest(targetTabId, false, chainDepth + 1, 0);
+                    }, delayMs);
                 }
             }
 
         } catch (globalErr: any) {
+            const latestCfgState = this.tabStateService.getState(effectiveTabId);
+            const catchMaxRetries = Math.max(0, Math.min(5, Number(latestCfgState?.triggerConfig?.retryCountOnFail ?? 0)));
+            if (!isAutoAuthRetry && !cancelToken.cancelled && retryAttempt < catchMaxRetries) {
+                const catchDelayMs = Math.max(250, Math.min(10000, Number(latestCfgState?.triggerConfig?.delayMs ?? 350)));
+                this.notificationService.notify(
+                    `Request execution failed — retrying (${retryAttempt + 1}/${catchMaxRetries})...`,
+                    'warning'
+                );
+                await new Promise(resolve => setTimeout(resolve, catchDelayMs));
+                if (!cancelToken.cancelled && this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) {
+                    await this.executeRequest(tabId, false, chainDepth, retryAttempt + 1);
+                }
+                return;
+            }
             console.error("Critical Execution Error:", globalErr);
             const resolvedTargetUrl = (this.tabStateService.getState(effectiveTabId)?.url || '').trim();
             const fallbackBody = {
@@ -1394,5 +1571,61 @@ export class RequestExecutionService {
                 error: (err) => console.warn('Could not persist history to backend', err)
             });
         }
+    }
+
+    private buildScriptEnvContext(extra: Record<string, any> = {}): Record<string, any> {
+        const envVars: Record<string, string> = {};
+        const activeEnv = this.environmentService.activeEnvironment();
+        if (activeEnv?.variables) {
+            for (const v of activeEnv.variables) {
+                if (v.enabled && v.key && v.key.trim()) {
+                    envVars[v.key.trim()] = v.value ?? '';
+                }
+            }
+        }
+        const capsuleVars: Record<string, string> = {};
+        for (const v of this.variableService.variables()) {
+            if (v.enabled && v.key && v.key.trim()) {
+                capsuleVars[v.key.trim()] = v.value ?? '';
+            }
+        }
+        return {
+            ...extra,
+            __envVars: envVars,
+            __capsuleVars: capsuleVars
+        };
+    }
+
+    private applyScriptMutations(resultContext?: Record<string, any>): { nextRequest?: string | null } {
+        if (!resultContext || typeof resultContext !== 'object') {
+            return {};
+        }
+        const envSet = resultContext['__envSet'];
+        if (envSet && typeof envSet === 'object') {
+            for (const [key, val] of Object.entries(envSet)) {
+                if (key) {
+                    this.environmentService.setActiveVariable(key, String(val ?? ''));
+                }
+            }
+        }
+        const envUnset = resultContext['__envUnset'];
+        if (Array.isArray(envUnset)) {
+            for (const key of envUnset) {
+                if (typeof key === 'string' && key) {
+                    this.environmentService.unsetActiveVariable(key);
+                }
+            }
+        }
+        const varSet = resultContext['__varSet'];
+        if (varSet && typeof varSet === 'object') {
+            for (const [key, val] of Object.entries(varSet)) {
+                if (key) {
+                    this.variableService.addVariable(key, String(val ?? ''), undefined, 'global');
+                }
+            }
+        }
+        return {
+            nextRequest: '__nextRequest' in resultContext ? (resultContext['__nextRequest'] as string | null) : undefined
+        };
     }
 }

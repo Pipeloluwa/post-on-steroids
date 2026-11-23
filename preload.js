@@ -8,7 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelHttpRequest: (requestId) => ipcRenderer.send('cancel-http-request', requestId),
   startMockServer: (payload) => ipcRenderer.invoke('start-mock-server', payload),
   stopMockServer: () => ipcRenderer.invoke('stop-mock-server'),
-  updateMockRoutes: (routes) => ipcRenderer.invoke('update-mock-routes', routes)
+  updateMockRoutes: (routes) => ipcRenderer.invoke('update-mock-routes', routes),
+  executeTerminalCommand: (command) => ipcRenderer.invoke('execute-terminal-command', command)
 });
 
 // Provide native right-click context menu (Cut, Copy, Paste, Select All) for inputs in Electron

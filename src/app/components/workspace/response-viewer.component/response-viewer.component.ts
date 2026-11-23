@@ -25,15 +25,18 @@ export class ResponseViewerComponent {
     private notificationService = inject(NotificationService);
 
     activeTab = signal('Body');
-    activeMode = computed<'Pretty' | 'Raw'>(() => {
+    activeMode = computed<'Pretty' | 'Raw' | 'Visualize'>(() => {
         const stateMode = this.tabState()?.responseActiveMode;
-        if (stateMode === 'Pretty' || stateMode === 'Raw') return stateMode;
+        if (stateMode === 'Pretty' || stateMode === 'Raw' || stateMode === 'Visualize') return stateMode;
         if (typeof localStorage !== 'undefined') {
             const saved = localStorage.getItem('onsteroids_response_active_mode');
-            if (saved === 'Pretty' || saved === 'Raw') return saved;
+            if (saved === 'Pretty' || saved === 'Raw' || saved === 'Visualize') return saved;
         }
         return 'Pretty';
     });
+    visualizerFilter = signal<string>('');
+    visualizerSortCol = signal<string>('');
+    visualizerSortAsc = signal<boolean>(true);
     manualResponseType = signal<string | null>(null);
     responseTypes = signal(['JSON', 'XML']);
     responseType = computed(() => {
@@ -176,13 +179,160 @@ export class ResponseViewerComponent {
     });
 
     setTab(tab: string) { this.activeTab.set(tab); }
-    setMode(mode: 'Pretty' | 'Raw') {
+    setMode(mode: 'Pretty' | 'Raw' | 'Visualize') {
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('onsteroids_response_active_mode', mode);
         }
         const id = this.tabId();
         if (id) {
             this.tabStateService.updateState(id, { responseActiveMode: mode }, false);
+        }
+    }
+
+    parsedResponseValue = computed<any>(() => {
+        const body = this.responseBody();
+        if (body === null || body === undefined) return null;
+        if (typeof body === 'object') return body;
+        if (typeof body === 'string') {
+            const trimmed = body.trim();
+            if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) return null;
+            try {
+                return JSON.parse(trimmed);
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    });
+
+    visualizerData = computed<{
+        kind: 'table' | 'kv' | 'empty';
+        columns: string[];
+        rows: Record<string, string>[];
+        totalCount: number;
+        sourceLabel: string;
+    }>(() => {
+        const parsed = this.parsedResponseValue();
+        if (parsed === null || parsed === undefined) {
+            return { kind: 'empty', columns: [], rows: [], totalCount: 0, sourceLabel: '' };
+        }
+
+        const formatCell = (val: any): string => {
+            if (val === null) return 'null';
+            if (val === undefined) return '';
+            if (typeof val === 'object') {
+                const s = JSON.stringify(val);
+                return s.length > 180 ? `${s.slice(0, 177)}...` : s;
+            }
+            return String(val);
+        };
+
+        let targetArr: any[] | null = null;
+        let sourceLabel = 'Root Array';
+
+        if (Array.isArray(parsed)) {
+            targetArr = parsed;
+        } else if (typeof parsed === 'object') {
+            const preferredKeys = ['data', 'items', 'results', 'records', 'value', 'rows', 'list'];
+            for (const key of preferredKeys) {
+                if (Array.isArray(parsed[key])) {
+                    targetArr = parsed[key];
+                    sourceLabel = `data.${key}`.replace(/^data\./, '');
+                    break;
+                }
+            }
+            if (!targetArr) {
+                const firstArrayEntry = Object.entries(parsed).find(([, v]) => Array.isArray(v) && v.length > 0 && typeof v[0] === 'object');
+                if (firstArrayEntry) {
+                    targetArr = firstArrayEntry[1] as any[];
+                    sourceLabel = firstArrayEntry[0];
+                }
+            }
+        }
+
+        const filter = this.visualizerFilter().trim().toLowerCase();
+        const sortCol = this.visualizerSortCol();
+        const sortAsc = this.visualizerSortAsc();
+
+        if (targetArr && targetArr.length > 0) {
+            const colSet = new Set<string>();
+            const isObjectItems = targetArr.some(item => item !== null && typeof item === 'object' && !Array.isArray(item));
+            const rawRows: Record<string, string>[] = [];
+
+            if (isObjectItems) {
+                for (const item of targetArr.slice(0, 500)) {
+                    if (item && typeof item === 'object' && !Array.isArray(item)) {
+                        for (const k of Object.keys(item)) colSet.add(k);
+                    }
+                }
+                const cols = Array.from(colSet);
+                for (const item of targetArr.slice(0, 500)) {
+                    const row: Record<string, string> = {};
+                    for (const c of cols) {
+                        row[c] = item && typeof item === 'object' ? formatCell(item[c]) : formatCell(item);
+                    }
+                    rawRows.push(row);
+                }
+                const filtered = filter
+                    ? rawRows.filter(r => cols.some(c => (r[c] || '').toLowerCase().includes(filter)))
+                    : rawRows;
+                const sorted = sortCol && cols.includes(sortCol)
+                    ? [...filtered].sort((a, b) => {
+                        const cmp = (a[sortCol] || '').localeCompare(b[sortCol] || '', undefined, { numeric: true });
+                        return sortAsc ? cmp : -cmp;
+                    })
+                    : filtered;
+                return { kind: 'table', columns: cols, rows: sorted, totalCount: targetArr.length, sourceLabel };
+            }
+
+            const cols = ['Index', 'Value', 'Type'];
+            for (let i = 0; i < Math.min(targetArr.length, 500); i++) {
+                const item = targetArr[i];
+                rawRows.push({
+                    Index: String(i),
+                    Value: formatCell(item),
+                    Type: item === null ? 'null' : Array.isArray(item) ? 'array' : typeof item
+                });
+            }
+            const filtered = filter
+                ? rawRows.filter(r => cols.some(c => (r[c] || '').toLowerCase().includes(filter)))
+                : rawRows;
+            return { kind: 'table', columns: cols, rows: filtered, totalCount: targetArr.length, sourceLabel };
+        }
+
+        if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const cols = ['Key', 'Value', 'Type'];
+            const entries = Object.entries(parsed).map(([k, v]) => ({
+                Key: k,
+                Value: formatCell(v),
+                Type: v === null ? 'null' : Array.isArray(v) ? `array (${v.length})` : typeof v
+            }));
+            const filtered = filter
+                ? entries.filter(r => r.Key.toLowerCase().includes(filter) || r.Value.toLowerCase().includes(filter))
+                : entries;
+            const sorted = sortCol && cols.includes(sortCol)
+                ? [...filtered].sort((a, b) => {
+                    const key = sortCol as keyof typeof a;
+                    const cmp = a[key].localeCompare(b[key], undefined, { numeric: true });
+                    return sortAsc ? cmp : -cmp;
+                })
+                : filtered;
+            return { kind: 'kv', columns: cols, rows: sorted, totalCount: entries.length, sourceLabel: 'JSON Object' };
+        }
+
+        return { kind: 'empty', columns: [], rows: [], totalCount: 0, sourceLabel: '' };
+    });
+
+    onVisualizerFilterChange(val: string) {
+        this.visualizerFilter.set(val || '');
+    }
+
+    toggleVisualizerSort(col: string) {
+        if (this.visualizerSortCol() === col) {
+            this.visualizerSortAsc.update(v => !v);
+        } else {
+            this.visualizerSortCol.set(col);
+            this.visualizerSortAsc.set(true);
         }
     }
     setResponseType(type: string) { this.manualResponseType.set(type); }

@@ -378,6 +378,13 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
             schemas: []
           });
         }
+        if (monacoGlobal.languages?.typescript?.javascriptDefaults) {
+          monacoGlobal.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+            noSemanticValidation: false,
+            noSyntaxValidation: false,
+            diagnosticCodesToIgnore: [1232, 1234, 1375, 1378, 2304, 2307, 2552, 7016, 80001]
+          });
+        }
 
         const targetLanguages = Array.from(new Set(['json', 'javascript', 'typescript', 'text', 'plaintext', 'html', 'xml', this.language()]));
         for (const lang of targetLanguages) {
@@ -959,12 +966,26 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       const currentContent = model.getValue();
       const trimmed = currentContent.trim();
       const lines = trimmed.split('\n');
-
-      // Validate: first non-empty line must be the function signature, last non-empty line must be closing brace
-      const firstLine = lines[0]?.trim() || '';
       const lastLine = lines[lines.length - 1]?.trim() || '';
 
-      const isFirstLineValid = /^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(firstLine);
+      // Find the boilerplate function header (allowing optional leading import/comment lines above it)
+      let fnHeaderIdx = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (!t || t.startsWith('//') || t.startsWith('/*') || t.startsWith('*') || /^import\s+/.test(t) || /^const\s+\w+\s*=\s*require\(/.test(t)) {
+          if (/^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(t)) {
+            fnHeaderIdx = i;
+            break;
+          }
+          continue;
+        }
+        if (/^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(t)) {
+          fnHeaderIdx = i;
+        }
+        break;
+      }
+
+      const isFirstLineValid = fnHeaderIdx !== -1;
       const isLastLineValid = lastLine === '}';
 
       if (!isFirstLineValid || !isLastLineValid) {
@@ -1437,6 +1458,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
       if (varRanges.length === 0) return markers;
 
       return markers.filter((m: any) => {
+        const msg = String(m?.message || '');
+        if (/import.+declaration.+top level|cannot find module|cannot find name '(pm|postman|setNextRequest|require)'/i.test(msg)) {
+          return false;
+        }
         const touches = varRanges.some(vr => {
           if (m.endLineNumber < vr.startLine || m.startLineNumber > vr.endLine) {
             return false;

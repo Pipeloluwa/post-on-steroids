@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { VariableService } from '../../../shared/services/variable.service';
-import { TabStateService } from '../../../shared/services/tab.state.service';
+import { TabStateService, TriggerFlowConfig, TriggerFlowCondition } from '../../../shared/services/tab.state.service';
 import { RequestExecutionService } from '../../../shared/services/request.execution.service';
 import { AutoAuthService } from '../../../shared/services/auto-auth.service';
 import { AutoAuthModalComponent } from '../../../shared/components/auto-auth.modal.component';
@@ -90,9 +90,32 @@ export class RequestUrlComponent {
 
     targetTriggerRequest = computed(() => {
         const targetId = this.postTriggerTabId();
-        if (!targetId) return null;
+        if (!targetId || targetId === '__script__') return null;
         return this.tabStateService.getState(targetId) || this.tabStateService.allCapsuleRequests().find(r => r.id === targetId) || null;
     });
+
+    triggerConfig = computed<TriggerFlowConfig>(() => {
+        return this.tabState()?.triggerConfig || {
+            condition: 'always',
+            expectedStatus: 200,
+            delayMs: 250,
+            retryCountOnFail: 0,
+            scheduleIntervalMs: 0
+        };
+    });
+    isScriptControlledTrigger = computed(() => this.postTriggerTabId() === '__script__');
+    scheduleInfo = computed(() => this.executionService.activeSchedules()[this.tabId()] || null);
+    isScheduleActive = computed(() => !!this.scheduleInfo());
+    scheduleIntervalSeconds = computed(() => Math.max(1, Math.round((this.triggerConfig().scheduleIntervalMs || 10000) / 1000)));
+    activeScheduleSeconds = computed(() => {
+        const info = this.scheduleInfo();
+        return info ? Math.max(1, Math.round(info.intervalMs / 1000)) : 10;
+    });
+    hasTriggerOrAutomation = computed(() =>
+        !!this.postTriggerTabId() ||
+        this.isScheduleActive() ||
+        (this.triggerConfig().retryCountOnFail ?? 0) > 0
+    );
 
     // Auto Auth Modal State
     showAutoAuthModal = signal(false);
@@ -160,7 +183,7 @@ export class RequestUrlComponent {
     }
 
     selectTriggerTarget(targetId: string | null) {
-        if (targetId && this.isCurrentAuthTab()) {
+        if (targetId && targetId !== '__script__' && this.isCurrentAuthTab()) {
             const targetState = this.tabStateService.getState(targetId);
             const targetReq = this.tabStateService.allCapsuleRequests().find(r => r.id === targetId);
             const hasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
@@ -168,8 +191,60 @@ export class RequestUrlComponent {
                 return;
             }
         }
-        this.tabStateService.updateState(this.tabId(), { postTriggerTabId: targetId });
+        const currCfg = this.triggerConfig();
+        const nextCfg: TriggerFlowConfig = targetId === '__script__'
+            ? { ...currCfg, condition: 'script-only' }
+            : (currCfg.condition === 'script-only' ? { ...currCfg, condition: 'always' } : currCfg);
+        this.tabStateService.updateState(this.tabId(), {
+            postTriggerTabId: targetId,
+            triggerConfig: nextCfg
+        });
         this.isTriggerDropdownOpen.set(false);
+    }
+
+    updateTriggerConfig(patch: Partial<TriggerFlowConfig>) {
+        this.tabStateService.updateState(this.tabId(), {
+            triggerConfig: {
+                ...this.triggerConfig(),
+                ...patch
+            }
+        });
+    }
+
+    onConditionChange(condition: string) {
+        const cond = (condition || 'always') as TriggerFlowCondition;
+        this.updateTriggerConfig({ condition: cond });
+    }
+
+    onExpectedStatusChange(rawVal: string | number) {
+        const num = Math.max(100, Math.min(599, Math.round(Number(rawVal) || 200)));
+        this.updateTriggerConfig({ expectedStatus: num });
+    }
+
+    onDelayChange(rawVal: string | number) {
+        const num = Math.max(0, Math.min(60000, Math.round(Number(rawVal) || 0)));
+        this.updateTriggerConfig({ delayMs: num });
+    }
+
+    onRetryChange(rawVal: string | number) {
+        const num = Math.max(0, Math.min(5, Math.round(Number(rawVal) || 0)));
+        this.updateTriggerConfig({ retryCountOnFail: num });
+    }
+
+    onScheduleSecondsChange(rawVal: string | number) {
+        const sec = Math.max(1, Math.min(86400, Math.round(Number(rawVal) || 10)));
+        const ms = sec * 1000;
+        this.updateTriggerConfig({ scheduleIntervalMs: ms });
+        if (this.isScheduleActive()) {
+            this.executionService.startSchedule(this.tabId(), ms);
+        }
+    }
+
+    toggleRecurringSchedule(event: MouseEvent) {
+        event.stopPropagation();
+        const ms = this.scheduleIntervalSeconds() * 1000;
+        this.updateTriggerConfig({ scheduleIntervalMs: ms });
+        this.executionService.toggleSchedule(this.tabId(), ms);
     }
 
     private cleanupAuthEndpointTriggerIfPointingToThisTab() {

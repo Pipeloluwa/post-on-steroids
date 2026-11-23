@@ -50,7 +50,7 @@
     @if (activeTab() === 'Body') {
     <div class="flex items-center justify-between px-2 py-2 border-b border-(--postonsteroids-border)/50">
         <div class="flex items-center gap-x-2">
-            <!-- Pretty / Raw toggle -->
+            <!-- Pretty / Raw / Visualize toggle -->
             <div
                 class="flex p-0.5 rounded-lg bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border)/30 h-[28px] items-center">
                 <button (click)="setMode('Pretty')"
@@ -66,6 +66,14 @@
                     [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Raw'"
                     [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Raw'">
                     Raw
+                </button>
+                <button (click)="setMode('Visualize')"
+                    class="h-full px-3 flex items-center justify-center gap-1 text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
+                    [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Visualize'"
+                    [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Visualize'"
+                    [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Visualize'">
+                    <mat-icon class="text-[13px]! size-[13px]! text-blue-400">table_chart</mat-icon>
+                    <span>Visualize</span>
                 </button>
             </div>
 
@@ -183,6 +191,74 @@
                     class="absolute inset-0 w-full h-full block">
                 </app-monaco-editor>
             </div>
+
+            } @else if (activeMode() === 'Visualize') {
+                @let vData = visualizerData();
+                <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <div class="px-3 py-2 border-b border-(--postonsteroids-border)/50 flex flex-wrap items-center justify-between gap-2 bg-(--postonsteroids-bg-secondary)/60 shrink-0">
+                        <div class="flex items-center gap-2 text-[11px]">
+                            <span class="px-2 py-0.5 rounded bg-blue-500/15 text-blue-400 font-semibold border border-blue-500/25">
+                                {{ vData.sourceLabel || 'Visualizer' }}
+                            </span>
+                            <span class="text-(--postonsteroids-text-muted)">
+                                Showing {{ vData.rows.length }} of {{ vData.totalCount }} {{ vData.kind === 'kv' ? 'field(s)' : 'row(s)' }}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <input type="text" [value]="visualizerFilter()" (input)="onVisualizerFilterChange($any($event.target).value)"
+                                placeholder="Filter rows or keys..."
+                                class="w-56 px-2.5 py-1 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-blue-500" />
+                            @if (visualizerFilter()) {
+                                <button type="button" (click)="onVisualizerFilterChange('')"
+                                    class="px-2 py-1 rounded text-[11px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
+                                    Clear
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    @if (vData.kind === 'empty' || vData.columns.length === 0) {
+                        <div class="flex-1 flex flex-col items-center justify-center gap-2 text-(--postonsteroids-text-muted) p-6 text-center">
+                            <mat-icon class="text-[36px]! size-[36px]! opacity-30">table_chart</mat-icon>
+                            <span class="text-[12px]">Table Visualizer supports JSON objects and arrays. Switch to Pretty or Raw to inspect XML/plain text payloads.</span>
+                        </div>
+                    } @else {
+                        <div class="flex-1 overflow-auto">
+                            <table class="w-full text-[11.5px] border-collapse">
+                                <thead class="sticky top-0 bg-(--postonsteroids-bg-secondary) z-10 border-b border-(--postonsteroids-border)">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left font-semibold text-(--postonsteroids-text-muted) w-10">#</th>
+                                        @for (col of vData.columns; track col) {
+                                            <th (click)="toggleVisualizerSort(col)"
+                                                class="px-3 py-2 text-left font-semibold text-(--postonsteroids-text-primary) cursor-pointer hover:bg-(--postonsteroids-bg-hover) select-none whitespace-nowrap">
+                                                <div class="flex items-center gap-1">
+                                                    <span>{{ col }}</span>
+                                                    @if (visualizerSortCol() === col) {
+                                                        <mat-icon class="text-[13px]! size-[13px]! text-blue-400">
+                                                            {{ visualizerSortAsc() ? 'arrow_upward' : 'arrow_downward' }}
+                                                        </mat-icon>
+                                                    }
+                                                </div>
+                                            </th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-(--postonsteroids-border)/30">
+                                    @for (row of vData.rows; track $index) {
+                                        <tr class="hover:bg-(--postonsteroids-bg-hover)/60 transition-colors">
+                                            <td class="px-3 py-1.5 font-mono text-[10px] text-(--postonsteroids-text-muted)">{{ $index + 1 }}</td>
+                                            @for (col of vData.columns; track col) {
+                                                <td class="px-3 py-1.5 font-mono text-(--postonsteroids-text-secondary) max-w-[340px] truncate" [title]="row[col]">
+                                                    {{ row[col] }}
+                                                </td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
 
             } @else {
             <pre

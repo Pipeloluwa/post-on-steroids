@@ -5,6 +5,7 @@ import { MatIcon } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
 import { CurlModalComponent } from '../../../shared/components/curl-modal.component';
+import { DocBrdGeneratorModalComponent } from '../../../shared/components/doc-brd-generator.modal.component';
 import { CookieManagerModalComponent } from '../../../shared/components/cookie-manager.modal.component';
 import { CookieJarService } from '../../../shared/services/cookie-jar.service';
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
@@ -17,7 +18,7 @@ import { inject } from '@angular/core';
 
 @Component({
     selector: 'app-request-details-component',
-    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, CookieManagerModalComponent, TransferCapsuleModalComponent],
+    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, CookieManagerModalComponent, TransferCapsuleModalComponent, DocBrdGeneratorModalComponent],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -61,11 +62,12 @@ export class RequestDetailsComponent {
     onNameChange(newName: string) {
         this.tabStateService.updateState(this.tabId(), { name: newName });
     }
-    saveOptions = ['Copy as cURL', 'View cURL...', 'Copy to Capsule...', 'Move to Capsule...', 'Export Endpoint', 'Export Capsule', 'Export as Postman'];
+    saveOptions = ['Copy as cURL', 'View cURL...', 'Generate Docs / BRD...', 'Copy to Capsule...', 'Move to Capsule...', 'Export Endpoint', 'Export Capsule', 'Export as Postman'];
 
     showShareModal = signal<boolean>(false);
     generatedLink = signal<string>('');
     isCurlModalOpen = signal<boolean>(false);
+    isDocBrdModalOpen = signal<boolean>(false);
     isTransferModalOpen = signal<boolean>(false);
     transferMode = signal<'copy' | 'move'>('copy');
 
@@ -77,6 +79,10 @@ export class RequestDetailsComponent {
     openCurlModal(): void {
         if (!this.currentRequestState()) return;
         this.isCurlModalOpen.set(true);
+    }
+
+    openDocBrdModal(): void {
+        this.isDocBrdModalOpen.set(true);
     }
 
     async shareCapsule() {
@@ -125,6 +131,9 @@ export class RequestDetailsComponent {
                 return;
             } else if (option === 'View cURL...') {
                 this.openCurlModal();
+                return;
+            } else if (option === 'Generate Docs / BRD...') {
+                this.openDocBrdModal();
                 return;
             } else if (option === 'Copy to Capsule...' || option === 'Move to Capsule...') {
                 this.transferMode.set(option.startsWith('Move') ? 'move' : 'copy');

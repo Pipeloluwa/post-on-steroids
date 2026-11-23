@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, MenuItem } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -1222,6 +1222,23 @@ app.on('ready', () => {
   ipcMain.handle('update-mock-routes', (_event, routes) => {
     activeMockRoutes = Array.isArray(routes) ? routes : [];
     return { ok: true, count: activeMockRoutes.length };
+  });
+
+  ipcMain.handle('execute-terminal-command', async (_event, command) => {
+    return new Promise((resolve) => {
+      if (!command || typeof command !== 'string') {
+        resolve({ ok: false, stdout: '', stderr: 'Empty command', code: 1 });
+        return;
+      }
+      exec(command, { cwd: app.getPath('home'), timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+        resolve({
+          ok: !err,
+          stdout: stdout || '',
+          stderr: stderr || (err ? err.message : ''),
+          code: err?.code ?? 0
+        });
+      });
+    });
   });
 
   ipcMain.on('cancel-http-request', (_event, requestId) => {

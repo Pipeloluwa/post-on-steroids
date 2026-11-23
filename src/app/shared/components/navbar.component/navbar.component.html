@@ -121,6 +121,14 @@
                                 </div>
                             </button>
 
+                            <button (click)="openDocsBrd()"
+                                class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">
+                                <div class="flex items-center gap-2">
+                                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-secondary) group-hover:text-blue-400 transition-colors">description</mat-icon>
+                                    <span>Generate API Docs / BRD...</span>
+                                </div>
+                            </button>
+
                             <div class="h-px bg-(--postonsteroids-border) my-1"></div>
 
                             <button (click)="closeActiveTab()"
@@ -157,8 +165,41 @@
             </div>
         </div>
 
-        <!-- Center Section: Edition Features Toolbar (excluded from Community build at compile time) -->
-        <div class="flex-1 flex items-center justify-end px-2 min-w-0">
+        <!-- Center Section: Shared Environments + Terminal + Edition Features Toolbar -->
+        <div class="flex-1 flex items-center justify-end gap-1.5 px-2 min-w-0" style="-webkit-app-region: no-drag;">
+            <!-- Shared Multi-Environment Switcher (All Editions) -->
+            <div class="flex items-center rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) px-2 py-0.5 gap-1 shrink-0">
+                <span class="size-2 rounded-full shrink-0"
+                      [style.background-color]="envService.activeEnvironment()?.color || '#94a3b8'"></span>
+                <select aria-label="Active Environment"
+                        [ngModel]="envService.activeEnvironmentId() || ''"
+                        (ngModelChange)="envService.setActiveEnvironment($event || null)"
+                        class="bg-transparent text-[11px] font-semibold text-(--postonsteroids-text-primary) outline-none cursor-pointer max-w-[96px] truncate">
+                    <option value="" class="bg-(--postonsteroids-bg-secondary)">No Env</option>
+                    @for (env of envService.environments(); track env.id) {
+                        <option [value]="env.id" class="bg-(--postonsteroids-bg-secondary)">{{ env.name }}</option>
+                    }
+                </select>
+                <button type="button" (click)="showEnvModal.set(true)" title="Manage Environments"
+                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center">
+                    <mat-icon class="text-[14px]! size-[14px]!">tune</mat-icon>
+                </button>
+            </div>
+
+            <!-- Shared Integrated Terminal Button (All Editions) -->
+            <button type="button" (click)="terminalService.toggle()" title="Toggle Terminal (Ctrl+`)"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-medium cursor-pointer transition-colors shrink-0"
+                    [class.bg-(--postonsteroids-accent)]="terminalService.isOpen()"
+                    [class.text-white]="terminalService.isOpen()"
+                    [class.border-(--postonsteroids-accent)]="terminalService.isOpen()"
+                    [class.bg-(--postonsteroids-bg-tertiary)]="!terminalService.isOpen()"
+                    [class.text-(--postonsteroids-text-secondary)]="!terminalService.isOpen()"
+                    [class.border-(--postonsteroids-border)]="!terminalService.isOpen()"
+                    [class.hover:bg-(--postonsteroids-bg-hover)]="!terminalService.isOpen()">
+                <mat-icon class="text-[14px]! size-[14px]!">terminal</mat-icon>
+                <span class="hidden xl:inline">Terminal</span>
+            </button>
+
             @if (appEdition.toolbarComponent) {
                 <ng-container *ngComponentOutlet="appEdition.toolbarComponent" />
             }
@@ -269,4 +310,6 @@
 <!-- Modals (Safely outside the drag region) -->
 <app-about-modal-component [show]="showAboutModal()" (onClose)="showAboutModal.set(false)" />
 <app-help-updates-modal-component [show]="showHelpModal()" [initialTab]="helpInitialTab()" (onClose)="showHelpModal.set(false)" />
+<app-environment-manager-modal [isOpen]="showEnvModal()" (closed)="showEnvModal.set(false)" />
+<app-doc-brd-generator-modal [isOpen]="showDocBrdModal()" [initialScope]="'collection'" [request]="activeRequestState()" (closed)="showDocBrdModal.set(false)" />
 <app-create-capsule-modal #createCapsuleModal />

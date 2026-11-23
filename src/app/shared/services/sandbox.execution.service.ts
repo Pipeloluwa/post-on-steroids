@@ -7,6 +7,72 @@ import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 import { getGlobalRequestTimeoutMs } from '../utils/request-timeout.util';
 import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
 import { environment } from '../../../environments/environment';
+import { SandboxPackagesService } from './sandbox-packages.service';
+import { APP_EDITION } from '../../../environments/edition';
+
+/**
+ * Transforms ES module `import` statements inside user scripts (including inside boilerplate
+ * async function bodies) into runtime `await __osbImport(...)` calls supported inside the sandbox.
+ */
+export function transformScriptImports(code: string): string {
+  if (!code || typeof code !== 'string') return '';
+  let importCounter = 0;
+
+  // Match ES module imports line-by-line (default, namespace, named, combined, or side-effect)
+  return code.replace(
+    /^[ \t]*import\s+(?:([A-Za-z_$][\w$]*)\s*,\s*\{\s*([^}]+)\s*\}|([A-Za-z_$][\w$]*)\s*,\s*\*\s+as\s+([A-Za-z_$][\w$]*)|\*\s+as\s+([A-Za-z_$][\w$]*)|\{\s*([^}]+)\s*\}|([A-Za-z_$][\w$]*))\s+from\s+['"]([^'"]+)['"]\s*;?|^[ \t]*import\s+['"]([^'"]+)['"]\s*;?/gm,
+    (
+      _full,
+      defWithNamed,
+      namedWithDef,
+      defWithNs,
+      nsWithDef,
+      nsOnly,
+      namedOnly,
+      defOnly,
+      pkgSpec,
+      sideEffectPkg
+    ) => {
+      const targetPkg = (pkgSpec || sideEffectPkg || '').trim();
+      if (!targetPkg) return _full;
+      if (!pkgSpec && sideEffectPkg) {
+        return `await __osbImport(${JSON.stringify(targetPkg)});`;
+      }
+      const modVar = `__osb_mod_${importCounter++}`;
+      const stmts: string[] = [`const ${modVar} = await __osbImport(${JSON.stringify(targetPkg)});`];
+
+      const defIdent = defWithNamed || defWithNs || defOnly;
+      if (defIdent) {
+        stmts.push(
+          `const ${defIdent} = (${modVar} && ${modVar}.default !== undefined) ? ${modVar}.default : ${modVar};`
+        );
+      }
+
+      const nsIdent = nsWithDef || nsOnly;
+      if (nsIdent) {
+        stmts.push(`const ${nsIdent} = ${modVar};`);
+      }
+
+      const namedRaw = namedWithDef || namedOnly;
+      if (namedRaw) {
+        const destructure = namedRaw
+          .split(',')
+          .map((part: string) => part.trim())
+          .filter(Boolean)
+          .map((part: string) => {
+            const aliasMatch = part.match(/^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/);
+            return aliasMatch ? `${aliasMatch[1]}: ${aliasMatch[2]}` : part;
+          })
+          .join(', ');
+        if (destructure) {
+          stmts.push(`const { ${destructure} } = ${modVar} || {};`);
+        }
+      }
+
+      return stmts.join(' ');
+    }
+  );
+}
 
 export interface SandboxResult {
   success: boolean;
@@ -69,6 +135,7 @@ function stringifyBody(raw: unknown): string {
 export class SandboxExecutionService {
   private platformId = inject(PLATFORM_ID);
   private http = inject(HttpClient);
+  private packagesService = inject(SandboxPackagesService);
   private iframe: HTMLIFrameElement | null = null;
 
   constructor() {
@@ -359,7 +426,184 @@ window.addEventListener("message", async (event) => {
   };
 
   try {
-    const contextKeys = Object.keys(context);
+    const installedPkgs = context.__installedPackages || {};
+    const allowPackages = !!context.__allowSandboxPackages;
+    const __osbLoadedModules = new Map();
+
+    async function __osbImport(pkgName) {
+      if (!allowPackages) {
+        throw new Error('npm package imports in scripts require Professional or Enterprise edition.');
+      }
+      if (__osbLoadedModules.has(pkgName)) {
+        return __osbLoadedModules.get(pkgName);
+      }
+      const codeStr = installedPkgs[pkgName];
+      if (!codeStr) {
+        throw new Error('Package "' + pkgName + '" is not installed. Open OnSteroid Terminal and run: npm install ' + pkgName);
+      }
+      const modBlob = new Blob([codeStr], { type: 'application/javascript' });
+      const blobUrl = URL.createObjectURL(modBlob);
+      try {
+        const mod = await import(blobUrl);
+        const wrapped = Object.assign({}, mod);
+        if (mod && mod.default !== undefined && wrapped.default === undefined) {
+          wrapped.default = mod.default;
+        }
+        __osbLoadedModules.set(pkgName, wrapped);
+        return wrapped;
+      } finally {
+        URL.revokeObjectURL(blobUrl);
+      }
+    }
+
+    const require = (pkgName) => {
+      if (!allowPackages) {
+        throw new Error('require() package loading requires Professional or Enterprise edition.');
+      }
+      if (__osbLoadedModules.has(pkgName)) {
+        const m = __osbLoadedModules.get(pkgName);
+        return (m && m.default !== undefined && Object.keys(m).length === 1) ? m.default : m;
+      }
+      throw new Error('Package "' + pkgName + '" is not loaded. Use import/require syntax or run npm install ' + pkgName + ' in Terminal.');
+    };
+
+    // Preload any installed packages that appear as require('...') calls so synchronous require() works too
+    if (allowPackages && typeof code === 'string') {
+      const reqMatches = code.matchAll(/require\\(\\s*['"]([^'"]+)['"]\\s*\\)/g);
+      for (const m of reqMatches) {
+        if (m[1] && installedPkgs[m[1]] && !__osbLoadedModules.has(m[1])) {
+          await __osbImport(m[1]);
+        }
+      }
+    }
+
+    const envMap = Object.assign({}, context.__envVars || {});
+    const globalMap = Object.assign({}, context.__capsuleVars || {});
+    const __envSet = {};
+    const __envUnset = [];
+    const __varSet = {};
+    let __nextRequest = undefined;
+
+    pm.environment = {
+      get: (k) => envMap[k],
+      has: (k) => Object.prototype.hasOwnProperty.call(envMap, k),
+      set: (k, v) => { const s = String(v ?? ''); envMap[k] = s; __envSet[k] = s; },
+      unset: (k) => { delete envMap[k]; delete __envSet[k]; __envUnset.push(k); },
+      toObject: () => Object.assign({}, envMap)
+    };
+
+    pm.variables = {
+      get: (k) => Object.prototype.hasOwnProperty.call(envMap, k) ? envMap[k] : globalMap[k],
+      has: (k) => Object.prototype.hasOwnProperty.call(envMap, k) || Object.prototype.hasOwnProperty.call(globalMap, k),
+      set: (k, v) => { const s = String(v ?? ''); globalMap[k] = s; __varSet[k] = s; },
+      replaceIn: (str) => String(str ?? '').replace(/\{\{([^}]+)\}\}/g, (m, k) => {
+        const key = String(k || '').trim();
+        if (Object.prototype.hasOwnProperty.call(envMap, key)) return String(envMap[key]);
+        if (Object.prototype.hasOwnProperty.call(globalMap, key)) return String(globalMap[key]);
+        return m;
+      })
+    };
+    pm.globals = pm.variables;
+    pm.collectionVariables = pm.variables;
+
+    pm.request = {
+      url: context.url || '',
+      method: context.method || 'GET',
+      headers: {
+        get: (key) => {
+          const kl = String(key || '').toLowerCase();
+          const f = (context.headers || []).find(h => h && h.enabled !== false && String(h.key || '').toLowerCase() === kl);
+          return f ? f.value : undefined;
+        },
+        add: (h) => {
+          if (!h || !h.key) return;
+          if (!Array.isArray(context.headers)) context.headers = [];
+          context.headers.push({ enabled: true, key: String(h.key), value: String(h.value ?? '') });
+        },
+        upsert: (h) => {
+          if (!h || !h.key) return;
+          if (!Array.isArray(context.headers)) context.headers = [];
+          const kl = String(h.key).toLowerCase();
+          const ex = context.headers.find(x => x && String(x.key || '').toLowerCase() === kl);
+          if (ex) { ex.value = String(h.value ?? ''); ex.enabled = true; }
+          else context.headers.push({ enabled: true, key: String(h.key), value: String(h.value ?? '') });
+        },
+        remove: (key) => {
+          const kl = String(key || '').toLowerCase();
+          if (Array.isArray(context.headers)) {
+            for (let i = context.headers.length - 1; i >= 0; i--) {
+              const x = context.headers[i];
+              if (!x || String(x.key || '').toLowerCase() === kl) {
+                context.headers.splice(i, 1);
+              }
+            }
+          }
+        }
+      }
+    };
+
+    const _rawRespText = typeof context.responseBody === 'string'
+      ? context.responseBody
+      : JSON.stringify(context.responseBody ?? '');
+
+    pm.response = {
+      code: Number(context.responseStatus) || 0,
+      status: String(context.responseStatus || ''),
+      responseTime: Number(context.responseTime) || 0,
+      text: () => _rawRespText,
+      json: () => (typeof context.responseBody === 'object' ? context.responseBody : JSON.parse(_rawRespText)),
+      headers: {
+        get: (key) => {
+          const kl = String(key || '').toLowerCase();
+          const f = (context.responseHeaders || []).find(h => h && String(h.key || '').toLowerCase() === kl);
+          return f ? f.value : undefined;
+        }
+      },
+      to: {
+        have: {
+          status: (expected) => {
+            const actual = Number(context.responseStatus) || 0;
+            if (actual !== expected) throw new Error('Expected status ' + expected + ' but got ' + actual);
+          }
+        }
+      }
+    };
+
+    pm.expect = (actual) => {
+      const check = (negate) => ({
+        equal: (exp) => { const ok = actual === exp; if (negate ? ok : !ok) throw new Error('Expected ' + JSON.stringify(actual) + (negate ? ' not' : '') + ' to equal ' + JSON.stringify(exp)); },
+        eql: (exp) => { const ok = JSON.stringify(actual) === JSON.stringify(exp); if (negate ? ok : !ok) throw new Error('Expected deep equal mismatch'); },
+        include: (sub) => { const ok = typeof actual === 'string' || Array.isArray(actual) ? actual.includes(sub) : false; if (negate ? ok : !ok) throw new Error('Expected ' + JSON.stringify(actual) + ' to include ' + JSON.stringify(sub)); },
+        match: (rx) => { const ok = rx.test(String(actual)); if (negate ? ok : !ok) throw new Error('Expected ' + JSON.stringify(actual) + ' to match ' + String(rx)); },
+        above: (n) => { const ok = Number(actual) > n; if (negate ? ok : !ok) throw new Error('Expected ' + actual + ' > ' + n); },
+        below: (n) => { const ok = Number(actual) < n; if (negate ? ok : !ok) throw new Error('Expected ' + actual + ' < ' + n); },
+        property: (p, val) => { const has = actual != null && Object.prototype.hasOwnProperty.call(actual, p); const ok = arguments.length > 1 ? has && actual[p] === val : has; if (negate ? ok : !ok) throw new Error('Property assertion failed for "' + p + '"'); },
+        lengthOf: (len) => { const ok = actual != null && actual.length === len; if (negate ? ok : !ok) throw new Error('Expected length ' + len); },
+        a: (t) => { const ok = t === 'array' ? Array.isArray(actual) : typeof actual === t; if (negate ? ok : !ok) throw new Error('Expected type ' + t); },
+        an: (t) => check(negate).a(t),
+        get ok() { if (negate ? !!actual : !actual) throw new Error('Expected truthy value'); return true; },
+        get true() { if (negate ? actual === true : actual !== true) throw new Error('Expected true'); return true; },
+        get false() { if (negate ? actual === false : actual !== false) throw new Error('Expected false'); return true; },
+        get null() { if (negate ? actual === null : actual !== null) throw new Error('Expected null'); return true; },
+        get undefined() { if (negate ? actual === undefined : actual !== undefined) throw new Error('Expected undefined'); return true; }
+      });
+      return {
+        to: Object.assign(check(false), { be: check(false), have: check(false), not: Object.assign(check(true), { be: check(true), have: check(true) }) })
+      };
+    };
+
+    const setNextRequest = (target) => {
+      __nextRequest = target === null ? null : String(target);
+    };
+    pm.setNextRequest = setNextRequest;
+    pm.execution = { setNextRequest };
+    const postman = { setNextRequest };
+
+    const reservedContextKeys = new Set([
+      '__installedPackages', '__allowSandboxPackages', '__envVars', '__capsuleVars',
+      '__envSet', '__envUnset', '__varSet', '__nextRequest'
+    ]);
+    const contextKeys = Object.keys(context).filter(k => !reservedContextKeys.has(k));
     
     // Declare all context keys as local variables
     const paramDeclarations = contextKeys.map(k => 
@@ -387,6 +631,7 @@ window.addEventListener("message", async (event) => {
         testPassed = false;
       }
     };
+    pm.test = test;
 
     const fnBodyLines = [
       "return (async () => {",
@@ -403,8 +648,8 @@ window.addEventListener("message", async (event) => {
     ];
     const fnBody = fnBodyLines.join(String.fromCharCode(10));
       
-    const executeInSandbox = new Function("pm", "context", "test", "_proxyFetch", fnBody);
-    await executeInSandbox(pm, context, test, _proxyFetch);
+    const executeInSandbox = new Function("pm", "context", "test", "_proxyFetch", "__osbImport", "require", "postman", "setNextRequest", fnBody);
+    await executeInSandbox(pm, context, test, _proxyFetch, __osbImport, require, postman, setNextRequest);
 
     // Extract test results from PASS/FAIL console logs if any
     for (const log of logs) {
@@ -422,8 +667,29 @@ window.addEventListener("message", async (event) => {
 
     pm['testResults'] = testResults;
     pm['testPassed'] = testPassed;
+    pm['__envSet'] = __envSet;
+    pm['__envUnset'] = __envUnset;
+    pm['__varSet'] = __varSet;
+    if (__nextRequest !== undefined) {
+      pm['__nextRequest'] = __nextRequest;
+    }
 
     delete pm.sendRequest;
+    delete pm.traverseFields;
+    delete pm.environment;
+    delete pm.variables;
+    delete pm.globals;
+    delete pm.collectionVariables;
+    delete pm.request;
+    delete pm.response;
+    delete pm.execution;
+    delete pm.expect;
+    delete pm.test;
+    delete pm.setNextRequest;
+    delete pm.__installedPackages;
+    delete pm.__allowSandboxPackages;
+    delete pm.__envVars;
+    delete pm.__capsuleVars;
     const cleanContext = {};
     for (const key of Object.keys(pm)) {
       if (typeof pm[key] !== 'function') {
@@ -703,13 +969,21 @@ window.addEventListener("message", async (event) => {
         }
       }
 
-      // Upgrade any naive comment-stripping regex inside user scripts so `/` (`//` or `/*`) inside
-      // encrypted Base64 string values is never mistaken for a comment and stripped.
-      const safeCode = (code || '')
+      // Transform `import ... from '...'` (inside or outside boilerplate functions) & upgrade naive comment regexes
+      const importedCode = transformScriptImports(code || '');
+      const safeCode = importedCode
         .split(".replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, '')")
         .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? \'\' : m)')
         .split('.replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, "")')
         .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)');
+
+      if (APP_EDITION.isProOrHigher) {
+        safeContext.__allowSandboxPackages = true;
+        safeContext.__installedPackages = this.packagesService.getPackageCodeMap();
+      } else {
+        safeContext.__allowSandboxPackages = false;
+        safeContext.__installedPackages = {};
+      }
 
       // Send code to the sandbox
       // The origin is '*' because a sandboxed iframe without allow-same-origin has an opaque origin

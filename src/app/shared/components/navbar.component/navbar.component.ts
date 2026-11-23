@@ -1,16 +1,21 @@
 import { Component, ChangeDetectionStrategy, effect, input, output, computed, signal, inject, untracked, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterModule, Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { SidebarService } from '../../services/sidebar.service';
 import { TabStateService } from '../../services/tab.state.service';
 import { NotificationService } from '../../services/notification.service';
 import { VariableService } from '../../services/variable.service';
+import { EnvironmentService } from '../../services/environment.service';
+import { TerminalService } from '../../services/terminal.service';
 import { AuthService } from '../../services/auth.service';
 import { VersionCheckService } from '../../services/version-check.service';
 import { AboutModalComponent } from '../about.modal.component/about.modal.component';
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
+import { EnvironmentManagerModalComponent } from '../environment-manager.modal.component';
+import { DocBrdGeneratorModalComponent } from '../doc-brd-generator.modal.component';
 import { DESKTOP_DOWNLOADS_CONFIG, DesktopPackage, buildDownloadLink } from '../../constants/desktop-downloads.constants';
 import { isElectronApp } from '../../utils/url.util';
 import { convertCapsuleToPostmanCollection } from '../../utils/postman-export.util';
@@ -20,11 +25,14 @@ import { APP_EDITION } from '../../../../environments/edition';
     selector: 'app-navbar-component',
     imports: [
         CommonModule,
+        FormsModule,
         RouterModule,
         MatIcon,
         AboutModalComponent,
         HelpUpdatesModalComponent,
-        CreateCapsuleModalComponent
+        CreateCapsuleModalComponent,
+        EnvironmentManagerModalComponent,
+        DocBrdGeneratorModalComponent
     ],
     templateUrl: './navbar.component.html',
     styleUrl: './navbar.component.css',
@@ -50,6 +58,8 @@ export class NavbarComponent {
     sidebarService = inject(SidebarService);
     tabStateService = inject(TabStateService);
     authService = inject(AuthService);
+    envService = inject(EnvironmentService);
+    terminalService = inject(TerminalService);
     private variableService = inject(VariableService);
     private versionCheckService = inject(VersionCheckService);
     private router = inject(Router);
@@ -62,6 +72,12 @@ export class NavbarComponent {
     showDownloadsMenu = signal<boolean>(false);
     showAboutModal = signal<boolean>(false);
     showHelpModal = signal<boolean>(false);
+    showEnvModal = signal<boolean>(false);
+    showDocBrdModal = signal<boolean>(false);
+    activeRequestState = computed(() => {
+        const id = this.tabStateService.activeTabId();
+        return id ? this.tabStateService.getState(id) || null : null;
+    });
     helpInitialTab = signal<'guide' | 'updates'>('guide');
 
     constructor() {
@@ -136,6 +152,11 @@ export class NavbarComponent {
         this.showFileMenu.set(false);
         this.helpInitialTab.set('guide');
         this.showHelpModal.set(true);
+    }
+
+    openDocsBrd() {
+        this.showFileMenu.set(false);
+        this.showDocBrdModal.set(true);
     }
 
     newRequest() {

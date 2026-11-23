@@ -74,21 +74,29 @@
 
         <!-- Trigger Next Request Unified Button & Dropdown -->
         <div class="flex h-full relative shrink-0">
-            <!-- Unified Trigger Button (Whole button toggles request dropdown) -->
-            <button (click)="toggleTriggerDropdown($event)" title="Select next request to trigger after response"
+            <!-- Unified Trigger Button (Whole button toggles request & automation dropdown) -->
+            <button (click)="toggleTriggerDropdown($event)" title="Configure request chaining, automation rules, retries, and recurring schedule"
                 class="px-3 h-full border border-(--postonsteroids-border) transition-colors duration-200 cursor-pointer flex items-center gap-x-1.5 rounded-[4px] shadow-xs"
-                [class.bg-(--postonsteroids-bg-secondary)]="!postTriggerTabId()"
-                [class.bg-(--postonsteroids-bg-hover)]="!postTriggerTabId()"
-                [class.hover:bg-(--postonsteroids-bg-tertiary)]="!postTriggerTabId()"
-                [class.text-(--postonsteroids-text-muted)]="!postTriggerTabId()"
-                [class.bg-emerald-600]="!!postTriggerTabId()"
-                [class.hover:bg-emerald-700]="!!postTriggerTabId()"
-                [class.text-white]="!!postTriggerTabId()">
+                [class.bg-(--postonsteroids-bg-secondary)]="!hasTriggerOrAutomation()"
+                [class.bg-(--postonsteroids-bg-hover)]="!hasTriggerOrAutomation()"
+                [class.hover:bg-(--postonsteroids-bg-tertiary)]="!hasTriggerOrAutomation()"
+                [class.text-(--postonsteroids-text-muted)]="!hasTriggerOrAutomation()"
+                [class.bg-emerald-600]="hasTriggerOrAutomation()"
+                [class.hover:bg-emerald-700]="hasTriggerOrAutomation()"
+                [class.text-white]="hasTriggerOrAutomation()">
                 <mat-icon class="text-[17px]! size-[17px]!">alt_route</mat-icon>
                 <span class="text-[12px] font-bold">Trigger</span>
-                @if (targetTriggerRequest(); as tr) {
+                @if (isScriptControlledTrigger()) {
+                    <span class="text-[9px] bg-white/25 px-1.5 py-0.5 rounded font-mono truncate max-w-[70px]">Script</span>
+                } @else if (targetTriggerRequest(); as tr) {
                     <span class="text-[9px] bg-white/25 px-1.5 py-0.5 rounded font-mono truncate max-w-[85px]" [title]="tr.name">
                         {{ tr.name || 'Next' }}
+                    </span>
+                }
+                @if (scheduleInfo(); as sInfo) {
+                    <span class="text-[9px] bg-amber-400/90 text-slate-950 font-bold px-1.5 py-0.5 rounded font-mono animate-pulse"
+                        [title]="'Recurring every ' + activeScheduleSeconds() + 's'">
+                        {{ activeScheduleSeconds() }}s #{{ sInfo.runCount }}
                     </span>
                 }
                 <mat-icon class="text-[16px]! size-[16px]! opacity-80 transition-transform duration-200"
@@ -97,7 +105,7 @@
 
             <!-- Dropdown Menu Overlay -->
             @if (isTriggerDropdownOpen()) {
-            <div class="absolute right-0 md:left-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-50 py-1 min-w-[240px] max-w-[340px] flex flex-col">
+            <div (click)="$event.stopPropagation()" class="absolute right-0 md:left-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-50 py-1 min-w-[295px] max-w-[360px] max-h-[82vh] overflow-y-auto flex flex-col">
                 <button (click)="selectTriggerTarget(null)" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer shrink-0">
                     <div class="flex items-center gap-1.5">
                         <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted)">block</mat-icon>
@@ -105,6 +113,16 @@
                     </div>
                     @if (!postTriggerTabId()) {
                         <mat-icon class="text-[16px]! size-[16px]! text-status-success">check</mat-icon>
+                    }
+                </button>
+
+                <button (click)="selectTriggerTarget('__script__')" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer shrink-0">
+                    <div class="flex items-center gap-1.5 min-w-0 pr-2">
+                        <mat-icon class="text-[15px]! size-[15px]! text-amber-400 shrink-0">code</mat-icon>
+                        <span class="font-medium truncate">Script-Controlled (pm.execution.setNextRequest)</span>
+                    </div>
+                    @if (isScriptControlledTrigger()) {
+                        <mat-icon class="text-[16px]! size-[16px]! text-status-success shrink-0">check</mat-icon>
                     }
                 </button>
 
@@ -121,7 +139,7 @@
                 }
 
                 <!-- Scrollable list of available requests -->
-                <div class="max-h-[240px] overflow-y-auto flex flex-col flex-1 divide-y divide-(--postonsteroids-border)/10">
+                <div class="max-h-[160px] overflow-y-auto flex flex-col shrink-0 divide-y divide-(--postonsteroids-border)/10">
                     @for (req of availableTriggerRequests(); track req.id) {
                         <button (click)="selectTriggerTarget(req.id)" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer group">
                             <div class="flex items-center gap-2 min-w-0 pr-2">
@@ -142,6 +160,87 @@
                             {{ isCurrentAuthTab() ? 'No eligible requests (requests with Auto Auth enabled are excluded to prevent loops)' : 'No other requests in capsule' }}
                         </div>
                     }
+                </div>
+
+                <!-- Automation & Retry Rules -->
+                <div class="border-t border-(--postonsteroids-border)/50 mt-1 px-3 py-2 flex flex-col gap-2 shrink-0 bg-(--postonsteroids-bg-primary)/40">
+                    <div class="text-[10px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider">
+                        Automation & Retry Rules
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex flex-col gap-0.5 text-[10px] text-(--postonsteroids-text-muted)">
+                            <span>Trigger Condition</span>
+                            <select [value]="triggerConfig().condition" (change)="onConditionChange($any($event.target).value)"
+                                class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-1.5 py-1 text-[11px] text-(--postonsteroids-text-primary) outline-none">
+                                <option value="always">Always</option>
+                                <option value="on-2xx">On 2xx Success</option>
+                                <option value="on-tests-pass">On Tests Pass</option>
+                                <option value="on-status-match">On Status Match</option>
+                                <option value="script-only">Script Only</option>
+                            </select>
+                        </label>
+                        @if (triggerConfig().condition === 'on-status-match') {
+                            <label class="flex flex-col gap-0.5 text-[10px] text-(--postonsteroids-text-muted)">
+                                <span>Expected Status</span>
+                                <input type="number" min="100" max="599" [value]="triggerConfig().expectedStatus ?? 200"
+                                    (change)="onExpectedStatusChange($any($event.target).value)"
+                                    class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[11px] text-(--postonsteroids-text-primary) outline-none" />
+                            </label>
+                        } @else {
+                            <label class="flex flex-col gap-0.5 text-[10px] text-(--postonsteroids-text-muted)">
+                                <span>Auto-Retry on Fail (0-5)</span>
+                                <input type="number" min="0" max="5" [value]="triggerConfig().retryCountOnFail ?? 0"
+                                    (change)="onRetryChange($any($event.target).value)"
+                                    class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[11px] text-(--postonsteroids-text-primary) outline-none" />
+                            </label>
+                        }
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex flex-col gap-0.5 text-[10px] text-(--postonsteroids-text-muted)">
+                            <span>Chain / Retry Delay (ms)</span>
+                            <input type="number" min="0" max="60000" step="50" [value]="triggerConfig().delayMs ?? 250"
+                                (change)="onDelayChange($any($event.target).value)"
+                                class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[11px] text-(--postonsteroids-text-primary) outline-none" />
+                        </label>
+                        @if (triggerConfig().condition === 'on-status-match') {
+                            <label class="flex flex-col gap-0.5 text-[10px] text-(--postonsteroids-text-muted)">
+                                <span>Auto-Retry on Fail (0-5)</span>
+                                <input type="number" min="0" max="5" [value]="triggerConfig().retryCountOnFail ?? 0"
+                                    (change)="onRetryChange($any($event.target).value)"
+                                    class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[11px] text-(--postonsteroids-text-primary) outline-none" />
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <!-- Recurring Schedule -->
+                <div class="border-t border-(--postonsteroids-border)/50 px-3 py-2 flex flex-col gap-1.5 shrink-0 bg-(--postonsteroids-bg-primary)/60">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider">Recurring Schedule</span>
+                        @if (scheduleInfo(); as sInfo) {
+                            <span class="text-[10px] font-mono text-amber-400 font-semibold">Running (#{{ sInfo.runCount }})</span>
+                        }
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-1 text-[11px] text-(--postonsteroids-text-muted) shrink-0">
+                            <span>Every</span>
+                            <input type="number" min="1" max="86400" [value]="scheduleIntervalSeconds()"
+                                (change)="onScheduleSecondsChange($any($event.target).value)"
+                                class="w-[62px] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-1.5 py-1 text-[11px] text-(--postonsteroids-text-primary) outline-none" />
+                            <span>sec</span>
+                        </label>
+                        <button (click)="toggleRecurringSchedule($event)"
+                            class="flex-1 px-2.5 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1"
+                            [class.bg-red-600]="isScheduleActive()"
+                            [class.hover:bg-red-700]="isScheduleActive()"
+                            [class.text-white]="isScheduleActive()"
+                            [class.bg-amber-600]="!isScheduleActive()"
+                            [class.hover:bg-amber-700]="!isScheduleActive()"
+                            [class.text-white]="!isScheduleActive()">
+                            <mat-icon class="text-[14px]! size-[14px]!">{{ isScheduleActive() ? 'stop_circle' : 'schedule' }}</mat-icon>
+                            <span>{{ isScheduleActive() ? 'Stop Schedule' : 'Start Schedule' }}</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             }
