@@ -165,8 +165,11 @@
             </div>
         </div>
 
-        <!-- Center Section: Shared Environments + Terminal + Edition Features Toolbar -->
-        <div class="flex-1 flex items-center justify-start 2xl:justify-center gap-1 2xl:gap-1.5 px-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style="-webkit-app-region: no-drag;">
+        <!-- Center Section: Flexible Spacer (Postman / Insomnia clean header) -->
+        <div class="flex-1 min-w-0"></div>
+
+        <!-- Right Section: Environment Switcher + Utilities + Auth (Pinned to far right) -->
+        <div class="flex items-center justify-end gap-x-1.5 2xl:gap-x-2.5 shrink-0" style="-webkit-app-region: no-drag;">
             <!-- Shared Multi-Environment Switcher (All Editions) -->
             <div class="flex items-center rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) px-2 py-0.5 gap-1 shrink-0">
                 <span class="size-2 rounded-full shrink-0"
@@ -174,7 +177,7 @@
                 <select aria-label="Active Environment"
                         [ngModel]="envService.activeEnvironmentId() || ''"
                         (ngModelChange)="envService.setActiveEnvironment($event || null)"
-                        class="bg-transparent text-[11px] font-semibold text-(--postonsteroids-text-primary) outline-none cursor-pointer max-w-[96px] truncate">
+                        class="bg-transparent text-[11px] font-semibold text-(--postonsteroids-text-primary) outline-none cursor-pointer max-w-[110px] truncate">
                     <option value="" class="bg-(--postonsteroids-bg-secondary)">No Env</option>
                     @for (env of envService.environments(); track env.id) {
                         <option [value]="env.id" class="bg-(--postonsteroids-bg-secondary)">{{ env.name }}</option>
@@ -185,28 +188,6 @@
                     <mat-icon class="text-[14px]! size-[14px]!">tune</mat-icon>
                 </button>
             </div>
-
-            <!-- Shared Integrated Terminal Button (All Editions) -->
-            <button type="button" (click)="terminalService.toggle()" title="Toggle Terminal (Ctrl+`)"
-                    class="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-1 rounded-full border text-[11px] font-medium cursor-pointer transition-colors shrink-0"
-                    [class.bg-(--postonsteroids-accent)]="terminalService.isOpen()"
-                    [class.text-white]="terminalService.isOpen()"
-                    [class.border-(--postonsteroids-accent)]="terminalService.isOpen()"
-                    [class.bg-(--postonsteroids-bg-tertiary)]="!terminalService.isOpen()"
-                    [class.text-(--postonsteroids-text-secondary)]="!terminalService.isOpen()"
-                    [class.border-(--postonsteroids-border)]="!terminalService.isOpen()"
-                    [class.hover:bg-(--postonsteroids-bg-hover)]="!terminalService.isOpen()">
-                <mat-icon class="text-[14px]! size-[14px]!">terminal</mat-icon>
-                <span class="hidden 2xl:inline">Terminal</span>
-            </button>
-
-            @if (appEdition.toolbarComponent) {
-                <ng-container *ngComponentOutlet="appEdition.toolbarComponent" />
-            }
-        </div>
-
-        <!-- Right Section: Utilities + Auth (Permanently pinned to far right) -->
-        <div class="flex items-center justify-end gap-x-1.5 2xl:gap-x-2.5 shrink-0" style="-webkit-app-region: no-drag;">
             @if (!isElectron) {
                 <div class="flex items-center gap-x-2.5 shrink-0">
                     <span class="text-[10px] lg:text-[11px] text-(--postonsteroids-text-muted) italic whitespace-nowrap shrink-0 hidden min-[2200px]:inline-flex items-center gap-1">

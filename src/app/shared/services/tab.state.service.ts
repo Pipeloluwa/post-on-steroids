@@ -143,6 +143,8 @@ export interface TriggerFlowConfig {
     delayMs?: number;
     retryCountOnFail?: number;
     scheduleIntervalMs?: number;
+    scheduleStartAt?: string | null;
+    scheduleEndAt?: string | null;
 }
 
 export interface RequestState {

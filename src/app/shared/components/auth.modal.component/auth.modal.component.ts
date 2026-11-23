@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
+import { APP_EDITION } from '../../../../environments/edition';
 
 @Component({
     selector: 'app-auth-modal-component',
@@ -12,6 +13,9 @@ import { AuthService } from '../../services/auth.service';
 })
 export class AuthModalComponent {
     authService = inject(AuthService);
+    readonly appEdition = APP_EDITION;
+    readonly testUserEmail = AuthService.TEST_USER_EMAIL;
+    readonly testUserPassword = AuthService.TEST_USER_PASSWORD;
 
     emailInput = viewChild<ElementRef<HTMLInputElement>>('emailInput');
     otpInput = viewChild<ElementRef<HTMLInputElement>>('otpInput');

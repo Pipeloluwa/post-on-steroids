@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { AuthService } from '../../shared/services/auth.service';
+import { APP_EDITION } from '../../../environments/edition';
 
 @Component({
     selector: 'app-login',
@@ -14,6 +15,9 @@ import { AuthService } from '../../shared/services/auth.service';
 export class LoginComponent implements OnInit {
     authService = inject(AuthService);
     private router = inject(Router);
+    readonly appEdition = APP_EDITION;
+    readonly testUserEmail = AuthService.TEST_USER_EMAIL;
+    readonly testUserPassword = AuthService.TEST_USER_PASSWORD;
 
     isOtpMasked = signal<boolean>(true);
     isPasswordMasked = signal<boolean>(true);
@@ -33,7 +37,7 @@ export class LoginComponent implements OnInit {
 
     ngOnInit() {
         if (this.authService.isLoggedIn()) {
-            this.router.navigate(['/steroid']);
+            this.router.navigate(['/']);
         }
     }
 
@@ -60,21 +64,32 @@ export class LoginComponent implements OnInit {
         if (this.authService.otp().length !== 6) return;
         const loggedInImmediately = await this.authService.authenticate();
         if (loggedInImmediately) {
-            this.router.navigate(['/steroid']);
+            this.router.navigate(['/']);
         }
     }
 
     async onCompleteAccountCreation() {
         const success = await this.authService.completeAccountCreation();
         if (success) {
-            this.router.navigate(['/steroid']);
+            this.router.navigate(['/']);
         }
     }
 
     async onLoginWithPassword() {
         const success = await this.authService.loginWithPassword();
         if (success) {
-            this.router.navigate(['/steroid']);
+            this.router.navigate(['/']);
+        }
+    }
+
+    fillTestCredentials() {
+        this.authService.fillTestUserCredentials();
+    }
+
+    quickSignInTestUser() {
+        const ok = this.authService.loginAsTestUser();
+        if (ok) {
+            this.router.navigate(['/']);
         }
     }
 
@@ -90,6 +105,9 @@ export class LoginComponent implements OnInit {
     }
 
     continueAsGuest() {
-        this.router.navigate(['/steroid']);
+        if (this.appEdition.isProOrHigher) {
+            return;
+        }
+        this.router.navigate(['/']);
     }
 }

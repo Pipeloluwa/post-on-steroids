@@ -95,8 +95,8 @@
                 }
                 @if (scheduleInfo(); as sInfo) {
                     <span class="text-[9px] bg-amber-400/90 text-slate-950 font-bold px-1.5 py-0.5 rounded font-mono animate-pulse"
-                        [title]="'Recurring every ' + activeScheduleSeconds() + 's'">
-                        {{ activeScheduleSeconds() }}s #{{ sInfo.runCount }}
+                        [title]="scheduleStatusSummary()">
+                        {{ scheduleBadgeText() }}
                     </span>
                 }
                 <mat-icon class="text-[16px]! size-[16px]! opacity-80 transition-transform duration-200"
@@ -105,7 +105,7 @@
 
             <!-- Dropdown Menu Overlay -->
             @if (isTriggerDropdownOpen()) {
-            <div (click)="$event.stopPropagation()" class="absolute right-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-50 py-1 min-w-[295px] max-w-[360px] max-h-[82vh] overflow-y-auto flex flex-col">
+            <div (click)="$event.stopPropagation()" class="absolute right-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-50 py-1 min-w-[330px] max-w-[380px] max-h-[82vh] overflow-y-auto flex flex-col">
                 <button (click)="selectTriggerTarget(null)" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer shrink-0">
                     <div class="flex items-center gap-1.5">
                         <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted)">block</mat-icon>
@@ -213,15 +213,47 @@
                     </div>
                 </div>
 
-                <!-- Recurring Schedule -->
-                <div class="border-t border-(--postonsteroids-border)/50 px-3 py-2 flex flex-col gap-1.5 shrink-0 bg-(--postonsteroids-bg-primary)/60">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[10px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider">Recurring Schedule</span>
+                <!-- Scheduled Execution & Recurring Interval -->
+                <div class="border-t border-(--postonsteroids-border)/50 px-3 py-2 flex flex-col gap-2 shrink-0 bg-(--postonsteroids-bg-primary)/60">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-[10px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider">Scheduled Flow &amp; Interval</span>
                         @if (scheduleInfo(); as sInfo) {
-                            <span class="text-[10px] font-mono text-amber-400 font-semibold">Running (#{{ sInfo.runCount }})</span>
+                            <span class="text-[10px] font-mono text-amber-400 font-semibold truncate max-w-[165px]" [title]="scheduleStatusSummary()">
+                                {{ sInfo.status === 'waiting' ? 'Scheduled' : 'Running (#' + sInfo.runCount + ')' }}
+                            </span>
                         }
                     </div>
-                    <div class="flex items-center gap-2">
+
+                    <div class="grid grid-cols-1 gap-1.5">
+                        <label class="flex flex-col gap-0.5 text-[10px] text-(--postonsteroids-text-muted)">
+                            <div class="flex items-center justify-between">
+                                <span>Execution Date &amp; Time (Local)</span>
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" (click)="setScheduleStartNow($event)" class="text-[9.5px] text-(--postonsteroids-accent) hover:underline cursor-pointer">Now</button>
+                                    @if (scheduleStartAt()) {
+                                        <button type="button" (click)="clearScheduleStartAt($event)" class="text-[9.5px] text-status-danger hover:underline cursor-pointer">Clear</button>
+                                    }
+                                </div>
+                            </div>
+                            <input type="datetime-local" [value]="scheduleStartAt()"
+                                (change)="onScheduleStartAtChange($any($event.target).value)"
+                                class="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
+                        </label>
+
+                        <label class="flex flex-col gap-0.5 text-[10px] text-(--postonsteroids-text-muted)">
+                            <div class="flex items-center justify-between">
+                                <span>End Date &amp; Time (Optional)</span>
+                                @if (scheduleEndAt()) {
+                                    <button type="button" (click)="clearScheduleEndAt($event)" class="text-[9.5px] text-status-danger hover:underline cursor-pointer">Clear</button>
+                                }
+                            </div>
+                            <input type="datetime-local" [value]="scheduleEndAt()"
+                                (change)="onScheduleEndAtChange($any($event.target).value)"
+                                class="w-full bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
+                        </label>
+                    </div>
+
+                    <div class="flex items-center gap-2 pt-0.5">
                         <label class="flex items-center gap-1 text-[11px] text-(--postonsteroids-text-muted) shrink-0">
                             <span>Every</span>
                             <input type="number" min="1" max="86400" [value]="scheduleIntervalSeconds()"
@@ -238,9 +270,15 @@
                             [class.hover:bg-amber-700]="!isScheduleActive()"
                             [class.text-white]="!isScheduleActive()">
                             <mat-icon class="text-[14px]! size-[14px]!">{{ isScheduleActive() ? 'stop_circle' : 'schedule' }}</mat-icon>
-                            <span>{{ isScheduleActive() ? 'Stop Schedule' : 'Start Schedule' }}</span>
+                            <span>{{ isScheduleActive() ? 'Stop Schedule' : (scheduleStartAt() ? 'Set Schedule' : 'Start Schedule') }}</span>
                         </button>
                     </div>
+
+                    @if (scheduleInfo()) {
+                        <div class="text-[10px] text-(--postonsteroids-text-muted) font-mono bg-(--postonsteroids-bg-secondary)/70 border border-(--postonsteroids-border)/50 rounded px-2 py-1">
+                            {{ scheduleStatusSummary() }}
+                        </div>
+                    }
                 </div>
             </div>
             }

@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { Subject, firstValueFrom } from 'rxjs';
 import { API_BASE_URL, AUTH_TOKEN_KEY, AUTH_USER_KEY, AUTH_REFRESH_TOKEN_KEY } from '../constants/api.constants';
 import { NotificationService } from './notification.service';
+import { APP_EDITION } from '../../../environments/edition';
 
 export interface UserAuth {
     id: string;
@@ -61,6 +62,17 @@ export interface PasswordValidationState {
 export class AuthService {
     private static readonly OTP_COOLDOWN_UNTIL_KEY = 'post_on_steroids_otp_cooldown_until';
     private static readonly OTP_COOLDOWN_TOTAL_KEY = 'post_on_steroids_otp_cooldown_total';
+    static readonly TEST_USER_EMAIL = 'test@onsteroid.com';
+    static readonly TEST_USER_PASSWORD = 'OnSteroid@2026';
+    static readonly TEST_USER_OTP = '123456';
+    private static readonly TEST_USER_ALIASES = new Set([
+        'test@onsteroid.com',
+        'enterprise@onsteroid.com',
+        'pro@onsteroid.com',
+        'demo@onsteroid.com'
+    ]);
+
+    readonly requiresAuthGate = APP_EDITION.isProOrHigher;
 
     private http = inject(HttpClient);
     private router = inject(Router);
@@ -74,6 +86,7 @@ export class AuthService {
     currentUser = signal<UserAuth | null>(null);
     token = signal<string | null>(null);
     refreshToken = signal<string | null>(null);
+    isTestUserSession = computed<boolean>(() => (this.token() || '').startsWith('onsteroid-test-token-'));
     onLogout = new Subject<UserAuth | null>();
     onLogin = new Subject<UserAuth>();
 
@@ -213,12 +226,12 @@ export class AuthService {
                 this.isLoggedIn.set(true);
                 this.showAuthModal.set(false);
             } else {
-                this.showAuthModal.set(true);
+                this.showAuthModal.set(!APP_EDITION.isProOrHigher);
             }
         } catch (e) {
             console.error('Failed to load session from localStorage', e);
             this.clearStorage();
-            this.showAuthModal.set(true);
+            this.showAuthModal.set(!APP_EDITION.isProOrHigher);
         }
     }
 
@@ -338,6 +351,9 @@ export class AuthService {
     }
 
     closeAuthModal() {
+        if (APP_EDITION.isProOrHigher && !this.isLoggedIn()) {
+            return;
+        }
         this.showAuthModal.set(false);
         this.errorMessage.set(null);
         this.successMessage.set(null);
@@ -350,7 +366,50 @@ export class AuthService {
     }
 
     continueWithoutSignIn() {
+        if (APP_EDITION.isProOrHigher) {
+            this.errorMessage.set(`Sign-in is required for OnSteroid ${APP_EDITION.label} Edition. Use the Test User or sign in with your account.`);
+            return;
+        }
         this.closeAuthModal();
+    }
+
+    isTestUserEmail(email: string): boolean {
+        return AuthService.TEST_USER_ALIASES.has((email || '').trim().toLowerCase());
+    }
+
+    isTestUserPassword(password: string): boolean {
+        return password === AuthService.TEST_USER_PASSWORD || password === 'Test@1234';
+    }
+
+    fillTestUserCredentials(): void {
+        this.userEmail.set(AuthService.TEST_USER_EMAIL);
+        this.password.set(AuthService.TEST_USER_PASSWORD);
+        this.errorMessage.set(null);
+        this.successMessage.set(null);
+        this.authStep.set('login-password');
+    }
+
+    loginAsTestUser(email = AuthService.TEST_USER_EMAIL): boolean {
+        const cleanEmail = (email || AuthService.TEST_USER_EMAIL).trim().toLowerCase();
+        const nowIso = new Date().toISOString();
+        const testData: AuthLoginResponseData = {
+            user: {
+                id: 'onsteroid-test-user-001',
+                email: cleanEmail,
+                isAuthenticated: true,
+                hasPassword: true,
+                createdAt: nowIso,
+                updatedAt: nowIso
+            },
+            token: `onsteroid-test-token-${Date.now()}`,
+            refreshToken: `onsteroid-test-refresh-${Date.now()}`,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            requiresPasswordSetup: false
+        };
+        this.userEmail.set(cleanEmail);
+        this.finalizeLogin(testData);
+        this.notificationService.notify(`Signed in as Test User (${cleanEmail})`, 'success');
+        return true;
     }
 
     resetToEmailStep() {
@@ -375,6 +434,22 @@ export class AuthService {
         this.isAuthenticating.set(true);
         this.errorMessage.set(null);
         this.successMessage.set(null);
+
+        if (this.isTestUserEmail(email)) {
+            this.isAuthenticating.set(false);
+            if (forceOtp) {
+                this.isOtpSent.set(true);
+                this.authStep.set('otp');
+                this.otp.set('');
+                this.successMessage.set(`Test verification code is ${AuthService.TEST_USER_OTP} (or sign in with password ${AuthService.TEST_USER_PASSWORD}).`);
+                return true;
+            }
+            this.isOtpSent.set(false);
+            this.authStep.set('login-password');
+            this.password.set('');
+            this.confirmPassword.set('');
+            return true;
+        }
 
         // When forceOtp is false (Step 1 email check), first check if the account already has a password
         // without consuming the 1-per-minute OTP generation rate limit.
@@ -492,6 +567,17 @@ export class AuthService {
         this.isAuthenticating.set(true);
         this.errorMessage.set(null);
         this.successMessage.set(null);
+
+        if (this.isTestUserEmail(email)) {
+            this.isAuthenticating.set(false);
+            if (otp === AuthService.TEST_USER_OTP || otp === '000000') {
+                this.otp.set('');
+                return this.loginAsTestUser(email);
+            }
+            this.errorMessage.set(`For the built-in test user, enter OTP ${AuthService.TEST_USER_OTP}.`);
+            this.otp.set('');
+            return false;
+        }
 
         return new Promise<boolean>((resolve) => {
             this.http.post<ApiResponse<AuthLoginResponseData>>(`${API_BASE_URL}/auth/verify-otp`, {
@@ -657,6 +743,15 @@ export class AuthService {
         this.errorMessage.set(null);
         this.successMessage.set(null);
 
+        if (this.isTestUserEmail(email)) {
+            this.isAuthenticating.set(false);
+            if (this.isTestUserPassword(password)) {
+                return this.loginAsTestUser(email);
+            }
+            this.errorMessage.set(`Invalid password for test user. Expected ${AuthService.TEST_USER_PASSWORD}.`);
+            return false;
+        }
+
         return new Promise<boolean>((resolve) => {
             this.http.post<ApiResponse<AuthLoginResponseData>>(`${API_BASE_URL}/auth/login-password`, {
                 email,
@@ -732,8 +827,8 @@ export class AuthService {
         const user = this.currentUser();
         const userToken = this.token();
 
-        // Only attempt backend logout call if session was not already expired
-        if (userToken && !isExpired) {
+        // Only attempt backend logout call if session was not already expired or local test user
+        if (userToken && !isExpired && !this.isTestUserSession()) {
             await firstValueFrom(this.http.post(`${API_BASE_URL}/auth/logout`, {})).catch(() => {});
         }
 
@@ -746,8 +841,12 @@ export class AuthService {
         this.refreshToken.set(null);
         this.userEmail.set('');
         this.resetToEmailStep();
-        this.showAuthModal.set(true);
+        this.showAuthModal.set(!APP_EDITION.isProOrHigher);
         this.isLoggingOut.set(false);
+
+        if (APP_EDITION.isProOrHigher && this.isBrowser) {
+            void this.router.navigate(['/login']);
+        }
 
         if (isExpired) {
             this.notificationService.notify('Your session has expired. Please sign in again.', 'warning');

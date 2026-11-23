@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { TerminalService } from '../services/terminal.service';
@@ -12,9 +12,17 @@ import { APP_EDITION } from '../../../environments/edition';
     '(document:keydown)': 'onGlobalKeydown($event)'
   },
   template: `
-    @if (terminal.isOpen()) {
-      <div class="border-t border-(--postonsteroids-border) bg-(--postonsteroids-bg-darker) text-(--postonsteroids-text-primary) flex flex-col shrink-0 shadow-2xl z-40"
-           style="height: 260px;">
+    @if (inline() || terminal.isOpen()) {
+      <div class="bg-(--postonsteroids-bg-darker) text-(--postonsteroids-text-primary) flex flex-col min-h-0"
+           [class.border-t]="!inline()"
+           [class.border-(--postonsteroids-border)]="!inline()"
+           [class.shrink-0]="!inline()"
+           [class.shadow-2xl]="!inline()"
+           [class.z-40]="!inline()"
+           [class.flex-1]="inline()"
+           [class.h-full]="inline()"
+           [class.w-full]="inline()"
+           [style.height]="inline() ? null : '260px'">
         <!-- Header Bar -->
         <div class="h-8 px-3 border-b border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary) flex items-center justify-between gap-3 shrink-0 text-[11px]">
           <div class="flex items-center gap-2 min-w-0">
@@ -28,7 +36,7 @@ import { APP_EDITION } from '../../../environments/edition';
                 <span class="text-[10px] text-(--postonsteroids-text-muted)">Sandbox packages:</span>
                 @for (pkg of terminal.packagesService.packages(); track pkg.name) {
                   <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-mono text-[10px] border border-emerald-500/25">
-                    {{ pkg.name }}@{{ pkg.version }}
+                    {{ pkg.name }}&#64;{{ pkg.version }}
                   </span>
                 }
               </div>
@@ -54,10 +62,12 @@ import { APP_EDITION } from '../../../environments/edition';
                     class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) cursor-pointer flex items-center">
               <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
             </button>
-            <button type="button" (click)="terminal.close()" title="Close Terminal (Ctrl+\`)"
-                    class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) cursor-pointer flex items-center">
-              <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
-            </button>
+            @if (!inline()) {
+              <button type="button" (click)="terminal.close()" title="Close Terminal (Ctrl+\`)"
+                      class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) cursor-pointer flex items-center">
+                <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
+              </button>
+            }
           </div>
         </div>
 
@@ -98,6 +108,7 @@ import { APP_EDITION } from '../../../environments/edition';
 export class TerminalDrawerComponent {
   terminal = inject(TerminalService);
   readonly appEdition = APP_EDITION;
+  inline = input<boolean>(false);
 
   @ViewChild('outputPane') outputPane?: ElementRef<HTMLDivElement>;
   @ViewChild('cmdInput') cmdInput?: ElementRef<HTMLInputElement>;
@@ -108,7 +119,7 @@ export class TerminalDrawerComponent {
   constructor() {
     effect(() => {
       const _lines = this.terminal.lines();
-      const open = this.terminal.isOpen();
+      const open = this.terminal.isOpen() || this.inline();
       if (open) {
         setTimeout(() => {
           const el = this.outputPane?.nativeElement;
@@ -119,6 +130,7 @@ export class TerminalDrawerComponent {
   }
 
   onGlobalKeydown(event: KeyboardEvent): void {
+    if (this.inline()) return;
     if ((event.ctrlKey || event.metaKey) && event.key === '`') {
       event.preventDefault();
       this.terminal.toggle();

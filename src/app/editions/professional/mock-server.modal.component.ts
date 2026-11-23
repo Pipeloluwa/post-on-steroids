@@ -36,7 +36,7 @@ export interface MockRouteEntry {
               </div>
               <div>
                 <h3 id="mock-mgr-title" class="text-sm font-bold text-(--postonsteroids-text-primary)">Mock Server from Saved Examples</h3>
-                <p class="text-[11px] text-(--postonsteroids-text-muted)">Serve saved request Examples locally on Electron (or simulate routes directly in Browser)</p>
+                <p class="text-[11px] text-(--postonsteroids-text-muted)">Serve saved request Examples locally on Desktop App (or simulate routes directly in Browser)</p>
               </div>
             </div>
             <button type="button" (click)="close()" class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) cursor-pointer">
@@ -71,7 +71,7 @@ export interface MockRouteEntry {
                   </button>
                 }
               } @else {
-                <span class="text-[11px] italic text-(--postonsteroids-text-muted)">Live port binding requires Desktop (Electron); use Route Simulator below on Web.</span>
+                <span class="text-[11px] italic text-(--postonsteroids-text-muted)">Live port binding requires Desktop App; use Route Simulator below on Web.</span>
               }
             </div>
           </div>
@@ -216,7 +216,7 @@ export class MockServerModalComponent {
     await this.refreshRoutes();
     const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
     if (!electronApi?.startMockServer) {
-      this.notification.notify('Local Mock Server requires Electron desktop runtime.', 'warning');
+      this.notification.notify('Local Mock Server requires Desktop App runtime.', 'warning');
       return;
     }
     const res = await electronApi.startMockServer({ port: this.port(), routes: this.routes() });

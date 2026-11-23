@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
@@ -99,6 +99,47 @@ interface RunnerResultRow {
             </div>
           </div>
 
+          <!-- Schedule Execution Date & Optional End Date Bar -->
+          <div class="px-4 py-2.5 border-b border-(--postonsteroids-border)/50 flex flex-wrap items-center justify-between gap-2 bg-(--postonsteroids-bg-secondary)/50 text-[11px]">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-semibold text-(--postonsteroids-text-muted) flex items-center gap-1">
+                <mat-icon class="text-[14px]! size-[14px]! text-amber-400">event</mat-icon>
+                <span>Schedule Flow (Local):</span>
+              </span>
+              <input type="datetime-local" aria-label="Runner execution start date time"
+                     [ngModel]="scheduleStartAt()" (ngModelChange)="scheduleStartAt.set($event)"
+                     [disabled]="isScheduled() || isRunning()"
+                     class="px-2 py-1 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) font-mono text-(--postonsteroids-text-primary) outline-none" />
+              <span class="text-(--postonsteroids-text-muted)">to</span>
+              <input type="datetime-local" aria-label="Runner optional end date time"
+                     [ngModel]="scheduleEndAt()" (ngModelChange)="scheduleEndAt.set($event)"
+                     [disabled]="isScheduled() || isRunning()"
+                     placeholder="Optional End"
+                     class="px-2 py-1 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) font-mono text-(--postonsteroids-text-primary) outline-none" />
+              <label class="flex items-center gap-1 text-(--postonsteroids-text-muted)">
+                <span>Repeat (s):</span>
+                <input type="number" min="0" max="86400"
+                       [ngModel]="scheduleRepeatSeconds()" (ngModelChange)="scheduleRepeatSeconds.set(Math.max(0, +$event || 0))"
+                       [disabled]="isScheduled() || isRunning()"
+                       class="w-16 px-1.5 py-1 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) font-mono text-(--postonsteroids-text-primary) outline-none" />
+              </label>
+            </div>
+            <div class="flex items-center gap-2">
+              @if (isScheduled()) {
+                <span class="text-amber-400 font-mono font-semibold">{{ scheduledStatusLabel() }}</span>
+                <button type="button" (click)="cancelScheduledRun()"
+                        class="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold cursor-pointer">
+                  Cancel Schedule
+                </button>
+              } @else {
+                <button type="button" (click)="scheduleRunner()" [disabled]="isRunning() || targetRequests().length === 0 || !scheduleStartAt()"
+                        class="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold cursor-pointer disabled:opacity-45">
+                  Schedule Execution
+                </button>
+              }
+            </div>
+          </div>
+
           <!-- Summary Stats -->
           @if (results().length > 0) {
             <div class="px-5 py-2.5 border-b border-(--postonsteroids-border)/50 flex flex-wrap items-center justify-between gap-3 bg-(--postonsteroids-bg-tertiary)/30 text-xs">
@@ -165,7 +206,7 @@ interface RunnerResultRow {
     }
   `
 })
-export class CollectionRunnerModalComponent {
+export class CollectionRunnerModalComponent implements OnDestroy {
   tabState = inject(TabStateService);
   private requestExecutor = inject(RequestExecutionService);
   private variableService = inject(VariableService);
@@ -182,7 +223,16 @@ export class CollectionRunnerModalComponent {
   isRunning = signal<boolean>(false);
   results = signal<RunnerResultRow[]>([]);
 
+  scheduleStartAt = signal<string>('');
+  scheduleEndAt = signal<string>('');
+  scheduleRepeatSeconds = signal<number>(0);
+  isScheduled = signal<boolean>(false);
+  scheduledStatusLabel = signal<string>('');
+
   private stopRequested = false;
+  private startTimerId: ReturnType<typeof setTimeout> | null = null;
+  private repeatTimerId: ReturnType<typeof setInterval> | null = null;
+  private endTimerId: ReturnType<typeof setTimeout> | null = null;
 
   capsuleGroups = computed(() => this.tabState.getGroupsForCapsule(this.tabState.activeCapsuleId()));
 
@@ -222,8 +272,95 @@ export class CollectionRunnerModalComponent {
     this.close();
   }
 
+  ngOnDestroy(): void {
+    this.cancelScheduledRun(true);
+  }
+
+  private parseLocalDateTimeMs(value: string): number | null {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      const [, y, m, d, hh, mm, ss] = match;
+      const ms = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss || '0'), 0).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    }
+    const ms = new Date(trimmed).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  scheduleRunner(): void {
+    const startMs = this.parseLocalDateTimeMs(this.scheduleStartAt());
+    const endMs = this.parseLocalDateTimeMs(this.scheduleEndAt());
+    const now = Date.now();
+    if (startMs === null) {
+      this.notification.notify('Please select an execution start date & time.', 'warning');
+      return;
+    }
+    if (endMs !== null && (endMs <= now || endMs <= startMs)) {
+      this.notification.notify('Optional end date & time must be after start date & time and in the future.', 'warning');
+      return;
+    }
+    this.cancelScheduledRun(true);
+    this.isScheduled.set(true);
+
+    const delayUntilStart = Math.max(0, startMs - now);
+    const repeatMs = this.scheduleRepeatSeconds() > 0 ? Math.max(1000, this.scheduleRepeatSeconds() * 1000) : 0;
+    this.scheduledStatusLabel.set(`Scheduled: ${new Date(startMs).toLocaleString()}`);
+
+    if (endMs !== null) {
+      this.endTimerId = setTimeout(() => {
+        this.cancelScheduledRun(true);
+        this.notification.notify('Scheduled Collection Runner ended at configured end date/time.');
+      }, Math.min(Math.max(0, endMs - now), 2_147_483_647));
+    }
+
+    const executeScheduled = () => {
+      if (endMs !== null && Date.now() >= endMs) {
+        this.cancelScheduledRun(true);
+        return;
+      }
+      if (!this.isRunning()) {
+        void this.startRun();
+      }
+    };
+
+    this.startTimerId = setTimeout(() => {
+      executeScheduled();
+      if (repeatMs > 0) {
+        this.scheduledStatusLabel.set(`Running every ${Math.round(repeatMs / 1000)}s`);
+        this.repeatTimerId = setInterval(executeScheduled, repeatMs);
+      } else {
+        this.cancelScheduledRun(true);
+      }
+    }, Math.min(delayUntilStart, 2_147_483_647));
+
+    this.notification.notify(`Collection run scheduled for ${new Date(startMs).toLocaleString()}`, 'success');
+  }
+
+  cancelScheduledRun(silent = false): void {
+    if (this.startTimerId) {
+      clearTimeout(this.startTimerId);
+      this.startTimerId = null;
+    }
+    if (this.repeatTimerId) {
+      clearInterval(this.repeatTimerId);
+      this.repeatTimerId = null;
+    }
+    if (this.endTimerId) {
+      clearTimeout(this.endTimerId);
+      this.endTimerId = null;
+    }
+    if (this.isScheduled() && !silent) {
+      this.notification.notify('Scheduled collection run cancelled.');
+    }
+    this.isScheduled.set(false);
+    this.scheduledStatusLabel.set('');
+  }
+
   close(): void {
     this.stopRun();
+    this.cancelScheduledRun(true);
     this.closed.emit();
   }
 

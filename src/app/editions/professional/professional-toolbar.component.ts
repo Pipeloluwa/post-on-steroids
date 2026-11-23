@@ -13,28 +13,48 @@ import { VersionHistoryModalComponent } from './version-history.modal.component'
     VersionHistoryModalComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(document:click)': 'showToolsMenu.set(false)'
+  },
   template: `
-    <div class="flex items-center gap-1 2xl:gap-1.5 shrink-0" style="-webkit-app-region: no-drag;">
-      <!-- Collection Runner -->
-      <button type="button" (click)="showRunnerModal.set(true)" title="Collection &amp; Data-Driven Runner"
-              class="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer transition-colors shrink-0">
+    <div class="flex items-center gap-1.5 shrink-0 relative">
+      <!-- Primary Collection Runner trigger -->
+      <button type="button" (click)="openRunner($event)" title="Collection &amp; Data-Driven Runner"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer transition-colors shrink-0">
         <mat-icon class="text-[14px]! size-[14px]! text-indigo-500">play_circle</mat-icon>
-        <span class="hidden 2xl:inline">Runner</span>
+        <span>Runner</span>
       </button>
 
-      <!-- Mock Server -->
-      <button type="button" (click)="openMockModal(mockModal)" title="Mock Server from Saved Examples"
-              class="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer transition-colors shrink-0">
-        <mat-icon class="text-[14px]! size-[14px]! text-purple-500">dns</mat-icon>
-        <span class="hidden 2xl:inline">Mocks</span>
-      </button>
+      <!-- Grouped Tools Dropdown (Mock Server, Version Snapshots, Runner) -->
+      <div class="relative">
+        <button type="button" (click)="toggleToolsMenu($event)" title="Workspace Tools (Runner, Mocks, Snapshots)"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer transition-colors shrink-0">
+          <mat-icon class="text-[14px]! size-[14px]! text-purple-400">workspaces</mat-icon>
+          <span>Tools</span>
+          <mat-icon class="text-[13px]! size-[13px]! opacity-70">expand_more</mat-icon>
+        </button>
 
-      <!-- Request Version Snapshots -->
-      <button type="button" (click)="showSnapshotModal.set(true)" title="Version History &amp; Snapshots"
-              class="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-1 rounded-full bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) cursor-pointer transition-colors shrink-0">
-        <mat-icon class="text-[14px]! size-[14px]! text-cyan-500">restore</mat-icon>
-        <span class="hidden 2xl:inline">Snapshots</span>
-      </button>
+        @if (showToolsMenu()) {
+          <div (click)="$event.stopPropagation()"
+               class="absolute right-0 top-full mt-1.5 w-52 p-1.5 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl z-[105] text-[11.5px] flex flex-col gap-0.5">
+            <button type="button" (click)="openRunner($event)"
+                    class="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) cursor-pointer text-left">
+              <mat-icon class="text-[15px]! size-[15px]! text-indigo-500">play_circle</mat-icon>
+              <span>Collection Runner</span>
+            </button>
+            <button type="button" (click)="openMockModal(mockModal, $event)"
+                    class="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) cursor-pointer text-left">
+              <mat-icon class="text-[15px]! size-[15px]! text-purple-500">dns</mat-icon>
+              <span>Local Mock Server</span>
+            </button>
+            <button type="button" (click)="openSnapshots($event)"
+                    class="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) cursor-pointer text-left">
+              <mat-icon class="text-[15px]! size-[15px]! text-cyan-500">restore</mat-icon>
+              <span>Version Snapshots</span>
+            </button>
+          </div>
+        }
+      </div>
     </div>
 
     <app-collection-runner-modal [isOpen]="showRunnerModal()" (closed)="showRunnerModal.set(false)" />
@@ -43,12 +63,32 @@ import { VersionHistoryModalComponent } from './version-history.modal.component'
   `
 })
 export class ProfessionalToolbarComponent {
+  showToolsMenu = signal(false);
   showRunnerModal = signal(false);
   showMockModal = signal(false);
   showSnapshotModal = signal(false);
 
-  openMockModal(modal: MockServerModalComponent): void {
+  toggleToolsMenu(event: Event): void {
+    event.stopPropagation();
+    this.showToolsMenu.update(v => !v);
+  }
+
+  openRunner(event?: Event): void {
+    event?.stopPropagation();
+    this.showToolsMenu.set(false);
+    this.showRunnerModal.set(true);
+  }
+
+  openMockModal(modal: MockServerModalComponent, event?: Event): void {
+    event?.stopPropagation();
+    this.showToolsMenu.set(false);
     this.showMockModal.set(true);
     void modal.refreshRoutes();
+  }
+
+  openSnapshots(event?: Event): void {
+    event?.stopPropagation();
+    this.showToolsMenu.set(false);
+    this.showSnapshotModal.set(true);
   }
 }

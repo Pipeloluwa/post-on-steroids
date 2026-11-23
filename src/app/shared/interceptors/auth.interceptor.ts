@@ -1,8 +1,8 @@
-import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpInterceptorFn, HttpErrorResponse, HttpResponse } from '@angular/common/http';
 import { inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { catchError, switchMap, finalize } from 'rxjs/operators';
-import { throwError, from } from 'rxjs';
+import { throwError, from, of } from 'rxjs';
 import { AUTH_TOKEN_KEY, API_BASE_URL } from '../constants/api.constants';
 import { AuthService } from '../services/auth.service';
 
@@ -12,6 +12,19 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     
     // Only intercept requests going to our own backend API
     if (isPlatformBrowser(platformId) && req.url.startsWith(API_BASE_URL)) {
+        if (authService.isTestUserSession()) {
+            const singleItemUrl = req.url.includes('/WorkspaceState') || req.url.includes('/capsule/shared/');
+            const listData = req.method === 'GET' && !singleItemUrl ? [] : null;
+            return of(new HttpResponse({
+                status: 200,
+                body: {
+                    title: 'Test Session',
+                    responseCode: '01',
+                    message: 'Handled locally for test user session',
+                    data: listData ?? (req.method === 'GET' ? null : (req.body ?? null))
+                }
+            }));
+        }
         const isSaveOrUpdate = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !req.url.includes('/auth/');
         if (isSaveOrUpdate) {
             authService.startSaveRequest();

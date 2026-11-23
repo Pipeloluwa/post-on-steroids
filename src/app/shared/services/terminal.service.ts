@@ -340,7 +340,7 @@ export class TerminalService {
       'warn',
       `Unknown command "${cmd}". Built-in commands: help, env, env use <name>, vars, set k=v, ls, run <req>, schedule <req> <sec>, schedule stop${
         APP_EDITION.isProOrHigher ? ', npm install <pkg>, npm list, npm uninstall <pkg>' : ''
-      }. Full OS shell commands are available in Desktop (Electron).`
+      }. Full OS shell commands are available in Desktop App.`
     );
   }
 
@@ -367,7 +367,7 @@ export class TerminalService {
       );
     }
     if (isElectronApp()) {
-      lines.push('', 'Desktop Shell: Any other command runs natively via the Electron OS shell.');
+      lines.push('', 'Desktop Shell: Any other command runs natively via the Desktop App OS shell.');
     }
     this.appendLine('code', lines.join('\n'));
   }

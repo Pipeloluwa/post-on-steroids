@@ -223,7 +223,7 @@ interface LoadTestSummary {
               <div class="p-4 rounded-xl bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border) space-y-3">
                 <div>
                   <div class="text-sm font-bold text-(--postonsteroids-text-primary)">Mutual TLS (mTLS) Client Certificates</div>
-                  <div class="text-[11px] text-(--postonsteroids-text-muted)">Attach <code class="font-mono">.pfx</code> / <code class="font-mono">.p12</code> or PEM (<code class="font-mono">.crt</code> + <code class="font-mono">.key</code>) certificates per host/domain for Electron requests.</div>
+                  <div class="text-[11px] text-(--postonsteroids-text-muted)">Attach <code class="font-mono">.pfx</code> / <code class="font-mono">.p12</code> or PEM (<code class="font-mono">.crt</code> + <code class="font-mono">.key</code>) certificates per host/domain for Desktop App requests.</div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
                   <input type="text" [ngModel]="certHost()" (ngModelChange)="certHost.set($event)" placeholder="Host (e.g. api.bank.internal or *.internal)"

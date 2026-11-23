@@ -9,14 +9,14 @@ import { EnterpriseSuiteModalComponent } from './enterprise-suite.modal.componen
   imports: [MatIcon, ProfessionalToolbarComponent, EnterpriseSuiteModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="flex items-center gap-1 2xl:gap-1.5 shrink-0" style="-webkit-app-region: no-drag;">
+    <div class="flex items-center gap-1.5 shrink-0">
       <app-professional-toolbar />
 
       <button type="button" (click)="showEnterpriseModal.set(true)"
               title="Enterprise Governance, Secret Vault, mTLS, RBAC &amp; Load Tester"
-              class="inline-flex items-center gap-1 px-2 2xl:px-2.5 py-1 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-[11px] font-bold text-amber-500 cursor-pointer transition-colors shrink-0">
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-[11px] font-bold text-amber-500 cursor-pointer transition-colors shrink-0">
         <mat-icon class="text-[14px]! size-[14px]!">admin_panel_settings</mat-icon>
-        <span>Enterprise</span>
+        <span>Suite</span>
         @if (gov.isActiveCapsuleLocked()) {
           <mat-icon class="text-[12px]! size-[12px]!">lock</mat-icon>
         }

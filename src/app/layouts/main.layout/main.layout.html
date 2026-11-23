@@ -1,3 +1,4 @@
+@if (!requiresAuthGate || authService.isLoggedIn()) {
 <div
     class="w-full h-full flex flex-col overflow-x-auto overflow-y-hidden bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) transition-colors duration-300 relative scroll-smooth">
 
@@ -39,8 +40,10 @@
             </div>
         </div>
 
-        <!-- Integrated Cross-Edition Terminal Drawer -->
-        <app-terminal-drawer />
+        <!-- Integrated Cross-Edition Terminal Drawer (non-workspace routes; workspace embeds Terminal inside Response pane) -->
+        @if (!isWorkspaceRoute()) {
+            <app-terminal-drawer />
+        }
     </div>
 
     <!-- Modals & Notifications -->
@@ -67,3 +70,4 @@
     <app-add-variable-modal-component />
     <app-dialog-modal />
 </div>
+}

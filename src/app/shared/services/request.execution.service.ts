@@ -59,54 +59,182 @@ export class RequestExecutionService {
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
     private clientCertProviders: Array<(targetUrl: string) => ClientCertConfig | null> = [];
     private executionObservers: Array<(event: ExecutionAuditEvent) => void> = [];
-    private schedules = new Map<string, { timerId: ReturnType<typeof setInterval>; intervalMs: number; runCount: number }>();
-    readonly activeSchedules = signal<Record<string, { intervalMs: number; runCount: number; nextRunAt: number }>>({});
+    private schedules = new Map<string, {
+        startTimerId?: ReturnType<typeof setTimeout>;
+        intervalId?: ReturnType<typeof setInterval>;
+        endTimerId?: ReturnType<typeof setTimeout>;
+        intervalMs: number;
+        startAt: number | null;
+        endAt: number | null;
+        runCount: number;
+        status: 'waiting' | 'running';
+    }>();
+    readonly activeSchedules = signal<Record<string, {
+        intervalMs: number;
+        runCount: number;
+        nextRunAt: number;
+        startAt?: number | null;
+        endAt?: number | null;
+        status: 'waiting' | 'running';
+    }>>({});
 
-    startSchedule(tabId: string, intervalMs: number): void {
+    private parseLocalDateTimeMs(value?: string | null): number | null {
+        if (!value || typeof value !== 'string') return null;
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const localMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+        if (localMatch) {
+            const [, y, m, d, hh, mm, ss] = localMatch;
+            const dt = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss || '0'), 0);
+            const ms = dt.getTime();
+            return Number.isFinite(ms) ? ms : null;
+        }
+        const parsed = new Date(trimmed).getTime();
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    private scheduleTimeoutSafe(fn: () => void, delayMs: number): ReturnType<typeof setTimeout> {
+        const MAX_TIMEOUT_MS = 2_147_483_647;
+        if (delayMs <= MAX_TIMEOUT_MS) {
+            return setTimeout(fn, Math.max(0, delayMs));
+        }
+        return setTimeout(() => this.scheduleTimeoutSafe(fn, delayMs - MAX_TIMEOUT_MS), MAX_TIMEOUT_MS);
+    }
+
+    startSchedule(
+        tabId: string,
+        intervalMs: number,
+        options?: { startAt?: string | null; endAt?: string | null }
+    ): boolean {
         const effectiveId = this.tabStateService.resolveTabId(tabId);
+        const state = this.tabStateService.getState(effectiveId);
         const safeMs = Math.max(1000, Math.min(86_400_000, Math.round(Number(intervalMs) || 10000)));
+        const rawStartAt = options && options.startAt !== undefined ? options.startAt : state?.triggerConfig?.scheduleStartAt;
+        const rawEndAt = options && options.endAt !== undefined ? options.endAt : state?.triggerConfig?.scheduleEndAt;
+        const startAtMs = this.parseLocalDateTimeMs(rawStartAt);
+        const endAtMs = this.parseLocalDateTimeMs(rawEndAt);
+        const now = Date.now();
+
+        if (endAtMs !== null && endAtMs <= now) {
+            this.notificationService.notify('Optional schedule end date & time must be in the future.', 'warning');
+            return false;
+        }
+        if (startAtMs !== null && endAtMs !== null && endAtMs <= startAtMs) {
+            this.notificationService.notify('End date & time must be after execution start date & time.', 'warning');
+            return false;
+        }
+
         this.stopSchedule(effectiveId, true);
 
-        const entry = {
+        const isFutureStart = startAtMs !== null && startAtMs > now + 500;
+        const entry: {
+            startTimerId?: ReturnType<typeof setTimeout>;
+            intervalId?: ReturnType<typeof setInterval>;
+            endTimerId?: ReturnType<typeof setTimeout>;
+            intervalMs: number;
+            startAt: number | null;
+            endAt: number | null;
+            runCount: number;
+            status: 'waiting' | 'running';
+        } = {
             intervalMs: safeMs,
+            startAt: startAtMs,
+            endAt: endAtMs,
             runCount: 0,
-            timerId: setInterval(() => {
-                const st = this.tabStateService.getState(effectiveId);
-                if (!st) {
-                    this.stopSchedule(effectiveId, true);
-                    return;
-                }
-                if (st.isLoading) return;
-                entry.runCount += 1;
-                this.activeSchedules.update(curr => ({
-                    ...curr,
-                    [effectiveId]: {
-                        intervalMs: safeMs,
-                        runCount: entry.runCount,
-                        nextRunAt: Date.now() + safeMs
-                    }
-                }));
-                this.executeRequest(effectiveId, false, 0, 0);
-            }, safeMs)
+            status: isFutureStart ? 'waiting' : 'running'
         };
+
+        const runTick = () => {
+            if (entry.endAt !== null && Date.now() >= entry.endAt) {
+                const label = this.tabStateService.getState(effectiveId)?.name || 'Request';
+                this.stopSchedule(effectiveId, true);
+                this.notificationService.notify(`Scheduled trigger for "${label}" completed (reached end date/time).`);
+                return;
+            }
+            const st = this.tabStateService.getState(effectiveId);
+            if (!st) {
+                this.stopSchedule(effectiveId, true);
+                return;
+            }
+            if (st.isLoading) return;
+            entry.status = 'running';
+            entry.runCount += 1;
+            const nextRunAt = Date.now() + safeMs;
+            this.activeSchedules.update(curr => ({
+                ...curr,
+                [effectiveId]: {
+                    intervalMs: safeMs,
+                    runCount: entry.runCount,
+                    nextRunAt: entry.endAt !== null && nextRunAt > entry.endAt ? entry.endAt : nextRunAt,
+                    startAt: entry.startAt,
+                    endAt: entry.endAt,
+                    status: 'running'
+                }
+            }));
+            this.executeRequest(effectiveId, false, 0, 0);
+        };
+
+        const startRecurringLoop = () => {
+            entry.intervalId = setInterval(runTick, safeMs);
+        };
+
+        if (endAtMs !== null) {
+            const label = state?.name || 'Request';
+            entry.endTimerId = this.scheduleTimeoutSafe(() => {
+                if (this.schedules.get(effectiveId) !== entry) return;
+                this.stopSchedule(effectiveId, true);
+                this.notificationService.notify(`Scheduled trigger for "${label}" stopped at configured end date/time.`);
+            }, Math.max(0, endAtMs - now));
+        }
+
+        if (isFutureStart && startAtMs !== null) {
+            entry.startTimerId = this.scheduleTimeoutSafe(() => {
+                if (this.schedules.get(effectiveId) !== entry) return;
+                entry.status = 'running';
+                runTick();
+                if (this.schedules.get(effectiveId) === entry) {
+                    startRecurringLoop();
+                }
+            }, startAtMs - now);
+        } else {
+            startRecurringLoop();
+        }
+
         this.schedules.set(effectiveId, entry);
         this.activeSchedules.update(curr => ({
             ...curr,
             [effectiveId]: {
                 intervalMs: safeMs,
                 runCount: 0,
-                nextRunAt: Date.now() + safeMs
+                nextRunAt: isFutureStart && startAtMs !== null ? startAtMs : Date.now() + safeMs,
+                startAt: startAtMs,
+                endAt: endAtMs,
+                status: entry.status
             }
         }));
-        const label = this.tabStateService.getState(effectiveId)?.name || 'Request';
-        this.notificationService.notify(`Recurring schedule started for "${label}" every ${Math.round(safeMs / 1000)}s`, 'success');
+        const label = state?.name || 'Request';
+        if (isFutureStart && startAtMs !== null) {
+            const startLabel = new Date(startAtMs).toLocaleString();
+            this.notificationService.notify(
+                `Trigger scheduled for "${label}" at ${startLabel} (every ${Math.round(safeMs / 1000)}s)${endAtMs ? ` until ${new Date(endAtMs).toLocaleString()}` : ''}`,
+                'success'
+            );
+        } else {
+            this.notificationService.notify(
+                `Recurring schedule started for "${label}" every ${Math.round(safeMs / 1000)}s${endAtMs ? ` until ${new Date(endAtMs).toLocaleString()}` : ''}`,
+                'success'
+            );
+        }
+        return true;
     }
 
     stopSchedule(tabId: string, silent: boolean = false): void {
         const effectiveId = this.tabStateService.resolveTabId(tabId);
         const existing = this.schedules.get(effectiveId);
         if (existing) {
-            clearInterval(existing.timerId);
+            if (existing.startTimerId) clearTimeout(existing.startTimerId);
+            if (existing.intervalId) clearInterval(existing.intervalId);
+            if (existing.endTimerId) clearTimeout(existing.endTimerId);
             this.schedules.delete(effectiveId);
         }
         this.activeSchedules.update(curr => {
@@ -121,13 +249,16 @@ export class RequestExecutionService {
         }
     }
 
-    toggleSchedule(tabId: string, intervalMs: number): boolean {
+    toggleSchedule(
+        tabId: string,
+        intervalMs: number,
+        options?: { startAt?: string | null; endAt?: string | null }
+    ): boolean {
         if (this.isScheduleActive(tabId)) {
             this.stopSchedule(tabId);
             return false;
         }
-        this.startSchedule(tabId, intervalMs);
-        return true;
+        return this.startSchedule(tabId, intervalMs, options);
     }
 
     isScheduleActive(tabId: string): boolean {

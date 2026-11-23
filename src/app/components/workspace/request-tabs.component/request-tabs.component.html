@@ -36,7 +36,7 @@
         <div cdkDrag cdkDragLockAxis="x" [cdkDragData]="tab" (click)="setActiveTab(tab.id)"
             (contextmenu)="onTabContextMenu($event, tab.id)" [title]="tab.name"
             (cdkDragMoved)="onDragMoved($event)"
-            class="request-tab relative flex items-center h-full px-2 gap-x-1.5 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group w-[200px] min-w-[200px] max-w-[200px] shrink-0"
+            class="request-tab relative flex items-center h-full px-2 gap-x-1 border-r border-(--postonsteroids-border) cursor-pointer hover:bg-(--postonsteroids-bg-hover) group w-[145px] min-w-[145px] max-w-[145px] shrink-0"
             [class.bg-(--postonsteroids-bg-secondary)]="activeTabId() === tab.id" [id]="'tab'+tab.id">
 
             <!-- Method -->
@@ -74,7 +74,7 @@
         @if (isTabsLoading()) {
         <div class="flex items-center h-full shrink-0" role="status" aria-label="Loading request tabs">
             @for (skeleton of skeletonTabs; track skeleton) {
-            <div class="relative flex items-center h-full px-2 border-r border-(--postonsteroids-border) w-[200px] min-w-[200px] max-w-[200px] shrink-0">
+            <div class="relative flex items-center h-full px-2 border-r border-(--postonsteroids-border) w-[145px] min-w-[145px] max-w-[145px] shrink-0">
                 <div class="relative w-full h-[12px] rounded bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border)/60 overflow-hidden">
                     <div class="tab-skeleton-shimmer"></div>
                 </div>

@@ -1,12 +1,5 @@
 import { Routes } from '@angular/router';
-import { MainLayout } from './layouts/main.layout/main.layout';
-import { WorkspaceComponent } from './components/workspace/workspace.component';
-import { CollectionsComponent } from './components/collections.component/collections.component';
-import { ExportComponent } from './components/export.component/export.component';
-import { ImportComponent } from './components/import.component/import.component';
-import { HistoryComponent } from './components/history.component/history.component';
-import { UtilityComponent } from './components/utility.component/utility.component';
-import { authGuard } from './guards/auth.guard';
+import { authGuard, authMatchGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
     {
@@ -15,32 +8,34 @@ export const routes: Routes = [
     },
     {
         path: '',
-        component: MainLayout,
+        canMatch: [authMatchGuard],
+        canActivate: [authGuard],
+        loadComponent: () => import('./layouts/main.layout/main.layout').then(m => m.MainLayout),
         children: [
             {
                 path: '',
-                component: WorkspaceComponent,
+                loadComponent: () => import('./components/workspace/workspace.component').then(m => m.WorkspaceComponent),
                 pathMatch: 'full'
             },
             {
                 path: 'capsules',
-                component: CollectionsComponent
+                loadComponent: () => import('./components/collections.component/collections.component').then(m => m.CollectionsComponent)
             },
             {
                 path: 'export',
-                component: ExportComponent
+                loadComponent: () => import('./components/export.component/export.component').then(m => m.ExportComponent)
             },
             {
                 path: 'import',
-                component: ImportComponent
+                loadComponent: () => import('./components/import.component/import.component').then(m => m.ImportComponent)
             },
             {
                 path: 'utilities',
-                component: UtilityComponent
+                loadComponent: () => import('./components/utility.component/utility.component').then(m => m.UtilityComponent)
             },
             {
                 path: 'history',
-                component: HistoryComponent
+                loadComponent: () => import('./components/history.component/history.component').then(m => m.HistoryComponent)
             }
         ]
     },

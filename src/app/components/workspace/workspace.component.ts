@@ -19,6 +19,7 @@ import { TabStateService, RequestGroup, RequestState } from '../../shared/servic
 import { DialogService } from '../../shared/services/dialog.service';
 import { getHttpMethodColor } from '../../shared/utils/http-method.util';
 import { RequestExecutionService } from '../../shared/services/request.execution.service';
+import { TerminalService } from '../../shared/services/terminal.service';
 
 @Component({
     selector: 'app-workspace',
@@ -58,6 +59,7 @@ export class WorkspaceComponent {
     tabStateService = inject(TabStateService);
     dialogService = inject(DialogService);
     private executionService = inject(RequestExecutionService);
+    private terminalService = inject(TerminalService);
 
     requestHeight = signal<number>(450); // Pixel height
     isResizing = signal<boolean>(false);
@@ -1205,6 +1207,12 @@ export class WorkspaceComponent {
 
     handleKeyboardShortcuts(event: KeyboardEvent) {
         if (!this.isBrowser) return;
+
+        if ((event.ctrlKey || event.metaKey) && event.key === '`') {
+            event.preventDefault();
+            this.terminalService.toggle();
+            return;
+        }
 
         const target = event.target as HTMLElement;
         

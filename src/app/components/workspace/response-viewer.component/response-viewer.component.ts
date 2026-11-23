@@ -1,10 +1,13 @@
-import { Component, signal, computed, inject, ViewChild, ChangeDetectionStrategy, input } from '@angular/core';
+import { Component, signal, computed, inject, effect, ViewChild, ChangeDetectionStrategy, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { TabStateService } from '../../../shared/services/tab.state.service';
 import { MonacoEditorComponent } from '../../../shared/components/monaco-editor.component/monaco-editor.component';
+import { TerminalDrawerComponent } from '../../../shared/components/terminal-drawer.component';
+import { TerminalService } from '../../../shared/services/terminal.service';
+import { APP_EDITION } from '../../../../environments/edition';
 
 import { VariableService } from '../../../shared/services/variable.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -15,16 +18,28 @@ import { WrapStyle, WRAP_STYLE_OPTIONS, formatBodyByStyle } from '../../../share
 @Component({
     selector: 'app-response-viewer-component',
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent, MonacoEditorComponent],
+    imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent, MonacoEditorComponent, TerminalDrawerComponent],
     templateUrl: './response-viewer.component.html',
     styleUrl: './response-viewer.component.css'
 })
 export class ResponseViewerComponent {
     tabStateService = inject(TabStateService);
+    terminalService = inject(TerminalService);
+    readonly appEdition = APP_EDITION;
     private variableService = inject(VariableService);
     private notificationService = inject(NotificationService);
 
     activeTab = signal('Body');
+
+    constructor() {
+        effect(() => {
+            if (this.terminalService.isOpen()) {
+                this.activeTab.set('Terminal');
+            } else if (this.activeTab() === 'Terminal') {
+                this.activeTab.set('Body');
+            }
+        });
+    }
     activeMode = computed<'Pretty' | 'Raw' | 'Visualize'>(() => {
         const stateMode = this.tabState()?.responseActiveMode;
         if (stateMode === 'Pretty' || stateMode === 'Raw' || stateMode === 'Visualize') return stateMode;
@@ -130,6 +145,7 @@ export class ResponseViewerComponent {
         { name: 'Test Results', count: this.testResults().length || null },
         { name: 'Encryption Console', count: null },
         { name: 'Script Console', count: null },
+        { name: 'Terminal', count: this.terminalService.lines().length || null },
     ]);
 
     // Script Console tab state
@@ -178,7 +194,14 @@ export class ResponseViewerComponent {
         return `${b} B`;
     });
 
-    setTab(tab: string) { this.activeTab.set(tab); }
+    setTab(tab: string) {
+        this.activeTab.set(tab);
+        if (tab === 'Terminal') {
+            this.terminalService.open();
+        } else if (this.terminalService.isOpen()) {
+            this.terminalService.close();
+        }
+    }
     setMode(mode: 'Pretty' | 'Raw' | 'Visualize') {
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('onsteroids_response_active_mode', mode);

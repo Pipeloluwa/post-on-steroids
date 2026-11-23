@@ -1,13 +1,16 @@
 <div class="w-full h-full flex flex-col">
 
     <!-- Tabs and Status -->
-    <div class="flex items-center justify-between px-2 h-[32px]">
-        <div class="flex items-center h-full gap-x-6">
+    <div class="flex items-center justify-between gap-2 px-2 h-[34px] border-b border-(--postonsteroids-border)/40 shrink-0">
+        <div class="flex items-center h-full gap-x-4 xl:gap-x-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-w-0">
             @for (tab of tabs(); track tab.name) {
             <div (click)="setTab(tab.name)"
-                class="h-full flex items-center gap-x-1 cursor-pointer relative transition-colors duration-200"
+                class="h-full flex items-center gap-x-1 cursor-pointer relative transition-colors duration-200 whitespace-nowrap shrink-0"
                 [class.text-(--postonsteroids-text-primary)]="activeTab() === tab.name"
                 [class.text-(--postonsteroids-text-secondary)]="activeTab() !== tab.name">
+                @if (tab.name === 'Terminal') {
+                <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">terminal</mat-icon>
+                }
                 <span class="text-[12px] font-medium">{{ tab.name }}</span>
                 @if (tab.count !== null) {
                 <span
@@ -15,21 +18,21 @@
                     tab.count }}</span>
                 }
                 @if (activeTab() === tab.name) {
-                <div class="absolute -bottom-[2px] left-0 right-0 h-[2px] bg-(--postonsteroids-accent)"></div>
+                <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-(--postonsteroids-accent)"></div>
                 }
             </div>
             }
         </div>
 
-        <!-- Status / Time / Size -->
-        <div class="flex items-center gap-x-4 text-[12px] font-bold">
+        <!-- Status / Time / Size + Grouped Pro/Enterprise Tools -->
+        <div class="flex items-center gap-x-3 text-[12px] font-bold shrink-0">
             @if (isLoading()) {
                 <div class="flex items-center gap-x-2 text-(--postonsteroids-accent)">
                     <mat-icon class="animate-spin text-[16px]! size-[16px]!">sync</mat-icon>
                     <span>Sending...</span>
                 </div>
             } @else if (hasResponse()) {
-            <div class="flex items-center gap-x-2 px-2 py-0.5 rounded text-[13px]" [class]="statusColor()">
+            <div class="flex items-center gap-x-2 px-2 py-0.5 rounded text-[12.5px]" [class]="statusColor()">
                 <span class="font-black">{{ statusLabel() }}</span>
             </div>
             <div class="flex items-center gap-x-1 text-(--postonsteroids-text-muted)">
@@ -42,6 +45,11 @@
             </div>
             } @else {
             <span class="text-(--postonsteroids-text-muted) italic text-[11px] font-normal">No response yet</span>
+            }
+
+            @if (tabStateService.activeTabId() === tabId() && appEdition.toolbarComponent) {
+                <div class="h-4 w-px bg-(--postonsteroids-border)"></div>
+                <ng-container *ngComponentOutlet="appEdition.toolbarComponent" />
             }
         </div>
     </div>
@@ -572,6 +580,13 @@
         </div>
         }
         
+
+        <!-- ─── TERMINAL ─── -->
+        @if (activeTab() === 'Terminal' && tabStateService.activeTabId() === tabId()) {
+        <div class="w-full h-full flex flex-col overflow-hidden">
+            <app-terminal-drawer [inline]="true" class="w-full h-full flex-1 min-h-0 flex flex-col" />
+        </div>
+        }
 
     </div>
 </div>

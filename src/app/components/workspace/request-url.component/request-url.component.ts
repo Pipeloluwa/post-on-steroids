@@ -100,16 +100,39 @@ export class RequestUrlComponent {
             expectedStatus: 200,
             delayMs: 250,
             retryCountOnFail: 0,
-            scheduleIntervalMs: 0
+            scheduleIntervalMs: 0,
+            scheduleStartAt: null,
+            scheduleEndAt: null
         };
     });
     isScriptControlledTrigger = computed(() => this.postTriggerTabId() === '__script__');
     scheduleInfo = computed(() => this.executionService.activeSchedules()[this.tabId()] || null);
     isScheduleActive = computed(() => !!this.scheduleInfo());
     scheduleIntervalSeconds = computed(() => Math.max(1, Math.round((this.triggerConfig().scheduleIntervalMs || 10000) / 1000)));
+    scheduleStartAt = computed(() => this.triggerConfig().scheduleStartAt || '');
+    scheduleEndAt = computed(() => this.triggerConfig().scheduleEndAt || '');
     activeScheduleSeconds = computed(() => {
         const info = this.scheduleInfo();
         return info ? Math.max(1, Math.round(info.intervalMs / 1000)) : 10;
+    });
+    scheduleBadgeText = computed(() => {
+        const info = this.scheduleInfo();
+        if (!info) return '';
+        if (info.status === 'waiting' && info.startAt) {
+            const d = new Date(info.startAt);
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            return `At ${hh}:${mm}`;
+        }
+        return `${this.activeScheduleSeconds()}s #${info.runCount}`;
+    });
+    scheduleStatusSummary = computed(() => {
+        const info = this.scheduleInfo();
+        if (!info) return '';
+        if (info.status === 'waiting' && info.startAt) {
+            return `Scheduled for ${new Date(info.startAt).toLocaleString()}${info.endAt ? ` · Ends ${new Date(info.endAt).toLocaleString()}` : ''}`;
+        }
+        return `Running (#${info.runCount})${info.endAt ? ` · Ends ${new Date(info.endAt).toLocaleString()}` : ''}`;
     });
     hasTriggerOrAutomation = computed(() =>
         !!this.postTriggerTabId() ||
@@ -236,15 +259,54 @@ export class RequestUrlComponent {
         const ms = sec * 1000;
         this.updateTriggerConfig({ scheduleIntervalMs: ms });
         if (this.isScheduleActive()) {
-            this.executionService.startSchedule(this.tabId(), ms);
+            this.executionService.startSchedule(this.tabId(), ms, {
+                startAt: this.triggerConfig().scheduleStartAt ?? null,
+                endAt: this.triggerConfig().scheduleEndAt ?? null
+            });
         }
+    }
+
+    private formatLocalDateTimeInput(date: Date): string {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${d}T${hh}:${mm}`;
+    }
+
+    onScheduleStartAtChange(rawVal: string) {
+        const clean = (rawVal || '').trim() || null;
+        this.updateTriggerConfig({ scheduleStartAt: clean });
+    }
+
+    onScheduleEndAtChange(rawVal: string) {
+        const clean = (rawVal || '').trim() || null;
+        this.updateTriggerConfig({ scheduleEndAt: clean });
+    }
+
+    setScheduleStartNow(event: MouseEvent) {
+        event.stopPropagation();
+        this.updateTriggerConfig({ scheduleStartAt: this.formatLocalDateTimeInput(new Date()) });
+    }
+
+    clearScheduleStartAt(event: MouseEvent) {
+        event.stopPropagation();
+        this.updateTriggerConfig({ scheduleStartAt: null });
+    }
+
+    clearScheduleEndAt(event: MouseEvent) {
+        event.stopPropagation();
+        this.updateTriggerConfig({ scheduleEndAt: null });
     }
 
     toggleRecurringSchedule(event: MouseEvent) {
         event.stopPropagation();
         const ms = this.scheduleIntervalSeconds() * 1000;
-        this.updateTriggerConfig({ scheduleIntervalMs: ms });
-        this.executionService.toggleSchedule(this.tabId(), ms);
+        const startAt = this.triggerConfig().scheduleStartAt ?? null;
+        const endAt = this.triggerConfig().scheduleEndAt ?? null;
+        this.updateTriggerConfig({ scheduleIntervalMs: ms, scheduleStartAt: startAt, scheduleEndAt: endAt });
+        this.executionService.toggleSchedule(this.tabId(), ms, { startAt, endAt });
     }
 
     private cleanupAuthEndpointTriggerIfPointingToThisTab() {
