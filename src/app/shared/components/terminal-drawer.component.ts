@@ -49,10 +49,12 @@ import { APP_EDITION } from '../../../environments/edition';
                     class="px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-[10px] font-mono cursor-pointer">
               help
             </button>
-            <button type="button" (click)="runQuick('env')"
-                    class="px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-[10px] font-mono cursor-pointer">
-              env
-            </button>
+            @if (subscription.isProOrHigher()) {
+              <button type="button" (click)="runQuick('env')"
+                      class="px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-[10px] font-mono cursor-pointer">
+                env
+              </button>
+            }
             <button type="button" (click)="terminal.clear()" title="Clear Terminal"
                     class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) cursor-pointer flex items-center">
               <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
@@ -66,8 +68,9 @@ import { APP_EDITION } from '../../../environments/edition';
           </div>
         </div>
 
-        <!-- Top Scrollable Output Pane -->
-        <div #outputPane class="h-[52%] min-h-[72px] overflow-y-auto px-3 py-2 font-mono text-[11.5px] leading-relaxed space-y-1 select-text">
+        <!-- Unified Interactive Inline Terminal Surface -->
+        <div #outputPane (click)="focusCmdInput()"
+             class="flex-1 min-h-[120px] overflow-y-auto px-3 py-2 font-mono text-[11.5px] leading-relaxed space-y-1.5 select-text cursor-text bg-(--postonsteroids-bg-darker)">
           @for (line of terminal.lines(); track line.id) {
             <div class="whitespace-pre-wrap break-words"
                  [class.text-(--postonsteroids-accent)]="line.kind === 'input'"
@@ -78,25 +81,24 @@ import { APP_EDITION } from '../../../environments/edition';
                  [class.text-(--postonsteroids-text-muted)]="line.kind === 'info'"
                  [class.text-(--postonsteroids-text-primary)]="line.kind === 'code'">{{ line.text }}</div>
           }
-        </div>
 
-        <!-- Full Lower Command Input Section up to the bottom demarcation -->
-        <div (click)="focusCmdInput()"
-             class="flex-1 min-h-[64px] px-3 py-2 border-t border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary)/60 flex items-start gap-2 cursor-text">
-          <span class="font-mono text-xs font-bold text-(--postonsteroids-accent) pt-[1px] select-none">$</span>
-          <textarea #cmdInput
-                    [ngModel]="inputCmd()"
-                    (ngModelChange)="inputCmd.set($event)"
-                    (keydown)="onInputKeydown($event)"
-                    name="terminalCmd"
-                    autocomplete="off"
-                    spellcheck="false"
-                    rows="1"
-                    [placeholder]="subscription.isProOrHigher() ? 'Type command (help, env use PROD, ls, run 1, npm install <pkg>) — Enter to run, Shift+Enter for new line...' : 'Type command (help, env use PROD, vars, set k=v, ls, run 1) — Enter to run...'"
-                    class="flex-1 w-full h-full bg-transparent outline-none font-mono text-xs text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted) resize-none leading-relaxed"></textarea>
-          @if (terminal.isBusy()) {
-            <mat-icon class="text-[14px]! size-[14px]! animate-spin text-(--postonsteroids-accent) mt-0.5 shrink-0">sync</mat-icon>
-          }
+          <!-- Inline Interactive Command Prompt directly beneath previous output -->
+          <div class="flex items-start gap-2 pt-0.5">
+            <span class="font-mono text-xs font-bold text-(--postonsteroids-accent) pt-[1px] select-none shrink-0">$</span>
+            <textarea #cmdInput
+                      [ngModel]="inputCmd()"
+                      (ngModelChange)="inputCmd.set($event)"
+                      (keydown)="onInputKeydown($event)"
+                      name="terminalCmd"
+                      autocomplete="off"
+                      spellcheck="false"
+                      rows="1"
+                      [placeholder]="subscription.isProOrHigher() ? 'Type command (help, env use PROD, ls, run 1, npm install &lt;pkg&gt;) — Enter to run' : 'Type command (help, env use PROD, vars, set k=v, ls, run 1) — Enter to run'"
+                      class="flex-1 w-full bg-transparent outline-none font-mono text-[11.5px] text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)/75 resize-none leading-relaxed"></textarea>
+            @if (terminal.isBusy()) {
+              <mat-icon class="text-[14px]! size-[14px]! animate-spin text-(--postonsteroids-accent) mt-0.5 shrink-0">sync</mat-icon>
+            }
+          </div>
         </div>
       </div>
     }

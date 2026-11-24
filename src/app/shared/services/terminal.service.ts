@@ -33,14 +33,7 @@ export class TerminalService {
   isOpen = signal<boolean>(false);
   isBusy = signal<boolean>(false);
   commandHistory = signal<string[]>([]);
-  lines = signal<TerminalLine[]>([
-    {
-      id: generateUUID(),
-      kind: 'info',
-      text: `OnSteroid Terminal (${APP_EDITION.label} Edition). Type "help" to list built-in workspace, request, schedule, and package commands.`,
-      timestamp: Date.now()
-    }
-  ]);
+  lines = signal<TerminalLine[]>([]);
 
   toggle(): void {
     this.isOpen.update(v => !v);
@@ -87,8 +80,12 @@ export class TerminalService {
       return;
     }
 
-    // Environment commands (All Editions)
+    // Environment commands (Pro & Enterprise only)
     if (lower === 'env' || lower === 'env list') {
+      if (!this.subscription.isProOrHigher()) {
+        this.appendLine('warn', 'Environments are restricted to Pro & Enterprise subscriptions.');
+        return;
+      }
       const activeId = this.envService.activeEnvironmentId();
       const envs = this.envService.environments();
       if (envs.length === 0) {
@@ -103,6 +100,10 @@ export class TerminalService {
     }
 
     if (lower.startsWith('env use ')) {
+      if (!this.subscription.isProOrHigher()) {
+        this.appendLine('warn', 'Environments are restricted to Pro & Enterprise subscriptions.');
+        return;
+      }
       const name = cmd.slice(8).trim();
       const matched = this.envService.selectEnvironmentByName(name);
       if (matched) {

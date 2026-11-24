@@ -705,77 +705,38 @@ export class ResponseViewerComponent {
         const id = this.tabId();
         if (!id) return;
         this.manualResponseType.set(null);
-        this.tabStateService.updateState(id, {
-            responseBody: null,
-            responseStatus: null,
-            responseTime: null,
-            responseSize: null
-        });
+        this.tabStateService.clearCachedResponseFields(id, { body: true });
     }
 
     clearCookies() {
         const id = this.tabId();
         if (!id) return;
-        this.tabStateService.updateState(id, {
-            responseCookies: []
-        });
+        this.tabStateService.clearCachedResponseFields(id, { cookies: true });
     }
 
     clearHeaders() {
         const id = this.tabId();
         if (!id) return;
-        this.tabStateService.updateState(id, {
-            responseHeaders: []
-        });
+        this.tabStateService.clearCachedResponseFields(id, { headers: true });
     }
 
     clearTestResults() {
         const id = this.tabId();
         if (!id) return;
-        this.tabStateService.updateState(id, {
-            testResults: []
-        });
+        this.tabStateService.clearCachedResponseFields(id, { testResults: true });
     }
 
     clearEncryptionConsole() {
         const id = this.tabId();
         if (!id) return;
-        const current = this.tabState()?.scripts ?? {
-            preRequest: '',
-            postResponse: '',
-            preRequestConsole: '',
-            postResponseConsole: '',
-            encryptionConsole: '',
-            testScript: '',
-            testScriptEnabled: false
-        };
-        this.tabStateService.updateState(id, {
-            scripts: {
-                ...current,
-                encryptionConsole: ''
-            }
-        });
+        this.tabStateService.clearCachedResponseFields(id, { encryptionConsole: true });
     }
 
     clearScriptConsole() {
         const id = this.tabId();
         if (!id) return;
-        const current = this.tabState()?.scripts ?? {
-            preRequest: '',
-            postResponse: '',
-            preRequestConsole: '',
-            postResponseConsole: '',
-            encryptionConsole: '',
-            testScript: '',
-            testScriptEnabled: false
-        };
         const isPre = this.activeScriptConsoleTab() === 'preRequest';
-        this.tabStateService.updateState(id, {
-            scripts: {
-                ...current,
-                ...(isPre ? { preRequestConsole: '' } : { postResponseConsole: '' })
-            }
-        });
+        this.tabStateService.clearCachedResponseFields(id, isPre ? { preRequestConsole: true } : { postResponseConsole: true });
     }
 
 

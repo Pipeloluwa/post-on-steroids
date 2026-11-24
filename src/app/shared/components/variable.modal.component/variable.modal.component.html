@@ -1,88 +1,212 @@
 @if (isOpen()) {
-<div class="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm" (click)="close()">
-    <div class="w-[600px] max-h-[80vh] bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
+<div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" (click)="close()">
+    <div role="dialog" aria-modal="true" aria-labelledby="variables-modal-title"
+        class="w-[760px] max-w-[96vw] max-h-[min(86dvh,calc(100dvh-28px))] bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
         (click)="stopProp($event)">
         <!-- Header -->
-        <div class="p-4 border-b border-(--postonsteroids-border) flex items-center justify-between gap-3">
-            <div class="flex items-center gap-x-2 min-w-0">
-                <mat-icon class="text-(--postonsteroids-accent)">variables</mat-icon>
-                <div class="flex flex-col min-w-0">
-                    <div class="flex items-center gap-2">
-                        <h2 class="text-lg font-semibold text-(--postonsteroids-text-primary)">Capsule Variables</h2>
-                        <span class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) truncate max-w-[180px]">
-                            {{ tabStateService.activeCapsuleName() }}
+        <div class="p-4 border-b border-(--postonsteroids-border) flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-x-2 min-w-0">
+                    <mat-icon class="text-(--postonsteroids-accent)">variables</mat-icon>
+                    <div class="flex flex-col min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 id="variables-modal-title" class="text-lg font-semibold text-(--postonsteroids-text-primary)">Variables</h2>
+                            <span class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) truncate max-w-[180px]">
+                                {{ tabStateService.activeCapsuleName() }}
+                            </span>
+                            @if (envService.isEnvironmentFeatureEnabled() && envService.activeEnvironment(); as activeEnv) {
+                                <span class="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-500">
+                                    Active: {{ activeEnv.name }}
+                                </span>
+                            }
+                        </div>
+                        <span class="text-[11px] text-(--postonsteroids-text-muted)">
+                            @if (envService.isEnvironmentFeatureEnabled()) {
+                                Variable keys are shared across environments; edits apply to the selected environment (or Capsule Default when No Env is active).
+                            } @else {
+                                Manage Capsule variables. Multi-environment variable switching and copying are available on Pro &amp; Enterprise plans.
+                            }
                         </span>
                     </div>
-                    @if (envService.activeEnvironment(); as activeEnv) {
-                        <span class="text-[11px] text-(--postonsteroids-text-muted)">
-                            Active environment <strong class="text-(--postonsteroids-text-secondary)">{{ activeEnv.name }}</strong> overrides matching keys at request runtime.
-                        </span>
+                </div>
+                <button type="button" (click)="close()" class="p-1 hover:bg-(--postonsteroids-bg-hover) rounded-md transition-colors cursor-pointer">
+                    <mat-icon class="text-(--postonsteroids-text-muted)">close</mat-icon>
+                </button>
+            </div>
+
+            <!-- Inline Environment Switcher Strip (Pro/Enterprise) -->
+            @if (envService.isEnvironmentFeatureEnabled()) {
+                <div class="flex items-center gap-1.5 flex-wrap pt-1 border-t border-(--postonsteroids-border)/50">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted) mr-1">Scope:</span>
+                    <button type="button" (click)="selectScopeEnv(null)"
+                            class="px-2 py-1 rounded-lg text-[11px] font-medium border transition-colors cursor-pointer"
+                            [class.bg-(--postonsteroids-accent)/15]="!envService.activeEnvironmentId()"
+                            [class.border-(--postonsteroids-accent)]="!envService.activeEnvironmentId()"
+                            [class.text-(--postonsteroids-accent)]="!envService.activeEnvironmentId()"
+                            [class.border-(--postonsteroids-border)]="!!envService.activeEnvironmentId()"
+                            [class.text-(--postonsteroids-text-secondary)]="!!envService.activeEnvironmentId()">
+                        Capsule Default
+                    </button>
+                    @for (env of envService.environments(); track env.id) {
+                        <button type="button" (click)="selectScopeEnv(env.id)"
+                                class="px-2 py-1 rounded-lg text-[11px] font-semibold border transition-colors flex items-center gap-1.5 cursor-pointer"
+                                [class.bg-emerald-500/15]="envService.activeEnvironmentId() === env.id"
+                                [class.border-emerald-500/60]="envService.activeEnvironmentId() === env.id"
+                                [class.text-emerald-400]="envService.activeEnvironmentId() === env.id"
+                                [class.border-(--postonsteroids-border)]="envService.activeEnvironmentId() !== env.id"
+                                [class.text-(--postonsteroids-text-secondary)]="envService.activeEnvironmentId() !== env.id">
+                            <span class="size-2 rounded-full shrink-0" [style.background-color]="env.color"></span>
+                            <span>{{ env.name }}</span>
+                        </button>
                     }
                 </div>
-            </div>
-            <button (click)="close()" class="p-1 hover:bg-(--postonsteroids-bg-hover) rounded-md transition-colors cursor-pointer">
-                <mat-icon class="text-(--postonsteroids-text-muted)">close</mat-icon>
-            </button>
+            }
         </div>
 
+        <!-- Batch Action Bar when rows are selected -->
+        @if (selectedRows().length > 0) {
+            <div class="px-4 py-2 bg-(--postonsteroids-accent)/10 border-b border-(--postonsteroids-accent)/30 flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2 text-xs font-semibold text-(--postonsteroids-text-primary)">
+                    <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-accent)">check_box</mat-icon>
+                    <span>{{ selectedRows().length }} selected</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    @if (envService.isEnvironmentFeatureEnabled()) {
+                        <div class="relative">
+                            <button type="button" (click)="toggleBatchCopyMenu($event)"
+                                    class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) text-xs font-semibold text-(--postonsteroids-text-primary) flex items-center gap-1 cursor-pointer">
+                                <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">content_copy</mat-icon>
+                                <span>Copy to Env</span>
+                                <mat-icon class="text-[14px]! size-[14px]!">arrow_drop_down</mat-icon>
+                            </button>
+                            @if (showBatchCopyMenu()) {
+                                <div (click)="$event.stopPropagation()"
+                                     class="absolute right-0 top-full mt-1 w-48 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-xl py-1 z-50 text-xs">
+                                    @for (env of envService.environments(); track env.id) {
+                                        <button type="button" (click)="copySelectedToEnv(env.id)"
+                                                class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center gap-2 text-(--postonsteroids-text-primary) cursor-pointer">
+                                            <span class="size-2 rounded-full shrink-0" [style.background-color]="env.color"></span>
+                                            <span class="truncate">{{ env.name }}</span>
+                                        </button>
+                                    }
+                                    <div class="my-1 border-t border-(--postonsteroids-border)/50"></div>
+                                    <button type="button" (click)="copySelectedToEnv('__all__')"
+                                            class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) font-semibold text-(--postonsteroids-accent) cursor-pointer">
+                                        All Environments
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                    <button type="button" (click)="deleteSelected()"
+                            class="px-2.5 py-1 rounded-lg bg-status-danger/15 border border-status-danger/35 text-status-danger hover:bg-status-danger/25 text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                        <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                        <span>Delete Selected</span>
+                    </button>
+                </div>
+            </div>
+        }
+
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
-            <p class="text-sm text-(--postonsteroids-text-muted)">
-                Define variables that can be used across your workspace. Use 
-                <code class="px-1 py-0.5 bg-(--postonsteroids-bg-secondary) rounded text-(--postonsteroids-accent)">{{ '{' }}{{ '{' }}var{{ '}' }}{{ '}' }}</code> for Global and 
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+            <p class="text-xs text-(--postonsteroids-text-muted)">
+                Use
+                <code class="px-1 py-0.5 bg-(--postonsteroids-bg-secondary) rounded text-(--postonsteroids-accent)">{{ '{' }}{{ '{' }}var{{ '}' }}{{ '}' }}</code> for Global and
                 <code class="px-1 py-0.5 bg-(--postonsteroids-bg-secondary) rounded text-(--postonsteroids-accent)">:var</code> for Path variables.
             </p>
 
             <div class="space-y-2">
                 <div
-                    class="grid grid-cols-[30px_70px_1fr_1fr_40px] gap-x-3 px-2 text-xs font-medium text-(--postonsteroids-text-muted) uppercase tracking-wider">
-                    <span></span>
+                    class="grid grid-cols-[24px_26px_74px_1fr_1.2fr_64px] gap-x-2.5 px-2 text-[10.5px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider items-center">
+                    <input type="checkbox" [checked]="allSelected()" (change)="toggleSelectAll()"
+                           title="Select all variables"
+                           class="accent-(--postonsteroids-accent) cursor-pointer" />
+                    <span title="Enable/Disable variable in current scope">On</span>
                     <span>Type</span>
                     <span>Key</span>
-                    <span>Value</span>
-                    <span></span>
+                    <span>
+                        {{ (envService.isEnvironmentFeatureEnabled() && envService.activeEnvironment()) ? ('Value (' + envService.activeEnvironment()!.name + ')') : 'Value (Capsule Default)' }}
+                    </span>
+                    <span class="text-right">Actions</span>
                 </div>
 
-                @for (v of variableService.variables(); track v.id) {
+                @for (row of unifiedRows(); track row.rowId) {
                 <div
-                    class="grid grid-cols-[30px_70px_1fr_1fr_40px] gap-x-3 items-center p-2 bg-(--postonsteroids-bg-secondary) rounded-lg border border-(--postonsteroids-border) group">
-                    <input type="checkbox" [checked]="v.enabled" (change)="toggleEnabled(v)"
+                    class="grid grid-cols-[24px_26px_74px_1fr_1.2fr_64px] gap-x-2.5 items-center p-2 bg-(--postonsteroids-bg-secondary) rounded-lg border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/40">
+                    <!-- Multi-select checkbox -->
+                    <input type="checkbox" [checked]="isRowSelected(row.rowId)" (change)="toggleRowSelection(row.rowId)"
+                        title="Select variable for batch copy or delete"
                         class="accent-(--postonsteroids-accent) cursor-pointer">
-                    <select [(ngModel)]="v.type" (change)="updateVar(v)" class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded outline-none text-[10px] py-1 px-1 text-(--postonsteroids-text-primary) cursor-pointer">
+                    <!-- Enabled toggle -->
+                    <input type="checkbox" [checked]="row.enabled" (change)="onToggleEnabled(row)"
+                        title="Enable variable in active scope"
+                        class="accent-emerald-500 cursor-pointer">
+                    <!-- Type -->
+                    <select [ngModel]="row.type" (ngModelChange)="onTypeChange(row, $event)"
+                            class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded outline-none text-[10px] py-1 px-1 text-(--postonsteroids-text-primary) cursor-pointer">
                         <option value="global">Global</option>
                         <option value="path">Path</option>
                     </select>
+                    <!-- Key -->
                     <div class="flex flex-col min-w-0">
-                        <input type="text" [(ngModel)]="v.key" (blur)="updateVar(v)" placeholder="Variable Name"
-                            class="bg-transparent border-none outline-none text-sm text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
-                        @if (hasEnvOverride(v.key)) {
-                            <span class="text-[9px] text-amber-400 font-mono truncate" [title]="'Active environment overrides this capsule variable at runtime'">
-                                Overridden by Env: {{ envService.activeEnvironment()?.name }}
-                            </span>
-                        }
-                        @if (v.source) {
-                            <span class="text-[9px] text-status-info font-mono flex items-center gap-0.5 truncate" [title]="'Dynamic: ' + v.source.type + ' -> ' + v.source.propertyKey">
+                        <input type="text" [ngModel]="row.key" (blur)="onKeyChange(row, $any($event.target).value)"
+                            (keydown.enter)="onKeyChange(row, $any($event.target).value)"
+                            placeholder="Variable Name"
+                            class="bg-transparent border-none outline-none text-sm font-mono text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                        @if (row.source) {
+                            <span class="text-[9px] text-status-info font-mono flex items-center gap-0.5 truncate" [title]="'Dynamic: ' + row.source.type + ' -> ' + row.source.propertyKey">
                                 <mat-icon class="text-[10px]! size-[10px]!">link</mat-icon>
-                                {{ v.source.type }}: {{ v.source.propertyKey }}
+                                {{ row.source.type }}: {{ row.source.propertyKey }}
                             </span>
                         }
                     </div>
+                    <!-- Value -->
                     <div class="flex flex-col min-w-0">
-                        <input type="text" [ngModel]="v.source ? variableService.getVariableValue(v) : v.value"
-                            (ngModelChange)="v.value = $event; updateVar(v)" placeholder="Value"
-                            class="bg-transparent border-none outline-none text-sm text-(--postonsteroids-text-secondary) placeholder:text-(--postonsteroids-text-muted)">
-                        @if (v.source) {
-                            <span class="text-[9px] text-(--postonsteroids-text-muted) italic">Live dynamic value</span>
+                        <input type="text" [ngModel]="row.contextualValue"
+                            (ngModelChange)="onValueChange(row, $event)"
+                            [placeholder]="(envService.isEnvironmentFeatureEnabled() && envService.activeEnvironment() && row.capsuleValue) ? ('Default: ' + row.capsuleValue) : 'Value'"
+                            class="bg-transparent border-none outline-none text-sm font-mono text-(--postonsteroids-text-secondary) placeholder:text-(--postonsteroids-text-muted)/60">
+                        @if (row.liveDynamicValue && envService.activeEnvironment() && !row.contextualValue) {
+                            <span class="text-[9px] text-(--postonsteroids-text-muted) italic truncate">Dynamic default active unless overridden</span>
                         }
                     </div>
-                    <button (click)="removeVar(v.id)"
-                        class="p-1 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all cursor-pointer">
-                        <mat-icon class="text-[18px]! size-[18px]!">delete</mat-icon>
-                    </button>
+                    <!-- Per-Row Copy to Env & Delete -->
+                    <div class="flex items-center justify-end gap-1 relative">
+                        @if (envService.isEnvironmentFeatureEnabled()) {
+                            <button type="button" (click)="toggleRowCopyMenu($event, row.rowId)"
+                                title="Copy value to another environment"
+                                class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer">
+                                <mat-icon class="text-[15px]! size-[15px]!">content_copy</mat-icon>
+                            </button>
+                            @if (rowCopyMenuId() === row.rowId) {
+                                <div (click)="$event.stopPropagation()"
+                                     class="absolute right-0 top-full mt-1 w-44 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-xl py-1 z-50 text-xs">
+                                    <div class="px-2.5 py-1 text-[10px] font-bold uppercase text-(--postonsteroids-text-muted)">Copy to Env</div>
+                                    @for (env of envService.environments(); track env.id) {
+                                        <button type="button" (click)="copySingleRowToEnv(row, env.id)"
+                                                class="w-full text-left px-2.5 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center gap-2 text-(--postonsteroids-text-primary) cursor-pointer">
+                                            <span class="size-2 rounded-full shrink-0" [style.background-color]="env.color"></span>
+                                            <span class="truncate">{{ env.name }}</span>
+                                        </button>
+                                    }
+                                    <div class="my-1 border-t border-(--postonsteroids-border)/50"></div>
+                                    <button type="button" (click)="copySingleRowToEnv(row, '__all__')"
+                                            class="w-full text-left px-2.5 py-1.5 hover:bg-(--postonsteroids-bg-hover) font-semibold text-(--postonsteroids-accent) cursor-pointer">
+                                        All Environments
+                                    </button>
+                                </div>
+                            }
+                        }
+                        <button type="button" (click)="removeRow(row)"
+                            title="Delete variable across environments"
+                            class="p-1 text-(--postonsteroids-text-muted) hover:text-red-500 transition-colors cursor-pointer">
+                            <mat-icon class="text-[16px]! size-[16px]!">delete</mat-icon>
+                        </button>
+                    </div>
                 </div>
                 }
 
-                <button (click)="addVar()"
+                <button type="button" (click)="addVar()"
                     class="w-full py-2 border-2 border-dashed border-(--postonsteroids-border) rounded-lg text-sm text-(--postonsteroids-text-muted) hover:border-(--postonsteroids-accent) hover:text-(--postonsteroids-accent) transition-all flex items-center justify-center gap-x-2 cursor-pointer">
                     <mat-icon class="text-[18px]! size-[18px]!">add</mat-icon>
                     Add New Variable
@@ -92,7 +216,7 @@
 
         <!-- Footer -->
         <div class="p-4 bg-(--postonsteroids-bg-secondary) border-t border-(--postonsteroids-border) flex justify-end">
-            <button (click)="close()"
+            <button type="button" (click)="close()"
                 class="px-6 py-2 bg-(--postonsteroids-accent) text-white font-semibold rounded-lg hover:brightness-110 transition-all shadow-lg active:scale-95 cursor-pointer">
                 Done
             </button>

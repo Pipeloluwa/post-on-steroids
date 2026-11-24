@@ -7,17 +7,18 @@ import { VariableService } from '../services/variable.service';
 import { AutoAuthService } from '../services/auto-auth.service';
 import { copyTextToClipboard } from '../utils/clipboard.util';
 import { CODE_LANGUAGE_OPTIONS, CodeLanguageId, buildCodeSnippet } from '../utils/code-generator.util';
+import { BodyPortalDirective } from '../directives/body-portal.directive';
 
 @Component({
     selector: 'app-curl-modal',
-    imports: [FormsModule, MatIcon],
+    imports: [FormsModule, MatIcon, BodyPortalDirective],
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: {
         '(document:keydown.escape)': 'onEscape($event)'
     },
     template: `
         @if (isOpen() && request()) {
-            <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+            <div appBodyPortal class="fixed inset-0 z-[10020] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4 animate-in fade-in duration-150"
                  (click)="close()">
                 <div role="dialog"
                      aria-modal="true"

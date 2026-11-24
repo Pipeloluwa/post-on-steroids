@@ -2,22 +2,25 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { EnvironmentService, ApiEnvironment, EnvironmentVariableItem } from '../services/environment.service';
+import { VariableService } from '../services/variable.service';
 import { NotificationService } from '../services/notification.service';
+import { DialogService } from '../services/dialog.service';
+import { BodyPortalDirective } from '../directives/body-portal.directive';
 import { generateUUID } from '../utils/uuid.util';
 
 @Component({
   selector: 'app-environment-manager-modal',
-  imports: [FormsModule, MatIcon],
+  imports: [FormsModule, MatIcon, BodyPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscape($event)'
   },
   template: `
     @if (isOpen()) {
-      <div class="fixed inset-0 z-110 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
+      <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="env-mgr-title"
              class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[min(86dvh,calc(100dvh-28px))]"
-             (click)="$event.stopPropagation()">
+             (click)="stopDialogClick($event)">
 
           <div class="px-5 py-3.5 border-b border-(--postonsteroids-border) flex items-center justify-between bg-(--postonsteroids-bg-tertiary)/50">
             <div class="flex items-center gap-2.5">
@@ -26,7 +29,7 @@ import { generateUUID } from '../utils/uuid.util';
               </div>
               <div>
                 <h3 id="env-mgr-title" class="text-sm font-bold text-(--postonsteroids-text-primary)">Environments &amp; Variables Manager</h3>
-                <p class="text-[11px] text-(--postonsteroids-text-muted)">Switch DEV / SIT / UAT / PROD presets in one click across all editions. Active environment variables override Capsule globals.</p>
+                <p class="text-[11px] text-(--postonsteroids-text-muted)">Variable keys sync across environments; edit contextual values per environment or copy selected values across DEV / SIT / UAT / PROD.</p>
               </div>
             </div>
             <button type="button" (click)="close()" class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) cursor-pointer">
@@ -34,6 +37,20 @@ import { generateUUID } from '../utils/uuid.util';
             </button>
           </div>
 
+          @if (!envService.isEnvironmentFeatureEnabled()) {
+            <div class="p-8 flex flex-col items-center justify-center text-center gap-3">
+              <div class="size-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                <mat-icon class="text-[26px]! size-[26px]!">lock</mat-icon>
+              </div>
+              <h4 class="text-sm font-bold text-(--postonsteroids-text-primary)">Environments Require Pro or Enterprise</h4>
+              <p class="text-xs text-(--postonsteroids-text-muted) max-w-md">
+                Multi-environment presets (DEV, SIT, UAT, PROD), contextual variable overrides, and cross-environment variable copying are exclusive to Pro and Enterprise plans.
+              </p>
+              <button type="button" (click)="close()" class="px-4 py-1.5 rounded-lg bg-(--postonsteroids-accent) text-white text-xs font-semibold cursor-pointer">
+                Close
+              </button>
+            </div>
+          } @else {
           <div class="flex flex-1 min-h-0 overflow-hidden">
             <!-- Left Sidebar: Environments List -->
             <div class="w-60 border-r border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary)/30 flex flex-col p-3 gap-2 shrink-0">
@@ -65,7 +82,7 @@ import { generateUUID } from '../utils/uuid.util';
 
               <div class="flex-1 overflow-y-auto space-y-1">
                 @for (env of envService.environments(); track env.id) {
-                  <div (click)="selectedEnvId.set(env.id)"
+                  <div (click)="selectEnv(env.id)"
                        class="px-2.5 py-2 rounded-lg text-xs cursor-pointer border transition-colors flex items-center justify-between group"
                        [class.bg-(--postonsteroids-bg-tertiary)]="activeSelectedEnvId() === env.id"
                        [class.border-(--postonsteroids-accent)/50]="activeSelectedEnvId() === env.id"
@@ -121,30 +138,85 @@ import { generateUUID } from '../utils/uuid.util';
                   </div>
                 </div>
 
+                <!-- Batch Selection Toolbar -->
+                @if (selectedVars().length > 0) {
+                  <div class="px-3 py-2 rounded-lg bg-(--postonsteroids-accent)/10 border border-(--postonsteroids-accent)/30 flex items-center justify-between gap-2 flex-wrap">
+                    <div class="flex items-center gap-2 text-xs font-semibold text-(--postonsteroids-text-primary)">
+                      <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">check_box</mat-icon>
+                      <span>{{ selectedVars().length }} selected</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <div class="relative">
+                        <button type="button" (click)="toggleBatchCopyMenu($event)"
+                                class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) text-xs font-semibold text-(--postonsteroids-text-primary) flex items-center gap-1 cursor-pointer">
+                          <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">content_copy</mat-icon>
+                          <span>Copy Selected to Env</span>
+                          <mat-icon class="text-[14px]! size-[14px]!">arrow_drop_down</mat-icon>
+                        </button>
+                        @if (showBatchCopyMenu()) {
+                          <div (click)="$event.stopPropagation()"
+                               class="absolute right-0 top-full mt-1 w-48 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-xl py-1 z-50 text-xs">
+                            @for (env of envService.environments(); track env.id) {
+                              <button type="button" (click)="copySelectedVarsToEnv(current, env.id)"
+                                      class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center gap-2 text-(--postonsteroids-text-primary) cursor-pointer">
+                                <span class="size-2 rounded-full shrink-0" [style.background-color]="env.color"></span>
+                                <span class="truncate">{{ env.name }}</span>
+                              </button>
+                            }
+                            <div class="my-1 border-t border-(--postonsteroids-border)/50"></div>
+                            <button type="button" (click)="copySelectedVarsToEnv(current, '__all__')"
+                                    class="w-full text-left px-3 py-1.5 hover:bg-(--postonsteroids-bg-hover) font-semibold text-(--postonsteroids-accent) cursor-pointer">
+                              All Environments
+                            </button>
+                          </div>
+                        }
+                      </div>
+                      <button type="button" (click)="deleteSelectedVars(current)"
+                              class="px-2.5 py-1 rounded-lg bg-status-danger/15 border border-status-danger/35 text-status-danger hover:bg-status-danger/25 text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                        <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                        <span>Delete Selected</span>
+                      </button>
+                    </div>
+                  </div>
+                }
+
                 <table class="w-full text-xs border-collapse">
                   <thead>
                     <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/50">
+                      <th class="w-7 py-1.5 text-center">
+                        <input type="checkbox" [checked]="allVarsSelected()" (change)="toggleSelectAllVars(current)"
+                               title="Select all environment variables"
+                               class="accent-(--postonsteroids-accent) cursor-pointer" />
+                      </th>
                       <th class="w-8 py-1.5 text-center">On</th>
                       <th class="w-1/3 py-1.5 px-2 text-left">Variable</th>
                       <th class="py-1.5 px-2 text-left">Value</th>
                       <th class="w-24 py-1.5 px-2 text-left">Type</th>
-                      <th class="w-8"></th>
+                      <th class="w-16 text-right px-1">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     @for (v of current.variables; track v.id) {
                       <tr class="border-b border-(--postonsteroids-border)/25 hover:bg-(--postonsteroids-bg-hover)/25">
                         <td class="py-1.5 text-center">
-                          <input type="checkbox" [checked]="v.enabled" (change)="updateVar(current, v.id, { enabled: $any($event.target).checked })"
+                          <input type="checkbox" [checked]="isVarSelected(v.id)" (change)="toggleVarSelection(v.id)"
+                                 title="Select row for batch actions"
                                  class="accent-(--postonsteroids-accent) cursor-pointer" />
                         </td>
+                        <td class="py-1.5 text-center">
+                          <input type="checkbox" [checked]="v.enabled" (change)="updateVar(current, v.id, { enabled: $any($event.target).checked })"
+                                 class="accent-emerald-500 cursor-pointer" />
+                        </td>
                         <td class="py-1.5 px-2">
-                          <input type="text" [ngModel]="v.key" (ngModelChange)="updateVar(current, v.id, { key: $event })"
+                          <input type="text" [ngModel]="v.key"
+                                 (blur)="renameOrSyncKey(current, v, $any($event.target).value)"
+                                 (keydown.enter)="renameOrSyncKey(current, v, $any($event.target).value)"
                                  placeholder="variableName"
                                  class="w-full bg-transparent outline-none font-mono text-(--postonsteroids-text-primary)" />
                         </td>
                         <td class="py-1.5 px-2">
-                          <input [type]="v.type === 'secret' ? 'password' : 'text'" [ngModel]="v.value" (ngModelChange)="updateVar(current, v.id, { value: $event })"
+                          <input [type]="v.type === 'secret' ? 'password' : 'text'" [ngModel]="v.value"
+                                 (ngModelChange)="updateVar(current, v.id, { value: $event, enabled: $event !== '' ? true : v.enabled })"
                                  placeholder="Value"
                                  class="w-full bg-transparent outline-none font-mono text-(--postonsteroids-text-primary)" />
                         </td>
@@ -155,10 +227,35 @@ import { generateUUID } from '../utils/uuid.util';
                             <option value="secret">Secret</option>
                           </select>
                         </td>
-                        <td class="py-1.5 text-center">
-                          <button type="button" (click)="removeVar(current, v.id)" class="text-(--postonsteroids-text-muted) hover:text-status-danger cursor-pointer">
-                            <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
-                          </button>
+                        <td class="py-1.5 px-1 text-right">
+                          <div class="flex items-center justify-end gap-0.5 relative">
+                            <button type="button" (click)="toggleRowCopyMenu($event, v.id)" title="Copy variable to another environment"
+                                    class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer">
+                              <mat-icon class="text-[14px]! size-[14px]!">content_copy</mat-icon>
+                            </button>
+                            @if (rowCopyMenuId() === v.id) {
+                              <div (click)="$event.stopPropagation()"
+                                   class="absolute right-0 top-full mt-1 w-44 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-xl py-1 z-50 text-xs text-left">
+                                <div class="px-2.5 py-1 text-[10px] font-bold uppercase text-(--postonsteroids-text-muted)">Copy to Env</div>
+                                @for (env of envService.environments(); track env.id) {
+                                  <button type="button" (click)="copySingleVarToEnv(current, v, env.id)"
+                                          class="w-full text-left px-2.5 py-1.5 hover:bg-(--postonsteroids-bg-hover) flex items-center gap-2 text-(--postonsteroids-text-primary) cursor-pointer">
+                                    <span class="size-2 rounded-full shrink-0" [style.background-color]="env.color"></span>
+                                    <span class="truncate">{{ env.name }}</span>
+                                  </button>
+                                }
+                                <div class="my-1 border-t border-(--postonsteroids-border)/50"></div>
+                                <button type="button" (click)="copySingleVarToEnv(current, v, '__all__')"
+                                        class="w-full text-left px-2.5 py-1.5 hover:bg-(--postonsteroids-bg-hover) font-semibold text-(--postonsteroids-accent) cursor-pointer">
+                                  All Environments
+                                </button>
+                              </div>
+                            }
+                            <button type="button" (click)="removeVar(current, v.id)" title="Delete variable"
+                                    class="p-1 text-(--postonsteroids-text-muted) hover:text-status-danger cursor-pointer">
+                              <mat-icon class="text-[15px]! size-[15px]!">close</mat-icon>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     }
@@ -177,6 +274,7 @@ import { generateUUID } from '../utils/uuid.util';
               </div>
             }
           </div>
+          }
         </div>
       </div>
     }
@@ -184,12 +282,17 @@ import { generateUUID } from '../utils/uuid.util';
 })
 export class EnvironmentManagerModalComponent {
   envService = inject(EnvironmentService);
+  private variableService = inject(VariableService);
   private notification = inject(NotificationService);
+  private dialog = inject(DialogService);
 
   isOpen = input<boolean>(false);
   closed = output<void>();
 
   selectedEnvId = signal<string | null>(null);
+  selectedVarIds = signal<Set<string>>(new Set());
+  showBatchCopyMenu = signal(false);
+  rowCopyMenuId = signal<string | null>(null);
 
   selectedEnv = computed<ApiEnvironment | null>(() => {
     const envs = this.envService.environments();
@@ -199,6 +302,20 @@ export class EnvironmentManagerModalComponent {
 
   activeSelectedEnvId = computed(() => this.selectedEnv()?.id ?? null);
 
+  selectedVars = computed<EnvironmentVariableItem[]>(() => {
+    const env = this.selectedEnv();
+    if (!env) return [];
+    const sel = this.selectedVarIds();
+    return env.variables.filter(v => sel.has(v.id));
+  });
+
+  allVarsSelected = computed<boolean>(() => {
+    const env = this.selectedEnv();
+    if (!env || env.variables.length === 0) return false;
+    const sel = this.selectedVarIds();
+    return env.variables.every(v => sel.has(v.id));
+  });
+
   onEscape(event: Event): void {
     if (!this.isOpen()) return;
     event.preventDefault();
@@ -206,22 +323,73 @@ export class EnvironmentManagerModalComponent {
   }
 
   close(): void {
+    this.selectedVarIds.set(new Set());
+    this.showBatchCopyMenu.set(false);
+    this.rowCopyMenuId.set(null);
     this.closed.emit();
+  }
+
+  stopDialogClick(event: Event): void {
+    event.stopPropagation();
+    this.showBatchCopyMenu.set(false);
+    this.rowCopyMenuId.set(null);
+  }
+
+  selectEnv(envId: string): void {
+    this.selectedEnvId.set(envId);
+    this.selectedVarIds.set(new Set());
+    this.showBatchCopyMenu.set(false);
+    this.rowCopyMenuId.set(null);
+  }
+
+  isVarSelected(varId: string): boolean {
+    return this.selectedVarIds().has(varId);
+  }
+
+  toggleVarSelection(varId: string): void {
+    this.selectedVarIds.update(prev => {
+      const next = new Set(prev);
+      if (next.has(varId)) next.delete(varId);
+      else next.add(varId);
+      return next;
+    });
+  }
+
+  toggleSelectAllVars(env: ApiEnvironment): void {
+    if (this.allVarsSelected()) {
+      this.selectedVarIds.set(new Set());
+    } else {
+      this.selectedVarIds.set(new Set(env.variables.map(v => v.id)));
+    }
+  }
+
+  toggleBatchCopyMenu(event: Event): void {
+    event.stopPropagation();
+    this.rowCopyMenuId.set(null);
+    this.showBatchCopyMenu.update(v => !v);
+  }
+
+  toggleRowCopyMenu(event: Event, varId: string): void {
+    event.stopPropagation();
+    this.showBatchCopyMenu.set(false);
+    this.rowCopyMenuId.update(curr => curr === varId ? null : varId);
   }
 
   addNewEnv(): void {
     const created = this.envService.createEnvironment('Custom Env');
-    this.selectedEnvId.set(created.id);
+    if (created) {
+      this.selectEnv(created.id);
+    }
   }
 
   duplicateEnv(id: string): void {
     const copy = this.envService.duplicateEnvironment(id);
-    if (copy) this.selectedEnvId.set(copy.id);
+    if (copy) this.selectEnv(copy.id);
   }
 
   deleteEnv(id: string): void {
     this.envService.deleteEnvironment(id);
-    this.selectedEnvId.set(this.envService.environments()[0]?.id || null);
+    this.selectEnv(this.envService.environments()[0]?.id || '');
   }
 
   updateEnvMeta(env: ApiEnvironment, name: string, color: string): void {
@@ -235,6 +403,27 @@ export class EnvironmentManagerModalComponent {
     });
   }
 
+  renameOrSyncKey(env: ApiEnvironment, item: EnvironmentVariableItem, rawNewKey: string): void {
+    const newKey = rawNewKey.trim();
+    const oldKey = (item.key || '').trim();
+    if (newKey === oldKey) return;
+
+    this.updateVar(env, item.id, { key: newKey });
+    if (oldKey && newKey) {
+      this.envService.renameVariableKeyAcrossEnvironments(oldKey, newKey);
+    } else if (newKey) {
+      this.envService.ensureKeyAcrossEnvironments(newKey);
+    }
+    if (newKey) {
+      const existsInCap = this.variableService.variables().some(
+        v => (v.key || '').trim().toLowerCase() === newKey.toLowerCase()
+      );
+      if (!existsInCap) {
+        this.variableService.addVariable(newKey, '', item.source, 'global');
+      }
+    }
+  }
+
   updateVar(env: ApiEnvironment, varId: string, patch: Partial<EnvironmentVariableItem>): void {
     this.envService.updateEnvironment({
       ...env,
@@ -242,11 +431,81 @@ export class EnvironmentManagerModalComponent {
     });
   }
 
+  copySingleVarToEnv(sourceEnv: ApiEnvironment, item: EnvironmentVariableItem, targetEnvId: string | '__all__'): void {
+    this.rowCopyMenuId.set(null);
+    if (!item.key.trim()) {
+      this.notification.notify('Enter a variable key before copying to another environment.', 'warning');
+      return;
+    }
+    const count = this.envService.copyVariablesToEnvironment(
+      [{ key: item.key.trim(), value: item.value, type: item.type, source: item.source }],
+      targetEnvId
+    );
+    if (count > 0) {
+      const targetName = targetEnvId === '__all__'
+        ? 'All Environments'
+        : (this.envService.environments().find(e => e.id === targetEnvId)?.name || 'Environment');
+      this.notification.notify(`Copied "${item.key.trim()}" from ${sourceEnv.name} to ${targetName}.`, 'success');
+    }
+  }
+
+  copySelectedVarsToEnv(sourceEnv: ApiEnvironment, targetEnvId: string | '__all__'): void {
+    this.showBatchCopyMenu.set(false);
+    const items = this.selectedVars().filter(v => v.key.trim() !== '');
+    if (items.length === 0) {
+      this.notification.notify('Select at least one named variable to copy.', 'warning');
+      return;
+    }
+    const count = this.envService.copyVariablesToEnvironment(
+      items.map(v => ({ key: v.key.trim(), value: v.value, type: v.type, source: v.source })),
+      targetEnvId
+    );
+    if (count > 0) {
+      const targetName = targetEnvId === '__all__'
+        ? 'All Environments'
+        : (this.envService.environments().find(e => e.id === targetEnvId)?.name || 'Environment');
+      this.notification.notify(`Copied ${items.length} variable${items.length === 1 ? '' : 's'} from ${sourceEnv.name} to ${targetName}.`, 'success');
+    }
+  }
+
   removeVar(env: ApiEnvironment, varId: string): void {
+    const target = env.variables.find(v => v.id === varId);
     this.envService.updateEnvironment({
       ...env,
       variables: env.variables.filter(v => v.id !== varId)
     });
+    if (target?.key?.trim()) {
+      this.envService.removeKeyAcrossEnvironments(target.key.trim());
+    }
+    this.selectedVarIds.update(prev => {
+      const next = new Set(prev);
+      next.delete(varId);
+      return next;
+    });
+  }
+
+  async deleteSelectedVars(env: ApiEnvironment): Promise<void> {
+    const items = this.selectedVars();
+    if (items.length === 0) return;
+
+    const confirmed = await this.dialog.confirm(
+      `Delete ${items.length} selected variable${items.length === 1 ? '' : 's'} across environments?`,
+      'Delete Environment Variables'
+    );
+    if (!confirmed) return;
+
+    const idSet = new Set(items.map(v => v.id));
+    this.envService.updateEnvironment({
+      ...env,
+      variables: env.variables.filter(v => !idSet.has(v.id))
+    });
+    for (const item of items) {
+      if (item.key.trim()) {
+        this.envService.removeKeyAcrossEnvironments(item.key.trim());
+      }
+    }
+    this.selectedVarIds.set(new Set());
+    this.notification.notify(`Deleted ${items.length} environment variable${items.length === 1 ? '' : 's'}.`, 'info');
   }
 
   exportPostmanEnv(env: ApiEnvironment): void {
@@ -270,8 +529,10 @@ export class EnvironmentManagerModalComponent {
     reader.onload = () => {
       try {
         const imported = this.envService.importPostmanEnvironment(String(reader.result || ''));
-        this.selectedEnvId.set(imported.id);
-        this.notification.notify(`Imported environment "${imported.name}" (${imported.variables.length} variables).`, 'success');
+        if (imported) {
+          this.selectEnv(imported.id);
+          this.notification.notify(`Imported environment "${imported.name}" (${imported.variables.length} variables).`, 'success');
+        }
       } catch {
         this.notification.notify('Invalid Postman Environment JSON file.', 'error');
       }

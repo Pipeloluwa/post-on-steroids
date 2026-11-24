@@ -19,18 +19,19 @@ import { EnvironmentService } from '../services/environment.service';
 import { NotificationService } from '../services/notification.service';
 import { copyTextToClipboard } from '../utils/clipboard.util';
 import { generateDocumentationOrBrd, DocBrdVariable } from '../utils/doc-brd-generator.util';
+import { BodyPortalDirective } from '../directives/body-portal.directive';
 
 @Component({
     selector: 'app-doc-brd-generator-modal',
-    imports: [CommonModule, FormsModule, MatIcon],
+    imports: [CommonModule, FormsModule, MatIcon, BodyPortalDirective],
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: {
         '(document:keydown.escape)': 'onEscape()'
     },
     template: `
         @if (isOpen()) {
-            <div class="fixed inset-0 z-1000 flex items-center justify-center bg-black/65 backdrop-blur-[2px] p-4" (click)="close()">
-                <div class="w-full max-w-5xl h-[88vh] flex flex-col rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl overflow-hidden"
+            <div appBodyPortal class="fixed inset-0 z-[10020] flex items-center justify-center bg-black/65 backdrop-blur-[2px] p-4" (click)="close()">
+                <div class="w-full max-w-5xl h-[min(88dvh,calc(100dvh-28px))] flex flex-col rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl overflow-hidden"
                     (click)="$event.stopPropagation()">
 
                     <!-- Header -->
@@ -201,6 +202,8 @@ export class DocBrdGeneratorModalComponent {
     initialScope = input<'endpoint' | 'collection'>('endpoint');
     initialMode = input<'api-doc' | 'brd'>('api-doc');
     request = input<RequestState | null>(null);
+    customRequests = input<RequestState[] | null>(null);
+    customTitle = input<string | null>(null);
     closed = output<void>();
 
     previewFrame = viewChild<ElementRef<HTMLIFrameElement>>('previewFrame');
@@ -214,16 +217,25 @@ export class DocBrdGeneratorModalComponent {
     organization = signal<string>('Engineering & Product');
 
     capsuleName = computed(() => {
+        if (this.customTitle()) return this.customTitle()!;
         const capId = this.tabStateService.activeCapsuleId();
         return this.tabStateService.capsules().find(c => c.id === capId)?.name || 'API Collection';
     });
 
-    collectionRequestCount = computed(() => this.tabStateService.allCapsuleRequests().length || (this.request() ? 1 : 0));
+    collectionRequestCount = computed(() => {
+        const custom = this.customRequests();
+        if (custom && custom.length > 0) return custom.length;
+        return this.tabStateService.allCapsuleRequests().length || (this.request() ? 1 : 0);
+    });
 
     targetRequests = computed<RequestState[]>(() => {
         const current = this.request();
         if (this.scope() === 'endpoint' && current) {
             return [current];
+        }
+        const custom = this.customRequests();
+        if (custom && custom.length > 0) {
+            return custom;
         }
         const all = this.tabStateService.allCapsuleRequests();
         return all.length > 0 ? all : (current ? [current] : []);

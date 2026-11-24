@@ -9,6 +9,8 @@ import { BodyPortalDirective } from '../../shared/directives/body-portal.directi
 import { RunnerSchedulerService, CollectionScheduleTarget } from '../../shared/services/runner-scheduler.service';
 import { getHttpMethodColor } from '../../shared/utils/http-method.util';
 import { copyTextToClipboard } from '../../shared/utils/clipboard.util';
+import { CurlModalComponent } from '../../shared/components/curl-modal.component';
+import { DocBrdGeneratorModalComponent } from '../../shared/components/doc-brd-generator.modal.component';
 
 interface RunnerResultRow {
   id: string;
@@ -60,7 +62,7 @@ interface CapsuleTreeNode {
 
 @Component({
   selector: 'app-collection-runner-modal',
-  imports: [CommonModule, FormsModule, MatIcon, DatePipe, BodyPortalDirective],
+  imports: [CommonModule, FormsModule, MatIcon, DatePipe, BodyPortalDirective, CurlModalComponent, DocBrdGeneratorModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscape($event)'
@@ -210,7 +212,7 @@ interface CapsuleTreeNode {
                                           class="flex-1 min-w-0 flex items-center justify-between gap-2 text-left cursor-pointer">
                                     <span class="flex items-center gap-1.5 min-w-0">
                                       <mat-icon class="text-[14px]! size-[14px]! text-amber-400 shrink-0">folder</mat-icon>
-                                      <span class="font-semibold text-(--postonsteroids-text-primary) truncate">{{ grpNode.group.name }}</span>
+                                      <span class="font-semibold text-(--postonsteroids-text-primary) truncate">{{ tabState.getFolderFullPath(grpNode.group.id, capNode.capsule.id) || grpNode.group.name }}</span>
                                     </span>
                                     <span class="text-[9.5px] font-mono text-(--postonsteroids-text-muted) shrink-0">
                                       {{ countSelectedInList(grpNode.requests) }}/{{ grpNode.requests.length }}
@@ -357,14 +359,20 @@ interface CapsuleTreeNode {
                     <span class="text-blue-400">Tests: <b>{{ summaryStats().testsPassed }}</b> / {{ summaryStats().testsPassed + summaryStats().testsFailed }}</span>
                     <span>Avg: <b>{{ summaryStats().avgTime }} ms</b></span>
                   </div>
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-3 shrink-0">
+                    <button type="button" (click)="openDocBrdForRunnerResults()" [disabled]="results().length === 0 && targetRequests().length === 0"
+                            title="Generate Technical API Docs or Standard BRD from run results"
+                            class="text-blue-400 hover:underline font-semibold cursor-pointer disabled:opacity-40 flex items-center gap-1 whitespace-nowrap">
+                      <mat-icon class="text-[13px]! size-[13px]!">description</mat-icon>
+                      <span>Docs / BRD</span>
+                    </button>
                     <button type="button" (click)="clearResults()" [disabled]="results().length === 0 || isRunning()"
-                            class="text-status-danger hover:underline font-semibold cursor-pointer disabled:opacity-40 flex items-center gap-1">
+                            class="text-status-danger hover:underline font-semibold cursor-pointer disabled:opacity-40 flex items-center gap-1 whitespace-nowrap">
                       <mat-icon class="text-[13px]! size-[13px]!">delete_sweep</mat-icon>
                       <span>Clear Results</span>
                     </button>
                     <button type="button" (click)="exportReport()" [disabled]="results().length === 0"
-                            class="text-(--postonsteroids-accent) hover:underline font-semibold cursor-pointer disabled:opacity-40">
+                            class="text-(--postonsteroids-accent) hover:underline font-semibold cursor-pointer disabled:opacity-40 whitespace-nowrap">
                       Export JSON
                     </button>
                   </div>
@@ -560,16 +568,24 @@ interface CapsuleTreeNode {
 
               <!-- Right Column: Combined Activity Feed (Click any item to inspect full response) -->
               <section class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) overflow-hidden flex flex-col min-h-[260px]">
-                <div class="px-3.5 py-2.5 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-between shrink-0">
+                <div class="px-3.5 py-2.5 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-between gap-2 shrink-0">
                   <div class="flex items-center gap-2 text-[12px] font-bold text-(--postonsteroids-text-primary)">
                     <mat-icon class="text-[16px]! size-[16px]! text-emerald-400">history</mat-icon>
                     <span>Scheduled Execution Activity</span>
                   </div>
-                  <button type="button" (click)="clearAllActivityLogs()" [disabled]="combinedLogs().length === 0"
-                          class="text-[10.5px] font-semibold text-status-danger hover:underline disabled:opacity-40 cursor-pointer flex items-center gap-1">
-                    <mat-icon class="text-[13px]! size-[13px]!">delete_sweep</mat-icon>
-                    <span>Clear Logs</span>
-                  </button>
+                  <div class="flex items-center gap-3 shrink-0">
+                    <button type="button" (click)="openDocBrdForScheduledLogs()" [disabled]="combinedLogs().length === 0"
+                            title="Generate Technical API Docs or Standard BRD from scheduled run tasks"
+                            class="text-[10.5px] font-semibold text-blue-400 hover:underline disabled:opacity-40 cursor-pointer flex items-center gap-1 whitespace-nowrap">
+                      <mat-icon class="text-[13px]! size-[13px]!">description</mat-icon>
+                      <span>Docs / BRD</span>
+                    </button>
+                    <button type="button" (click)="clearAllActivityLogs()" [disabled]="combinedLogs().length === 0"
+                            class="text-[10.5px] font-semibold text-status-danger hover:underline disabled:opacity-40 cursor-pointer flex items-center gap-1 whitespace-nowrap">
+                      <mat-icon class="text-[13px]! size-[13px]!">delete_sweep</mat-icon>
+                      <span>Clear Logs</span>
+                    </button>
+                  </div>
                 </div>
 
                 @if (combinedLogs().length === 0) {
@@ -602,14 +618,14 @@ interface CapsuleTreeNode {
                             }
                           </div>
                         </div>
-                        <div class="flex items-center gap-2 shrink-0 font-mono text-[10px]">
+                        <div class="inline-flex items-center gap-2 shrink-0 font-mono text-[10px] whitespace-nowrap">
                           @if (log.testsPassed > 0 || log.testsFailed > 0) {
-                            <span [class.text-emerald-400]="log.testsFailed === 0" [class.text-amber-400]="log.testsFailed > 0">
+                            <span class="whitespace-nowrap shrink-0" [class.text-emerald-400]="log.testsFailed === 0" [class.text-amber-400]="log.testsFailed > 0">
                               {{ log.testsPassed }}/{{ log.testsPassed + log.testsFailed }} tests
                             </span>
                           }
-                          <span class="text-(--postonsteroids-text-muted)">{{ log.durationMs }}ms</span>
-                          <span class="px-1.5 py-0.5 rounded font-bold"
+                          <span class="text-(--postonsteroids-text-muted) whitespace-nowrap shrink-0">{{ log.durationMs }} ms</span>
+                          <span class="px-2 py-0.5 rounded font-bold whitespace-nowrap shrink-0"
                                 [class.bg-emerald-500/15]="log.status >= 200 && log.status < 300"
                                 [class.text-emerald-400]="log.status >= 200 && log.status < 300"
                                 [class.bg-red-500/15]="log.status === 0 || log.status >= 400"
@@ -618,7 +634,7 @@ interface CapsuleTreeNode {
                                 [class.text-amber-400]="log.status >= 300 && log.status < 400">
                             {{ log.status || 'ERR' }}
                           </span>
-                          <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">chevron_right</mat-icon>
+                          <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) shrink-0">chevron_right</mat-icon>
                         </div>
                       </div>
                     }
@@ -634,36 +650,50 @@ interface CapsuleTreeNode {
                  (click)="inspectedDetail.set(null)">
               <div class="w-full max-w-3xl max-h-[calc(100%-1rem)] rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden"
                    (click)="$event.stopPropagation()">
-                <div class="px-4 py-3 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex items-center justify-between gap-3 shrink-0">
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-2">
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent)">
+                <div class="px-4 py-3 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex flex-wrap items-center justify-between gap-3 shrink-0">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent) whitespace-nowrap shrink-0">
                         {{ detail.method }}
                       </span>
                       <span class="font-bold text-[13px] text-(--postonsteroids-text-primary) truncate">{{ detail.requestName }}</span>
-                      <span class="px-2 py-0.5 rounded text-[10.5px] font-mono font-bold"
+                      <span class="px-2.5 py-0.5 rounded text-[10.5px] font-mono font-bold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
                             [class.bg-emerald-500/15]="detail.status >= 200 && detail.status < 300"
                             [class.text-emerald-400]="detail.status >= 200 && detail.status < 300"
                             [class.bg-red-500/15]="detail.status === 0 || detail.status >= 400"
                             [class.text-red-400]="detail.status === 0 || detail.status >= 400"
                             [class.bg-amber-500/15]="detail.status >= 300 && detail.status < 400"
                             [class.text-amber-400]="detail.status >= 300 && detail.status < 400">
-                        {{ detail.status || 'ERR' }} &middot; {{ detail.durationMs }} ms
+                        <span>{{ detail.status || 'ERR' }}</span>
+                        <span>&middot;</span>
+                        <span>{{ detail.durationMs }} ms</span>
                       </span>
                     </div>
                     <div class="text-[11px] font-mono text-(--postonsteroids-text-muted) truncate mt-0.5">
                       {{ detail.sourceLabel }} @if (detail.url) { &middot; {{ detail.url }} }
                     </div>
                   </div>
-                  <div class="flex items-center gap-1.5 shrink-0">
+                  <div class="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    <button type="button" (click)="openCurlForInspected()"
+                            title="Generate cURL &amp; code snippets for this run task"
+                            class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-accent) cursor-pointer inline-flex items-center gap-1 whitespace-nowrap">
+                      <mat-icon class="text-[13px]! size-[13px]!">code</mat-icon>
+                      <span>cURL / Code</span>
+                    </button>
+                    <button type="button" (click)="openDocBrdForInspected()"
+                            title="Generate Technical API Docs or Standard BRD"
+                            class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-blue-400 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap">
+                      <mat-icon class="text-[13px]! size-[13px]!">description</mat-icon>
+                      <span>Docs / BRD</span>
+                    </button>
                     @if (detail.requestId) {
                       <button type="button" (click)="openInspectedRequestTab(detail.requestId)"
-                              class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-text-primary) cursor-pointer">
+                              class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-text-primary) cursor-pointer whitespace-nowrap">
                         Open Tab
                       </button>
                     }
                     <button type="button" (click)="copyInspectedBody()"
-                            class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-text-primary) cursor-pointer">
+                            class="px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-text-primary) cursor-pointer whitespace-nowrap">
                       Copy Body
                     </button>
                     <button type="button" (click)="inspectedDetail.set(null)"
@@ -727,6 +757,16 @@ interface CapsuleTreeNode {
         </div>
       </div>
     }
+
+    <app-curl-modal [isOpen]="curlModalRequest() !== null"
+                    [request]="curlModalRequest()"
+                    (closed)="curlModalRequest.set(null)" />
+    <app-doc-brd-generator-modal [isOpen]="isDocBrdModalOpen()"
+                                 [request]="docBrdSingleRequest()"
+                                 [customRequests]="docBrdCustomRequests()"
+                                 [customTitle]="docBrdCustomTitle()"
+                                 [initialScope]="docBrdScope()"
+                                 (closed)="isDocBrdModalOpen.set(false)" />
   `
 })
 export class CollectionRunnerModalComponent {
@@ -757,6 +797,12 @@ export class CollectionRunnerModalComponent {
   scheduleRepeatSeconds = signal<number>(0);
   activeScheduleJobId = signal<string | null>(null);
   inspectedDetail = signal<InspectedExecutionDetail | null>(null);
+  curlModalRequest = signal<RequestState | null>(null);
+  isDocBrdModalOpen = signal<boolean>(false);
+  docBrdSingleRequest = signal<RequestState | null>(null);
+  docBrdCustomRequests = signal<RequestState[] | null>(null);
+  docBrdCustomTitle = signal<string | null>(null);
+  docBrdScope = signal<'endpoint' | 'collection'>('collection');
 
   private stopRequested = false;
   private initializedOnOpen = false;
@@ -1215,6 +1261,74 @@ export class CollectionRunnerModalComponent {
   async copyInspectedBody(): Promise<void> {
     await copyTextToClipboard(this.formattedInspectedBody());
     this.notification.notify('Inspected response body copied to clipboard.');
+  }
+
+  private resolveRequestStateForRunItem(item: {
+    requestId?: string;
+    requestName: string;
+    method: string;
+    url?: string;
+    status?: number;
+    durationMs?: number;
+    responseTime?: number;
+    responseHeaders?: any[];
+    responseBody?: any;
+  }): RequestState {
+    const existing = item.requestId ? this.tabState.getState(item.requestId) : undefined;
+    const base = existing ? { ...existing } : this.tabState.getDefaultState(item.requestId || `run_${Date.now()}`);
+    return {
+      ...base,
+      name: item.requestName || base.name,
+      method: item.method || base.method,
+      url: item.url || base.url,
+      responseStatus: item.status !== undefined ? item.status : base.responseStatus,
+      responseTime: (item.durationMs ?? item.responseTime) !== undefined ? (item.durationMs ?? item.responseTime)! : base.responseTime,
+      responseHeaders: item.responseHeaders ?? base.responseHeaders,
+      responseBody: item.responseBody !== undefined ? item.responseBody : base.responseBody
+    };
+  }
+
+  openCurlForInspected(): void {
+    const detail = this.inspectedDetail();
+    if (!detail) return;
+    this.curlModalRequest.set(this.resolveRequestStateForRunItem(detail));
+  }
+
+  openDocBrdForInspected(): void {
+    const detail = this.inspectedDetail();
+    if (!detail) return;
+    const reqState = this.resolveRequestStateForRunItem(detail);
+    this.docBrdSingleRequest.set(reqState);
+    this.docBrdCustomRequests.set([reqState]);
+    this.docBrdCustomTitle.set(detail.requestName || 'Scheduled Task Run');
+    this.docBrdScope.set('endpoint');
+    this.isDocBrdModalOpen.set(true);
+  }
+
+  openDocBrdForRunnerResults(): void {
+    const rows = this.results();
+    const list: RequestState[] = rows.length > 0
+      ? rows.map(r => this.resolveRequestStateForRunItem(r))
+      : this.targetRequests();
+    if (list.length === 0) return;
+    const uniqueById = Array.from(new Map(list.map(r => [r.id, r])).values());
+    this.docBrdSingleRequest.set(uniqueById[0]);
+    this.docBrdCustomRequests.set(uniqueById);
+    this.docBrdCustomTitle.set(`Collection Runner Batch (${uniqueById.length} Endpoints)`);
+    this.docBrdScope.set('collection');
+    this.isDocBrdModalOpen.set(true);
+  }
+
+  openDocBrdForScheduledLogs(): void {
+    const logs = this.combinedLogs();
+    if (logs.length === 0) return;
+    const list = logs.map(l => this.resolveRequestStateForRunItem(l));
+    const uniqueById = Array.from(new Map(list.map(r => [r.id, r])).values());
+    this.docBrdSingleRequest.set(uniqueById[0]);
+    this.docBrdCustomRequests.set(uniqueById);
+    this.docBrdCustomTitle.set(`Scheduled Execution Tasks (${uniqueById.length} Endpoints)`);
+    this.docBrdScope.set('collection');
+    this.isDocBrdModalOpen.set(true);
   }
 
   onDataFileSelected(event: Event): void {

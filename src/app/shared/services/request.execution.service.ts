@@ -1604,8 +1604,19 @@ export class RequestExecutionService {
                         const token = this.autoAuthService.extractAccessToken(authState.responseBody);
                         if (token) {
 
-                            // Cache the token globally so all other tabs can reuse it
+                            // Cache the token cleanly and synchronize it contextually into the active environment / Variables
                             this.autoAuthService.setCachedToken(token);
+                            const existingAuthVar = this.variableService.variables().find(
+                                v => (v.key || '').trim().toLowerCase() === 'authtoken'
+                            );
+                            if (this.environmentService.isEnvironmentFeatureEnabled() && this.environmentService.activeEnvironment()) {
+                                this.environmentService.setActiveVariable('authToken', token);
+                                if (!existingAuthVar) {
+                                    this.variableService.addVariable('authToken', '', undefined, 'global');
+                                }
+                            } else {
+                                this.variableService.addVariable('authToken', token, undefined, 'global');
+                            }
 
                             // Also update this tab's auth state for explicit auth type tabs
                             const originalState = this.tabStateService.getState(tabId);
@@ -1909,12 +1920,32 @@ export class RequestExecutionService {
         if (!resultContext || typeof resultContext !== 'object') {
             return {};
         }
+        const applyContextualSet = (rawKey: string, val: any, preferEnv: boolean) => {
+            const key = (rawKey || '').trim();
+            if (!key) return;
+            const strVal = String(val ?? '');
+            const existingKey = this.variableService.variables().some(
+                v => (v.key || '').trim().toLowerCase() === key.toLowerCase()
+            );
+            const hasActiveEnv = this.environmentService.isEnvironmentFeatureEnabled() && !!this.environmentService.activeEnvironment();
+            if (hasActiveEnv) {
+                this.environmentService.setActiveVariable(key, strVal);
+                if (!existingKey) {
+                    // Register key schema in shared Variables list without leaking active env value to other envs
+                    this.variableService.addVariable(key, '', undefined, 'global');
+                }
+            } else {
+                this.variableService.addVariable(key, strVal, undefined, 'global');
+                if (this.environmentService.isEnvironmentFeatureEnabled()) {
+                    this.environmentService.ensureKeyAcrossEnvironments(key, preferEnv ? strVal : undefined);
+                }
+            }
+        };
+
         const envSet = resultContext['__envSet'];
         if (envSet && typeof envSet === 'object') {
             for (const [key, val] of Object.entries(envSet)) {
-                if (key) {
-                    this.environmentService.setActiveVariable(key, String(val ?? ''));
-                }
+                applyContextualSet(key, val, true);
             }
         }
         const envUnset = resultContext['__envUnset'];
@@ -1928,9 +1959,7 @@ export class RequestExecutionService {
         const varSet = resultContext['__varSet'];
         if (varSet && typeof varSet === 'object') {
             for (const [key, val] of Object.entries(varSet)) {
-                if (key) {
-                    this.variableService.addVariable(key, String(val ?? ''), undefined, 'global');
-                }
+                applyContextualSet(key, val, false);
             }
         }
 

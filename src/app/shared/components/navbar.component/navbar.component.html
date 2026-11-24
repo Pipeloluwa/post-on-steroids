@@ -168,9 +168,10 @@
         <!-- Center Section: Flexible Spacer (Postman / Insomnia clean header) -->
         <div class="flex-1 min-w-0"></div>
 
-        <!-- Right Section: Environment Switcher + Utilities + Auth (Pinned to far right) -->
+        <!-- Right Section: Environment Switcher (Pro/Enterprise) + Utilities + Auth -->
         <div class="flex items-center justify-end gap-x-1.5 2xl:gap-x-2.5 shrink-0" style="-webkit-app-region: no-drag;">
-            <!-- Sleek Multi-Environment Switcher Card -->
+            @if (subscriptionService.isProOrHigher()) {
+            <!-- Sleek Multi-Environment Switcher Card (Pro & Enterprise Only) -->
             <div class="relative shrink-0">
                 <div class="flex items-center rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 transition-colors overflow-hidden">
                     <button type="button" (click)="toggleEnvMenu($event)" title="Switch Active Environment"
@@ -242,6 +243,13 @@
                     </div>
                 }
             </div>
+            } @else if (!subscriptionService.isOpenSourceCommunityBuild) {
+                <span title="Environments require Pro or Enterprise subscription"
+                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-(--postonsteroids-bg-tertiary)/70 border border-(--postonsteroids-border) text-[10.5px] font-semibold text-(--postonsteroids-text-muted) select-none shrink-0">
+                    <mat-icon class="text-[13px]! size-[13px]! text-amber-400">lock</mat-icon>
+                    <span>Env (Pro)</span>
+                </span>
+            }
             @if (!isElectron) {
                 <div class="flex items-center gap-x-2.5 shrink-0">
                     <span class="text-[10px] lg:text-[11px] text-(--postonsteroids-text-muted) italic whitespace-nowrap shrink-0 hidden min-[2200px]:inline-flex items-center gap-1">

@@ -20,7 +20,8 @@
 
         <!-- Form fields -->
         <div class="space-y-4 text-xs">
-            <!-- Save Scope Selection (Environment vs Capsule) -->
+            <!-- Save Scope Selection (Environment vs Capsule — Pro/Enterprise) -->
+            @if (envService.isEnvironmentFeatureEnabled()) {
             <div>
                 <label class="block font-semibold text-(--postonsteroids-text-secondary) mb-1.5">
                     Save Destination Scope
@@ -38,7 +39,7 @@
                             {{ envService.activeEnvironment() ? 'Env: ' + envService.activeEnvironment()!.name : 'Env: DEV (Auto)' }}
                         </div>
                         <div class="text-[10px] text-(--postonsteroids-text-muted)">
-                            Switches per environment
+                            Value set for active env; key shared
                         </div>
                     </button>
 
@@ -53,11 +54,17 @@
                             Capsule: {{ tabStateService.activeCapsuleName() || 'Default' }}
                         </div>
                         <div class="text-[10px] text-(--postonsteroids-text-muted)">
-                            Shared across environments
+                            Shared default across environments
                         </div>
                     </button>
                 </div>
             </div>
+            } @else {
+            <div class="px-2.5 py-1.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-between text-[11px]">
+                <span class="text-(--postonsteroids-text-secondary) font-medium">Scope: Capsule Variables</span>
+                <span class="text-[10px] text-(--postonsteroids-text-muted)">Environments: Pro / Enterprise</span>
+            </div>
+            }
 
             <!-- Variable Type Selection -->
             <div>

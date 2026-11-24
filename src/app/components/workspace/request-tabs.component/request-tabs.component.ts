@@ -8,6 +8,7 @@ import { SwaggerImportModalComponent } from '../../../shared/components/swagger-
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
 import { CurlModalComponent } from '../../../shared/components/curl-modal.component';
 import { VariableService } from '../../../shared/services/variable.service';
+import { EnvironmentService } from '../../../shared/services/environment.service';
 import { TabStateService, RequestState } from '../../../shared/services/tab.state.service';
 import { AuthService } from '../../../shared/services/auth.service';
 import { getHttpMethodColor } from '../../../shared/utils/http-method.util';
@@ -29,6 +30,7 @@ interface RequestTab {
 })
 export class RequestTabsComponent {
     variableService = inject(VariableService);
+    envService = inject(EnvironmentService);
     tabStateService = inject(TabStateService);
     authService = inject(AuthService);
     private destroyRef = inject(DestroyRef);

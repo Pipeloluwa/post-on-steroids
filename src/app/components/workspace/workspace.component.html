@@ -77,8 +77,8 @@
         }
 
         <!-- Capsule Requests list (visible when expanded) -->
-        <div class="flex-1 overflow-y-auto overflow-x-hidden py-1 sidebar-scroll" [class.hidden]="!isSidebarOpen()" (click)="onSidebarBackgroundClick($event)">
-            <div class="flex flex-col px-2.5 py-1.5 border-b border-(--postonsteroids-border)/40 mb-0.5 gap-y-1.5">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden pb-1 sidebar-scroll" [class.hidden]="!isSidebarOpen()" (click)="onSidebarBackgroundClick($event)">
+            <div class="sticky top-0 z-20 flex flex-col px-2.5 py-1.5 border-b border-(--postonsteroids-border)/60 mb-0.5 gap-y-1.5 bg-(--postonsteroids-bg-secondary) backdrop-blur-xs shadow-xs">
                 <div class="flex items-center justify-between gap-x-1 min-w-0">
                     <div class="flex items-center gap-x-2 min-w-0">
                         <input type="checkbox"
@@ -102,13 +102,14 @@
                 </div>
 
                 @if (selectedRequestIds().size > 0 || selectedGroupIds().size > 0) {
-                    <div class="flex flex-wrap items-center gap-1 pt-1 border-t border-(--postonsteroids-border)/30">
+                    <div class="flex flex-wrap items-center gap-1 pt-1 border-t border-(--postonsteroids-border)/30 relative">
                         @if (selectedRequestIds().size > 0) {
                             <button (click)="groupSelectedRequests($event)" type="button"
-                                    title="Group selected requests into a folder"
+                                    title="Group selected requests into a new or existing folder"
                                     class="py-0.5 px-1.5 rounded bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 text-(--postonsteroids-accent) text-[10px] font-semibold flex items-center gap-x-0.5 cursor-pointer transition-colors">
                                 <mat-icon class="text-[12px]! size-[12px]!">create_new_folder</mat-icon>
                                 <span>Group ({{ selectedRequestIds().size }})</span>
+                                <mat-icon class="text-[11px]! size-[11px]! opacity-75">expand_more</mat-icon>
                             </button>
                         }
                         <button (click)="openTransferModalFromSelection('copy', $event)" type="button"
@@ -124,6 +125,47 @@
                             <mat-icon class="text-[12px]! size-[12px]!">delete</mat-icon>
                             <span>{{ batchDeleteCountLabel() }}</span>
                         </button>
+
+                        @if (groupSelectionMenuOpen()) {
+                            <div (click)="$event.stopPropagation()"
+                                 class="mt-1 w-full rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) shadow-2xl p-2 space-y-1.5 text-[11px] z-30">
+                                <div class="text-[9.5px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                                    Group {{ selectedRequestIds().size }} Request(s)
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <input type="text"
+                                           [ngModel]="customGroupName()"
+                                           (ngModelChange)="customGroupName.set($event)"
+                                           (keydown.enter)="groupSelectedIntoNewFolder(customGroupName(), $event)"
+                                           placeholder="Custom folder name..."
+                                           class="flex-1 min-w-0 px-2 py-1 rounded bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
+                                    <button type="button" (click)="groupSelectedIntoNewFolder(customGroupName(), $event)"
+                                            class="px-2 py-1 rounded bg-(--postonsteroids-accent) text-white font-semibold cursor-pointer shrink-0">
+                                        Create
+                                    </button>
+                                </div>
+                                <button type="button" (click)="groupSelectedIntoNewFolder('New Folder', $event)"
+                                        class="w-full px-2 py-1.5 rounded text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) font-medium flex items-center gap-1.5 cursor-pointer">
+                                    <mat-icon class="text-[14px]! size-[14px]!">create_new_folder</mat-icon>
+                                    <span>Quick New Folder</span>
+                                </button>
+                                @if (tabStateService.activeCapsuleGroups().length > 0) {
+                                    <div class="h-px bg-(--postonsteroids-border)/50"></div>
+                                    <div class="text-[9px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                                        Or Move into Existing Folder
+                                    </div>
+                                    <div class="max-h-36 overflow-y-auto custom-scrollbar space-y-0.5">
+                                        @for (g of tabStateService.activeCapsuleGroups(); track g.id) {
+                                            <button type="button" (click)="groupSelectedIntoExistingFolder(g.id, $event)"
+                                                    class="w-full px-2 py-1.5 rounded text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) flex items-center gap-1.5 cursor-pointer truncate">
+                                                <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent) shrink-0">folder</mat-icon>
+                                                <span class="truncate">{{ tabStateService.getFolderFullPath(g.id) }}</span>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
                 }
             </div>
@@ -160,170 +202,8 @@
                                 </div>
                                 <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
 
-                                <!-- Folder Header Row (Focusable Item + Drag Handle + Drop Target for Requests) -->
-                                <div cdkDragHandle
-                                     [attr.data-folder-header-id]="item.group.id"
-                                     class="sidebar-tree-row flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
-                                     [class.cursor-grabbing!]="isDraggingFolder()"
-                                     [class.ring-1]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
-                                     [class.ring-(--postonsteroids-accent)]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
-                                     [class.bg-(--postonsteroids-accent)/20]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()"
-                                     [class.border-(--postonsteroids-accent)/65!]="isGroupFocused(item.group.id) && !(hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest())"
-                                     [class.bg-(--postonsteroids-accent)/8]="isGroupFocused(item.group.id) && !selectedGroupIds().has(item.group.id) && !(hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest())"
-                                     [class.bg-(--postonsteroids-accent)/12]="selectedGroupIds().has(item.group.id) && !(hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest())"
-                                     (click)="onFolderContainerClick(item.group.id, $event)"
-                                     (dblclick)="startEditingGroup(item.group, $event)">
-                                    
-                                    <input type="checkbox"
-                                           [checked]="isGroupSelected(item.group.id, item.requests)"
-                                           (click)="toggleSelectGroup(item.group.id, item.requests, $event)"
-                                           (dblclick)="$event.stopPropagation()"
-                                           (mousedown)="$event.stopPropagation()"
-                                           (pointerdown)="$event.stopPropagation()"
-                                           (touchstart)="$event.stopPropagation()"
-                                           title="Select folder and all requests in folder"
-                                           [attr.aria-label]="'Select folder ' + item.group.name"
-                                           class="sidebar-checkbox cursor-pointer! shrink-0 opacity-0 group-hover/folder:opacity-100 transition-opacity"
-                                           [class.opacity-100!]="isGroupSelected(item.group.id, item.requests) || selectedGroupIds().size > 0 || selectedRequestIds().size > 0" />
-
-                                    @if (editingGroupId() === item.group.id) {
-                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted) transition-transform shrink-0"
-                                                  [class.rotate-90]="item.group.isExpanded !== false">chevron_right</mat-icon>
-
-                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)/90 shrink-0">
-                                            {{ item.group.isExpanded !== false ? 'folder_open' : 'folder' }}
-                                        </mat-icon>
-
-                                        <input type="text"
-                                               class="flex-1 min-w-0 bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) text-[12.5px] font-medium px-1.5 py-[1px] rounded border border-(--postonsteroids-accent) outline-none"
-                                               [ngModel]="editingGroupName()"
-                                               (ngModelChange)="editingGroupName.set($event)"
-                                               (click)="$event.stopPropagation()"
-                                               (mousedown)="$event.stopPropagation()"
-                                               (pointerdown)="$event.stopPropagation()"
-                                               (keydown.enter)="saveGroupName(item.group.id, $event)"
-                                               (keydown.escape)="cancelEditingGroup($event)"
-                                               (blur)="saveGroupName(item.group.id, $event)"
-                                               autofocus />
-                                    } @else {
-                                        <button type="button"
-                                                class="sidebar-focus-trigger flex-1 min-w-0 flex items-center gap-x-1.5 text-left bg-transparent border-0 p-0 cursor-pointer outline-none"
-                                                [class.cursor-grabbing!]="isDraggingFolder()"
-                                                [attr.aria-expanded]="item.group.isExpanded !== false"
-                                                [attr.aria-label]="'Folder ' + item.group.name + ', ' + item.requests.length + ' requests'"
-                                                [title]="item.group.name + ' (' + item.requests.length + ' requests) — Click to focus/toggle, drag to reorder folder'"
-                                                (focus)="onFocusGroup(item.group.id)"
-                                                (click)="onFolderRowClick(item.group.id, $event)"
-                                                (keydown.escape)="clearSidebarFocus($event)">
-                                            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted) transition-transform shrink-0"
-                                                      [class.rotate-90]="item.group.isExpanded !== false">chevron_right</mat-icon>
-
-                                            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)/90 shrink-0">
-                                                {{ item.group.isExpanded !== false ? 'folder_open' : 'folder' }}
-                                            </mat-icon>
-
-                                            <span class="text-[12.5px] font-medium text-(--postonsteroids-text-primary) truncate flex-1 min-w-0">
-                                                {{ item.group.name }}
-                                            </span>
-                                            @if (hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest()) {
-                                                <span class="text-[10px] font-semibold text-(--postonsteroids-accent) px-1.5 py-0.5 rounded bg-(--postonsteroids-accent)/15 shrink-0">
-                                                    Drop inside
-                                                </span>
-                                            } @else {
-                                                <span class="text-[10.5px] text-(--postonsteroids-text-muted)/75 font-medium tabular-nums pr-0.5 shrink-0 group-hover/folder:hidden">
-                                                    {{ item.requests.length }}
-                                                </span>
-                                            }
-                                        </button>
-                                    }
-
-                                    <!-- Folder Hover Actions (only take layout space when hovered) -->
-                                    <div class="hidden group-hover/folder:flex items-center gap-x-0.5 shrink-0"
-                                         (click)="$event.stopPropagation()"
-                                         (mousedown)="$event.stopPropagation()"
-                                         (pointerdown)="$event.stopPropagation()"
-                                         (touchstart)="$event.stopPropagation()">
-                                        <button (click)="addNewRequestInGroup(item.group.id, $event)" type="button"
-                                                title="Add request in folder" aria-label="Add request in folder"
-                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
-                                            <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
-                                        </button>
-                                        <button (click)="startEditingGroup(item.group, $event)" type="button"
-                                                title="Rename folder" aria-label="Rename folder"
-                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer flex items-center justify-center">
-                                            <mat-icon class="text-[14px]! size-[14px]!">edit</mat-icon>
-                                        </button>
-                                        <button (click)="openTransferModalForFolder(item.group, 'copy', $event)" type="button"
-                                                title="Copy folder to capsule" aria-label="Copy folder to capsule"
-                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
-                                            <mat-icon class="text-[14px]! size-[14px]!">content_copy</mat-icon>
-                                        </button>
-                                        <button (click)="openTransferModalForFolder(item.group, 'move', $event)" type="button"
-                                                title="Move folder to capsule" aria-label="Move folder to capsule"
-                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
-                                            <mat-icon class="text-[14px]! size-[14px]!">drive_file_move</mat-icon>
-                                        </button>
-                                        <button (click)="ungroupFolder(item.group, $event)" type="button"
-                                                title="Ungroup folder (keep requests)" aria-label="Ungroup folder"
-                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
-                                            <mat-icon class="text-[14px]! size-[14px]!">folder_off</mat-icon>
-                                        </button>
-                                        <button (click)="deleteFolder(item.group, item.requests.length, $event)" type="button"
-                                                title="Delete folder" aria-label="Delete folder"
-                                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-status-danger cursor-pointer flex items-center justify-center">
-                                            <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Folder Requests Drop List -->
-                                <div cdkDropList
-                                     [id]="'folder-drop-' + item.group.id"
-                                     [attr.data-folder-zone-id]="item.group.isExpanded !== false ? item.group.id : null"
-                                     cdkDropListOrientation="vertical"
-                                     [cdkDropListData]="item.requests"
-                                     [cdkDropListConnectedTo]="allRequestDropListIds()"
-                                     [cdkDropListEnterPredicate]="canEnterFolderDropList"
-                                     (cdkDropListDropped)="onDropInFolder($event, item.group.id)"
-                                     class="folder-drop-zone flex flex-col gap-y-[2px] pl-1.5 border-l border-(--postonsteroids-border)/45 ml-[18px] my-[1px]"
-                                     [class.bg-(--postonsteroids-accent)/5]="hoveredFolderIdDuringDrag() === item.group.id && isDraggingRequest() && item.group.isExpanded !== false"
-                                     [class.hidden]="item.group.isExpanded === false">
-                                    @if (item.group.isExpanded !== false) {
-                                        @for (req of item.requests; track req.id) {
-                                            <div cdkDrag
-                                                 [cdkDragData]="{ type: 'request', req: req, groupId: item.group.id }"
-                                                 (cdkDragStarted)="onRequestDragStarted(req, item.group.id)"
-                                                 (cdkDragMoved)="onRequestDragMoved($event)"
-                                                 (cdkDragEnded)="onRequestDragEnded()"
-                                                 class="flex flex-col relative">
-                                                <div *cdkDragPreview class="px-3 py-1.5 rounded-md bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-accent) shadow-xl flex items-center gap-x-2 text-[12px] text-(--postonsteroids-text-primary) select-none">
-                                                    @if (draggedRequestIds().length > 1) {
-                                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">library_add_check</mat-icon>
-                                                        <span class="font-semibold text-(--postonsteroids-accent)">
-                                                            @if (hoveredFolderName(); as targetName) {
-                                                                Move {{ draggedRequestIds().length }} into "{{ targetName }}"
-                                                            } @else {
-                                                                Moving {{ draggedRequestIds().length }} selected
-                                                            }
-                                                        </span>
-                                                    } @else {
-                                                        <span class="text-[10px] font-bold" [style.color]="getMethodColor(req.method)">{{ getShortMethod(req.method) }}</span>
-                                                        <span class="font-medium">{{ tabStateService.resolveRequestTitle(req.name, req.url) }}</span>
-                                                        @if (hoveredFolderName(); as targetName) {
-                                                            <span class="text-[10.5px] font-semibold text-(--postonsteroids-accent) ml-1">→ {{ targetName }}</span>
-                                                        }
-                                                    }
-                                                </div>
-                                                <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
-                                                <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: req, groupId: item.group.id }"></ng-container>
-                                            </div>
-                                        } @empty {
-                                            <div class="py-1.5 px-2 text-[10.5px] text-(--postonsteroids-text-muted)/75 italic select-none">
-                                                Empty folder — drag requests here
-                                            </div>
-                                        }
-                                    }
-                                </div>
+                                <!-- Top-level Folder Header + Nested Children (Endless Nesting Supported) -->
+                                <ng-container *ngTemplateOutlet="folderNodeTpl; context: { $implicit: item, depth: 0 }"></ng-container>
                             </div>
                         } @else {
                             <div cdkDrag
@@ -371,6 +251,144 @@
                     </div>
                 }
             </div>
+
+            <!-- Recursive Nested Folder Template (supports unlimited folder nesting) -->
+            <ng-template #folderNodeTpl let-folderNode let-depth="depth">
+                <div [attr.data-folder-header-id]="folderNode.group.id"
+                     class="sidebar-tree-row flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
+                     [class.cursor-grabbing!]="isDraggingFolder() && depth === 0"
+                     [class.ring-1]="hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest()"
+                     [class.ring-(--postonsteroids-accent)]="hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest()"
+                     [class.bg-(--postonsteroids-accent)/20]="hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest()"
+                     [class.border-(--postonsteroids-accent)/65!]="isGroupFocused(folderNode.group.id) && !(hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest())"
+                     [class.bg-(--postonsteroids-accent)/8]="isGroupFocused(folderNode.group.id) && !selectedGroupIds().has(folderNode.group.id) && !(hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest())"
+                     [class.bg-(--postonsteroids-accent)/12]="selectedGroupIds().has(folderNode.group.id) && !(hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest())"
+                     (click)="onFolderContainerClick(folderNode.group.id, $event)"
+                     (contextmenu)="openFolderContextMenu(folderNode.group, folderNode.requests.length, $event)"
+                     (dblclick)="startEditingGroup(folderNode.group, $event)">
+
+                    <input type="checkbox"
+                           [checked]="isGroupSelected(folderNode.group.id, folderNode.requests)"
+                           (click)="toggleSelectGroup(folderNode.group.id, folderNode.requests, $event)"
+                           (dblclick)="$event.stopPropagation()"
+                           (mousedown)="$event.stopPropagation()"
+                           (pointerdown)="$event.stopPropagation()"
+                           (touchstart)="$event.stopPropagation()"
+                           title="Select folder and all requests in folder"
+                           [attr.aria-label]="'Select folder ' + folderNode.group.name"
+                           class="sidebar-checkbox cursor-pointer! shrink-0 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                           [class.opacity-100!]="isGroupSelected(folderNode.group.id, folderNode.requests) || selectedGroupIds().size > 0 || selectedRequestIds().size > 0" />
+
+                    @if (editingGroupId() === folderNode.group.id) {
+                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted) transition-transform shrink-0"
+                                  [class.rotate-90]="folderNode.group.isExpanded !== false">chevron_right</mat-icon>
+                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)/90 shrink-0">
+                            {{ folderNode.group.isExpanded !== false ? 'folder_open' : 'folder' }}
+                        </mat-icon>
+                        <input type="text"
+                               [attr.data-folder-rename-input]="folderNode.group.id"
+                               class="flex-1 min-w-0 bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) text-[12.5px] font-medium px-1.5 py-[1px] rounded border border-(--postonsteroids-accent) outline-none"
+                               [ngModel]="editingGroupName()"
+                               (ngModelChange)="editingGroupName.set($event)"
+                               (click)="$event.stopPropagation()"
+                               (mousedown)="$event.stopPropagation()"
+                               (pointerdown)="$event.stopPropagation()"
+                               (keydown.enter)="saveGroupName(folderNode.group.id, $event)"
+                               (keydown.escape)="cancelEditingGroup($event)"
+                               (blur)="saveGroupName(folderNode.group.id, $event)"
+                               autofocus />
+                    } @else {
+                        <button type="button"
+                                class="sidebar-focus-trigger flex-1 min-w-0 flex items-center gap-x-1.5 text-left bg-transparent border-0 p-0 cursor-pointer outline-none"
+                                [attr.aria-expanded]="folderNode.group.isExpanded !== false"
+                                [attr.aria-label]="'Folder ' + folderNode.group.name + ', ' + folderNode.requests.length + ' requests'"
+                                [title]="folderNode.group.name + ' (' + folderNode.requests.length + ' requests) — Right-click for nested folder options'"
+                                (focus)="onFocusGroup(folderNode.group.id)"
+                                (click)="onFolderRowClick(folderNode.group.id, $event)"
+                                (keydown.escape)="clearSidebarFocus($event)">
+                            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted) transition-transform shrink-0"
+                                      [class.rotate-90]="folderNode.group.isExpanded !== false">chevron_right</mat-icon>
+                            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)/90 shrink-0">
+                                {{ folderNode.group.isExpanded !== false ? 'folder_open' : 'folder' }}
+                            </mat-icon>
+                            <span class="text-[12.5px] font-medium text-(--postonsteroids-text-primary) truncate flex-1 min-w-0">
+                                {{ folderNode.group.name }}
+                            </span>
+                            @if (hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest()) {
+                                <span class="text-[10px] font-semibold text-(--postonsteroids-accent) px-1.5 py-0.5 rounded bg-(--postonsteroids-accent)/15 shrink-0">
+                                    Drop
+                                </span>
+                            } @else {
+                                <span class="text-[10.5px] text-(--postonsteroids-text-muted)/75 font-medium tabular-nums pr-0.5 shrink-0 group-hover/folder:hidden">
+                                    {{ folderNode.requests.length }}
+                                </span>
+                            }
+                        </button>
+                    }
+
+                    <!-- Folder Hover Actions -->
+                    <div class="hidden group-hover/folder:flex items-center gap-x-0.5 shrink-0"
+                         (click)="$event.stopPropagation()"
+                         (mousedown)="$event.stopPropagation()"
+                         (pointerdown)="$event.stopPropagation()"
+                         (touchstart)="$event.stopPropagation()">
+                        <button (click)="addNewRequestInGroup(folderNode.group.id, $event)" type="button"
+                                title="Add request in folder" aria-label="Add request in folder"
+                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
+                            <mat-icon class="text-[14px]! size-[14px]!">add</mat-icon>
+                        </button>
+                        <button (click)="createSubfolder(folderNode.group.id, $event)" type="button"
+                                title="New subfolder inside this folder" aria-label="New subfolder"
+                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center justify-center">
+                            <mat-icon class="text-[14px]! size-[14px]!">create_new_folder</mat-icon>
+                        </button>
+                        <button (click)="deleteFolder(folderNode.group, folderNode.requests.length, $event)" type="button"
+                                title="Delete folder" aria-label="Delete folder"
+                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) hover:text-status-danger cursor-pointer flex items-center justify-center">
+                            <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Child Subfolders & Requests Drop List -->
+                <div cdkDropList
+                     [id]="'folder-drop-' + folderNode.group.id"
+                     [attr.data-folder-zone-id]="folderNode.group.isExpanded !== false ? folderNode.group.id : null"
+                     cdkDropListOrientation="vertical"
+                     [cdkDropListData]="folderNode.requests"
+                     [cdkDropListConnectedTo]="allRequestDropListIds()"
+                     [cdkDropListEnterPredicate]="canEnterFolderDropList"
+                     (cdkDropListDropped)="onDropInFolder($event, folderNode.group.id)"
+                     class="folder-drop-zone flex flex-col gap-y-[2px] pl-1.5 border-l border-(--postonsteroids-border)/45 ml-[18px] my-[1px]"
+                     [class.bg-(--postonsteroids-accent)/5]="hoveredFolderIdDuringDrag() === folderNode.group.id && isDraggingRequest() && folderNode.group.isExpanded !== false"
+                     [class.hidden]="folderNode.group.isExpanded === false">
+                    @if (folderNode.group.isExpanded !== false) {
+                        @for (childFolder of (tabStateService.childGroupsMap().get(folderNode.group.id) || []); track childFolder.group.id) {
+                            <ng-container *ngTemplateOutlet="folderNodeTpl; context: { $implicit: childFolder, depth: depth + 1 }"></ng-container>
+                        }
+                        @for (req of folderNode.requests; track req.id) {
+                            <div cdkDrag
+                                 [cdkDragData]="{ type: 'request', req: req, groupId: folderNode.group.id }"
+                                 (cdkDragStarted)="onRequestDragStarted(req, folderNode.group.id)"
+                                 (cdkDragMoved)="onRequestDragMoved($event)"
+                                 (cdkDragEnded)="onRequestDragEnded()"
+                                 class="flex flex-col relative">
+                                <div *cdkDragPreview class="px-3 py-1.5 rounded-md bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-accent) shadow-xl flex items-center gap-x-2 text-[12px] text-(--postonsteroids-text-primary) select-none">
+                                    <span class="text-[10px] font-bold" [style.color]="getMethodColor(req.method)">{{ getShortMethod(req.method) }}</span>
+                                    <span class="font-medium">{{ tabStateService.resolveRequestTitle(req.name, req.url) }}</span>
+                                </div>
+                                <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
+                                <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: req, groupId: folderNode.group.id }"></ng-container>
+                            </div>
+                        }
+                        @if (folderNode.requests.length === 0 && !(tabStateService.childGroupsMap().get(folderNode.group.id)?.length)) {
+                            <div class="py-1.5 px-2 text-[10.5px] text-(--postonsteroids-text-muted)/75 italic select-none">
+                                Empty folder — drag requests or add subfolder
+                            </div>
+                        }
+                    }
+                </div>
+            </ng-template>
 
             <!-- Shared Request Item Template -->
             <ng-template #requestRowTpl let-req let-groupId="groupId">
@@ -637,7 +655,7 @@
                     <button type="button" (click)="contextMoveToGroup(g.id, $event)"
                             class="w-full px-3 py-2 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2.5 cursor-pointer truncate min-h-[34px]">
                         <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent) shrink-0">folder</mat-icon>
-                        <span class="truncate">{{ g.name }}</span>
+                        <span class="truncate">{{ tabStateService.getFolderFullPath(g.id) }}</span>
                     </button>
                 }
             }
@@ -681,6 +699,66 @@
                 class="w-full px-3 py-1.5 text-left hover:bg-status-danger/10 text-status-danger flex items-center gap-x-2 cursor-pointer font-medium">
             <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
             <span>Delete Request</span>
+        </button>
+    </div>
+}
+
+<!-- Folder Right-Click Context Menu (Subfolders, Nesting & Actions) -->
+@if (folderContextMenu().isOpen && folderContextMenu().group; as ctxGrp) {
+    <div class="fixed inset-0 z-500"
+         (click)="closeFolderContextMenu()"
+         (contextmenu)="closeFolderContextMenu(); $event.preventDefault()">
+    </div>
+    <div class="fixed z-501 w-[232px] py-1.5 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) shadow-2xl text-[11.5px] text-(--postonsteroids-text-primary) flex flex-col"
+         [style.left.px]="folderContextMenu().x"
+         [style.top.px]="folderContextMenu().y"
+         (click)="$event.stopPropagation()">
+        <div class="px-3 py-1 border-b border-(--postonsteroids-border)/50 mb-1 flex items-center gap-1.5">
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent) shrink-0">folder</mat-icon>
+            <span class="truncate font-semibold text-[11px] text-(--postonsteroids-text-secondary)">{{ ctxGrp.name }}</span>
+        </div>
+
+        <button type="button" (click)="contextCreateSubfolder($event)"
+                class="w-full px-3 py-2 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2.5 cursor-pointer text-(--postonsteroids-accent) font-medium">
+            <mat-icon class="text-[15px]! size-[15px]!">create_new_folder</mat-icon>
+            <span>New Subfolder</span>
+        </button>
+        <button type="button" (click)="contextRenameFolder($event)"
+                class="w-full px-3 py-2 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2.5 cursor-pointer">
+            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-secondary)">edit</mat-icon>
+            <span>Rename Folder</span>
+        </button>
+
+        @if (availableParentFoldersForMenu().length > 0 || ctxGrp.parentGroupId) {
+            <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
+            <div class="px-3 py-1 text-[9.5px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                Nest Folder Inside
+            </div>
+            <div class="max-h-40 overflow-y-auto custom-scrollbar flex flex-col gap-y-0.5 py-0.5">
+                @if (ctxGrp.parentGroupId) {
+                    <button type="button" (click)="contextMoveFolderToParent(null, $event)"
+                            class="w-full px-3 py-2 text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) flex items-center gap-x-2.5 cursor-pointer min-h-[34px]">
+                        <mat-icon class="text-[15px]! size-[15px]! shrink-0">drive_file_move_rtl</mat-icon>
+                        <span>Move to Top Level</span>
+                    </button>
+                }
+                @for (pf of availableParentFoldersForMenu(); track pf.id) {
+                    @if (pf.id !== ctxGrp.parentGroupId) {
+                        <button type="button" (click)="contextMoveFolderToParent(pf.id, $event)"
+                                class="w-full px-3 py-2 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2.5 cursor-pointer truncate min-h-[34px]">
+                            <mat-icon class="text-[15px]! size-[15px]! text-amber-400 shrink-0">folder_open</mat-icon>
+                            <span class="truncate">{{ tabStateService.getFolderFullPath(pf.id) }}</span>
+                        </button>
+                    }
+                }
+            </div>
+        }
+
+        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
+        <button type="button" (click)="contextDeleteFolder($event)"
+                class="w-full px-3 py-2 text-left hover:bg-status-danger/10 text-status-danger flex items-center gap-x-2.5 cursor-pointer font-medium">
+            <mat-icon class="text-[15px]! size-[15px]!">delete</mat-icon>
+            <span>Delete Folder</span>
         </button>
     </div>
 }

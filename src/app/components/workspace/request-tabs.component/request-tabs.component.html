@@ -119,13 +119,18 @@
     <!-- Right Section: Variables -->
     <div class="flex items-center h-full border-l border-(--postonsteroids-border)">
 
-        <!-- Capsule Variables Button -->
+        <!-- Unified Contextual Variables Button -->
         <button (click)="openVariableModal()"
             class="h-full px-2.5 flex items-center gap-x-1.5 border-r border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors group whitespace-nowrap shrink-0 cursor-pointer"
-            title="Manage Capsule Variables (shared across environments; overridden by matching keys in Active Environment)">
+            title="Manage Variables (keys shared across environments; values follow the active environment)">
             <mat-icon
                 class="text-[18px]! size-[18px]! text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-accent) shrink-0">variables</mat-icon>
-            <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium">Capsule Vars</span>
+            <span class="text-[11px] text-(--postonsteroids-text-secondary) font-medium">Variables</span>
+            @if (envService.isEnvironmentFeatureEnabled() && envService.activeEnvironment(); as activeEnv) {
+                <span class="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 leading-none">
+                    {{ activeEnv.name }}
+                </span>
+            }
         </button>
     </div>
 

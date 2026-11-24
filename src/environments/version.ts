@@ -2,6 +2,6 @@
 export const APP_VERSION_INFO = {
   version: '2026.11.0',
   edition: 'enterprise',
-  buildTime: 1795509155827,
-  buildDate: '2026-11-24T08:32:35.827Z'
+  buildTime: 1795519111461,
+  buildDate: '2026-11-24T11:18:31.461Z'
 } as const;

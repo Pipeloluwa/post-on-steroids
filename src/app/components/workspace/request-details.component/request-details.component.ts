@@ -21,7 +21,10 @@ import { inject } from '@angular/core';
     imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, CookieManagerModalComponent, TransferCapsuleModalComponent, DocBrdGeneratorModalComponent],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
-    changeDetection: ChangeDetectionStrategy.OnPush
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    host: {
+        '(document:click)': 'isActionsMenuOpen.set(false)'
+    }
 })
 export class RequestDetailsComponent {
     isLoggedIn = input<boolean>(false);
@@ -43,6 +46,8 @@ export class RequestDetailsComponent {
     tabId = input.required<string>();
     
     requestName = computed(() => this.tabStateService.getState(this.tabId())?.name || '');
+    requestDescription = computed(() => this.tabStateService.getState(this.tabId())?.description || '');
+    isActionsMenuOpen = signal<boolean>(false);
     activeLockMode = computed<CapsuleLockMode>(() => this.tabStateService.activeCapsuleLockMode());
     readonly lockModeOptions: ReadonlyArray<{ id: CapsuleLockMode; label: string; title: string }> = [
         { id: 'unlocked', label: 'Unlocked', title: 'Full edit & delete access for you and shared receivers' },
@@ -73,6 +78,20 @@ export class RequestDetailsComponent {
             return;
         }
         this.tabStateService.updateState(this.tabId(), { name: newName });
+    }
+
+    onDescriptionChange(newDesc: string) {
+        const block = this.tabStateService.getEditBlockReason(undefined, 'edit');
+        if (block) {
+            this.notificationService.notify(block, 'warning');
+            return;
+        }
+        this.tabStateService.updateState(this.tabId(), { description: newDesc });
+    }
+
+    toggleActionsMenu(event: Event): void {
+        event.stopPropagation();
+        this.isActionsMenuOpen.update(v => !v);
     }
 
     onLockModeChange(mode: CapsuleLockMode): void {

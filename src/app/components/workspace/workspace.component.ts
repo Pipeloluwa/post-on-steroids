@@ -314,6 +314,15 @@ export class WorkspaceComponent {
     editingGroupId = signal<string | null>(null);
     editingGroupName = signal<string>('');
     moveMenuRequestId = signal<string | null>(null);
+    groupSelectionMenuOpen = signal<boolean>(false);
+    customGroupName = signal<string>('');
+    folderContextMenu = signal<{
+        isOpen: boolean;
+        x: number;
+        y: number;
+        group: RequestGroup | null;
+        requestCount: number;
+    }>({ isOpen: false, x: 0, y: 0, group: null, requestCount: 0 });
     isTransferModalOpen = signal<boolean>(false);
     transferRequestIds = signal<string[]>([]);
     transferFolder = signal<RequestGroup | null>(null);
@@ -335,6 +344,8 @@ export class WorkspaceComponent {
         event.preventDefault();
         event.stopPropagation();
         this.moveMenuRequestId.set(null);
+        this.groupSelectionMenuOpen.set(false);
+        this.closeFolderContextMenu();
         const viewportW = this.isBrowser ? window.innerWidth : 1280;
         const viewportH = this.isBrowser ? window.innerHeight : 800;
         const menuW = 228;
@@ -348,6 +359,62 @@ export class WorkspaceComponent {
             req,
             groupId: groupId ?? req.groupId ?? null
         });
+    }
+
+    openFolderContextMenu(group: RequestGroup, requestCount: number, event: MouseEvent): void {
+        event.preventDefault();
+        event.stopPropagation();
+        this.closeSidebarRequestContextMenu();
+        this.groupSelectionMenuOpen.set(false);
+        const viewportW = this.isBrowser ? window.innerWidth : 1280;
+        const viewportH = this.isBrowser ? window.innerHeight : 800;
+        const menuW = 228;
+        const menuH = 300;
+        const x = Math.max(8, Math.min(event.clientX, viewportW - menuW - 8));
+        const y = Math.max(8, Math.min(event.clientY, viewportH - menuH - 8));
+        this.folderContextMenu.set({ isOpen: true, x, y, group, requestCount });
+    }
+
+    closeFolderContextMenu(): void {
+        if (this.folderContextMenu().isOpen) {
+            this.folderContextMenu.set({ isOpen: false, x: 0, y: 0, group: null, requestCount: 0 });
+        }
+    }
+
+    availableParentFoldersForMenu = computed<RequestGroup[]>(() => {
+        const grp = this.folderContextMenu().group;
+        if (!grp) return [];
+        const descendants = new Set(this.tabStateService.getDescendantGroupIds([grp.id]));
+        return this.tabStateService.activeCapsuleGroups().filter(g => !descendants.has(g.id));
+    });
+
+    contextCreateSubfolder(event: Event): void {
+        const grp = this.folderContextMenu().group;
+        this.closeFolderContextMenu();
+        if (grp) this.createSubfolder(grp.id, event);
+    }
+
+    contextMoveFolderToParent(parentId: string | null, event: Event): void {
+        event.stopPropagation();
+        const grp = this.folderContextMenu().group;
+        this.closeFolderContextMenu();
+        if (!grp) return;
+        const ok = this.tabStateService.moveGroupToParentGroup(grp.id, parentId);
+        if (ok) {
+            this.scrollFolderIntoView(grp.id);
+        }
+    }
+
+    contextRenameFolder(event: Event): void {
+        const grp = this.folderContextMenu().group;
+        this.closeFolderContextMenu();
+        if (grp) this.startEditingGroup(grp, event);
+    }
+
+    contextDeleteFolder(event: Event): void {
+        const ctx = this.folderContextMenu();
+        this.closeFolderContextMenu();
+        if (ctx.group) void this.deleteFolder(ctx.group, ctx.requestCount, event);
     }
 
     closeSidebarRequestContextMenu(): void {
@@ -567,13 +634,17 @@ export class WorkspaceComponent {
 
     getVisibleOrderedRequestIds(): string[] {
         const ids: string[] = [];
+        const childMap = this.tabStateService.childGroupsMap();
+        const walkGroup = (group: RequestGroup, requests: RequestState[]) => {
+            if (group.isExpanded === false) return;
+            for (const r of requests) ids.push(r.id);
+            for (const child of (childMap.get(group.id) || [])) {
+                walkGroup(child.group, child.requests);
+            }
+        };
         for (const item of this.tabStateService.sidebarRootItems()) {
             if (item.type === 'group') {
-                if (item.group.isExpanded !== false) {
-                    for (const r of item.requests) {
-                        ids.push(r.id);
-                    }
-                }
+                walkGroup(item.group, item.requests);
             } else {
                 ids.push(item.request.id);
             }
@@ -583,11 +654,16 @@ export class WorkspaceComponent {
 
     getAllOrderedRequestIds(): string[] {
         const ids: string[] = [];
+        const childMap = this.tabStateService.childGroupsMap();
+        const walkGroup = (group: RequestGroup, requests: RequestState[]) => {
+            for (const r of requests) ids.push(r.id);
+            for (const child of (childMap.get(group.id) || [])) {
+                walkGroup(child.group, child.requests);
+            }
+        };
         for (const item of this.tabStateService.sidebarRootItems()) {
             if (item.type === 'group') {
-                for (const r of item.requests) {
-                    ids.push(r.id);
-                }
+                walkGroup(item.group, item.requests);
             } else {
                 ids.push(item.request.id);
             }
@@ -609,10 +685,14 @@ export class WorkspaceComponent {
         if (this.moveMenuRequestId()) {
             this.moveMenuRequestId.set(null);
         }
+        if (this.groupSelectionMenuOpen()) {
+            this.groupSelectionMenuOpen.set(false);
+        }
         if (this.editingRequestId()) {
             this.saveRequestName(this.editingRequestId()!);
         }
         this.closeSidebarRequestContextMenu();
+        this.closeFolderContextMenu();
     }
 
     onFolderDragStarted() {
@@ -734,25 +814,78 @@ export class WorkspaceComponent {
         this.hoveredFolderZoneId.set(null);
     }
 
+    private scrollFolderIntoView(groupId: string): void {
+        if (!this.isBrowser) return;
+        setTimeout(() => {
+            const headerEl = document.querySelector<HTMLElement>(`[data-folder-header-id="${groupId}"]`);
+            headerEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            const inputEl = document.querySelector<HTMLInputElement>(`[data-folder-rename-input="${groupId}"]`);
+            inputEl?.focus();
+            inputEl?.select();
+        }, 40);
+    }
+
     createNewFolder(event?: Event) {
         event?.stopPropagation();
         const group = this.tabStateService.createRequestGroup('New Folder');
         this.editingGroupId.set(group.id);
         this.editingGroupName.set(group.name);
+        this.scrollFolderIntoView(group.id);
     }
 
-    groupSelectedRequests(event?: Event) {
+    createSubfolder(parentGroupId: string, event?: Event) {
+        event?.stopPropagation();
+        const group = this.tabStateService.createRequestGroup('New Subfolder', [], undefined, parentGroupId);
+        this.editingGroupId.set(group.id);
+        this.editingGroupName.set(group.name);
+        this.scrollFolderIntoView(group.id);
+    }
+
+    toggleGroupSelectionMenu(event?: Event) {
+        event?.stopPropagation();
+        this.groupSelectionMenuOpen.update(v => !v);
+        if (this.groupSelectionMenuOpen()) {
+            this.customGroupName.set('');
+        }
+    }
+
+    groupSelectedIntoNewFolder(customName?: string, event?: Event) {
         event?.stopPropagation();
         const selected = this.selectedRequestIds();
         if (selected.size === 0) return;
         const ordered = this.getAllOrderedRequestIds().filter(id => selected.has(id));
         const ids = ordered.length > 0 ? ordered : Array.from(selected);
-        const group = this.tabStateService.createRequestGroup('New Folder', ids);
+        const name = (customName ?? this.customGroupName()).trim() || 'New Folder';
+        const group = this.tabStateService.createRequestGroup(name, ids);
         this.selectedGroupIds.set(new Set());
         this.selectedRequestIds.set(new Set());
-        this.editingGroupId.set(group.id);
-        this.editingGroupName.set(group.name);
-        this.notificationService.notify(`Grouped ${ids.length} request(s) into folder.`);
+        this.groupSelectionMenuOpen.set(false);
+        this.customGroupName.set('');
+        if (!(customName ?? '').trim()) {
+            this.editingGroupId.set(group.id);
+            this.editingGroupName.set(group.name);
+        }
+        this.scrollFolderIntoView(group.id);
+        this.notificationService.notify(`Grouped ${ids.length} request(s) into "${group.name}".`);
+    }
+
+    groupSelectedIntoExistingFolder(targetGroupId: string, event?: Event) {
+        event?.stopPropagation();
+        const selected = this.selectedRequestIds();
+        if (selected.size === 0) return;
+        const ordered = this.getAllOrderedRequestIds().filter(id => selected.has(id));
+        const ids = ordered.length > 0 ? ordered : Array.from(selected);
+        this.tabStateService.moveRequestsToGroup(ids, targetGroupId);
+        this.selectedGroupIds.set(new Set());
+        this.selectedRequestIds.set(new Set());
+        this.groupSelectionMenuOpen.set(false);
+        this.scrollFolderIntoView(targetGroupId);
+        const pathName = this.tabStateService.getFolderFullPath(targetGroupId) || 'Folder';
+        this.notificationService.notify(`Moved ${ids.length} request(s) into "${pathName}".`);
+    }
+
+    groupSelectedRequests(event?: Event) {
+        this.toggleGroupSelectionMenu(event);
     }
 
     startEditingGroup(group: RequestGroup, event?: Event) {
@@ -870,20 +1003,30 @@ export class WorkspaceComponent {
         event.stopPropagation();
         if (this.isDeletingRequests()) return;
 
-        if (requestCount > 0) {
-            const confirmed = await this.dialogService.confirm(
-                `Are you sure you want to delete folder "${group.name}" and its ${requestCount} request(s)? (Tip: Use the ungroup button to keep requests)`
-            );
-            if (!confirmed) return;
-        }
+        const descendantIds = this.tabStateService.getDescendantGroupIds([group.id]);
+        const subFolderCount = Math.max(0, descendantIds.length - 1);
+        const descSet = new Set(descendantIds);
+        const totalNestedReqs = this.tabStateService.allCapsuleRequests().filter(r => r.groupId && descSet.has(r.groupId)).length;
+        const effectiveReqCount = Math.max(requestCount, totalNestedReqs);
+
+        const promptMsg = effectiveReqCount > 0 || subFolderCount > 0
+            ? `Are you sure you want to delete folder "${group.name}"${subFolderCount > 0 ? `, its ${subFolderCount} subfolder(s)` : ''}${effectiveReqCount > 0 ? `, and its ${effectiveReqCount} request(s)` : ''}? (Tip: Use Ungroup to keep requests)`
+            : `Are you sure you want to delete empty folder "${group.name}"?`;
+
+        const confirmed = await this.dialogService.confirm(promptMsg);
+        if (!confirmed) return;
 
         this.isDeletingRequests.set(true);
         try {
-            const memberIds = new Set<string>(group.requestIds || []);
-            await this.tabStateService.deleteRequestGroup(group.id, requestCount > 0);
+            const memberIds = new Set<string>(
+                this.tabStateService.allCapsuleRequests().filter(r => r.groupId && descSet.has(r.groupId)).map(r => r.id)
+            );
+            for (const rId of (group.requestIds || [])) memberIds.add(rId);
+
+            await this.tabStateService.deleteRequestGroup(group.id, true);
             this.selectedGroupIds.update(set => {
                 const next = new Set(set);
-                next.delete(group.id);
+                for (const dId of descendantIds) next.delete(dId);
                 return next;
             });
             if (memberIds.size > 0) {
@@ -894,8 +1037,8 @@ export class WorkspaceComponent {
                 });
             }
             this.notificationService.notify(
-                requestCount > 0
-                    ? `Deleted folder "${group.name}" and ${requestCount} request(s).`
+                effectiveReqCount > 0
+                    ? `Deleted folder "${group.name}" and ${effectiveReqCount} request(s).`
                     : `Deleted folder "${group.name}".`
             );
         } catch (e: any) {
@@ -974,6 +1117,7 @@ export class WorkspaceComponent {
         this.moveMenuRequestId.set(null);
         this.editingGroupId.set(group.id);
         this.editingGroupName.set(group.name);
+        this.scrollFolderIntoView(group.id);
     }
 
     getSelectedRequestIdsIncludingFolders(): string[] {

@@ -120,6 +120,7 @@ export interface RequestGroup {
     id: string;
     name: string;
     capsuleId: string;
+    parentGroupId?: string | null;
     isExpanded?: boolean;
     requestIds: string[];
     createdAt: number;
@@ -154,6 +155,7 @@ export interface RequestState {
     url: string;
     method: string;
     name: string;
+    description?: string;
     isDirty: boolean;
     isLoading: boolean;
     autoAuthEnabled?: boolean;
@@ -1496,10 +1498,12 @@ export class TabStateService {
     sidebarRootItems = computed<SidebarRootItem[]>(() => {
         const capId = this.activeCapsuleId();
         const grouped = this.groupedCapsuleRequests();
+        const allGroupIds = new Set(grouped.map(g => g.group.id));
+        const rootGrouped = grouped.filter(g => !g.group.parentGroupId || !allGroupIds.has(g.group.parentGroupId));
         const ungrouped = this.ungroupedCapsuleRequests();
 
         const items: SidebarRootItem[] = [
-            ...grouped.map(g => ({
+            ...rootGrouped.map(g => ({
                 type: 'group' as const,
                 id: g.group.id,
                 group: g.group,
@@ -1525,6 +1529,75 @@ export class TabStateService {
 
         return items;
     });
+
+    childGroupsMap = computed<Map<string, { group: RequestGroup; requests: RequestState[] }[]>>(() => {
+        const map = new Map<string, { group: RequestGroup; requests: RequestState[] }[]>();
+        for (const entry of this.groupedCapsuleRequests()) {
+            const pId = entry.group.parentGroupId;
+            if (!pId) continue;
+            const list = map.get(pId) || [];
+            list.push(entry);
+            map.set(pId, list);
+        }
+        return map;
+    });
+
+    getDescendantGroupIds(rootGroupIds: string[], capsuleId?: string): string[] {
+        const capId = capsuleId || this.activeCapsuleId();
+        const groups = this.getGroupsForCapsule(capId);
+        const result = new Set<string>(rootGroupIds.filter(Boolean));
+        const queue = [...result];
+        while (queue.length > 0) {
+            const parentId = queue.shift()!;
+            for (const g of groups) {
+                if (g.parentGroupId === parentId && !result.has(g.id)) {
+                    result.add(g.id);
+                    queue.push(g.id);
+                }
+            }
+        }
+        return Array.from(result);
+    }
+
+    getFolderFullPath(groupId: string, capsuleId?: string): string {
+        const capId = capsuleId || this.activeCapsuleId();
+        const groups = this.getGroupsForCapsule(capId);
+        const byId = new Map(groups.map(g => [g.id, g]));
+        const parts: string[] = [];
+        const visited = new Set<string>();
+        let cur = byId.get(groupId);
+        while (cur && !visited.has(cur.id)) {
+            visited.add(cur.id);
+            parts.unshift(cur.name);
+            cur = cur.parentGroupId ? byId.get(cur.parentGroupId) : undefined;
+        }
+        return parts.join(' / ');
+    }
+
+    moveGroupToParentGroup(groupId: string, newParentGroupId: string | null, capsuleId?: string): boolean {
+        const capId = capsuleId || this.activeCapsuleId();
+        const blockReason = this.getEditBlockReason(capId, 'structure');
+        if (blockReason) {
+            this.notifyEditBlocked(blockReason);
+            return false;
+        }
+        const currentGroups = this.getGroupsForCapsule(capId);
+        if (!currentGroups.some(g => g.id === groupId)) return false;
+        if (newParentGroupId) {
+            const descendants = new Set(this.getDescendantGroupIds([groupId], capId));
+            if (descendants.has(newParentGroupId)) {
+                this.notificationService.notify('Cannot move a folder inside itself or its subfolder.', 'warning');
+                return false;
+            }
+        }
+        const updated = currentGroups.map(g => {
+            if (g.id === groupId) return { ...g, parentGroupId: newParentGroupId || null };
+            if (newParentGroupId && g.id === newParentGroupId) return { ...g, isExpanded: true };
+            return g;
+        });
+        this.setGroupsForCapsule(capId, updated, true);
+        return true;
+    }
 
     private historyStack = new Map<string, { past: Partial<RequestState>[], future: Partial<RequestState>[] }>();
 
@@ -1595,7 +1668,7 @@ export class TabStateService {
         this.notifyStructureOrOrderChanged(capId, true);
     }
 
-    createRequestGroup(name: string = 'New Folder', initialRequestIds: string[] = [], capsuleId?: string): RequestGroup {
+    createRequestGroup(name: string = 'New Folder', initialRequestIds: string[] = [], capsuleId?: string, parentGroupId: string | null = null): RequestGroup {
         const capId = capsuleId || this.activeCapsuleId();
         const blockReason = this.getEditBlockReason(capId, 'structure');
         if (blockReason) {
@@ -1610,6 +1683,7 @@ export class TabStateService {
             id: 'grp_' + this.createId(),
             name: (name || '').trim() || 'New Folder',
             capsuleId: capId,
+            parentGroupId: parentGroupId || null,
             isExpanded: true,
             requestIds: uniqueReqIds,
             createdAt: Date.now()
@@ -1618,6 +1692,7 @@ export class TabStateService {
         const updatedGroups = [
             ...currentGroups.map(g => ({
                 ...g,
+                isExpanded: parentGroupId && g.id === parentGroupId ? true : g.isExpanded,
                 requestIds: (g.requestIds || []).filter(id => !initSet.has(id))
             })),
             newGroup
@@ -1640,7 +1715,7 @@ export class TabStateService {
         }
 
         const existingOrder = this.getRequestOrderForCapsule(capId);
-        if (existingOrder.length > 0 && existingOrder.some(id => id.startsWith('grp_'))) {
+        if (!parentGroupId && existingOrder.length > 0 && existingOrder.some(id => id.startsWith('grp_'))) {
             const nextOrder = [...existingOrder];
             let insertIdx = -1;
             if (uniqueReqIds.length > 0) {
@@ -1873,7 +1948,9 @@ export class TabStateService {
         }
 
         const memberSet = new Set(memberIds);
-        const remainingGroups = currentGroups.filter(g => g.id !== groupId);
+        const remainingGroups = currentGroups
+            .filter(g => g.id !== groupId)
+            .map(g => g.parentGroupId === groupId ? { ...g, parentGroupId: targetGroup.parentGroupId ?? null } : g);
 
         this.states.update(map => {
             const next = new Map(map);
@@ -1924,7 +2001,8 @@ export class TabStateService {
             this.notifyEditBlocked(blockReason);
             return;
         }
-        const groupIdSet = new Set((groupIds || []).filter(Boolean));
+        const expandedGroupIds = this.getDescendantGroupIds(groupIds || [], capId);
+        const groupIdSet = new Set(expandedGroupIds.filter(Boolean));
         const currentGroups = this.getGroupsForCapsule(capId);
 
         const rawReqIds = new Set<string>((requestIds || []).filter(Boolean));
@@ -4047,6 +4125,99 @@ export class TabStateService {
         return null;
     }
 
+    clearCachedResponseFields(
+        id: string,
+        opts: {
+            body?: boolean;
+            cookies?: boolean;
+            headers?: boolean;
+            testResults?: boolean;
+            encryptionConsole?: boolean;
+            preRequestConsole?: boolean;
+            postResponseConsole?: boolean;
+        }
+    ): void {
+        const effectiveId = this.resolveTabId(id);
+        const idsToUpdate = Array.from(new Set([id, effectiveId].filter(Boolean)));
+
+        if (this.isBrowser) {
+            try {
+                const stored = localStorage.getItem('onsteroids_responses');
+                if (stored) {
+                    const map = JSON.parse(stored);
+                    let changed = false;
+                    for (const keyId of idsToUpdate) {
+                        const entry = map[keyId];
+                        if (!entry) continue;
+                        if (opts.body) {
+                            delete entry.responseBody;
+                            delete entry.responseStatus;
+                            delete entry.responseTime;
+                            delete entry.responseSize;
+                        }
+                        if (opts.cookies) delete entry.responseCookies;
+                        if (opts.headers) delete entry.responseHeaders;
+                        if (opts.testResults) delete entry.testResults;
+                        const hasAny =
+                            entry.responseBody !== undefined ||
+                            (Array.isArray(entry.responseCookies) && entry.responseCookies.length > 0) ||
+                            (Array.isArray(entry.responseHeaders) && entry.responseHeaders.length > 0) ||
+                            (Array.isArray(entry.testResults) && entry.testResults.length > 0);
+                        if (!hasAny) {
+                            delete map[keyId];
+                        }
+                        changed = true;
+                    }
+                    if (changed) {
+                        localStorage.setItem('onsteroids_responses', JSON.stringify(map));
+                    }
+                }
+            } catch {}
+        }
+
+        const buildPatch = (curr: RequestState): Partial<RequestState> => {
+            const patch: Partial<RequestState> = {};
+            if (opts.body) {
+                patch.responseBody = null;
+                patch.responseStatus = null;
+                patch.responseTime = null;
+                patch.responseSize = null;
+            }
+            if (opts.cookies) patch.responseCookies = [];
+            if (opts.headers) patch.responseHeaders = [];
+            if (opts.testResults) patch.testResults = [];
+            if (opts.encryptionConsole || opts.preRequestConsole || opts.postResponseConsole) {
+                patch.scripts = {
+                    ...curr.scripts,
+                    ...(opts.encryptionConsole ? { encryptionConsole: '' } : {}),
+                    ...(opts.preRequestConsole ? { preRequestConsole: '' } : {}),
+                    ...(opts.postResponseConsole ? { postResponseConsole: '' } : {})
+                };
+            }
+            return patch;
+        };
+
+        this.states.update(map => {
+            const next = new Map(map);
+            for (const keyId of idsToUpdate) {
+                const curr = next.get(keyId);
+                if (curr) {
+                    next.set(keyId, { ...curr, ...buildPatch(curr) });
+                }
+            }
+            return next;
+        });
+
+        this.savedCapsules.update(col =>
+            col.map(r => (idsToUpdate.includes(r.id) ? { ...r, ...buildPatch(r) } : r))
+        );
+
+        this.snapshotCurrentSession(undefined, false);
+        if (this.autoSaveEnabled() && this.authService.isLoggedIn()) {
+            this.syncWorkspaceStateToBackend();
+        }
+    }
+
     private attachExamplesToRequests(requests: RequestState[]): RequestState[] {
         return requests.map(r => {
             const cached = this.requestExamplesMap().get(r.id);
@@ -4282,6 +4453,7 @@ export class TabStateService {
             capsuleId: capsuleId || state.capsuleId,
             capsuleName: capsuleName || this.activeCapsuleName(),
             name: state.name || 'Imported Request',
+            description: state.description || '',
             url: state.url || '',
             method: (state.method || 'GET').toUpperCase(),
             payloadType: state.payloadType || 'params',
@@ -6632,6 +6804,7 @@ export class TabStateService {
             id: dto.id,
             capsuleId: dto.capsuleId || this.activeCapsuleId(),
             name: dto.name || 'New Request',
+            description: dto.description || '',
             url: dto.url || '',
             method: dto.method || 'GET',
             payloadType: dto.payloadType || 'params',
@@ -6810,6 +6983,7 @@ export class TabStateService {
             url: '',
             method: 'GET',
             name: 'New Request',
+            description: '',
             isDirty: false,
             isLoading: false,
             autoAuthEnabled: false,

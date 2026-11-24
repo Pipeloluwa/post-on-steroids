@@ -25,7 +25,7 @@ export class AddVariableModalComponent {
     constructor() {
         effect(() => {
             if (this.variableService.showAddModal()) {
-                const hasEnv = !!this.envService.activeEnvironment();
+                const hasEnv = this.envService.isEnvironmentFeatureEnabled() && !!this.envService.activeEnvironment();
                 this.saveScope.set(hasEnv && this.variableService.modalType() !== 'path' ? 'environment' : 'capsule');
             }
         });
@@ -34,7 +34,7 @@ export class AddVariableModalComponent {
     isDuplicateKey = computed(() => {
         const key = this.variableService.modalKey().trim().toLowerCase();
         if (!key) return false;
-        if (this.saveScope() === 'environment') {
+        if (this.saveScope() === 'environment' && this.envService.isEnvironmentFeatureEnabled()) {
             const env = this.envService.activeEnvironment();
             return !!env?.variables.some(v => v.key.trim().toLowerCase() === key);
         }
@@ -55,24 +55,34 @@ export class AddVariableModalComponent {
         }
 
         const isUpdate = this.isDuplicateKey();
-        if (this.saveScope() === 'environment' && this.variableService.modalType() !== 'path') {
+        if (this.saveScope() === 'environment' && this.envService.isEnvironmentFeatureEnabled() && this.variableService.modalType() !== 'path') {
             this.envService.setActiveVariable(key, value, this.variableService.modalSource());
+            // Keep shared key registered across Capsule schema without clobbering existing baseline value
+            const existsInCapsule = this.variableService.variables().some(
+                v => (v.key || '').trim().toLowerCase() === key.toLowerCase()
+            );
+            if (!existsInCapsule) {
+                this.variableService.addVariable(key, '', this.variableService.modalSource(), 'global');
+            }
             const envName = this.envService.activeEnvironment()?.name || 'Active Environment';
             this.notificationService.notify(
                 isUpdate
                     ? `Updated "${key}" in Environment "${envName}".`
-                    : `Added "${key}" to Environment "${envName}" (switches with environments).`
+                    : `Added "${key}" in Environment "${envName}" (key shared across environments).`
             );
             this.close();
             return;
         }
 
         this.variableService.addVariable(key, value, this.variableService.modalSource(), this.variableService.modalType());
+        if (this.envService.isEnvironmentFeatureEnabled() && this.variableService.modalType() !== 'path') {
+            this.envService.ensureKeyAcrossEnvironments(key);
+        }
         if (isUpdate) {
-            this.notificationService.notify(`Updated ${this.variableService.modalType()} variable "${key}" in Capsule Variables.`);
+            this.notificationService.notify(`Updated ${this.variableService.modalType()} variable "${key}" in Variables.`);
         } else {
             this.notificationService.notify(
-                `Added "${key}" to Capsule Variables (${this.tabStateService.activeCapsuleName() || 'Capsule'}).`
+                `Added "${key}" to Variables (${this.tabStateService.activeCapsuleName() || 'Capsule'}).`
             );
         }
         this.close();

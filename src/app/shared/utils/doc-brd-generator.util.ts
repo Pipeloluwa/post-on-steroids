@@ -436,6 +436,9 @@ function buildApiDocMarkdown(options: DocBrdOptions, generatedIso: string): { ti
     reqs.forEach((r, idx) => {
         md.push('---');
         md.push(`## ${idx + 1}. \`${r.method || 'GET'}\` ${r.name || 'Untitled Request'}`);
+        if (r.description?.trim()) {
+            md.push(`- **Description:** ${r.description.trim()}`);
+        }
         md.push(`- **Endpoint URL:** \`${r.url || '(not set)'}\``);
         md.push(`- **Authentication:** ${describeAuth(r)}${r.autoAuthEnabled ? ' (Auto-Auth Enabled)' : ''}`);
         if (r.encryption?.algorithm && r.encryption.algorithm !== 'none') {
@@ -564,6 +567,9 @@ function buildBrdMarkdown(options: DocBrdOptions, generatedIso: string): { title
     reqs.forEach((r, idx) => {
         const frId = `FR-${String(idx + 1).padStart(3, '0')}`;
         md.push(`### 4.${idx + 1} [${frId}] ${r.method || 'GET'} — ${r.name || 'Untitled Request'}`);
+        if (r.description?.trim()) {
+            md.push(`- **Description / Purpose:** ${r.description.trim()}`);
+        }
         md.push(`- **Business Action:** Execute \`${r.method || 'GET'}\` call against \`${r.url || '(not set)'}\`.`);
         md.push(`- **Preconditions & Auth:** ${describeAuth(r)}${r.autoAuthEnabled ? '; Auto-Auth 401 refresh active' : ''}.`);
         if (r.scripts?.preRequest?.trim()) {
