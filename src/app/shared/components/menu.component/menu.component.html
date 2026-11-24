@@ -3,7 +3,7 @@
     [class.opacity-0]="sidebarService.isCollapsed()" [class.md:opacity-100]="true"
     [class.pointer-events-none]="sidebarService.isCollapsed()" [class.md:pointer-events-auto]="true"
     [class.transition-none]="!sidebarService.isHydrated()"
-    class="w-full flex flex-row md:flex-col transition-all duration-300 overflow-x-auto overflow-y-hidden md:overflow-hidden shrink-0 z-20 bg-(--postonsteroids-bg-secondary) border-t md:border-t-0 md:border-r border-(--postonsteroids-border)">
+    class="w-full flex flex-row md:flex-col transition-all duration-300 overflow-x-auto overflow-y-hidden md:overflow-visible shrink-0 z-20 bg-(--postonsteroids-bg-secondary) border-t md:border-t-0 md:border-r border-(--postonsteroids-border)">
     
     <ul class="flex flex-row md:flex-col gap-x-2 md:gap-y-2 p-2 md:mt-4 flex-1 items-center md:items-stretch justify-start md:justify-start">
         @for (item of menu(); track item.name) {
@@ -11,7 +11,10 @@
             routerLinkActive
             [routerLinkActiveOptions]="item.exact ? matchOptionsExact : matchOptionsSubset"
             #rla="routerLinkActive"
-            class="h-[45px] py-2 px-3 capitalize flex items-center gap-3 rounded-xl cursor-pointer transition-all duration-300"
+            [title]="item.name"
+            [attr.aria-label]="item.name"
+            class="h-[45px] py-2 px-3 capitalize flex items-center gap-3 rounded-xl cursor-pointer transition-all duration-300 relative group"
+            [class.md:justify-center]="sidebarService.isCollapsed()"
             [class.bg-(--postonsteroids-accent)]="rla.isActive || isItemActive(item)"
             [class.text-white]="rla.isActive || isItemActive(item)"
             [class.shadow-lg]="rla.isActive || isItemActive(item)"
@@ -22,6 +25,10 @@
             <mat-icon class="text-[20px]! size-[20px]! shrink-0">{{ item.icon }}</mat-icon>
             @if (!sidebarService.isCollapsed()) {
             <span class="hidden md:inline text-[13px] font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{{ item.name }}</span>
+            } @else {
+            <span class="pointer-events-none hidden md:block absolute left-full ml-2.5 px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-[11.5px] font-semibold shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-[200] capitalize">
+                {{ item.name }}
+            </span>
             }
         </li>
         }
@@ -31,11 +38,15 @@
         @if (authService.isLoggedIn()) {
         <button type="button" (click)="openChangePassword()"
             title="Change Password"
-            class="h-9 px-2.5 md:h-[40px] md:w-full flex items-center justify-center md:justify-start gap-2.5 rounded-xl cursor-pointer transition-all duration-200 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) border border-transparent hover:border-(--postonsteroids-border)/60"
+            class="relative group h-9 px-2.5 md:h-[40px] md:w-full flex items-center justify-center md:justify-start gap-2.5 rounded-xl cursor-pointer transition-all duration-200 text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) border border-transparent hover:border-(--postonsteroids-border)/60"
             [class.md:justify-center]="sidebarService.isCollapsed()">
             <mat-icon class="text-[19px]! size-[19px]! shrink-0">lock_reset</mat-icon>
             @if (!sidebarService.isCollapsed()) {
             <span class="hidden md:inline text-[12px] font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">Password</span>
+            } @else {
+            <span class="pointer-events-none hidden md:block absolute left-full ml-2.5 px-2.5 py-1 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-[11.5px] font-semibold shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-[200]">
+                Change Password
+            </span>
             }
         </button>
         }

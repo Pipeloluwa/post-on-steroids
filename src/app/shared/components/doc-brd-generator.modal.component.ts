@@ -75,6 +75,13 @@ import { BodyPortalDirective } from '../directives/body-portal.directive';
                                         [class.text-(--postonsteroids-text-secondary)]="mode() !== 'brd'">
                                         Standard BRD
                                     </button>
+                                    <button type="button" (click)="mode.set('testrail')"
+                                        class="px-3 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer"
+                                        [class.bg-teal-600]="mode() === 'testrail'"
+                                        [class.text-white]="mode() === 'testrail'"
+                                        [class.text-(--postonsteroids-text-secondary)]="mode() !== 'testrail'">
+                                        TestRail Cases
+                                    </button>
                                 </div>
 
                                 <div class="flex rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-0.5">
@@ -141,6 +148,52 @@ import { BodyPortalDirective } from '../directives/body-portal.directive';
                                     class="bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded px-2.5 py-1 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-blue-500" />
                             </label>
                         </div>
+
+                        @if (showTestRailPanel()) {
+                            <div class="p-3 rounded-xl bg-teal-500/8 border border-teal-500/30 flex flex-col gap-2.5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2 text-[11.5px] font-bold text-teal-400">
+                                        <mat-icon class="text-[16px]! size-[16px]!">checklist</mat-icon>
+                                        <span>TestRail API Integration (Push {{ generated().testRailCases?.length || 0 }} Test Case(s))</span>
+                                    </div>
+                                    <button type="button" (click)="showTestRailPanel.set(false)" class="text-[11px] text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                                        Hide
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                                    <input type="url" [ngModel]="trUrl()" (ngModelChange)="trUrl.set($event)"
+                                        placeholder="https://company.testrail.io"
+                                        class="px-2.5 py-1.5 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-teal-500" />
+                                    <input type="email" [ngModel]="trEmail()" (ngModelChange)="trEmail.set($event)"
+                                        placeholder="TestRail Email"
+                                        class="px-2.5 py-1.5 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-teal-500" />
+                                    <input type="password" [ngModel]="trApiKey()" (ngModelChange)="trApiKey.set($event)"
+                                        placeholder="TestRail API Key"
+                                        class="px-2.5 py-1.5 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-teal-500" />
+                                    <div class="flex items-center gap-1.5">
+                                        <input type="text" [ngModel]="trSectionId()" (ngModelChange)="trSectionId.set($event)"
+                                            placeholder="Section ID (e.g. 12)"
+                                            class="flex-1 min-w-0 px-2.5 py-1.5 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-teal-500" />
+                                        <button type="button" (click)="pushToTestRail()" [disabled]="isPushingTestRail()"
+                                            class="px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-700 text-white font-semibold shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-1">
+                                            @if (isPushingTestRail()) {
+                                                <mat-icon class="text-[13px]! size-[13px]! animate-spin">sync</mat-icon>
+                                                <span>Pushing...</span>
+                                            } @else {
+                                                <span>Push</span>
+                                            }
+                                        </button>
+                                    </div>
+                                </div>
+                                @if (trStatus()) {
+                                    <div class="text-[11px] font-medium px-2.5 py-1.5 rounded border"
+                                         [class.bg-emerald-500/10]="!trError()" [class.border-emerald-500/30]="!trError()" [class.text-emerald-400]="!trError()"
+                                         [class.bg-red-500/10]="trError()" [class.border-red-500/30]="trError()" [class.text-red-400]="trError()">
+                                        {{ trStatus() }}
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
 
                     <!-- Preview / Source Body -->
@@ -180,6 +233,16 @@ import { BodyPortalDirective } from '../directives/body-portal.directive';
                                 <mat-icon class="text-[14px]! size-[14px]!">article</mat-icon>
                                 <span>Export Word (.doc)</span>
                             </button>
+                            <button type="button" (click)="downloadTestRailCsv()"
+                                class="px-3 py-1.5 rounded-md border border-teal-500/40 bg-teal-500/10 hover:bg-teal-500/20 text-[11px] font-semibold text-teal-400 flex items-center gap-1.5 cursor-pointer">
+                                <mat-icon class="text-[14px]! size-[14px]!">table_view</mat-icon>
+                                <span>TestRail .csv</span>
+                            </button>
+                            <button type="button" (click)="showTestRailPanel.set(!showTestRailPanel())"
+                                class="px-3 py-1.5 rounded-md bg-teal-600 hover:bg-teal-700 text-[11px] font-semibold text-white flex items-center gap-1.5 cursor-pointer">
+                                <mat-icon class="text-[14px]! size-[14px]!">cloud_upload</mat-icon>
+                                <span>Integrate TestRail</span>
+                            </button>
                             <button type="button" (click)="printDocument()"
                                 class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-[11px] font-semibold text-white flex items-center gap-1.5 cursor-pointer">
                                 <mat-icon class="text-[14px]! size-[14px]!">print</mat-icon>
@@ -200,7 +263,7 @@ export class DocBrdGeneratorModalComponent {
 
     isOpen = input<boolean>(false);
     initialScope = input<'endpoint' | 'collection'>('endpoint');
-    initialMode = input<'api-doc' | 'brd'>('api-doc');
+    initialMode = input<'api-doc' | 'brd' | 'testrail'>('api-doc');
     request = input<RequestState | null>(null);
     customRequests = input<RequestState[] | null>(null);
     customTitle = input<string | null>(null);
@@ -208,13 +271,22 @@ export class DocBrdGeneratorModalComponent {
 
     previewFrame = viewChild<ElementRef<HTMLIFrameElement>>('previewFrame');
 
-    mode = signal<'api-doc' | 'brd'>('api-doc');
+    mode = signal<'api-doc' | 'brd' | 'testrail'>('api-doc');
     scope = signal<'endpoint' | 'collection'>('endpoint');
     viewTab = signal<'preview' | 'markdown'>('preview');
     projectTitle = signal<string>('');
     version = signal<string>('1.0.0');
     author = signal<string>('Solutions Architecture Team');
     organization = signal<string>('Engineering & Product');
+
+    showTestRailPanel = signal<boolean>(false);
+    trUrl = signal<string>(typeof localStorage !== 'undefined' ? (localStorage.getItem('onsteroids_tr_url') || '') : '');
+    trEmail = signal<string>(typeof localStorage !== 'undefined' ? (localStorage.getItem('onsteroids_tr_email') || '') : '');
+    trApiKey = signal<string>(typeof localStorage !== 'undefined' ? (localStorage.getItem('onsteroids_tr_key') || '') : '');
+    trSectionId = signal<string>(typeof localStorage !== 'undefined' ? (localStorage.getItem('onsteroids_tr_section') || '') : '');
+    isPushingTestRail = signal<boolean>(false);
+    trStatus = signal<string>('');
+    trError = signal<boolean>(false);
 
     capsuleName = computed(() => {
         if (this.customTitle()) return this.customTitle()!;
@@ -318,7 +390,94 @@ export class DocBrdGeneratorModalComponent {
             .replace(/[^a-z0-9]+/gi, '_')
             .replace(/^_+|_+$/g, '')
             .toLowerCase() || 'api_document';
-        return `${clean}_${this.mode() === 'brd' ? 'brd' : 'api_docs'}`;
+        const suffix = this.mode() === 'brd' ? 'brd' : (this.mode() === 'testrail' ? 'testrail_cases' : 'api_docs');
+        return `${clean}_${suffix}`;
+    }
+
+    downloadTestRailCsv(): void {
+        const csv = this.generated().testRailCsv || '';
+        if (!csv) return;
+        this.triggerDownload(csv, `${this.fileBaseName()}_testrail.csv`, 'text/csv;charset=utf-8;');
+        this.notificationService.notify('Exported TestRail-compatible CSV file.', 'success');
+    }
+
+    async pushToTestRail(): Promise<void> {
+        const base = this.trUrl().trim().replace(/\/+$/, '');
+        const email = this.trEmail().trim();
+        const key = this.trApiKey().trim();
+        const sectionId = this.trSectionId().trim();
+        const cases = this.generated().testRailCases || [];
+
+        if (!base || !email || !key || !sectionId) {
+            this.trError.set(true);
+            this.trStatus.set('Enter TestRail URL, Email, API Key, and Section ID.');
+            return;
+        }
+        if (cases.length === 0) {
+            this.trError.set(true);
+            this.trStatus.set('No test cases to push.');
+            return;
+        }
+
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('onsteroids_tr_url', base);
+            localStorage.setItem('onsteroids_tr_email', email);
+            localStorage.setItem('onsteroids_tr_key', key);
+            localStorage.setItem('onsteroids_tr_section', sectionId);
+        }
+
+        this.isPushingTestRail.set(true);
+        this.trError.set(false);
+        this.trStatus.set('');
+
+        const authHeader = 'Basic ' + btoa(`${email}:${key}`);
+        const electronApi = typeof window !== 'undefined' ? (window as any).electronAPI : null;
+        let pushed = 0;
+
+        try {
+            for (const c of cases) {
+                const endpoint = `${base}/index.php?/api/v2/add_case/${encodeURIComponent(sectionId)}`;
+                const payload = {
+                    title: c.title,
+                    refs: c.refs,
+                    custom_preconds: c.preconditions,
+                    custom_steps: c.steps,
+                    custom_expected: c.expectedResult
+                };
+
+                if (electronApi && typeof electronApi.executeHttpRequest === 'function') {
+                    const res = await electronApi.executeHttpRequest({
+                        method: 'POST',
+                        url: endpoint,
+                        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res?.ok || (res.statusCode && res.statusCode >= 400)) {
+                        throw new Error(res?.body || res?.error || `HTTP ${res?.statusCode || 'Error'}`);
+                    }
+                } else {
+                    const resp = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!resp.ok) {
+                        const errText = await resp.text();
+                        throw new Error(`HTTP ${resp.status}: ${errText || resp.statusText}`);
+                    }
+                }
+                pushed++;
+            }
+
+            this.trError.set(false);
+            this.trStatus.set(`Successfully pushed ${pushed} test case(s) to TestRail section #${sectionId}.`);
+            this.notificationService.notify(`Pushed ${pushed} test case(s) to TestRail.`, 'success');
+        } catch (err: any) {
+            this.trError.set(true);
+            this.trStatus.set(`TestRail push stopped after ${pushed}/${cases.length} case(s): ${err?.message || err}`);
+        } finally {
+            this.isPushingTestRail.set(false);
+        }
     }
 
     private triggerDownload(content: string, filename: string, mimeType: string) {

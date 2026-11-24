@@ -85,10 +85,12 @@ export class ImportComponent implements OnInit {
     showShareUrlModal = signal<boolean>(false);
     shareUrlInput = signal<string>('');
     importShareIntoActive = signal<boolean>(false);
+    openShareInTabs = signal<boolean>(true);
 
     showSavePrompt = signal<boolean>(false);
     pendingImport = signal<PendingImport | null>(null);
     importFileIntoActive = signal<boolean>(false);
+    openFileInTabs = signal<boolean>(true);
     hasActiveCapsule = computed(() => Boolean(this.tabStateService.activeCapsuleId()));
     activeCapsuleName = computed(() => this.tabStateService.activeCapsuleName() || 'Current Capsule');
 
@@ -108,7 +110,7 @@ export class ImportComponent implements OnInit {
         this.isImporting.set(true);
         try {
             const targetCapId = this.importShareIntoActive() ? (this.tabStateService.activeCapsuleId() || null) : null;
-            const res = await this.tabStateService.importCapsuleFromUrl(input, targetCapId);
+            const res = await this.tabStateService.importCapsuleFromUrl(input, targetCapId, this.openShareInTabs());
             const actionLabel = targetCapId ? `into active capsule "${res.capsuleName}"` : `capsule "${res.capsuleName}"`;
             this.showStatus(`Successfully imported ${res.requestsCount} request(s) (${actionLabel})!`, false);
             this.showShareUrlModal.set(false);
@@ -200,7 +202,8 @@ export class ImportComponent implements OnInit {
             const targetCapId = this.importFileIntoActive() ? (this.tabStateService.activeCapsuleId() || null) : null;
             const count = await this.tabStateService.importData(pending.payload, {
                 saveToBackend,
-                targetCapsuleId: targetCapId
+                targetCapsuleId: targetCapId,
+                openTabs: this.openFileInTabs()
             });
             const storageNote = saveToBackend ? 'and saved to cloud database' : 'into local workspace (not saved to cloud)';
             const summary = targetCapId

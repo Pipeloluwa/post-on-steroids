@@ -3,22 +3,23 @@ import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { RequestGroup, TabStateService } from '../services/tab.state.service';
 import { NotificationService } from '../services/notification.service';
+import { BodyPortalDirective } from '../directives/body-portal.directive';
 
 @Component({
     selector: 'app-transfer-capsule-modal',
-    imports: [FormsModule, MatIcon],
+    imports: [FormsModule, MatIcon, BodyPortalDirective],
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: {
         '(document:keydown.escape)': 'onEscape($event)'
     },
     template: `
         @if (isOpen()) {
-            <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+            <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4 animate-in fade-in duration-150"
                  (click)="close()">
                 <div role="dialog"
                      aria-modal="true"
                      aria-labelledby="transfer-capsule-title"
-                     class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-md shadow-2xl overflow-visible flex flex-col"
+                     class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-lg h-[min(82dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] shadow-2xl overflow-hidden flex flex-col"
                      (click)="$event.stopPropagation(); closeDropdowns()">
 
                     <!-- Header -->
@@ -46,7 +47,7 @@ import { NotificationService } from '../services/notification.service';
                     </div>
 
                     <!-- Body -->
-                    <div class="p-5 flex flex-col gap-4">
+                    <div class="p-5 flex-1 min-h-0 overflow-y-auto flex flex-col gap-4">
                         <!-- Copy / Move Switch -->
                         <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border)">
                             <button type="button"
@@ -244,8 +245,10 @@ import { NotificationService } from '../services/notification.service';
                                             <div class="h-px bg-(--postonsteroids-border)/50 my-1 mx-1"></div>
 
                                             @for (g of targetGroups(); track g.id) {
+                                                @let fullFolderPath = getTargetFolderFullPath(g);
                                                 <button type="button"
                                                         role="option"
+                                                        [title]="fullFolderPath"
                                                         [attr.aria-selected]="targetGroupId() === g.id"
                                                         (click)="onFolderSelected(g.id)"
                                                         class="w-full text-left px-2.5 py-2 rounded-lg text-[12px] flex items-center justify-between gap-2 transition-colors cursor-pointer"
@@ -254,9 +257,9 @@ import { NotificationService } from '../services/notification.service';
                                                         [class.font-semibold]="targetGroupId() === g.id"
                                                         [class.text-(--postonsteroids-text-primary)]="targetGroupId() !== g.id"
                                                         [class.hover:bg-(--postonsteroids-bg-hover)]="targetGroupId() !== g.id">
-                                                    <div class="flex items-center gap-2 min-w-0">
-                                                        <mat-icon class="text-[15px]! size-[15px]! shrink-0 text-amber-500">folder</mat-icon>
-                                                        <span class="truncate">{{ g.name }}</span>
+                                                    <div class="flex items-start gap-2 min-w-0 flex-1">
+                                                        <mat-icon class="text-[15px]! size-[15px]! shrink-0 text-amber-500 mt-0.5">folder</mat-icon>
+                                                        <span class="break-words leading-snug">{{ fullFolderPath }}</span>
                                                     </div>
                                                     <div class="flex items-center gap-1.5 shrink-0">
                                                         <span class="text-[10px] text-(--postonsteroids-text-muted)">{{ g.requestIds.length }}</span>
@@ -358,10 +361,25 @@ export class TransferCapsuleModalComponent {
         return this.otherCapsules().find(c => c.id === id)?.name || 'Select a capsule...';
     });
 
+    getTargetFolderFullPath(g: RequestGroup): string {
+        const groups = this.targetGroups();
+        const byId = new Map(groups.map(item => [item.id, item]));
+        const parts: string[] = [];
+        const visited = new Set<string>();
+        let cur: RequestGroup | undefined = g;
+        while (cur && !visited.has(cur.id)) {
+            visited.add(cur.id);
+            parts.unshift(cur.name);
+            cur = cur.parentGroupId ? byId.get(cur.parentGroupId) : undefined;
+        }
+        return parts.join(' / ');
+    }
+
     selectedFolderLabel = computed(() => {
         const gId = this.targetGroupId();
         if (!gId) return 'Capsule Root (No Folder)';
-        return this.targetGroups().find(g => g.id === gId)?.name || 'Capsule Root (No Folder)';
+        const found = this.targetGroups().find(g => g.id === gId);
+        return found ? this.getTargetFolderFullPath(found) : 'Capsule Root (No Folder)';
     });
 
     requestSummaryText = computed(() => {

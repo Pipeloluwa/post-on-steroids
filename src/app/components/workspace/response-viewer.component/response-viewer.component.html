@@ -95,6 +95,15 @@
                     <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">smart_display</mat-icon>
                     <span>Preview</span>
                 </button>
+                <button (click)="setMode('Visualize')"
+                    title="Visualize response as Bar/Line/Area/Pie/Donut/Scatter charts, Relationship Graph, KPI cards, Table, or pm.visualizer HTML"
+                    class="h-full px-3 flex items-center justify-center gap-1 text-[11px] rounded-md transition-all duration-200 cursor-pointer font-medium"
+                    [class.bg-(--postonsteroids-bg-hover)]="activeMode() === 'Visualize'"
+                    [class.text-(--postonsteroids-text-primary)]="activeMode() === 'Visualize'"
+                    [class.text-(--postonsteroids-text-secondary)]="activeMode() !== 'Visualize'">
+                    <mat-icon class="text-[14px]! size-[14px]! text-emerald-400">bar_chart</mat-icon>
+                    <span>Visualize</span>
+                </button>
             </div>
         </div>
 
@@ -223,6 +232,255 @@
                         class="absolute inset-0 w-full h-full block">
                     </app-monaco-editor>
                 </div>
+
+                } @else if (activeMode() === 'Visualize') {
+                    @let ds = visualizerDataset();
+                    <div class="flex-1 min-h-0 flex flex-col overflow-hidden bg-(--postonsteroids-bg-primary)">
+                        <!-- Visualizer Controls Bar -->
+                        <div class="px-2.5 py-1.5 border-b border-(--postonsteroids-border)/50 flex flex-wrap items-center justify-between gap-2 bg-(--postonsteroids-bg-secondary)/50 shrink-0">
+                            <div class="flex flex-wrap items-center gap-1">
+                                @if (hasCustomScriptVisualizer()) {
+                                    <button type="button" (click)="visualizerChartType.set('custom')"
+                                        class="px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer border transition-colors"
+                                        [class.bg-emerald-500/15]="visualizerChartType() === 'custom'"
+                                        [class.border-emerald-500/60]="visualizerChartType() === 'custom'"
+                                        [class.text-emerald-400]="visualizerChartType() === 'custom'"
+                                        [class.border-transparent]="visualizerChartType() !== 'custom'"
+                                        [class.text-(--postonsteroids-text-secondary)]="visualizerChartType() !== 'custom'">
+                                        <mat-icon class="text-[13px]! size-[13px]!">code</mat-icon>
+                                        <span>Script Template</span>
+                                    </button>
+                                }
+                                @for (m of visualizerModes; track m.id) {
+                                    <button type="button" (click)="visualizerChartType.set(m.id)"
+                                        class="px-2 py-1 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer border transition-colors"
+                                        [class.bg-(--postonsteroids-accent)/15]="visualizerChartType() === m.id"
+                                        [class.border-(--postonsteroids-accent)]="visualizerChartType() === m.id"
+                                        [class.text-(--postonsteroids-accent)]="visualizerChartType() === m.id"
+                                        [class.border-transparent]="visualizerChartType() !== m.id"
+                                        [class.text-(--postonsteroids-text-secondary)]="visualizerChartType() !== m.id"
+                                        [class.hover:bg-(--postonsteroids-bg-hover)]="visualizerChartType() !== m.id">
+                                        <mat-icon class="text-[13px]! size-[13px]!">{{ m.icon }}</mat-icon>
+                                        <span>{{ m.label }}</span>
+                                    </button>
+                                }
+                            </div>
+
+                            @if (visualizerChartType() !== 'custom' && visualizerChartType() !== 'graph' && ds.availableArrays.length > 0) {
+                                <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                                    @if (ds.availableArrays.length > 1) {
+                                        <select [ngModel]="visualizerArrayPath() || ds.sourcePath" (ngModelChange)="visualizerArrayPath.set($event)"
+                                            title="Dataset Source Path"
+                                            class="px-2 py-0.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) outline-none">
+                                            @for (arr of ds.availableArrays; track arr.path) {
+                                                <option [value]="arr.path">{{ arr.label }}</option>
+                                            }
+                                        </select>
+                                    }
+                                    @if (visualizerChartType() !== 'table' && visualizerChartType() !== 'kpi') {
+                                        <label class="flex items-center gap-1 text-(--postonsteroids-text-muted)">
+                                            <span>X:</span>
+                                            <select [ngModel]="effectiveLabelField()" (ngModelChange)="visualizerLabelField.set($event)"
+                                                class="px-1.5 py-0.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) outline-none max-w-[130px]">
+                                                @for (c of ds.columns; track c) {
+                                                    <option [value]="c">{{ c }}</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <label class="flex items-center gap-1 text-(--postonsteroids-text-muted)">
+                                            <span>Y:</span>
+                                            <select [ngModel]="effectiveValueField()" (ngModelChange)="visualizerValueField.set($event)"
+                                                class="px-1.5 py-0.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) outline-none max-w-[130px]">
+                                                <option value="">Count (1 per item)</option>
+                                                @for (c of ds.columns; track c) {
+                                                    <option [value]="c">{{ c }}</option>
+                                                }
+                                            </select>
+                                        </label>
+                                    }
+                                    @if (visualizerChartType() === 'table') {
+                                        <input type="text" [value]="visualizerFilter()" (input)="onVisualizerFilterChange($any($event.target).value)"
+                                            placeholder="Filter rows..."
+                                            class="w-36 px-2 py-0.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) text-(--postonsteroids-text-primary) outline-none" />
+                                        <button type="button" (click)="exportVisualizerCsv()"
+                                            class="px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) font-semibold cursor-pointer">
+                                            CSV
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Visualizer Canvas Area -->
+                        <div class="flex-1 min-h-0 overflow-auto p-3">
+                            @if (visualizerChartType() === 'custom' && customVisualizerHtml(); as customHtml) {
+                                <iframe sandbox="allow-scripts" [srcdoc]="customHtml" title="Script Visualizer"
+                                    class="w-full h-full min-h-[260px] rounded-xl border border-(--postonsteroids-border) bg-slate-900"></iframe>
+                            } @else if (visualizerChartType() === 'graph') {
+                                @let graph = visualizerGraphData();
+                                @if (graph.nodes.length === 0) {
+                                    <div class="h-full flex items-center justify-center text-xs text-(--postonsteroids-text-muted)">
+                                        Send a JSON/XML response to render the interactive node relationship graph.
+                                    </div>
+                                } @else {
+                                    <div class="w-full overflow-auto rounded-xl border border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary)/25 p-2">
+                                        <svg [attr.viewBox]="'0 0 ' + graph.width + ' ' + graph.height" [style.min-width.px]="graph.width" [style.height.px]="graph.height" class="block">
+                                            @for (edge of graph.edges; track $index) {
+                                                <path [attr.d]="'M ' + edge.fromX + ' ' + edge.fromY + ' C ' + ((edge.fromX + edge.toX) / 2) + ' ' + edge.fromY + ', ' + ((edge.fromX + edge.toX) / 2) + ' ' + edge.toY + ', ' + edge.toX + ' ' + edge.toY"
+                                                    fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-width="1.5" class="text-(--postonsteroids-accent)" />
+                                            }
+                                            @for (node of graph.nodes; track node.id) {
+                                                <g [attr.transform]="'translate(' + node.x + ',' + node.y + ')'">
+                                                    <rect width="150" height="32" rx="7"
+                                                        class="fill-(--postonsteroids-bg-secondary) stroke-(--postonsteroids-border)"
+                                                        [class.stroke-(--postonsteroids-accent)]="node.kind === 'root' || node.kind === 'array'"
+                                                        stroke-width="1.2" />
+                                                    <text x="10" y="13" class="fill-(--postonsteroids-text-primary) text-[10.5px] font-bold">{{ node.label }}</text>
+                                                    <text x="10" y="25" class="fill-(--postonsteroids-text-muted) text-[9.5px] font-mono">{{ node.sublabel }}</text>
+                                                </g>
+                                            }
+                                        </svg>
+                                    </div>
+                                }
+                            } @else if (ds.rows.length === 0) {
+                                <div class="h-full flex flex-col items-center justify-center gap-2 text-(--postonsteroids-text-muted) text-center p-6">
+                                    <mat-icon class="text-[38px]! size-[38px]! opacity-30">bar_chart</mat-icon>
+                                    <span class="text-xs">Send a structured JSON or XML array/object response (or call <code class="font-mono text-(--postonsteroids-accent)">st.visualizer.set(html, data)</code> in Scripts) to visualize charts, tables, KPIs, and graphs.</span>
+                                </div>
+                            } @else if (visualizerChartType() === 'kpi') {
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) flex flex-col gap-1">
+                                        <span class="text-[10.5px] uppercase tracking-wider text-(--postonsteroids-text-muted) font-semibold">Total Records</span>
+                                        <span class="text-2xl font-black text-(--postonsteroids-accent) tabular-nums">{{ ds.rows.length }}</span>
+                                        <span class="text-[11px] text-(--postonsteroids-text-muted) font-mono truncate">{{ ds.sourcePath || 'root' }} ({{ ds.columns.length }} fields)</span>
+                                    </div>
+                                    @for (stat of ds.kpiStats; track stat.field) {
+                                        <div class="p-3.5 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) flex flex-col gap-1.5">
+                                            <span class="text-[11px] font-bold text-(--postonsteroids-text-primary) font-mono truncate">{{ stat.field }}</span>
+                                            <div class="grid grid-cols-2 gap-2 text-[11px]">
+                                                <div><span class="text-(--postonsteroids-text-muted)">Sum:</span> <strong class="font-mono text-emerald-400">{{ stat.sum }}</strong></div>
+                                                <div><span class="text-(--postonsteroids-text-muted)">Avg:</span> <strong class="font-mono text-blue-400">{{ stat.avg }}</strong></div>
+                                                <div><span class="text-(--postonsteroids-text-muted)">Min:</span> <strong class="font-mono">{{ stat.min }}</strong></div>
+                                                <div><span class="text-(--postonsteroids-text-muted)">Max:</span> <strong class="font-mono">{{ stat.max }}</strong></div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            } @else if (visualizerChartType() === 'table') {
+                                @let tblRows = visualizerTableRows();
+                                <div class="rounded-xl border border-(--postonsteroids-border) overflow-auto max-h-full">
+                                    <table class="w-full border-collapse text-[12px]">
+                                        <thead class="sticky top-0 bg-(--postonsteroids-bg-secondary) z-10">
+                                            <tr>
+                                                <th class="px-2.5 py-2 text-center border-b border-r border-(--postonsteroids-border) text-(--postonsteroids-text-muted) font-mono">#</th>
+                                                @for (col of ds.columns; track col) {
+                                                    <th (click)="toggleVisualizerSort(col)"
+                                                        class="px-3 py-2 text-left font-semibold border-b border-r border-(--postonsteroids-border) whitespace-nowrap cursor-pointer hover:bg-(--postonsteroids-bg-hover)">
+                                                        <span class="inline-flex items-center gap-1">
+                                                            <span>{{ col }}</span>
+                                                            @if (visualizerSortCol() === col) {
+                                                                <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">{{ visualizerSortAsc() ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+                                                            }
+                                                        </span>
+                                                    </th>
+                                                }
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @for (row of tblRows; track $index; let rIdx = $index) {
+                                                <tr class="hover:bg-(--postonsteroids-bg-hover)/30">
+                                                    <td class="px-2.5 py-1.5 text-center border-b border-r border-(--postonsteroids-border)/50 font-mono text-(--postonsteroids-text-muted)">{{ rIdx + 1 }}</td>
+                                                    @for (col of ds.columns; track col) {
+                                                        <td class="px-3 py-1.5 border-b border-r border-(--postonsteroids-border)/50 font-mono text-(--postonsteroids-text-secondary) max-w-[260px] truncate">{{ formatCellDisplay(row[col]) }}</td>
+                                                    }
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            } @else if (visualizerChartType() === 'pie' || visualizerChartType() === 'donut') {
+                                @let pie = visualizerPieGeometry();
+                                <div class="flex flex-col sm:flex-row items-center justify-center gap-6 p-3 rounded-xl border border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary)/25">
+                                    <svg viewBox="0 0 270 270" class="w-56 h-56 shrink-0">
+                                        @for (s of pie.slices; track s.index) {
+                                            <path [attr.d]="s.path" [attr.fill]="s.color"
+                                                [attr.opacity]="hoveredChartIndex() === null || hoveredChartIndex() === s.index ? 0.92 : 0.45"
+                                                (mouseenter)="hoveredChartIndex.set(s.index)" (mouseleave)="hoveredChartIndex.set(null)"
+                                                class="transition-opacity cursor-pointer stroke-(--postonsteroids-bg-primary) stroke-2">
+                                                <title>{{ s.label }}: {{ s.value }} ({{ s.pct }}%)</title>
+                                            </path>
+                                        }
+                                        @if (visualizerChartType() === 'donut') {
+                                            <circle cx="135" cy="135" r="54" class="fill-(--postonsteroids-bg-primary)" />
+                                            <text x="135" y="132" text-anchor="middle" class="fill-(--postonsteroids-text-muted) text-[10px]">TOTAL</text>
+                                            <text x="135" y="148" text-anchor="middle" class="fill-(--postonsteroids-text-primary) text-[14px] font-bold font-mono">{{ pie.total }}</text>
+                                        }
+                                    </svg>
+                                    <div class="flex flex-col gap-1.5 max-h-56 overflow-y-auto text-[11.5px] min-w-[200px]">
+                                        @for (s of pie.slices; track s.index) {
+                                            <div (mouseenter)="hoveredChartIndex.set(s.index)" (mouseleave)="hoveredChartIndex.set(null)"
+                                                class="flex items-center justify-between gap-3 px-2 py-1 rounded hover:bg-(--postonsteroids-bg-hover)/50 cursor-pointer">
+                                                <div class="flex items-center gap-2 min-w-0">
+                                                    <span class="size-2.5 rounded-full shrink-0" [style.background-color]="s.color"></span>
+                                                    <span class="truncate text-(--postonsteroids-text-primary)">{{ s.label }}</span>
+                                                </div>
+                                                <span class="font-mono text-(--postonsteroids-text-secondary) shrink-0">{{ s.value }} ({{ s.pct }}%)</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            } @else if (visualizerChartType() === 'scatter') {
+                                @let sc = visualizerScatterGeometry();
+                                <div class="rounded-xl border border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary)/25 p-3">
+                                    <svg [attr.viewBox]="'0 0 ' + sc.width + ' ' + sc.height" class="w-full h-64">
+                                        <line [attr.x1]="sc.pad" [attr.y1]="sc.pad" [attr.x2]="sc.pad" [attr.y2]="sc.pad + sc.plotH" stroke="currentColor" stroke-opacity="0.25" />
+                                        <line [attr.x1]="sc.pad" [attr.y1]="sc.pad + sc.plotH" [attr.x2]="sc.width - sc.pad" [attr.y2]="sc.pad + sc.plotH" stroke="currentColor" stroke-opacity="0.25" />
+                                        @for (pt of sc.points; track pt.index) {
+                                            <circle [attr.cx]="pt.cx" [attr.cy]="pt.cy" [attr.r]="hoveredChartIndex() === pt.index ? 7 : 5"
+                                                [attr.fill]="pt.color" (mouseenter)="hoveredChartIndex.set(pt.index)" (mouseleave)="hoveredChartIndex.set(null)"
+                                                class="cursor-pointer transition-all">
+                                                <title>{{ pt.label }}: {{ pt.value }}</title>
+                                            </circle>
+                                        }
+                                    </svg>
+                                </div>
+                            } @else {
+                                @let geo = visualizerBarGeometry();
+                                <div class="rounded-xl border border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary)/25 p-3">
+                                    <svg [attr.viewBox]="'0 0 ' + geo.width + ' ' + geo.height" class="w-full h-64">
+                                        @for (g of geo.gridLines; track $index) {
+                                            <line [attr.x1]="geo.padLeft" [attr.y1]="g.y" [attr.x2]="geo.width - 20" [attr.y2]="g.y" stroke="currentColor" stroke-opacity="0.1" stroke-dasharray="3 3" />
+                                            <text [attr.x]="geo.padLeft - 6" [attr.y]="g.y + 3" text-anchor="end" class="fill-(--postonsteroids-text-muted) text-[9.5px] font-mono">{{ g.label }}</text>
+                                        }
+                                        @if (visualizerChartType() === 'area' && geo.areaPath) {
+                                            <path [attr.d]="geo.areaPath" fill="#3b82f6" fill-opacity="0.22" />
+                                        }
+                                        @if ((visualizerChartType() === 'line' || visualizerChartType() === 'area') && geo.linePoints) {
+                                            <polyline [attr.points]="geo.linePoints" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+                                        }
+                                        @for (b of geo.bars; track b.index) {
+                                            @if (visualizerChartType() === 'bar') {
+                                                <rect [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.width" [attr.height]="b.height" rx="4"
+                                                    [attr.fill]="b.color" [attr.opacity]="hoveredChartIndex() === null || hoveredChartIndex() === b.index ? 0.92 : 0.55"
+                                                    (mouseenter)="hoveredChartIndex.set(b.index)" (mouseleave)="hoveredChartIndex.set(null)"
+                                                    class="cursor-pointer transition-opacity">
+                                                    <title>{{ b.label }}: {{ b.value }}</title>
+                                                </rect>
+                                            } @else {
+                                                <circle [attr.cx]="b.cx" [attr.cy]="b.y" [attr.r]="hoveredChartIndex() === b.index ? 6 : 4"
+                                                    [attr.fill]="b.color" stroke="white" stroke-width="1.5"
+                                                    (mouseenter)="hoveredChartIndex.set(b.index)" (mouseleave)="hoveredChartIndex.set(null)"
+                                                    class="cursor-pointer">
+                                                    <title>{{ b.label }}: {{ b.value }}</title>
+                                                </circle>
+                                            }
+                                            <text [attr.x]="b.cx" [attr.y]="geo.height - 28" text-anchor="middle" class="fill-(--postonsteroids-text-muted) text-[9.5px]">{{ b.label }}</text>
+                                        }
+                                    </svg>
+                                </div>
+                            }
+                        </div>
+                    </div>
 
                 } @else if (activeMode() === 'Preview') {
                     @if (isHtmlResponse()) {

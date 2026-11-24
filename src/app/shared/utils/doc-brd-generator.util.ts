@@ -6,7 +6,7 @@ export interface DocBrdVariable {
 }
 
 export interface DocBrdOptions {
-    mode: 'api-doc' | 'brd';
+    mode: 'api-doc' | 'brd' | 'testrail';
     scope: 'endpoint' | 'collection';
     projectTitle: string;
     version: string;
@@ -17,11 +17,26 @@ export interface DocBrdOptions {
     variables?: DocBrdVariable[];
 }
 
+export interface GeneratedTestRailCase {
+    section: string;
+    title: string;
+    type: string;
+    priority: string;
+    refs: string;
+    preconditions: string;
+    steps: string;
+    expectedResult: string;
+    endpointUrl: string;
+    method: string;
+}
+
 export interface GeneratedDocResult {
     title: string;
     markdown: string;
     html: string;
     wordHtml: string;
+    testRailCases?: GeneratedTestRailCase[];
+    testRailCsv?: string;
 }
 
 interface DataFieldRow {
@@ -441,6 +456,11 @@ function buildApiDocMarkdown(options: DocBrdOptions, generatedIso: string): { ti
         }
         md.push(`- **Endpoint URL:** \`${r.url || '(not set)'}\``);
         md.push(`- **Authentication:** ${describeAuth(r)}${r.autoAuthEnabled ? ' (Auto-Auth Enabled)' : ''}`);
+        if (r.docNotes?.trim()) {
+            md.push('');
+            md.push('### Endpoint Documentation Notes');
+            md.push(r.docNotes.trim());
+        }
         if (r.encryption?.algorithm && r.encryption.algorithm !== 'none') {
             md.push(`- **Field-Level Encryption:** \`${r.encryption.algorithm}\` (Body: ${r.encryption.autoEncryptBody ? 'Auto' : 'Custom'}, Headers: ${r.encryption.autoEncryptHeaders ? 'Auto' : 'Custom'})`);
         }
@@ -570,6 +590,9 @@ function buildBrdMarkdown(options: DocBrdOptions, generatedIso: string): { title
         if (r.description?.trim()) {
             md.push(`- **Description / Purpose:** ${r.description.trim()}`);
         }
+        if (r.docNotes?.trim()) {
+            md.push(`- **Business & Functional Doc Notes:** ${r.docNotes.trim()}`);
+        }
         md.push(`- **Business Action:** Execute \`${r.method || 'GET'}\` call against \`${r.url || '(not set)'}\`.`);
         md.push(`- **Preconditions & Auth:** ${describeAuth(r)}${r.autoAuthEnabled ? '; Auto-Auth 401 refresh active' : ''}.`);
         if (r.scripts?.preRequest?.trim()) {
@@ -644,6 +667,98 @@ function buildBrdMarkdown(options: DocBrdOptions, generatedIso: string): { title
     return { title: docTitle, markdown: md.join('\n') };
 }
 
+function buildTestRailCases(options: DocBrdOptions): GeneratedTestRailCase[] {
+    const sectionName = options.capsuleName || options.projectTitle || 'API Test Suite';
+    return options.requests.map((r, idx) => {
+        const title = `${r.method || 'GET'} ${r.name || r.url || `Endpoint ${idx + 1}`}`;
+        const authDesc = describeAuth(r);
+        const bodyPrev = getRequestBodyPreview(r);
+        const tests = extractTestCases(r);
+
+        const defaultPre = [
+            `Endpoint URL: ${r.url || '(not set)'}`,
+            `Authentication: ${authDesc}${r.autoAuthEnabled ? ' (Auto-Auth refresh enabled)' : ''}`,
+            r.description?.trim() ? `Summary: ${r.description.trim()}` : '',
+            r.docNotes?.trim() ? `Notes: ${r.docNotes.trim()}` : ''
+        ].filter(Boolean).join('\n');
+
+        const defaultSteps = [
+            `1. Send ${r.method || 'GET'} request to ${r.url || '(not set)'}.`,
+            bodyPrev.content ? `2. Attach ${r.bodyType} (${r.rawType || 'raw'}) payload:\n${bodyPrev.content.slice(0, 300)}` : '2. Include configured query params & headers.',
+            '3. Inspect HTTP status code, headers, and response payload.'
+        ].join('\n');
+
+        const expectedStatus = r.triggerConfig?.condition === 'on-status-match'
+            ? String(r.triggerConfig.expectedStatus ?? 200)
+            : '2xx OK';
+        const defaultExpected = tests.length > 0
+            ? `HTTP ${expectedStatus}; assertions pass:\n- ${tests.join('\n- ')}`
+            : `HTTP ${expectedStatus} returned cleanly within SLA and valid response structure verified.`;
+
+        return {
+            section: sectionName,
+            title,
+            type: 'API / Automated',
+            priority: r.method === 'DELETE' || r.method === 'POST' ? 'High' : 'Medium',
+            refs: `API-${String(idx + 1).padStart(3, '0')}`,
+            preconditions: r.testRailPreconditions?.trim() || defaultPre,
+            steps: r.testRailSteps?.trim() || defaultSteps,
+            expectedResult: r.testRailExpected?.trim() || defaultExpected,
+            endpointUrl: r.url || '',
+            method: r.method || 'GET'
+        };
+    });
+}
+
+function formatTestRailCsv(cases: GeneratedTestRailCase[]): string {
+    const esc = (s: string) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+    const header = ['Title', 'Section', 'Type', 'Priority', 'References', 'Preconditions', 'Steps', 'Expected Result'];
+    const lines = [
+        header.map(esc).join(','),
+        ...cases.map(c =>
+            [c.title, c.section, c.type, c.priority, c.refs, c.preconditions, c.steps, c.expectedResult]
+                .map(esc)
+                .join(',')
+        )
+    ];
+    return lines.join('\n');
+}
+
+function buildTestRailMarkdown(options: DocBrdOptions, generatedIso: string, cases: GeneratedTestRailCase[]): { title: string; markdown: string } {
+    const docTitle = `${options.projectTitle || options.capsuleName || 'API'} — TestRail Test Cases`;
+    const md: string[] = [];
+    md.push(`# ${docTitle}`);
+    md.push(`- **Test Suite / Section:** ${options.capsuleName || options.projectTitle}`);
+    md.push(`- **Version:** ${options.version || '1.0.0'}  |  **Author:** ${options.author || 'QA Engineering'}  |  **Generated:** ${generatedIso}`);
+    md.push(`- **Total Test Cases:** ${cases.length}`);
+    md.push('');
+    md.push('| ID | Title | Type | Priority | Endpoint |');
+    md.push('| --- | --- | --- | --- | --- |');
+    cases.forEach((c, idx) => {
+        md.push(`| ${c.refs || `C${idx + 1}`} | **${escapeMdCell(c.title)}** | ${c.type} | ${c.priority} | \`${escapeMdCell(c.endpointUrl)}\` |`);
+    });
+    md.push('');
+
+    cases.forEach((c, idx) => {
+        md.push('---');
+        md.push(`## ${idx + 1}. [${c.refs}] ${c.title}`);
+        md.push(`- **Section:** ${c.section}  |  **Priority:** ${c.priority}  |  **Type:** ${c.type}`);
+        md.push(`- **Endpoint:** \`${c.method} ${c.endpointUrl || '(not set)'}\``);
+        md.push('');
+        md.push('### Preconditions');
+        md.push(c.preconditions);
+        md.push('');
+        md.push('### Steps');
+        md.push(c.steps);
+        md.push('');
+        md.push('### Expected Result');
+        md.push(c.expectedResult);
+        md.push('');
+    });
+
+    return { title: docTitle, markdown: md.join('\n') };
+}
+
 export function generateDocumentationOrBrd(options: DocBrdOptions): GeneratedDocResult {
     const generatedIso = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
     const cleanOptions: DocBrdOptions = {
@@ -651,15 +766,20 @@ export function generateDocumentationOrBrd(options: DocBrdOptions): GeneratedDoc
         requests: options.scope === 'endpoint' ? options.requests.slice(0, 1) : options.requests
     };
 
+    const testRailCases = buildTestRailCases(cleanOptions);
     const built = cleanOptions.mode === 'brd'
         ? buildBrdMarkdown(cleanOptions, generatedIso)
-        : buildApiDocMarkdown(cleanOptions, generatedIso);
+        : cleanOptions.mode === 'testrail'
+            ? buildTestRailMarkdown(cleanOptions, generatedIso, testRailCases)
+            : buildApiDocMarkdown(cleanOptions, generatedIso);
 
     const bodyHtml = renderMarkdownTablesAndBlocks(built.markdown);
     return {
         title: built.title,
         markdown: built.markdown,
         html: wrapDocumentHtml(built.title, bodyHtml, false),
-        wordHtml: wrapDocumentHtml(built.title, bodyHtml, true)
+        wordHtml: wrapDocumentHtml(built.title, bodyHtml, true),
+        testRailCases,
+        testRailCsv: formatTestRailCsv(testRailCases)
     };
 }

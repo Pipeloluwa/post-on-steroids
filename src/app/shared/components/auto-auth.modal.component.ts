@@ -11,7 +11,7 @@ import { AutoAuthService } from '../services/auto-auth.service';
     template: `
     @if (show()) {
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" (click)="onCancel.emit()">
-        <div class="w-[450px] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" (click)="$event.stopPropagation()">
+        <div class="w-[460px] max-w-[95vw] h-[min(82dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" (click)="$event.stopPropagation()">
             <!-- Header -->
             <div class="flex items-center justify-between px-5 py-4 border-b border-(--postonsteroids-border)/50 bg-(--postonsteroids-bg-tertiary)/30">
                 <div class="flex items-center gap-x-3">

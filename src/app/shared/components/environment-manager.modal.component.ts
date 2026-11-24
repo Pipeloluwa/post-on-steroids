@@ -19,7 +19,7 @@ import { generateUUID } from '../utils/uuid.util';
     @if (isOpen()) {
       <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="env-mgr-title"
-             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[min(86dvh,calc(100dvh-28px))]"
+             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col h-[min(86dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)]"
              (click)="stopDialogClick($event)">
 
           <div class="px-5 py-3.5 border-b border-(--postonsteroids-border) flex items-center justify-between bg-(--postonsteroids-bg-tertiary)/50">
@@ -171,6 +171,16 @@ import { generateUUID } from '../utils/uuid.util';
                           </div>
                         }
                       </div>
+                      <button type="button" (click)="setSelectedVarsEnabled(current, true)"
+                              class="px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 hover:bg-emerald-500/25 text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                        <mat-icon class="text-[14px]! size-[14px]!">toggle_on</mat-icon>
+                        <span>Turn On</span>
+                      </button>
+                      <button type="button" (click)="setSelectedVarsEnabled(current, false)"
+                              class="px-2 py-1 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) hover:bg-(--postonsteroids-bg-hover) text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                        <mat-icon class="text-[14px]! size-[14px]!">toggle_off</mat-icon>
+                        <span>Turn Off</span>
+                      </button>
                       <button type="button" (click)="deleteSelectedVars(current)"
                               class="px-2.5 py-1 rounded-lg bg-status-danger/15 border border-status-danger/35 text-status-danger hover:bg-status-danger/25 text-xs font-semibold flex items-center gap-1 cursor-pointer">
                         <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
@@ -188,7 +198,13 @@ import { generateUUID } from '../utils/uuid.util';
                                title="Select all environment variables"
                                class="accent-(--postonsteroids-accent) cursor-pointer" />
                       </th>
-                      <th class="w-8 py-1.5 text-center">On</th>
+                      <th class="w-12 py-1.5 text-center">
+                        <label class="inline-flex items-center gap-1 cursor-pointer select-none" title="Toggle all variables On/Off in this environment">
+                          <input type="checkbox" [checked]="allVarsEnabled()" (change)="toggleAllVarsEnabled(current)"
+                                 class="accent-emerald-500 cursor-pointer" />
+                          <span>On</span>
+                        </label>
+                      </th>
                       <th class="w-1/3 py-1.5 px-2 text-left">Variable</th>
                       <th class="py-1.5 px-2 text-left">Value</th>
                       <th class="w-24 py-1.5 px-2 text-left">Type</th>
@@ -315,6 +331,34 @@ export class EnvironmentManagerModalComponent {
     const sel = this.selectedVarIds();
     return env.variables.every(v => sel.has(v.id));
   });
+
+  allVarsEnabled = computed<boolean>(() => {
+    const env = this.selectedEnv();
+    if (!env || env.variables.length === 0) return false;
+    return env.variables.every(v => v.enabled);
+  });
+
+  toggleAllVarsEnabled(env: ApiEnvironment): void {
+    const nextEnabled = !this.allVarsEnabled();
+    this.envService.updateEnvironment({
+      ...env,
+      variables: env.variables.map(v => ({ ...v, enabled: nextEnabled }))
+    });
+    this.notification.notify(
+      `${nextEnabled ? 'Enabled' : 'Disabled'} all ${env.variables.length} variable(s) in "${env.name}".`,
+      'info'
+    );
+  }
+
+  setSelectedVarsEnabled(env: ApiEnvironment, enabled: boolean): void {
+    const sel = this.selectedVarIds();
+    if (sel.size === 0) return;
+    this.envService.updateEnvironment({
+      ...env,
+      variables: env.variables.map(v => sel.has(v.id) ? { ...v, enabled } : v)
+    });
+    this.notification.notify(`${enabled ? 'Enabled' : 'Disabled'} ${sel.size} variable(s) in "${env.name}".`, 'info');
+  }
 
   onEscape(event: Event): void {
     if (!this.isOpen()) return;

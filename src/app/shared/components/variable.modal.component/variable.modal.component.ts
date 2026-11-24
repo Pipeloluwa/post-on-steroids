@@ -125,6 +125,98 @@ export class VariableModalComponent {
         return this.unifiedRows().filter(r => sel.has(r.rowId));
     });
 
+    readonly allRowsEnabled = computed(() => {
+        const rows = this.unifiedRows();
+        return rows.length > 0 && rows.every(r => r.enabled);
+    });
+
+    toggleAllEnabled(): void {
+        if (!this.ensureEditable()) return;
+        const rows = this.unifiedRows();
+        if (rows.length === 0) return;
+        const targetState = !this.allRowsEnabled();
+        const activeEnv = this.envService.isEnvironmentFeatureEnabled() ? this.envService.activeEnvironment() : null;
+
+        if (activeEnv) {
+            const byKey = new Map(activeEnv.variables.map(v => [(v.key || '').trim().toLowerCase(), v]));
+            const nextVars = [...activeEnv.variables];
+            for (const row of rows) {
+                const clean = (row.key || '').trim();
+                const lower = clean.toLowerCase();
+                if (!clean || row.type === 'path') continue;
+                const existing = byKey.get(lower);
+                if (existing) {
+                    const idx = nextVars.findIndex(x => x.id === existing.id);
+                    if (idx !== -1) nextVars[idx] = { ...nextVars[idx], enabled: targetState };
+                } else if (targetState) {
+                    nextVars.push({
+                        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                        key: clean,
+                        value: row.contextualValue || '',
+                        type: row.envType || 'default',
+                        enabled: true,
+                        source: row.source
+                    });
+                }
+            }
+            this.envService.updateEnvironment({ ...activeEnv, variables: nextVars });
+            this.notification.notify(
+                `${targetState ? 'Enabled' : 'Disabled'} all variables in Environment "${activeEnv.name}".`,
+                'info'
+            );
+            return;
+        }
+
+        this.applyCapsuleEnabledState(rows, targetState);
+        this.notification.notify(`${targetState ? 'Enabled' : 'Disabled'} all Capsule variables.`, 'info');
+    }
+
+    private applyCapsuleEnabledState(rows: UnifiedVariableRow[], targetState: boolean): void {
+        for (const row of rows) {
+            if (row.capVar) {
+                if (row.capVar.enabled !== targetState) {
+                    this.variableService.updateVariable({ ...row.capVar, enabled: targetState });
+                }
+            } else if (targetState && row.key.trim()) {
+                this.variableService.addVariable(row.key.trim(), '', row.source, row.type);
+            }
+        }
+    }
+
+    setSelectedEnabled(targetState: boolean): void {
+        if (!this.ensureEditable()) return;
+        const rows = this.selectedRows();
+        if (rows.length === 0) return;
+        const activeEnv = this.envService.isEnvironmentFeatureEnabled() ? this.envService.activeEnvironment() : null;
+
+        if (activeEnv) {
+            const selectedKeySet = new Set(rows.filter(r => r.key.trim() && r.type !== 'path').map(r => r.key.trim().toLowerCase()));
+            const nextVars = activeEnv.variables.map(v =>
+                selectedKeySet.has((v.key || '').trim().toLowerCase()) ? { ...v, enabled: targetState } : v
+            );
+            for (const row of rows) {
+                const clean = row.key.trim();
+                const lower = clean.toLowerCase();
+                if (clean && row.type !== 'path' && targetState && !nextVars.some(v => (v.key || '').trim().toLowerCase() === lower)) {
+                    nextVars.push({
+                        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                        key: clean,
+                        value: row.contextualValue || '',
+                        type: row.envType || 'default',
+                        enabled: true,
+                        source: row.source
+                    });
+                }
+            }
+            this.envService.updateEnvironment({ ...activeEnv, variables: nextVars });
+            this.notification.notify(`${targetState ? 'Enabled' : 'Disabled'} ${rows.length} selected variable(s) in "${activeEnv.name}".`, 'info');
+            return;
+        }
+
+        this.applyCapsuleEnabledState(rows, targetState);
+        this.notification.notify(`${targetState ? 'Enabled' : 'Disabled'} ${rows.length} selected variable(s).`, 'info');
+    }
+
     onEscape(event: Event): void {
         if (!this.isOpen()) return;
         event.preventDefault();
@@ -266,6 +358,8 @@ export class VariableModalComponent {
         }
         if (row.capVar) {
             this.variableService.updateVariable({ ...row.capVar, enabled: !row.capVar.enabled });
+        } else if (row.key.trim()) {
+            this.variableService.addVariable(row.key.trim(), '', row.source, row.type);
         }
     }
 

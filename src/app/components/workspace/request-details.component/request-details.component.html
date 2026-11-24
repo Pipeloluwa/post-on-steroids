@@ -1,21 +1,31 @@
 <div class="flex items-center justify-between w-full h-[34px] mb-2 gap-x-3">
-    <!-- Left Section: Icon, Request Name, and Request Description -->
-    <div class="flex items-center gap-x-2.5 flex-1 min-w-0">
+    <!-- Left Section: Icon, Request Name, and Compact Doc/BRD Notes Indicator Button -->
+    <div class="flex items-center gap-x-2 flex-1 min-w-0">
         <div
             class="flex items-center justify-center w-6 h-6 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) shrink-0">
             <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">swap_horiz</mat-icon>
         </div>
 
         <input type="text" [ngModel]="requestName()" (ngModelChange)="onNameChange($event)"
-            class="bg-transparent border-none outline-none font-semibold text-[13px] text-(--postonsteroids-text-primary) min-w-[110px] max-w-[230px] shrink truncate"
+            class="bg-transparent border-none outline-none font-semibold text-[13px] text-(--postonsteroids-text-primary) flex-1 min-w-[120px] max-w-[360px] truncate"
             placeholder="Request Name" />
 
-        <div class="h-4 w-px bg-(--postonsteroids-border)/70 shrink-0 hidden sm:block"></div>
-
-        <input type="text" [ngModel]="requestDescription()" (ngModelChange)="onDescriptionChange($event)"
-            title="Request description / purpose (used in Docs & BRD exports)"
-            class="bg-(--postonsteroids-bg-tertiary)/40 hover:bg-(--postonsteroids-bg-tertiary)/70 focus:bg-(--postonsteroids-bg-tertiary) border border-transparent focus:border-(--postonsteroids-border) rounded px-2 py-1 outline-none text-[11.5px] text-(--postonsteroids-text-secondary) placeholder:text-(--postonsteroids-text-muted)/75 flex-1 min-w-[130px] truncate transition-colors hidden sm:block"
-            placeholder="Add request description..." />
+        <button type="button" (click)="openDocNotesModal()"
+            title="Add request description &amp; writeup to include in API Docs, BRD &amp; TestRail generation"
+            class="h-[26px] px-2 rounded-md border flex items-center gap-1.5 text-[11px] font-medium transition-colors cursor-pointer shrink-0"
+            [class.bg-blue-500/12]="hasDocNotesContent()"
+            [class.border-blue-500/40]="hasDocNotesContent()"
+            [class.text-blue-400]="hasDocNotesContent()"
+            [class.bg-(--postonsteroids-bg-tertiary)]=" !hasDocNotesContent()"
+            [class.border-(--postonsteroids-border)]=" !hasDocNotesContent()"
+            [class.text-(--postonsteroids-text-secondary)]=" !hasDocNotesContent()"
+            [class.hover:bg-(--postonsteroids-bg-hover)]="true">
+            <mat-icon class="text-[14px]! size-[14px]!">edit_note</mat-icon>
+            <span class="hidden sm:inline">Doc / BRD Note</span>
+            @if (hasDocNotesContent()) {
+                <span class="size-1.5 rounded-full bg-blue-400"></span>
+            }
+        </button>
     </div>
 
     <!-- Right Section: Grouped Utilities (Cookies, Code, Docs/BRD, Lock), Share, and Unified Save + Auto-Save -->
@@ -61,10 +71,10 @@
                         <span>Code / cURL Snippets</span>
                     </button>
 
-                    <button (click)="openDocBrdModal(); isActionsMenuOpen.set(false)" type="button"
+                    <button (click)="openDocBrdModal('api-doc'); isActionsMenuOpen.set(false)" type="button"
                         class="w-full px-2.5 py-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) flex items-center gap-2 text-left cursor-pointer text-(--postonsteroids-text-primary)">
                         <mat-icon class="text-[15px]! size-[15px]! text-blue-400">description</mat-icon>
-                        <span>Generate Docs / BRD</span>
+                        <span>Generate Docs / BRD / TestRail</span>
                     </button>
 
                     <div class="h-px bg-(--postonsteroids-border)/60 my-0.5"></div>
@@ -104,9 +114,9 @@
             }
         </button>
 
-        <!-- Unified Save & Auto-Save Split Group -->
+        <!-- Compact Save Split Button (Save + Chevron Menu with Auto-Save Toggle & Actions) -->
         <div
-            class="flex items-center h-[30px] rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)">
+            class="relative flex items-center h-[30px] rounded-[4px] border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)">
             <button (click)="saveRequest()" [disabled]="isSaving()"
                 class="px-2.5 h-full flex items-center gap-x-1.5 text-[12px] font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 @if (isSaving()) {
@@ -116,24 +126,10 @@
                 <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-secondary)">save</mat-icon>
                 }
                 <span>{{ isSaving() ? 'Saving...' : 'Save' }}</span>
+                @if (isLoggedIn() && tabStateService.autoSaveEnabled()) {
+                    <span class="size-1.5 rounded-full bg-emerald-400" title="Auto-Save is ON"></span>
+                }
             </button>
-
-            @if (isLoggedIn()) {
-            <button type="button" (click)="tabStateService.toggleAutoSave()"
-                class="h-full px-2 flex items-center gap-x-1 border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer shrink-0"
-                [attr.aria-pressed]="tabStateService.autoSaveEnabled()"
-                [title]="tabStateService.autoSaveEnabled() ? 'Auto-Save is ON (Click to disable)' : 'Auto-Save is OFF (Click to enable)'">
-                <mat-icon class="text-[14px]! size-[14px]! transition-colors" aria-hidden="true"
-                    [class.text-(--postonsteroids-text-muted)]="!tabStateService.autoSaveEnabled()"
-                    [class.text-(--postonsteroids-accent)]="tabStateService.autoSaveEnabled()"
-                    [class.animate-pulse]="tabStateService.isAutoSaving()">
-                    {{ !tabStateService.autoSaveEnabled() ? 'cloud_off' : (tabStateService.isAutoSaving() ? 'cloud_sync' : 'cloud_done') }}
-                </mat-icon>
-                <span class="text-[10.5px] text-(--postonsteroids-text-secondary) font-medium whitespace-nowrap">
-                    {{ tabStateService.autoSaveEnabled() ? 'Auto On' : 'Auto Off' }}
-                </span>
-            </button>
-            }
 
             @if (isSaving()) {
             <button (click)="cancelSave()" title="Cancel Save"
@@ -142,24 +138,54 @@
             </button>
             }
 
-            <app-scrollable-select-component [optionValues]="saveOptions" [verticalPosition]="32" [modalWidth]="170"
-                [absoluteStartLeft]="false" (outputSelectedValue)="onSaveOptionSelected($event)">
-                <div
-                    class="px-1.5 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center justify-center">
-                    @if (isExporting()) {
-                    <mat-icon
-                        class="text-[16px]! size-[16px]! animate-spin text-(--postonsteroids-accent)">sync</mat-icon>
-                    } @else {
-                    <mat-icon class="text-[16px]! size-[16px]!">expand_more</mat-icon>
+            <button type="button" (click)="toggleSaveMenu($event)"
+                title="Auto-Save Settings &amp; Export Options"
+                class="px-1.5 h-full border-l border-(--postonsteroids-border) hover:bg-(--postonsteroids-bg-hover) transition-colors duration-200 cursor-pointer flex items-center justify-center">
+                @if (isExporting()) {
+                <mat-icon class="text-[16px]! size-[16px]! animate-spin text-(--postonsteroids-accent)">sync</mat-icon>
+                } @else {
+                <mat-icon class="text-[16px]! size-[16px]! text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                }
+            </button>
+
+            @if (isSaveMenuOpen()) {
+                <div (click)="$event.stopPropagation()"
+                     class="absolute right-0 top-full mt-1.5 w-60 p-1.5 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl z-[130] text-[11.5px] flex flex-col gap-0.5">
+                    @if (isLoggedIn()) {
+                        <button type="button" (click)="tabStateService.toggleAutoSave()"
+                            class="w-full px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between gap-2 text-left cursor-pointer">
+                            <span class="flex items-center gap-2 font-semibold text-(--postonsteroids-text-primary)">
+                                <mat-icon class="text-[15px]! size-[15px]!"
+                                    [class.text-emerald-400]="tabStateService.autoSaveEnabled()"
+                                    [class.text-(--postonsteroids-text-muted)]="!tabStateService.autoSaveEnabled()">
+                                    {{ tabStateService.autoSaveEnabled() ? 'cloud_done' : 'cloud_off' }}
+                                </mat-icon>
+                                <span>Auto-Save</span>
+                            </span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                                [class.bg-emerald-500/15]="tabStateService.autoSaveEnabled()"
+                                [class.text-emerald-400]="tabStateService.autoSaveEnabled()"
+                                [class.bg-(--postonsteroids-bg-tertiary)]="!tabStateService.autoSaveEnabled()"
+                                [class.text-(--postonsteroids-text-muted)]="!tabStateService.autoSaveEnabled()">
+                                {{ tabStateService.autoSaveEnabled() ? 'ON' : 'OFF' }}
+                            </span>
+                        </button>
+                        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
+                    }
+                    @for (opt of saveOptions; track opt) {
+                        <button type="button" (click)="isSaveMenuOpen.set(false); onSaveOptionSelected(opt)"
+                            class="w-full px-2.5 py-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-left text-(--postonsteroids-text-primary) cursor-pointer flex items-center justify-between">
+                            <span>{{ opt }}</span>
+                        </button>
                     }
                 </div>
-            </app-scrollable-select-component>
+            }
         </div>
     </div>
 
 </div>
 
-<!-- Share Link, cURL, & Transfer Modals (placed outside header flex row so Save aligns flush right) -->
+<!-- Share Link, cURL, Docs/BRD, Cookies, Transfer & Request Doc Notes Modals -->
 <app-share-modal-component [show]="showShareModal()" [link]="generatedLink()" (onClose)="showShareModal.set(false)"
     (onCopy)="copyLink()" />
 <app-curl-modal [isOpen]="isCurlModalOpen()"
@@ -167,6 +193,7 @@
     (closed)="isCurlModalOpen.set(false)" />
 <app-doc-brd-generator-modal [isOpen]="isDocBrdModalOpen()"
     [initialScope]="'endpoint'"
+    [initialMode]="docBrdInitialMode()"
     [request]="currentRequestState()"
     (closed)="isDocBrdModalOpen.set(false)" />
 <app-cookie-manager-modal [isOpen]="isCookieModalOpen()"
@@ -176,3 +203,91 @@
     [requestIds]="[tabId()]"
     [initialMode]="transferMode()"
     (closed)="isTransferModalOpen.set(false)" />
+
+@if (isDocNotesModalOpen()) {
+    <div appBodyPortal class="fixed inset-0 z-[10020] flex items-center justify-center bg-black/65 backdrop-blur-xs p-4"
+         (click)="isDocNotesModalOpen.set(false)">
+        <div role="dialog" aria-modal="true" aria-labelledby="doc-notes-modal-title"
+             class="w-full max-w-3xl h-[min(88dvh,calc(100dvh-28px))] bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+             (click)="$event.stopPropagation()">
+            <div class="px-5 py-3.5 border-b border-(--postonsteroids-border) flex items-center justify-between bg-(--postonsteroids-bg-tertiary)/50 shrink-0">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="size-8 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
+                        <mat-icon class="text-[18px]! size-[18px]!">edit_note</mat-icon>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 id="doc-notes-modal-title" class="text-[14px] font-bold text-(--postonsteroids-text-primary)">
+                            Endpoint Documentation, BRD &amp; TestRail Notes
+                        </h3>
+                        <p class="text-[11px] text-(--postonsteroids-text-muted) truncate font-mono">
+                            {{ currentRequestState()?.method }} {{ currentRequestState()?.url || 'Unsaved / Blank URL' }}
+                        </p>
+                    </div>
+                </div>
+                <button type="button" (click)="isDocNotesModalOpen.set(false)"
+                    class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                    <mat-icon class="text-[18px]! size-[18px]!">close</mat-icon>
+                </button>
+            </div>
+
+            <div class="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-4 text-xs">
+                <div class="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-300 text-[11px] flex items-center gap-2">
+                    <mat-icon class="text-[16px]! size-[16px]! shrink-0">info</mat-icon>
+                    <span>Everything written here is stored with this request URL and automatically injected into generated Technical API Docs, Enterprise BRD, and TestRail Test Cases.</span>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-(--postonsteroids-text-secondary) mb-1">Short Description (Summary Line)</label>
+                    <input type="text" [ngModel]="requestDescription()" (ngModelChange)="onDocFieldChange('description', $event)"
+                        placeholder="e.g. Retrieves active customer lien blocks filtered by account reference..."
+                        class="w-full px-3 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-blue-500" />
+                </div>
+
+                <div class="flex-1 flex flex-col min-h-[150px]">
+                    <label class="block font-semibold text-(--postonsteroids-text-secondary) mb-1">Detailed Doc / BRD Content (Markdown Supported)</label>
+                    <textarea [ngModel]="requestDocNotes()" (ngModelChange)="onDocFieldChange('docNotes', $event)"
+                        placeholder="Write detailed endpoint behavior, business rules, error codes, SLAs, or integration notes..."
+                        class="flex-1 w-full min-h-[140px] px-3 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) font-mono text-[11.5px] outline-none focus:border-blue-500 resize-none"></textarea>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="flex flex-col">
+                        <label class="block font-semibold text-teal-400 mb-1">TestRail Preconditions</label>
+                        <textarea rows="4" [ngModel]="requestTestRailPreconditions()" (ngModelChange)="onDocFieldChange('testRailPreconditions', $event)"
+                            placeholder="Optional TestRail preconditions..."
+                            class="w-full px-2.5 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-[11px] outline-none focus:border-teal-500 resize-none"></textarea>
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="block font-semibold text-teal-400 mb-1">TestRail Steps</label>
+                        <textarea rows="4" [ngModel]="requestTestRailSteps()" (ngModelChange)="onDocFieldChange('testRailSteps', $event)"
+                            placeholder="Optional step-by-step actions..."
+                            class="w-full px-2.5 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-[11px] outline-none focus:border-teal-500 resize-none"></textarea>
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="block font-semibold text-teal-400 mb-1">TestRail Expected Result</label>
+                        <textarea rows="4" [ngModel]="requestTestRailExpected()" (ngModelChange)="onDocFieldChange('testRailExpected', $event)"
+                            placeholder="Optional expected outcome..."
+                            class="w-full px-2.5 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) text-[11px] outline-none focus:border-teal-500 resize-none"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-5 py-3 border-t border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary)/50 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <button type="button" (click)="isDocNotesModalOpen.set(false); openDocBrdModal('brd')"
+                        class="px-3 py-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-semibold cursor-pointer">
+                        Preview in Docs / BRD
+                    </button>
+                    <button type="button" (click)="isDocNotesModalOpen.set(false); openDocBrdModal('testrail')"
+                        class="px-3 py-1.5 rounded-lg border border-teal-500/40 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 font-semibold cursor-pointer">
+                        Open TestRail Generator
+                    </button>
+                </div>
+                <button type="button" (click)="isDocNotesModalOpen.set(false)"
+                    class="px-5 py-1.5 rounded-lg bg-(--postonsteroids-accent) text-white font-semibold cursor-pointer">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+}

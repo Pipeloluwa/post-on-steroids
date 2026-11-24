@@ -209,10 +209,11 @@ interface CapsuleTreeNode {
                                          (change)="toggleGroupSelection(grpNode, $any($event.target).checked)"
                                          class="accent-(--postonsteroids-accent) cursor-pointer shrink-0" />
                                   <button type="button" (click)="toggleGroupExpand(grpNode.group.id)"
+                                          [title]="tabState.getFolderFullPath(grpNode.group.id, capNode.capsule.id) || grpNode.group.name"
                                           class="flex-1 min-w-0 flex items-center justify-between gap-2 text-left cursor-pointer">
-                                    <span class="flex items-center gap-1.5 min-w-0">
-                                      <mat-icon class="text-[14px]! size-[14px]! text-amber-400 shrink-0">folder</mat-icon>
-                                      <span class="font-semibold text-(--postonsteroids-text-primary) truncate">{{ tabState.getFolderFullPath(grpNode.group.id, capNode.capsule.id) || grpNode.group.name }}</span>
+                                    <span class="flex items-start gap-1.5 min-w-0">
+                                      <mat-icon class="text-[14px]! size-[14px]! text-amber-400 shrink-0 mt-0.5">folder</mat-icon>
+                                      <span class="font-semibold text-(--postonsteroids-text-primary) break-words leading-snug">{{ tabState.getFolderFullPath(grpNode.group.id, capNode.capsule.id) || grpNode.group.name }}</span>
                                     </span>
                                     <span class="text-[9.5px] font-mono text-(--postonsteroids-text-muted) shrink-0">
                                       {{ countSelectedInList(grpNode.requests) }}/{{ grpNode.requests.length }}
@@ -648,7 +649,7 @@ interface CapsuleTreeNode {
           @if (inspectedDetail(); as detail) {
             <div class="absolute inset-0 z-30 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4"
                  (click)="inspectedDetail.set(null)">
-              <div class="w-full max-w-3xl max-h-[calc(100%-1rem)] rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden"
+              <div class="w-full max-w-3xl h-[calc(100%-1rem)] rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden"
                    (click)="$event.stopPropagation()">
                 <div class="px-4 py-3 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) flex flex-wrap items-center justify-between gap-3 shrink-0">
                   <div class="min-w-0 flex-1">

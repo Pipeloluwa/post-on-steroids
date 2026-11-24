@@ -1,6 +1,5 @@
 import { Component, ChangeDetectionStrategy, effect, input, output, signal, computed, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { MatIcon } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { ShareModalComponent } from '../../../shared/components/share.modal.component/share.modal.component';
@@ -9,6 +8,7 @@ import { DocBrdGeneratorModalComponent } from '../../../shared/components/doc-br
 import { CookieManagerModalComponent } from '../../../shared/components/cookie-manager.modal.component';
 import { CookieJarService } from '../../../shared/services/cookie-jar.service';
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
+import { BodyPortalDirective } from '../../../shared/directives/body-portal.directive';
 import { TabStateService, RequestState, CapsuleLockMode } from '../../../shared/services/tab.state.service';
 import { copyTextToClipboard } from '../../../shared/utils/clipboard.util';
 import { convertCapsuleToPostmanCollection } from '../../../shared/utils/postman-export.util';
@@ -18,12 +18,12 @@ import { inject } from '@angular/core';
 
 @Component({
     selector: 'app-request-details-component',
-    imports: [FormsModule, ScrollableSelectComponent, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, CookieManagerModalComponent, TransferCapsuleModalComponent, DocBrdGeneratorModalComponent],
+    imports: [FormsModule, MatIcon, CommonModule, ShareModalComponent, CurlModalComponent, CookieManagerModalComponent, TransferCapsuleModalComponent, DocBrdGeneratorModalComponent, BodyPortalDirective],
     templateUrl: './request-details.component.html',
     styleUrl: './request-details.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: {
-        '(document:click)': 'isActionsMenuOpen.set(false)'
+        '(document:click)': 'closeHeaderMenus()'
     }
 })
 export class RequestDetailsComponent {
@@ -47,7 +47,21 @@ export class RequestDetailsComponent {
     
     requestName = computed(() => this.tabStateService.getState(this.tabId())?.name || '');
     requestDescription = computed(() => this.tabStateService.getState(this.tabId())?.description || '');
+    requestDocNotes = computed(() => this.tabStateService.getState(this.tabId())?.docNotes || '');
+    requestTestRailPreconditions = computed(() => this.tabStateService.getState(this.tabId())?.testRailPreconditions || '');
+    requestTestRailSteps = computed(() => this.tabStateService.getState(this.tabId())?.testRailSteps || '');
+    requestTestRailExpected = computed(() => this.tabStateService.getState(this.tabId())?.testRailExpected || '');
+    hasDocNotesContent = computed(() => Boolean(
+        this.requestDescription().trim() ||
+        this.requestDocNotes().trim() ||
+        this.requestTestRailPreconditions().trim() ||
+        this.requestTestRailSteps().trim() ||
+        this.requestTestRailExpected().trim()
+    ));
+    isDocNotesModalOpen = signal<boolean>(false);
     isActionsMenuOpen = signal<boolean>(false);
+    isSaveMenuOpen = signal<boolean>(false);
+    docBrdInitialMode = signal<'api-doc' | 'brd' | 'testrail'>('api-doc');
     activeLockMode = computed<CapsuleLockMode>(() => this.tabStateService.activeCapsuleLockMode());
     readonly lockModeOptions: ReadonlyArray<{ id: CapsuleLockMode; label: string; title: string }> = [
         { id: 'unlocked', label: 'Unlocked', title: 'Full edit & delete access for you and shared receivers' },
@@ -80,18 +94,36 @@ export class RequestDetailsComponent {
         this.tabStateService.updateState(this.tabId(), { name: newName });
     }
 
-    onDescriptionChange(newDesc: string) {
+    onDocFieldChange(field: 'description' | 'docNotes' | 'testRailPreconditions' | 'testRailSteps' | 'testRailExpected', val: string) {
         const block = this.tabStateService.getEditBlockReason(undefined, 'edit');
         if (block) {
             this.notificationService.notify(block, 'warning');
             return;
         }
-        this.tabStateService.updateState(this.tabId(), { description: newDesc });
+        this.tabStateService.updateState(this.tabId(), { [field]: val });
+    }
+
+    closeHeaderMenus(): void {
+        this.isActionsMenuOpen.set(false);
+        this.isSaveMenuOpen.set(false);
     }
 
     toggleActionsMenu(event: Event): void {
         event.stopPropagation();
+        this.isSaveMenuOpen.set(false);
         this.isActionsMenuOpen.update(v => !v);
+    }
+
+    toggleSaveMenu(event: Event): void {
+        event.stopPropagation();
+        this.isActionsMenuOpen.set(false);
+        this.isSaveMenuOpen.update(v => !v);
+    }
+
+    openDocNotesModal(): void {
+        this.isActionsMenuOpen.set(false);
+        this.isSaveMenuOpen.set(false);
+        this.isDocNotesModalOpen.set(true);
     }
 
     onLockModeChange(mode: CapsuleLockMode): void {
@@ -123,7 +155,8 @@ export class RequestDetailsComponent {
         this.isCurlModalOpen.set(true);
     }
 
-    openDocBrdModal(): void {
+    openDocBrdModal(mode: 'api-doc' | 'brd' | 'testrail' = 'api-doc'): void {
+        this.docBrdInitialMode.set(mode);
         this.isDocBrdModalOpen.set(true);
     }
 

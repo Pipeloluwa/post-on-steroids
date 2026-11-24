@@ -156,6 +156,10 @@ export interface RequestState {
     method: string;
     name: string;
     description?: string;
+    docNotes?: string;
+    testRailPreconditions?: string;
+    testRailSteps?: string;
+    testRailExpected?: string;
     isDirty: boolean;
     isLoading: boolean;
     autoAuthEnabled?: boolean;
@@ -189,6 +193,7 @@ export interface RequestState {
     responseCookies: CookieRow[];
     responseHeaders: KeyValue[];
     testResults: TestResult[];
+    visualizerPayload?: { template: string; data: any } | null;
     editorScrollPositions: Record<string, { scrollTop: number; scrollLeft: number }>;
     executionToken?: number;
     bodyWrapStyle?: 'pretty' | 'key-field' | 'word-wrap' | 'collapsed';
@@ -1295,6 +1300,11 @@ export class TabStateService {
                     testScript: r.scripts.testScript,
                     testScriptEnabled: r.scripts.testScriptEnabled
                 } : undefined,
+                description: r.description,
+                docNotes: r.docNotes,
+                testRailPreconditions: r.testRailPreconditions,
+                testRailSteps: r.testRailSteps,
+                testRailExpected: r.testRailExpected,
                 bodyWrapStyle: r.bodyWrapStyle,
                 responseWrapStyle: r.responseWrapStyle,
                 responseActiveMode: r.responseActiveMode,
@@ -1378,6 +1388,11 @@ export class TabStateService {
                     ...st,
                     groupId: targetGId,
                     ...(meta ? {
+                        description: st.description || meta.description || '',
+                        docNotes: st.docNotes || meta.docNotes || '',
+                        testRailPreconditions: st.testRailPreconditions || meta.testRailPreconditions || '',
+                        testRailSteps: st.testRailSteps || meta.testRailSteps || '',
+                        testRailExpected: st.testRailExpected || meta.testRailExpected || '',
                         postTriggerTabId: st.postTriggerTabId ?? meta.postTriggerTabId ?? null,
                         triggerConfig: st.triggerConfig ?? meta.triggerConfig,
                         autoAuthEnabled: st.autoAuthEnabled ?? meta.autoAuthEnabled ?? false,
@@ -2216,6 +2231,12 @@ export class TabStateService {
 
     reorderSidebarRootItem(itemId: string, previousIndex: number, currentIndex: number, capsuleId?: string): void {
         const capId = capsuleId || this.activeCapsuleId();
+        let currentGroups = this.getGroupsForCapsule(capId);
+        const targetGroup = currentGroups.find(g => g.id === itemId);
+        if (targetGroup && targetGroup.parentGroupId) {
+            this.moveGroupToParentGroup(itemId, null, capId);
+            currentGroups = this.getGroupsForCapsule(capId);
+        }
         const rootItems = [...this.sidebarRootItems()];
         const fromIdx = itemId ? rootItems.findIndex(it => it.id === itemId) : previousIndex;
         const actualPrev = fromIdx !== -1 ? fromIdx : previousIndex;
@@ -2224,15 +2245,15 @@ export class TabStateService {
             actualPrev < 0 ||
             currentIndex < 0 ||
             actualPrev >= rootItems.length ||
-            currentIndex >= rootItems.length
+            currentIndex > rootItems.length
         ) {
             return;
         }
 
         const [moved] = rootItems.splice(actualPrev, 1);
-        rootItems.splice(currentIndex, 0, moved);
+        const clampedTarget = Math.min(currentIndex, rootItems.length);
+        rootItems.splice(clampedTarget, 0, moved);
 
-        const currentGroups = this.getGroupsForCapsule(capId);
         const groupMap = new Map<string, RequestGroup>();
         for (const g of currentGroups) groupMap.set(g.id, g);
 
@@ -4096,6 +4117,7 @@ export class TabStateService {
         responseCookies?: CookieRow[];
         responseHeaders?: KeyValue[];
         testResults?: TestResult[];
+        visualizerPayload?: { template: string; data: any } | null;
     }) {
         if (!this.isBrowser) return;
         try {
@@ -4132,6 +4154,7 @@ export class TabStateService {
             cookies?: boolean;
             headers?: boolean;
             testResults?: boolean;
+            visualizer?: boolean;
             encryptionConsole?: boolean;
             preRequestConsole?: boolean;
             postResponseConsole?: boolean;
@@ -4154,7 +4177,9 @@ export class TabStateService {
                             delete entry.responseStatus;
                             delete entry.responseTime;
                             delete entry.responseSize;
+                            delete entry.visualizerPayload;
                         }
+                        if (opts.visualizer) delete entry.visualizerPayload;
                         if (opts.cookies) delete entry.responseCookies;
                         if (opts.headers) delete entry.responseHeaders;
                         if (opts.testResults) delete entry.testResults;
@@ -4182,7 +4207,9 @@ export class TabStateService {
                 patch.responseStatus = null;
                 patch.responseTime = null;
                 patch.responseSize = null;
+                patch.visualizerPayload = null;
             }
+            if (opts.visualizer) patch.visualizerPayload = null;
             if (opts.cookies) patch.responseCookies = [];
             if (opts.headers) patch.responseHeaders = [];
             if (opts.testResults) patch.testResults = [];
@@ -4454,6 +4481,10 @@ export class TabStateService {
             capsuleName: capsuleName || this.activeCapsuleName(),
             name: state.name || 'Imported Request',
             description: state.description || '',
+            docNotes: state.docNotes || '',
+            testRailPreconditions: state.testRailPreconditions || '',
+            testRailSteps: state.testRailSteps || '',
+            testRailExpected: state.testRailExpected || '',
             url: state.url || '',
             method: (state.method || 'GET').toUpperCase(),
             payloadType: state.payloadType || 'params',
@@ -4579,7 +4610,8 @@ export class TabStateService {
             }[];
             variables?: IGlobalVariable[];
         },
-        shouldSaveToBackend: boolean
+        shouldSaveToBackend: boolean,
+        openTabs = true
     ): Promise<{ capsulesCount: number; requestsCount: number }> {
         const vs = this.getVariableService();
         if (vs) {
@@ -4825,7 +4857,7 @@ export class TabStateService {
             }
 
             const newIds = allNewRequests.map(r => r.id);
-            if (newIds.length > 0) {
+            if (openTabs && newIds.length > 0) {
                 this.openTabIds.update(ids => {
                     const next = [...ids];
                     for (const nId of newIds) {
@@ -4843,7 +4875,7 @@ export class TabStateService {
             }
         } else {
             await this.switchCapsule({ id: targetCapId, name: targetCap.name });
-            if (allNewRequests.length > 0) {
+            if (openTabs && allNewRequests.length > 0) {
                 this.openTabIds.update(ids => {
                     const next = [...ids];
                     for (const r of allNewRequests) {
@@ -4880,7 +4912,7 @@ export class TabStateService {
             variableSources?: Record<string, any>;
         }[];
         variables?: IGlobalVariable[];
-    }, options?: { saveToBackend?: boolean; targetCapsuleId?: string | null }): Promise<{ capsulesCount: number; requestsCount: number }> {
+    }, options?: { saveToBackend?: boolean; targetCapsuleId?: string | null; openTabs?: boolean }): Promise<{ capsulesCount: number; requestsCount: number }> {
         if (!data || !data.capsules || data.capsules.length === 0) {
             return { capsulesCount: 0, requestsCount: 0 };
         }
@@ -4888,11 +4920,12 @@ export class TabStateService {
         const shouldSaveToBackend = options?.saveToBackend !== undefined
             ? options.saveToBackend
             : (this.isBrowser && this.authService.isLoggedIn());
+        const shouldOpenTabs = options?.openTabs !== false;
 
         if (options?.targetCapsuleId) {
             const targetCap = this.capsules().find(c => c.id === options.targetCapsuleId);
             if (targetCap) {
-                return this.importIntoExistingCapsule(targetCap, data, shouldSaveToBackend);
+                return this.importIntoExistingCapsule(targetCap, data, shouldSaveToBackend, shouldOpenTabs);
             }
         }
 
@@ -5288,15 +5321,16 @@ export class TabStateService {
 
             if (lastCreatedRequests.length > 0) {
                 this.savedCapsules.set(lastCreatedRequests);
-                const openIds = lastCreatedRequests.map(r => r.id);
+                const openIds = shouldOpenTabs ? lastCreatedRequests.map(r => r.id) : [];
+                const activeId = openIds[0] || '';
                 this.openTabIds.set(openIds);
-                this.activeTabId.set(openIds[0]);
+                this.activeTabId.set(activeId);
 
                 if (this.isBrowser) {
                     localStorage.setItem(`onsteroids_open_tab_ids_${lastCreatedCap.id}`, JSON.stringify(openIds));
-                    localStorage.setItem(`onsteroids_active_tab_${lastCreatedCap.id}`, openIds[0]);
+                    localStorage.setItem(`onsteroids_active_tab_${lastCreatedCap.id}`, activeId);
                     localStorage.setItem('onsteroids_open_tab_ids', JSON.stringify(openIds));
-                    localStorage.setItem('onsteroids_active_tab', openIds[0]);
+                    localStorage.setItem('onsteroids_active_tab', activeId);
                 }
             }
 
@@ -5312,7 +5346,7 @@ export class TabStateService {
         };
     }
 
-    async importCapsuleFromUrl(urlOrToken: string, targetCapsuleId?: string | null): Promise<{ capsuleName: string; requestsCount: number }> {
+    async importCapsuleFromUrl(urlOrToken: string, targetCapsuleId?: string | null, openTabs = true): Promise<{ capsuleName: string; requestsCount: number }> {
         let token = urlOrToken.trim();
         let urlLockMode: CapsuleLockMode | undefined;
         if (token.includes('share=')) {
@@ -5492,7 +5526,10 @@ export class TabStateService {
                 variableSources: sharedVarSources
             }],
             variables: extractedVars
-        }, targetCapsuleId ? { targetCapsuleId } : undefined);
+        }, {
+            ...(targetCapsuleId ? { targetCapsuleId } : {}),
+            openTabs
+        });
 
         const targetCapObj = targetCapsuleId
             ? this.capsules().find(c => c.id === targetCapsuleId)
@@ -5711,7 +5748,7 @@ export class TabStateService {
 
     updateState(id: string, partialState: Partial<RequestState>, recordHistory = true) {
         const effectiveId = this.resolveTabId(id);
-        const ignorableKeys = ['isLoading', 'responseBody', 'responseStatus', 'responseTime', 'responseSize', 'responseCookies', 'responseHeaders', 'testResults', 'editorScrollPositions', 'isDirty', 'executionToken', 'bodyWrapStyle', 'responseWrapStyle', 'responseActiveMode', 'consoleWrap'];
+        const ignorableKeys = ['isLoading', 'responseBody', 'responseStatus', 'responseTime', 'responseSize', 'responseCookies', 'responseHeaders', 'testResults', 'visualizerPayload', 'editorScrollPositions', 'isDirty', 'executionToken', 'bodyWrapStyle', 'responseWrapStyle', 'responseActiveMode', 'consoleWrap'];
         const explicitDirty = Object.prototype.hasOwnProperty.call(partialState, 'isDirty');
         const currentExisting = this.states().get(effectiveId) || this.states().get(id);
         const isSignificantTop = Object.keys(partialState).some(k => !ignorableKeys.includes(k));
@@ -6805,6 +6842,10 @@ export class TabStateService {
             capsuleId: dto.capsuleId || this.activeCapsuleId(),
             name: dto.name || 'New Request',
             description: dto.description || '',
+            docNotes: dto.docNotes || '',
+            testRailPreconditions: dto.testRailPreconditions || '',
+            testRailSteps: dto.testRailSteps || '',
+            testRailExpected: dto.testRailExpected || '',
             url: dto.url || '',
             method: dto.method || 'GET',
             payloadType: dto.payloadType || 'params',
@@ -6984,6 +7025,10 @@ export class TabStateService {
             method: 'GET',
             name: 'New Request',
             description: '',
+            docNotes: '',
+            testRailPreconditions: '',
+            testRailSteps: '',
+            testRailExpected: '',
             isDirty: false,
             isLoading: false,
             autoAuthEnabled: false,

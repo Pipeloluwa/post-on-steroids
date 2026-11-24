@@ -348,8 +348,8 @@ export class WorkspaceComponent {
         this.closeFolderContextMenu();
         const viewportW = this.isBrowser ? window.innerWidth : 1280;
         const viewportH = this.isBrowser ? window.innerHeight : 800;
-        const menuW = 228;
-        const menuH = 340;
+        const menuW = 292;
+        const menuH = 380;
         const x = Math.max(8, Math.min(event.clientX, viewportW - menuW - 8));
         const y = Math.max(8, Math.min(event.clientY, viewportH - menuH - 8));
         this.sidebarContextMenu.set({
@@ -368,8 +368,8 @@ export class WorkspaceComponent {
         this.groupSelectionMenuOpen.set(false);
         const viewportW = this.isBrowser ? window.innerWidth : 1280;
         const viewportH = this.isBrowser ? window.innerHeight : 800;
-        const menuW = 228;
-        const menuH = 300;
+        const menuW = 292;
+        const menuH = 340;
         const x = Math.max(8, Math.min(event.clientX, viewportW - menuW - 8));
         const y = Math.max(8, Math.min(event.clientY, viewportH - menuH - 8));
         this.folderContextMenu.set({ isOpen: true, x, y, group, requestCount });
@@ -409,6 +409,12 @@ export class WorkspaceComponent {
         const grp = this.folderContextMenu().group;
         this.closeFolderContextMenu();
         if (grp) this.startEditingGroup(grp, event);
+    }
+
+    contextUngroupFolder(event: Event): void {
+        const ctx = this.folderContextMenu();
+        this.closeFolderContextMenu();
+        if (ctx.group) void this.ungroupFolder(ctx.group, event);
     }
 
     contextDeleteFolder(event: Event): void {
@@ -528,15 +534,29 @@ export class WorkspaceComponent {
     lastSelectedRequestId = signal<string | null>(null);
     isDraggingRequest = signal<boolean>(false);
     isDraggingFolder = signal<boolean>(false);
+    draggedGroupId = signal<string | null>(null);
     draggedRequestIds = signal<string[]>([]);
     draggedSourceGroupId = signal<string | null>(null);
     hoveredFolderHeaderId = signal<string | null>(null);
     hoveredFolderZoneId = signal<string | null>(null);
     hoveredFolderIdDuringDrag = computed<string | null>(() => {
         const headerId = this.hoveredFolderHeaderId();
-        if (headerId) return headerId;
+        const draggedGrp = this.draggedGroupId();
+        if (headerId) {
+            if (this.isDraggingFolder() && draggedGrp) {
+                const blocked = new Set(this.tabStateService.getDescendantGroupIds([draggedGrp]));
+                if (blocked.has(headerId)) return null;
+            }
+            return headerId;
+        }
         const zoneId = this.hoveredFolderZoneId();
-        if (zoneId && zoneId !== this.draggedSourceGroupId()) return zoneId;
+        if (zoneId && zoneId !== this.draggedSourceGroupId()) {
+            if (this.isDraggingFolder() && draggedGrp) {
+                const blocked = new Set(this.tabStateService.getDescendantGroupIds([draggedGrp]));
+                if (blocked.has(zoneId)) return null;
+            }
+            return zoneId;
+        }
         return null;
     });
     hoveredFolderName = computed<string | null>(() => {
@@ -545,20 +565,28 @@ export class WorkspaceComponent {
         return this.tabStateService.activeCapsuleGroups().find(g => g.id === fId)?.name || null;
     });
     isRootSortingDisabled = computed<boolean>(() =>
-        this.isDraggingRequest() && this.hoveredFolderHeaderId() !== null
+        (this.isDraggingRequest() || this.isDraggingFolder()) && this.hoveredFolderHeaderId() !== null
     );
 
     folderDropListIds = computed<string[]>(() =>
         this.tabStateService.activeCapsuleGroups().map(g => 'folder-drop-' + g.id)
     );
 
+    subfolderDropListIds = computed<string[]>(() =>
+        this.tabStateService.activeCapsuleGroups().map(g => 'subfolder-drop-' + g.id)
+    );
+
     allRequestDropListIds = computed<string[]>(() => [
         ...this.folderDropListIds(),
+        ...this.subfolderDropListIds(),
         'sidebar-root-drop-list'
     ]);
 
     canEnterFolderDropList = (drag: CdkDrag): boolean => {
-        return drag.data?.type !== 'group';
+        if (drag.data?.type === 'group') {
+            return true;
+        }
+        return true;
     };
 
     canEnterRootDropList = (drag: CdkDrag): boolean => {
@@ -568,7 +596,7 @@ export class WorkspaceComponent {
     };
 
     canSortRootItem = (_index: number, drag: CdkDrag): boolean => {
-        if (drag.data?.type === 'group') return true;
+        if (drag.data?.type === 'group') return this.hoveredFolderHeaderId() === null;
         if (this.hoveredFolderHeaderId()) return false;
         return this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY) === null;
     };
@@ -580,11 +608,16 @@ export class WorkspaceComponent {
         y: number,
         padX = 0,
         padTop = 0,
-        padBottom = 0
+        padBottom = 0,
+        excludeGroupIds?: Set<string>
     ): string | null {
         if (!this.isBrowser) return null;
-        const elements = document.querySelectorAll<HTMLElement>(selector);
+        // Iterate in reverse DOM order so deepest nested subfolders take priority over outer ancestor folders
+        const elements = Array.from(document.querySelectorAll<HTMLElement>(selector)).reverse();
         for (const el of elements) {
+            const val = el.getAttribute(attr);
+            if (!val) continue;
+            if (excludeGroupIds && excludeGroupIds.has(val)) continue;
             const rect = el.getBoundingClientRect();
             if (rect.width === 0 || rect.height === 0) continue;
             if (
@@ -593,26 +626,31 @@ export class WorkspaceComponent {
                 y >= rect.top - padTop &&
                 y <= rect.bottom + padBottom
             ) {
-                return el.getAttribute(attr);
+                return val;
             }
         }
         return null;
     }
 
-    private findFolderHeaderAtPoint(x: number, y: number): string | null {
-        return this.findElementAttrAtPoint('[data-folder-header-id]', 'data-folder-header-id', x, y, 4, 2, 1);
+    private findFolderHeaderAtPoint(x: number, y: number, excludeGroupIds?: Set<string>): string | null {
+        return this.findElementAttrAtPoint('[data-folder-header-id]', 'data-folder-header-id', x, y, 4, 2, 1, excludeGroupIds);
     }
 
-    private findFolderZoneAtPoint(x: number, y: number): string | null {
-        return this.findElementAttrAtPoint('[data-folder-zone-id]', 'data-folder-zone-id', x, y);
+    private findFolderZoneAtPoint(x: number, y: number, excludeGroupIds?: Set<string>): string | null {
+        return this.findElementAttrAtPoint('[data-folder-zone-id]', 'data-folder-zone-id', x, y, 0, 0, 0, excludeGroupIds);
     }
 
     private updateDragHoverTarget(x: number, y: number): void {
-        if (!this.isDraggingRequest() || !this.isBrowser) return;
+        if ((!this.isDraggingRequest() && !this.isDraggingFolder()) || !this.isBrowser) return;
         this.lastPointerX = x;
         this.lastPointerY = y;
 
-        const headerId = this.findFolderHeaderAtPoint(x, y);
+        const draggedGrp = this.isDraggingFolder() ? this.draggedGroupId() : null;
+        const excludeIds = draggedGrp
+            ? new Set(this.tabStateService.getDescendantGroupIds([draggedGrp]))
+            : undefined;
+
+        const headerId = this.findFolderHeaderAtPoint(x, y, excludeIds);
         if (headerId) {
             if (this.hoveredFolderHeaderId() !== headerId) {
                 this.hoveredFolderHeaderId.set(headerId);
@@ -626,7 +664,7 @@ export class WorkspaceComponent {
             this.hoveredFolderHeaderId.set(null);
         }
 
-        const zoneId = this.findFolderZoneAtPoint(x, y);
+        const zoneId = this.findFolderZoneAtPoint(x, y, excludeIds);
         if (this.hoveredFolderZoneId() !== zoneId) {
             this.hoveredFolderZoneId.set(zoneId);
         }
@@ -695,12 +733,23 @@ export class WorkspaceComponent {
         this.closeFolderContextMenu();
     }
 
-    onFolderDragStarted() {
+    onFolderDragStarted(group?: RequestGroup) {
         this.isDraggingFolder.set(true);
+        this.draggedGroupId.set(group?.id || null);
+        this.hoveredFolderHeaderId.set(null);
+        this.hoveredFolderZoneId.set(null);
+    }
+
+    onFolderDragMoved(event: CdkDragMove) {
+        if (!this.isDraggingFolder() || !this.isBrowser) return;
+        this.updateDragHoverTarget(event.pointerPosition.x, event.pointerPosition.y);
     }
 
     onFolderDragEnded() {
         this.isDraggingFolder.set(false);
+        this.draggedGroupId.set(null);
+        this.hoveredFolderHeaderId.set(null);
+        this.hoveredFolderZoneId.set(null);
     }
 
     onRequestDragStarted(req: any, sourceGroupId: string | null = null) {
@@ -730,11 +779,26 @@ export class WorkspaceComponent {
         const dragData = event.item.data;
         if (!dragData) return;
 
-        // Case 1: Repositioning a folder in any order in the root list
+        // Case 1: Repositioning or nesting/promoting a folder (at any elevation)
         if (dragData.type === 'group') {
             const groupId = dragData.groupId || dragData.group?.id;
             if (!groupId) return;
+
+            const excludeIds = new Set(this.tabStateService.getDescendantGroupIds([groupId]));
+            const targetFolderId =
+                (this.hoveredFolderHeaderId() && !excludeIds.has(this.hoveredFolderHeaderId()!) ? this.hoveredFolderHeaderId() : null) ||
+                (this.hoveredFolderZoneId() && !excludeIds.has(this.hoveredFolderZoneId()!) ? this.hoveredFolderZoneId() : null) ||
+                this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY, excludeIds) ||
+                this.findFolderZoneAtPoint(this.lastPointerX, this.lastPointerY, excludeIds);
+
+            if (targetFolderId) {
+                this.tabStateService.moveGroupToParentGroup(groupId, targetFolderId);
+                this.onFolderDragEnded();
+                return;
+            }
+
             this.tabStateService.reorderSidebarRootItem(groupId, event.previousIndex, event.currentIndex);
+            this.onFolderDragEnded();
             return;
         }
 
@@ -746,7 +810,7 @@ export class WorkspaceComponent {
             : this.getEffectiveIdsForAction(req.id);
         const sourceGroupId: string | null = dragData.groupId !== undefined ? dragData.groupId : (req.groupId ?? null);
 
-        // Prefer dropping into folder if pointer is over any folder header or folder drop zone
+        // Prefer dropping into deepest hovered folder if pointer is over any folder header or folder drop zone
         const dropTargetFolderId =
             this.hoveredFolderHeaderId() ||
             this.hoveredFolderZoneId() ||
@@ -783,7 +847,25 @@ export class WorkspaceComponent {
 
     onDropInFolder(event: CdkDragDrop<any>, targetGroupId: string) {
         const dragData = event.item.data;
-        if (!dragData || dragData.type === 'group') return;
+        if (!dragData) return;
+
+        // Allow dropping any folder or subfolder into another folder or promoting via root check
+        if (dragData.type === 'group') {
+            const groupId = dragData.groupId || dragData.group?.id;
+            if (!groupId) return;
+            const excludeIds = new Set(this.tabStateService.getDescendantGroupIds([groupId]));
+            const deeperTarget =
+                (this.hoveredFolderHeaderId() && !excludeIds.has(this.hoveredFolderHeaderId()!) ? this.hoveredFolderHeaderId() : null) ||
+                this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY, excludeIds) ||
+                this.findFolderZoneAtPoint(this.lastPointerX, this.lastPointerY, excludeIds) ||
+                (!excludeIds.has(targetGroupId) ? targetGroupId : null);
+
+            if (deeperTarget) {
+                this.tabStateService.moveGroupToParentGroup(groupId, deeperTarget);
+            }
+            this.onFolderDragEnded();
+            return;
+        }
 
         const req = dragData.req || dragData;
         if (!req?.id) return;

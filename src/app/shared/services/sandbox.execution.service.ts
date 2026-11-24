@@ -511,6 +511,7 @@ window.addEventListener("message", async (event) => {
     const __varSet = {};
     const __requestFieldLinks = [];
     let __nextRequest = undefined;
+    let __visualizerPayload = undefined;
 
     const getEnv = (k) => Object.prototype.hasOwnProperty.call(environment, k) ? environment[k] : envMap[k];
     const setEnv = (k, v) => {
@@ -653,11 +654,19 @@ window.addEventListener("message", async (event) => {
     };
     pm.setNextRequest = setNextRequest;
     pm.execution = { setNextRequest };
+    pm.visualizer = {
+      set: (template, data) => {
+        __visualizerPayload = { template: String(template || ''), data: data === undefined ? null : data };
+      },
+      clear: () => {
+        __visualizerPayload = null;
+      }
+    };
     const postman = { setNextRequest };
 
     const reservedContextKeys = new Set([
       '__installedPackages', '__allowSandboxPackages', '__envVars', '__capsuleVars',
-      '__envSet', '__envUnset', '__varSet', '__nextRequest', '__requestFieldLinks', '__scriptLanguage'
+      '__envSet', '__envUnset', '__varSet', '__nextRequest', '__visualizerPayload', '__requestFieldLinks', '__scriptLanguage'
     ]);
     const contextKeys = Object.keys(context).filter(k => !reservedContextKeys.has(k));
     
@@ -896,8 +905,12 @@ window.addEventListener("message", async (event) => {
     if (__nextRequest !== undefined) {
       pm['__nextRequest'] = __nextRequest;
     }
+    if (__visualizerPayload !== undefined) {
+      pm['__visualizerPayload'] = __visualizerPayload;
+    }
 
     delete pm.sendRequest;
+    delete pm.visualizer;
     delete pm.traverseFields;
     delete pm.linkToRequest;
     delete pm.setBodyField;

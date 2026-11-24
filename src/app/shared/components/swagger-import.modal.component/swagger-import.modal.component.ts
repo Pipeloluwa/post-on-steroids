@@ -32,6 +32,7 @@ export class SwaggerImportModalComponent {
     isImporting = signal(false);
     saveToBackend = signal(true);
     importIntoActiveCapsule = signal(false);
+    openInTabs = signal(true);
     hasActiveCapsule = computed(() => Boolean(this.tabStateService.activeCapsuleId()));
     activeCapsuleName = computed(() => this.tabStateService.activeCapsuleName() || 'Current Capsule');
 
@@ -99,7 +100,8 @@ export class SwaggerImportModalComponent {
                 variables: result.variables
             }, {
                 saveToBackend: this.saveToBackend(),
-                targetCapsuleId: activeCapId
+                targetCapsuleId: activeCapId,
+                openTabs: this.openInTabs()
             });
 
             const destinationLabel = activeCapId ? this.activeCapsuleName() : result.collectionName;

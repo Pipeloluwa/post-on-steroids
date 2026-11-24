@@ -1,7 +1,7 @@
 @if (isOpen()) {
 <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" (click)="close()">
     <div role="dialog" aria-modal="true" aria-labelledby="variables-modal-title"
-        class="w-[760px] max-w-[96vw] max-h-[min(86dvh,calc(100dvh-28px))] bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
+        class="w-[760px] max-w-[96vw] h-[min(86dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
         (click)="stopProp($event)">
         <!-- Header -->
         <div class="p-4 border-b border-(--postonsteroids-border) flex flex-col gap-3">
@@ -98,6 +98,16 @@
                             }
                         </div>
                     }
+                    <button type="button" (click)="setSelectedEnabled(true)"
+                            class="px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 hover:bg-emerald-500/25 text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                        <mat-icon class="text-[14px]! size-[14px]!">toggle_on</mat-icon>
+                        <span>Turn On</span>
+                    </button>
+                    <button type="button" (click)="setSelectedEnabled(false)"
+                            class="px-2 py-1 rounded-lg bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) hover:bg-(--postonsteroids-bg-hover) text-xs font-semibold flex items-center gap-1 cursor-pointer">
+                        <mat-icon class="text-[14px]! size-[14px]!">toggle_off</mat-icon>
+                        <span>Turn Off</span>
+                    </button>
                     <button type="button" (click)="deleteSelected()"
                             class="px-2.5 py-1 rounded-lg bg-status-danger/15 border border-status-danger/35 text-status-danger hover:bg-status-danger/25 text-xs font-semibold flex items-center gap-1 cursor-pointer">
                         <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
@@ -117,11 +127,15 @@
 
             <div class="space-y-2">
                 <div
-                    class="grid grid-cols-[24px_26px_74px_1fr_1.2fr_64px] gap-x-2.5 px-2 text-[10.5px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider items-center">
+                    class="grid grid-cols-[24px_38px_74px_1fr_1.2fr_64px] gap-x-2.5 px-2 text-[10.5px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider items-center">
                     <input type="checkbox" [checked]="allSelected()" (change)="toggleSelectAll()"
                            title="Select all variables"
                            class="accent-(--postonsteroids-accent) cursor-pointer" />
-                    <span title="Enable/Disable variable in current scope">On</span>
+                    <label class="flex items-center gap-1 cursor-pointer select-none" title="Toggle all variables On/Off in active scope">
+                        <input type="checkbox" [checked]="allRowsEnabled()" (change)="toggleAllEnabled()"
+                               class="accent-emerald-500 cursor-pointer" />
+                        <span>On</span>
+                    </label>
                     <span>Type</span>
                     <span>Key</span>
                     <span>
@@ -132,7 +146,7 @@
 
                 @for (row of unifiedRows(); track row.rowId) {
                 <div
-                    class="grid grid-cols-[24px_26px_74px_1fr_1.2fr_64px] gap-x-2.5 items-center p-2 bg-(--postonsteroids-bg-secondary) rounded-lg border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/40">
+                    class="grid grid-cols-[24px_38px_74px_1fr_1.2fr_64px] gap-x-2.5 items-center p-2 bg-(--postonsteroids-bg-secondary) rounded-lg border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/40">
                     <!-- Multi-select checkbox -->
                     <input type="checkbox" [checked]="isRowSelected(row.rowId)" (change)="toggleRowSelection(row.rowId)"
                         title="Select variable for batch copy or delete"

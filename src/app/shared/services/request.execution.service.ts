@@ -1495,6 +1495,7 @@ export class RequestExecutionService {
                 : '';
             let postResponseLogs = '';
             let testResults: any[] = [];
+            let scriptVisualizerPayload: { template: string; data: any } | null | undefined = undefined;
             if (postScriptCode && postScriptCode.trim()) {
                 const context = this.buildScriptEnvContext({
                     url: finalUrl || resolvedUrl,
@@ -1522,6 +1523,9 @@ export class RequestExecutionService {
                 postResponseLogs = result.logs || '';
                 const mutated = this.applyScriptMutations(result.context, effectiveTabId);
                 if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
+                if (result.context && '__visualizerPayload' in result.context) {
+                    scriptVisualizerPayload = result.context['__visualizerPayload'] ?? null;
+                }
 
                 if (result.success && result.context) {
                     if (Array.isArray(result.context.testResults) && result.context.testResults.length > 0) {
@@ -1562,6 +1566,9 @@ export class RequestExecutionService {
                 );
                 const mutated = this.applyScriptMutations(testResult.context, effectiveTabId);
                 if (mutated.nextRequest !== undefined) scriptNextRequest = mutated.nextRequest;
+                if (testResult.context && '__visualizerPayload' in testResult.context) {
+                    scriptVisualizerPayload = testResult.context['__visualizerPayload'] ?? null;
+                }
                 if (testResult.context?.testResults && Array.isArray(testResult.context.testResults)) {
                     testResults = [...testResults, ...testResult.context.testResults];
                 } else if (testResult.logs) {
@@ -1681,6 +1688,7 @@ export class RequestExecutionService {
                 responseHeaders: responseHeaders.map(rh => ({ enabled: true, key: rh.key, value: rh.value })),
                 responseCookies,
                 testResults,
+                visualizerPayload: scriptVisualizerPayload !== undefined ? scriptVisualizerPayload : null,
                 scripts: {
                     ...freshState.scripts,
                     preRequestConsole: preRequestLogs,
@@ -1740,7 +1748,8 @@ export class RequestExecutionService {
                 responseTime,
                 responseSize,
                 responseHeaders: responseData.responseHeaders,
-                testResults
+                testResults,
+                visualizerPayload: responseData.visualizerPayload
             });
 
             this.recordHistory({

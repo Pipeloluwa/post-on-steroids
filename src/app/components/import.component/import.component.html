@@ -57,8 +57,8 @@
 
     <!-- Share Link Import Modal -->
     @if (showShareUrlModal()) {
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fadeIn">
-            <div class="w-full max-w-lg mx-4 p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-5">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fadeIn p-4">
+            <div class="w-full max-w-lg h-[min(78dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col justify-between gap-5 overflow-y-auto">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2.5">
                         <mat-icon class="text-purple-500">link</mat-icon>
@@ -86,6 +86,13 @@
                             <span>Import into current active capsule (<strong class="text-(--postonsteroids-accent)">{{ activeCapsuleName() }}</strong>)</span>
                         </label>
                     }
+                    <label class="flex items-center gap-2 text-xs text-(--postonsteroids-text-secondary) cursor-pointer select-none">
+                        <input type="checkbox"
+                               [checked]="openShareInTabs()"
+                               (change)="openShareInTabs.set($any($event.target).checked)"
+                               class="accent-(--postonsteroids-accent) cursor-pointer" />
+                        <span>Open all imported requests in horizontal tabs</span>
+                    </label>
                 </div>
 
                 <div class="flex justify-end gap-3 pt-2">
@@ -110,8 +117,8 @@
 
     <!-- Save to Backend Prompt Modal for JSON Import -->
     @if (showSavePrompt() && pendingImport(); as pending) {
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs animate-fadeIn" (click)="cancelImport()">
-            <div class="w-full max-w-lg mx-4 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden" (click)="$event.stopPropagation()">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs animate-fadeIn p-4" (click)="cancelImport()">
+            <div class="w-full max-w-lg h-[min(86dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden" (click)="$event.stopPropagation()">
                 <!-- Header -->
                 <div class="px-6 py-4 border-b border-(--postonsteroids-border) flex items-center justify-between">
                     <div class="flex items-center gap-3">
@@ -185,6 +192,15 @@
                             </div>
                         </div>
                     }
+
+                    <!-- Workspace Options -->
+                    <label class="flex items-center gap-2 text-xs text-(--postonsteroids-text-primary) cursor-pointer select-none px-1">
+                        <input type="checkbox"
+                               [checked]="openFileInTabs()"
+                               (change)="openFileInTabs.set($any($event.target).checked)"
+                               class="accent-(--postonsteroids-accent) cursor-pointer" />
+                        <span>Open all imported requests in horizontal tabs (uncheck to keep sidebar clean)</span>
+                    </label>
 
                     <!-- Prompt Text -->
                     <p class="text-xs text-(--postonsteroids-text-secondary) leading-relaxed">

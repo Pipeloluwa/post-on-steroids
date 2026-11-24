@@ -30,6 +30,15 @@ import {
     SchemaValidationResult,
     ResponseDiffResult
 } from '../../../shared/utils/json-schema.util';
+import {
+    VisualizerChartType,
+    VisualizerDataPoint,
+    VisualizerExtractedDataset,
+    extractVisualizerDataset,
+    buildChartSeries,
+    buildResponseRelationshipGraph,
+    compilePostmanVisualizerHtml
+} from '../../../shared/utils/response-visualizer.util';
 
 @Component({
     selector: 'app-response-viewer-component',
@@ -68,15 +77,32 @@ export class ResponseViewerComponent {
             }
         });
     }
-    activeMode = computed<'Pretty' | 'Raw' | 'Preview'>(() => {
+    activeMode = computed<'Pretty' | 'Raw' | 'Preview' | 'Visualize'>(() => {
         const stateMode = this.tabState()?.responseActiveMode;
-        if (stateMode === 'Preview' || stateMode === 'Visualize') return 'Preview';
+        if (stateMode === 'Visualize') return 'Visualize';
+        if (stateMode === 'Preview') return 'Preview';
         if (stateMode === 'Pretty' || stateMode === 'Raw') return stateMode;
         return 'Pretty';
     });
     visualizerFilter = signal<string>('');
     visualizerSortCol = signal<string>('');
     visualizerSortAsc = signal<boolean>(true);
+    visualizerChartType = signal<VisualizerChartType>('bar');
+    visualizerArrayPath = signal<string>('');
+    visualizerLabelField = signal<string>('');
+    visualizerValueField = signal<string>('');
+    hoveredChartIndex = signal<number | null>(null);
+    readonly visualizerModes: { id: VisualizerChartType; label: string; icon: string }[] = [
+        { id: 'bar', label: 'Bar', icon: 'bar_chart' },
+        { id: 'line', label: 'Line', icon: 'show_chart' },
+        { id: 'area', label: 'Area', icon: 'area_chart' },
+        { id: 'pie', label: 'Pie', icon: 'pie_chart' },
+        { id: 'donut', label: 'Donut', icon: 'donut_large' },
+        { id: 'scatter', label: 'Scatter', icon: 'scatter_plot' },
+        { id: 'graph', label: 'Graph', icon: 'hub' },
+        { id: 'table', label: 'Table', icon: 'table_chart' },
+        { id: 'kpi', label: 'KPI', icon: 'analytics' }
+    ];
     collapsedPreviewPaths = signal<Set<string>>(new Set());
     expandedPreviewCells = signal<Set<string>>(new Set());
     activeRightPanel = signal<'none' | 'schema' | 'compare'>('none');
@@ -272,13 +298,15 @@ export class ResponseViewerComponent {
         }
     }
     setMode(mode: 'Pretty' | 'Raw' | 'Preview' | 'Visualize') {
-        const normalized: 'Pretty' | 'Raw' | 'Preview' = mode === 'Visualize' ? 'Preview' : mode;
-        if (typeof localStorage !== 'undefined' && normalized !== 'Preview') {
-            localStorage.setItem('onsteroids_response_active_mode', normalized);
+        if (typeof localStorage !== 'undefined' && mode !== 'Preview' && mode !== 'Visualize') {
+            localStorage.setItem('onsteroids_response_active_mode', mode);
+        }
+        if (mode === 'Visualize' && this.hasCustomScriptVisualizer() && this.visualizerChartType() !== 'custom') {
+            this.visualizerChartType.set('custom');
         }
         const id = this.tabId();
         if (id) {
-            this.tabStateService.updateState(id, { responseActiveMode: normalized }, false);
+            this.tabStateService.updateState(id, { responseActiveMode: mode }, false);
         }
     }
 
@@ -686,6 +714,179 @@ export class ResponseViewerComponent {
 
         return { kind: 'empty', columns: [], rows: [], totalCount: 0, sourceLabel: '' };
     });
+
+    hasCustomScriptVisualizer = computed<boolean>(() => {
+        const payload = this.tabState()?.visualizerPayload;
+        return Boolean(payload && typeof payload.template === 'string' && payload.template.trim().length > 0);
+    });
+
+    customVisualizerHtml = computed<SafeHtml | null>(() => {
+        const payload = this.tabState()?.visualizerPayload;
+        if (!payload?.template) return null;
+        const html = compilePostmanVisualizerHtml(payload.template, payload.data ?? this.parsedResponseValue());
+        return this.sanitizer.bypassSecurityTrustHtml(html);
+    });
+
+    visualizerDataset = computed<VisualizerExtractedDataset>(() => {
+        const parsed = this.parsedResponseValue();
+        return extractVisualizerDataset(parsed, this.visualizerArrayPath() || null);
+    });
+
+    effectiveLabelField = computed<string>(() => {
+        const ds = this.visualizerDataset();
+        const chosen = this.visualizerLabelField();
+        if (chosen && ds.columns.includes(chosen)) return chosen;
+        return ds.categoricalFields[0] || ds.columns[0] || '';
+    });
+
+    effectiveValueField = computed<string>(() => {
+        const ds = this.visualizerDataset();
+        const chosen = this.visualizerValueField();
+        if (chosen && ds.columns.includes(chosen)) return chosen;
+        return ds.numericFields[0] || '';
+    });
+
+    visualizerSeries = computed<VisualizerDataPoint[]>(() => {
+        return buildChartSeries(
+            this.visualizerDataset(),
+            this.effectiveLabelField(),
+            this.effectiveValueField(),
+            32
+        );
+    });
+
+    visualizerBarGeometry = computed(() => {
+        const series = this.visualizerSeries();
+        const width = 680;
+        const height = 270;
+        const padLeft = 56;
+        const padRight = 24;
+        const padTop = 22;
+        const padBottom = 56;
+        const plotW = width - padLeft - padRight;
+        const plotH = height - padTop - padBottom;
+        const maxVal = Math.max(1, ...series.map(s => Math.abs(s.value)));
+        const count = Math.max(1, series.length);
+        const slotW = plotW / count;
+        const barW = Math.max(10, Math.min(48, slotW * 0.66));
+
+        const bars = series.map((pt, i) => {
+            const ratio = Math.max(0, pt.value) / maxVal;
+            const h = Math.max(2, ratio * plotH);
+            const x = padLeft + i * slotW + (slotW - barW) / 2;
+            const y = padTop + plotH - h;
+            const cx = padLeft + i * slotW + slotW / 2;
+            return { ...pt, x, y, width: barW, height: h, cx };
+        });
+
+        const linePoints = bars.map(b => `${b.cx},${b.y}`).join(' ');
+        const areaPath = bars.length > 0
+            ? `M ${bars[0].cx},${padTop + plotH} L ${bars.map(b => `${b.cx},${b.y}`).join(' L ')} L ${bars[bars.length - 1].cx},${padTop + plotH} Z`
+            : '';
+
+        const gridLines = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+            y: Math.round(padTop + plotH * (1 - t)),
+            label: String(Math.round(maxVal * t * 100) / 100)
+        }));
+
+        return { width, height, padLeft, padBottom, plotH, maxVal, bars, linePoints, areaPath, gridLines };
+    });
+
+    visualizerPieGeometry = computed(() => {
+        const series = this.visualizerSeries().filter(s => s.value > 0);
+        const total = series.reduce((acc, s) => acc + s.value, 0);
+        if (total <= 0) return { total: 0, slices: [] as { path: string; color: string; label: string; value: number; pct: number; index: number }[] };
+
+        let angle = -Math.PI / 2;
+        const cx = 135;
+        const cy = 135;
+        const r = 108;
+        const slices = series.map((pt, idx) => {
+            const sliceAngle = (pt.value / total) * Math.PI * 2;
+            const endAngle = angle + sliceAngle;
+            const largeArc = sliceAngle > Math.PI ? 1 : 0;
+            const x1 = cx + r * Math.cos(angle);
+            const y1 = cy + r * Math.sin(angle);
+            const x2 = cx + r * Math.cos(endAngle);
+            const y2 = cy + r * Math.sin(endAngle);
+            const path = series.length === 1
+                ? `M ${cx},${cy - r} A ${r},${r} 0 1,1 ${cx - 0.01},${cy - r} Z`
+                : `M ${cx},${cy} L ${x1.toFixed(2)},${y1.toFixed(2)} A ${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`;
+            angle = endAngle;
+            return {
+                index: idx,
+                path,
+                color: pt.color,
+                label: pt.label,
+                value: pt.value,
+                pct: Math.round((pt.value / total) * 1000) / 10
+            };
+        });
+        return { total: Math.round(total * 100) / 100, slices };
+    });
+
+    visualizerScatterGeometry = computed(() => {
+        const series = this.visualizerSeries();
+        const width = 680;
+        const height = 270;
+        const pad = 48;
+        const plotW = width - pad * 2;
+        const plotH = height - pad * 2;
+        const xs = series.map(s => s.xValue ?? s.index);
+        const minX = xs.length ? Math.min(...xs) : 0;
+        const maxX = xs.length ? Math.max(...xs) : 1;
+        const maxY = Math.max(1, ...series.map(s => s.value));
+        const spanX = Math.max(1, maxX - minX);
+        const points = series.map(pt => ({
+            ...pt,
+            cx: pad + (((pt.xValue ?? pt.index) - minX) / spanX) * plotW,
+            cy: pad + plotH - (Math.max(0, pt.value) / maxY) * plotH
+        }));
+        return { width, height, pad, plotW, plotH, points };
+    });
+
+    visualizerGraphData = computed(() => {
+        return buildResponseRelationshipGraph(this.parsedResponseValue());
+    });
+
+    visualizerTableRows = computed(() => {
+        const ds = this.visualizerDataset();
+        const filter = this.visualizerFilter().trim().toLowerCase();
+        const sortCol = this.visualizerSortCol();
+        const sortAsc = this.visualizerSortAsc();
+        let rows = ds.rows;
+        if (filter) {
+            rows = rows.filter(r =>
+                ds.columns.some(c => String(r[c] ?? '').toLowerCase().includes(filter))
+            );
+        }
+        if (sortCol && ds.columns.includes(sortCol)) {
+            rows = [...rows].sort((a, b) => {
+                const cmp = String(a[sortCol] ?? '').localeCompare(String(b[sortCol] ?? ''), undefined, { numeric: true });
+                return sortAsc ? cmp : -cmp;
+            });
+        }
+        return rows;
+    });
+
+    exportVisualizerCsv(): void {
+        const ds = this.visualizerDataset();
+        const rows = this.visualizerTableRows();
+        if (ds.columns.length === 0 || rows.length === 0) return;
+        const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const lines = [
+            ds.columns.map(esc).join(','),
+            ...rows.map(r => ds.columns.map(c => esc(r[c])).join(','))
+        ];
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(this.tabState()?.name || 'response').replace(/[^a-z0-9-_]+/gi, '_')}_visualize.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.notificationService.notify('Exported visualized dataset as CSV.', 'success');
+    }
 
     onVisualizerFilterChange(val: string) {
         this.visualizerFilter.set(val || '');

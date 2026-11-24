@@ -3,20 +3,21 @@ import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { CookieJarService } from '../services/cookie-jar.service';
 import { NotificationService } from '../services/notification.service';
+import { BodyPortalDirective } from '../directives/body-portal.directive';
 
 @Component({
   selector: 'app-cookie-manager-modal',
-  imports: [FormsModule, MatIcon],
+  imports: [FormsModule, MatIcon, BodyPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscape($event)'
   },
   template: `
     @if (isOpen()) {
-      <div class="fixed inset-0 z-110 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4"
+      <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4"
            (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="cookie-mgr-title"
-             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[min(85dvh,calc(100dvh-28px))]"
+             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col h-[min(86dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)]"
              (click)="$event.stopPropagation()">
 
           <div class="px-5 py-3.5 border-b border-(--postonsteroids-border) flex items-center justify-between bg-(--postonsteroids-bg-tertiary)/50">
