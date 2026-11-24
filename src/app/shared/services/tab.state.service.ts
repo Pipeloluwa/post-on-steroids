@@ -196,12 +196,15 @@ export interface RequestState {
 }
 
 
+export type CapsuleLockMode = 'unlocked' | 'read-only' | 'edit-only' | 'locked';
+
 export interface Capsule {
     id: string;
     name: string;
     createdAt: number;
     autoAuthEnabled?: 'off' | 'individual' | 'global' | string;
     autoAuthEndpointId?: string | null;
+    lockMode?: CapsuleLockMode;
     isLocalOnly?: boolean;
 }
 
@@ -217,20 +220,88 @@ export class TabStateService {
     private injector = inject(Injector);
     private states = signal<Map<string, RequestState>>(new Map());
     openTabIds = signal<string[]>([]);
-    private editGuards: Array<(capsuleId: string) => string | null> = [];
+    private editGuards: Array<(capsuleId: string, operation?: 'edit' | 'structure' | 'delete') => string | null> = [];
     private lastEditBlockToastAt = 0;
 
-    registerEditGuard(guard: (capsuleId: string) => string | null): () => void {
+    registerEditGuard(guard: (capsuleId: string, operation?: 'edit' | 'structure' | 'delete') => string | null): () => void {
         this.editGuards.push(guard);
         return () => {
             this.editGuards = this.editGuards.filter(g => g !== guard);
         };
     }
 
-    getEditBlockReason(capsuleId?: string): string | null {
+    private loadLocalLockModes(): Record<string, CapsuleLockMode> {
+        if (!this.isBrowser) return {};
+        try {
+            const raw = localStorage.getItem('onsteroids_capsule_lock_modes');
+            const parsed = raw ? JSON.parse(raw) : {};
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+
+    private persistLocalLockMode(capsuleId: string, mode: CapsuleLockMode): void {
+        if (!this.isBrowser || !capsuleId) return;
+        try {
+            const map = this.loadLocalLockModes();
+            if (mode === 'unlocked') {
+                delete map[capsuleId];
+            } else {
+                map[capsuleId] = mode;
+            }
+            localStorage.setItem('onsteroids_capsule_lock_modes', JSON.stringify(map));
+        } catch {}
+    }
+
+    getCapsuleLockMode(capsuleId?: string | null): CapsuleLockMode {
         const capId = capsuleId || this.activeCapsuleId();
+        if (!capId) return 'unlocked';
+        const cap = this.capsules().find(c => c.id === capId);
+        if (cap?.lockMode) return cap.lockMode;
+        return this.loadLocalLockModes()[capId] || 'unlocked';
+    }
+
+    readonly activeCapsuleLockMode = computed<CapsuleLockMode>(() => {
+        const capId = this.activeCapsuleId();
+        if (!capId) return 'unlocked';
+        const cap = this.capsules().find(c => c.id === capId);
+        return cap?.lockMode || this.loadLocalLockModes()[capId] || 'unlocked';
+    });
+
+    setCapsuleLockMode(capsuleId: string, mode: CapsuleLockMode): void {
+        if (!capsuleId) return;
+        this.capsules.update(list => list.map(c => c.id === capsuleId ? { ...c, lockMode: mode } : c));
+        this.persistLocalLockMode(capsuleId, mode);
+        if (this.isBrowser) {
+            try {
+                localStorage.setItem('onsteroids_capsules', JSON.stringify(this.capsules()));
+            } catch {}
+        }
+        this.scheduleGroupsVariableSync(capsuleId);
+    }
+
+    private notifyEditBlocked(reason: string): void {
+        const now = Date.now();
+        if (now - this.lastEditBlockToastAt > 2000) {
+            this.lastEditBlockToastAt = now;
+            this.notificationService.notify(reason, 'warning');
+        }
+    }
+
+    getEditBlockReason(capsuleId?: string, operation: 'edit' | 'structure' | 'delete' = 'edit'): string | null {
+        const capId = capsuleId || this.activeCapsuleId();
+        const lockMode = this.getCapsuleLockMode(capId);
+        if (lockMode === 'read-only' || lockMode === 'locked') {
+            return lockMode === 'read-only'
+                ? 'Capsule is locked to Read-Only mode. Change lock mode to modify requests or structure.'
+                : 'Capsule is fully Locked. Unlock the capsule to make changes.';
+        }
+        if (lockMode === 'edit-only' && (operation === 'structure' || operation === 'delete')) {
+            return 'Capsule is in Edit-Only mode: existing request values can be edited, but adding, renaming, moving, or deleting requests/folders is locked.';
+        }
         for (const guard of this.editGuards) {
-            const msg = guard(capId);
+            const msg = guard(capId, operation);
             if (msg) return msg;
         }
         return null;
@@ -1193,6 +1264,7 @@ export class TabStateService {
         updatedAt: number;
         autoAuthEnabled?: string;
         autoAuthEndpointId?: string | null;
+        lockMode?: CapsuleLockMode;
         requestMeta?: Record<string, any>;
     } {
         const groups = this.getGroupsForCapsule(capId);
@@ -1202,6 +1274,7 @@ export class TabStateService {
         const cap = this.capsules().find(c => c.id === capId);
         const autoAuthEnabled = (capId === this.activeCapsuleId() ? this.autoAuthEnabled() : cap?.autoAuthEnabled) || 'off';
         const autoAuthEndpointId = (capId === this.activeCapsuleId() ? this.autoAuthEndpointId() : cap?.autoAuthEndpointId) || null;
+        const lockMode = this.getCapsuleLockMode(capId);
 
         const reqs = this.getCapsuleRequestsSync(capId);
         const requestMeta: Record<string, any> = {};
@@ -1234,6 +1307,7 @@ export class TabStateService {
             updatedAt,
             autoAuthEnabled,
             autoAuthEndpointId,
+            lockMode,
             requestMeta
         };
     }
@@ -1245,6 +1319,7 @@ export class TabStateService {
         updatedAt?: number;
         autoAuthEnabled?: string;
         autoAuthEndpointId?: string | null;
+        lockMode?: CapsuleLockMode;
         requestMeta?: Record<string, any>;
     }): void {
         if (!capId || this.deletingCapsuleIds.has(capId) || !payload || typeof payload !== 'object') return;
@@ -1334,13 +1409,17 @@ export class TabStateService {
             }));
         }
 
-        if (payload.autoAuthEnabled !== undefined || payload.autoAuthEndpointId !== undefined) {
+        if (payload.autoAuthEnabled !== undefined || payload.autoAuthEndpointId !== undefined || payload.lockMode !== undefined) {
+            if (payload.lockMode) {
+                this.persistLocalLockMode(capId, payload.lockMode);
+            }
             this.capsules.update(list => list.map(c => {
                 if (c.id !== capId) return c;
                 return {
                     ...c,
                     autoAuthEnabled: (payload.autoAuthEnabled as any) || c.autoAuthEnabled || 'off',
-                    autoAuthEndpointId: payload.autoAuthEndpointId !== undefined ? payload.autoAuthEndpointId : (c.autoAuthEndpointId ?? null)
+                    autoAuthEndpointId: payload.autoAuthEndpointId !== undefined ? payload.autoAuthEndpointId : (c.autoAuthEndpointId ?? null),
+                    lockMode: payload.lockMode || c.lockMode
                 };
             }));
             if (capId === this.activeCapsuleId()) {
@@ -1518,6 +1597,11 @@ export class TabStateService {
 
     createRequestGroup(name: string = 'New Folder', initialRequestIds: string[] = [], capsuleId?: string): RequestGroup {
         const capId = capsuleId || this.activeCapsuleId();
+        const blockReason = this.getEditBlockReason(capId, 'structure');
+        if (blockReason) {
+            this.notifyEditBlocked(blockReason);
+            throw new Error(blockReason);
+        }
         const currentGroups = this.getGroupsForCapsule(capId);
         const uniqueReqIds = Array.from(new Set(initialRequestIds.filter(Boolean)));
         const initSet = new Set(uniqueReqIds);
@@ -1835,6 +1919,11 @@ export class TabStateService {
     /** Atomically delete marked group folder(s) and/or request(s) without popping requests outside folders first */
     async deleteRequestGroupsAndRequests(groupIds: string[], requestIds: string[] = [], capsuleId?: string): Promise<void> {
         const capId = capsuleId || this.activeCapsuleId();
+        const blockReason = this.getEditBlockReason(capId, 'delete');
+        if (blockReason) {
+            this.notifyEditBlocked(blockReason);
+            return;
+        }
         const groupIdSet = new Set((groupIds || []).filter(Boolean));
         const currentGroups = this.getGroupsForCapsule(capId);
 
@@ -1984,6 +2073,11 @@ export class TabStateService {
 
     moveRequestsToGroup(requestIds: string[], targetGroupId: string | null, capsuleId?: string): void {
         const capId = capsuleId || this.activeCapsuleId();
+        const blockReason = this.getEditBlockReason(capId, 'structure');
+        if (blockReason) {
+            this.notifyEditBlocked(blockReason);
+            return;
+        }
         const moveSet = new Set(requestIds.filter(Boolean));
         if (moveSet.size === 0) return;
 
@@ -3430,6 +3524,11 @@ export class TabStateService {
 
     async deleteCapsule(id: string): Promise<void> {
         if (!id) return;
+        const blockReason = this.getEditBlockReason(id, 'delete');
+        if (blockReason) {
+            this.notifyEditBlocked(blockReason);
+            return;
+        }
 
         clearTimeout(this.groupsVarSyncTimeout);
         clearTimeout(this.autoSaveTimeout);
@@ -4150,7 +4249,9 @@ export class TabStateService {
             throw new Error('Please sign in to share this capsule.');
         }
 
-        // Flush capsule variables, __capsule_groups__, and __var_sources__ to backend before generating share snapshot
+        const currentLockMode = this.getCapsuleLockMode(capsuleId);
+
+        // Flush capsule variables, __capsule_groups__ (including lockMode), and __var_sources__ to backend before generating share snapshot
         const vs = this.getVariableService();
         if (vs) {
             try {
@@ -4161,7 +4262,7 @@ export class TabStateService {
         const res = await firstValueFrom(
             this.http.post<{ data: { shareToken: string; shareUrl: string } }>(
                 `${API_BASE_URL}/capsule/${capsuleId}/share`,
-                {}
+                { lockMode: currentLockMode }
             )
         );
 
@@ -4169,7 +4270,8 @@ export class TabStateService {
             const baseUrl = getAppBaseUrl();
             const isFile = typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin.startsWith('file:'));
             const hasHash = isFile || (typeof window !== 'undefined' && window.location.hash && window.location.hash.startsWith('#/'));
-            return `${baseUrl}${hasHash ? '/#/' : '/'}import?share=${res.data.shareToken}`;
+            const lockSuffix = currentLockMode !== 'unlocked' ? `&lockMode=${encodeURIComponent(currentLockMode)}` : '';
+            return `${baseUrl}${hasHash ? '/#/' : '/'}import?share=${res.data.shareToken}${lockSuffix}`;
         }
         throw new Error('Failed to generate share link');
     }
@@ -4598,6 +4700,7 @@ export class TabStateService {
             name: string;
             autoAuthEnabled?: string;
             autoAuthEndpointId?: string | null;
+            lockMode?: CapsuleLockMode;
             requests: RequestState[];
             groups?: RequestGroup[];
             requestOrder?: string[];
@@ -4670,8 +4773,12 @@ export class TabStateService {
                         name: capData.name,
                         autoAuthEnabled: capData.autoAuthEnabled || 'off',
                         autoAuthEndpointId: capData.autoAuthEndpointId || null,
+                        lockMode: capInput?.lockMode || capData.lockMode || 'unlocked',
                         createdAt: new Date(capData.createdAt).getTime() || Date.now()
                     };
+                    if (newCap.lockMode && newCap.lockMode !== 'unlocked') {
+                        this.persistLocalLockMode(newCap.id, newCap.lockMode);
+                    }
 
                     this.capsules.update(list => {
                         const exists = list.some(c => c.id === newCap.id);
@@ -4868,9 +4975,13 @@ export class TabStateService {
                     name: c.name.trim() || 'Imported Capsule',
                     autoAuthEnabled: c.autoAuthEnabled || 'off',
                     autoAuthEndpointId: c.autoAuthEndpointId || null,
+                    lockMode: c.lockMode || 'unlocked',
                     createdAt: Date.now(),
                     isLocalOnly: true
                 };
+                if (newCap.lockMode && newCap.lockMode !== 'unlocked') {
+                    this.persistLocalLockMode(newCap.id, newCap.lockMode);
+                }
 
                 this.capsules.update(list => {
                     const exists = list.some(item => item.id === newCap.id);
@@ -5031,22 +5142,33 @@ export class TabStateService {
 
     async importCapsuleFromUrl(urlOrToken: string, targetCapsuleId?: string | null): Promise<{ capsuleName: string; requestsCount: number }> {
         let token = urlOrToken.trim();
+        let urlLockMode: CapsuleLockMode | undefined;
         if (token.includes('share=')) {
             try {
                 const parseableUrl = /^https?:\/\//i.test(token) ? token : `https://${token}`;
                 const url = new URL(parseableUrl);
                 let param = url.searchParams.get('share');
+                let lockParam = url.searchParams.get('lockMode');
                 if (!param && url.hash.includes('share=')) {
                     const hashIndex = url.hash.indexOf('?');
                     if (hashIndex !== -1) {
                         const hashSearch = url.hash.substring(hashIndex);
-                        param = new URLSearchParams(hashSearch).get('share');
+                        const hParams = new URLSearchParams(hashSearch);
+                        param = hParams.get('share');
+                        if (!lockParam) lockParam = hParams.get('lockMode');
                     }
+                }
+                if (lockParam && ['unlocked', 'read-only', 'edit-only', 'locked'].includes(lockParam)) {
+                    urlLockMode = lockParam as CapsuleLockMode;
                 }
                 token = param || token;
             } catch {
                 const match = token.match(/[?&]share=([^&#]+)/);
                 if (match) token = decodeURIComponent(match[1]);
+                const lockMatch = token.match(/[?&]lockMode=([^&#]+)/);
+                if (lockMatch && ['unlocked', 'read-only', 'edit-only', 'locked'].includes(decodeURIComponent(lockMatch[1]))) {
+                    urlLockMode = decodeURIComponent(lockMatch[1]) as CapsuleLockMode;
+                }
             }
         } else if (token.includes('/share/')) {
             const parts = token.split('/share/');
@@ -5082,6 +5204,11 @@ export class TabStateService {
         let sharedOrder: string[] = [];
         let sharedAutoAuthEnabled: string = shared.autoAuthEnabled || 'off';
         let sharedAutoAuthEndpointId: string | null = shared.autoAuthEndpointId || null;
+        let sharedLockMode: CapsuleLockMode = (
+            shared.lockMode && ['unlocked', 'read-only', 'edit-only', 'locked'].includes(shared.lockMode)
+                ? shared.lockMode
+                : (urlLockMode || 'unlocked')
+        );
         const sharedVarSources: Record<string, any> = {};
 
         if (Array.isArray(shared.variables)) {
@@ -5090,6 +5217,9 @@ export class TabStateService {
             if (rawGrpVal && typeof rawGrpVal === 'string') {
                 try {
                     const parsedGrp = JSON.parse(rawGrpVal);
+                    if (parsedGrp?.lockMode && ['unlocked', 'read-only', 'edit-only', 'locked'].includes(parsedGrp.lockMode)) {
+                        sharedLockMode = parsedGrp.lockMode as CapsuleLockMode;
+                    }
                     if (Array.isArray(parsedGrp?.groups)) {
                         sharedGroups = parsedGrp.groups.map((g: any) => {
                             const newGId = 'grp_' + this.createId();
@@ -5182,6 +5312,7 @@ export class TabStateService {
                 name: capName,
                 autoAuthEnabled: sharedAutoAuthEnabled,
                 autoAuthEndpointId: sharedAutoAuthEndpointId,
+                lockMode: sharedLockMode,
                 requests: requestsToSave,
                 groups: sharedGroups,
                 requestOrder: sharedOrder,
@@ -5190,6 +5321,13 @@ export class TabStateService {
             }],
             variables: extractedVars
         }, targetCapsuleId ? { targetCapsuleId } : undefined);
+
+        const targetCapObj = targetCapsuleId
+            ? this.capsules().find(c => c.id === targetCapsuleId)
+            : this.capsules().find(c => c.id === this.activeCapsuleId());
+        if (targetCapObj && sharedLockMode !== 'unlocked') {
+            this.setCapsuleLockMode(targetCapObj.id, sharedLockMode);
+        }
 
         const resolvedName = targetCapsuleId
             ? (this.capsules().find(c => c.id === targetCapsuleId)?.name || capName)
@@ -5374,6 +5512,11 @@ export class TabStateService {
     }
 
     async renameCapsule(id: string, name: string): Promise<void> {
+        const blockReason = this.getEditBlockReason(id, 'structure');
+        if (blockReason) {
+            this.notifyEditBlocked(blockReason);
+            return;
+        }
         const trimmed = name.trim();
         if (!trimmed) return;
 
@@ -6669,7 +6812,7 @@ export class TabStateService {
             editorScrollPositions: {},
             bodyWrapStyle: (this.isBrowser ? localStorage.getItem('onsteroids_body_wrap_style') as any : null) || 'word-wrap',
             responseWrapStyle: (this.isBrowser ? localStorage.getItem('onsteroids_response_wrap_style') as any : null) || 'word-wrap',
-            responseActiveMode: (this.isBrowser ? localStorage.getItem('onsteroids_response_active_mode') as any : null) || 'Pretty',
+            responseActiveMode: 'Pretty',
             consoleWrap: this.isBrowser ? localStorage.getItem('onsteroids_console_wrap') === 'true' : false,
             executionToken: 0,
         };

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, effect, inje
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { TerminalService } from '../services/terminal.service';
+import { SubscriptionService } from '../services/subscription.service';
 import { APP_EDITION } from '../../../environments/edition';
 
 @Component({
@@ -22,16 +23,16 @@ import { APP_EDITION } from '../../../environments/edition';
            [class.flex-1]="inline()"
            [class.h-full]="inline()"
            [class.w-full]="inline()"
-           [style.height]="inline() ? null : '260px'">
+           [style.height]="inline() ? null : '280px'">
         <!-- Header Bar -->
         <div class="h-8 px-3 border-b border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary) flex items-center justify-between gap-3 shrink-0 text-[11px]">
           <div class="flex items-center gap-2 min-w-0">
             <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">terminal</mat-icon>
             <span class="font-bold">OnSteroid Terminal</span>
             <span class="px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) text-[9.5px] font-semibold text-(--postonsteroids-text-muted)">
-              {{ appEdition.label }}
+              {{ subscription.label() }}
             </span>
-            @if (appEdition.isProOrHigher && terminal.packagesService.packages().length > 0) {
+            @if (subscription.isProOrHigher() && terminal.packagesService.packages().length > 0) {
               <div class="hidden md:flex items-center gap-1 overflow-x-auto max-w-md">
                 <span class="text-[10px] text-(--postonsteroids-text-muted)">Sandbox packages:</span>
                 @for (pkg of terminal.packagesService.packages(); track pkg.name) {
@@ -52,12 +53,6 @@ import { APP_EDITION } from '../../../environments/edition';
                     class="px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-[10px] font-mono cursor-pointer">
               env
             </button>
-            @if (appEdition.isProOrHigher) {
-              <button type="button" (click)="prefill('npm install crypto-js')"
-                      class="px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-[10px] font-mono text-emerald-400 cursor-pointer">
-                + crypto-js
-              </button>
-            }
             <button type="button" (click)="terminal.clear()" title="Clear Terminal"
                     class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) cursor-pointer flex items-center">
               <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
@@ -71,8 +66,8 @@ import { APP_EDITION } from '../../../environments/edition';
           </div>
         </div>
 
-        <!-- Scrollable Output -->
-        <div #outputPane class="flex-1 overflow-y-auto px-3 py-2 font-mono text-[11.5px] leading-relaxed space-y-1 select-text">
+        <!-- Top Scrollable Output Pane -->
+        <div #outputPane class="h-[52%] min-h-[72px] overflow-y-auto px-3 py-2 font-mono text-[11.5px] leading-relaxed space-y-1 select-text">
           @for (line of terminal.lines(); track line.id) {
             <div class="whitespace-pre-wrap break-words"
                  [class.text-(--postonsteroids-accent)]="line.kind === 'input'"
@@ -85,33 +80,36 @@ import { APP_EDITION } from '../../../environments/edition';
           }
         </div>
 
-        <!-- Prompt Input -->
-        <form (submit)="submit($event)" class="h-8 px-3 border-t border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-secondary)/60 flex items-center gap-2 shrink-0">
-          <span class="font-mono text-xs font-bold text-(--postonsteroids-accent)">$</span>
-          <input #cmdInput type="text"
-                 [ngModel]="inputCmd()"
-                 (ngModelChange)="inputCmd.set($event)"
-                 (keydown)="onInputKeydown($event)"
-                 name="terminalCmd"
-                 autocomplete="off"
-                 spellcheck="false"
-                 [placeholder]="appEdition.isProOrHigher ? 'Type command (help, env use PROD, ls, run 1, npm install crypto-js)...' : 'Type command (help, env use PROD, vars, set k=v, ls, run 1)...'"
-                 class="flex-1 bg-transparent outline-none font-mono text-xs text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)" />
+        <!-- Full Lower Command Input Section up to the bottom demarcation -->
+        <div (click)="focusCmdInput()"
+             class="flex-1 min-h-[64px] px-3 py-2 border-t border-(--postonsteroids-border)/70 bg-(--postonsteroids-bg-secondary)/60 flex items-start gap-2 cursor-text">
+          <span class="font-mono text-xs font-bold text-(--postonsteroids-accent) pt-[1px] select-none">$</span>
+          <textarea #cmdInput
+                    [ngModel]="inputCmd()"
+                    (ngModelChange)="inputCmd.set($event)"
+                    (keydown)="onInputKeydown($event)"
+                    name="terminalCmd"
+                    autocomplete="off"
+                    spellcheck="false"
+                    rows="1"
+                    [placeholder]="subscription.isProOrHigher() ? 'Type command (help, env use PROD, ls, run 1, npm install <pkg>) — Enter to run, Shift+Enter for new line...' : 'Type command (help, env use PROD, vars, set k=v, ls, run 1) — Enter to run...'"
+                    class="flex-1 w-full h-full bg-transparent outline-none font-mono text-xs text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted) resize-none leading-relaxed"></textarea>
           @if (terminal.isBusy()) {
-            <mat-icon class="text-[14px]! size-[14px]! animate-spin text-(--postonsteroids-accent)">sync</mat-icon>
+            <mat-icon class="text-[14px]! size-[14px]! animate-spin text-(--postonsteroids-accent) mt-0.5 shrink-0">sync</mat-icon>
           }
-        </form>
+        </div>
       </div>
     }
   `
 })
 export class TerminalDrawerComponent {
   terminal = inject(TerminalService);
+  subscription = inject(SubscriptionService);
   readonly appEdition = APP_EDITION;
   inline = input<boolean>(false);
 
   @ViewChild('outputPane') outputPane?: ElementRef<HTMLDivElement>;
-  @ViewChild('cmdInput') cmdInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('cmdInput') cmdInput?: ElementRef<HTMLTextAreaElement>;
 
   inputCmd = signal('');
   private historyIdx = -1;
@@ -129,6 +127,10 @@ export class TerminalDrawerComponent {
     });
   }
 
+  focusCmdInput(): void {
+    this.cmdInput?.nativeElement?.focus();
+  }
+
   onGlobalKeydown(event: KeyboardEvent): void {
     if (this.inline()) return;
     if ((event.ctrlKey || event.metaKey) && event.key === '`') {
@@ -141,12 +143,19 @@ export class TerminalDrawerComponent {
   }
 
   onInputKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void this.submit(event);
+      return;
+    }
     const hist = this.terminal.commandHistory();
-    if (event.key === 'ArrowUp' && hist.length > 0) {
+    const ta = this.cmdInput?.nativeElement;
+    const isAtTop = !ta || ta.selectionStart === 0;
+    if (event.key === 'ArrowUp' && hist.length > 0 && isAtTop) {
       event.preventDefault();
       this.historyIdx = Math.min(hist.length - 1, this.historyIdx + 1);
       this.inputCmd.set(hist[this.historyIdx]);
-    } else if (event.key === 'ArrowDown') {
+    } else if (event.key === 'ArrowDown' && this.historyIdx !== -1) {
       event.preventDefault();
       if (this.historyIdx <= 0) {
         this.historyIdx = -1;

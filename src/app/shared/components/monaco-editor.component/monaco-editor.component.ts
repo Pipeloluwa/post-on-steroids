@@ -124,6 +124,7 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
 
   private static modelCache = new Map<string, any>();
   private static completionProvidersRegistered = new Set<string>();
+  private static stExtraLibRegistered = false;
   private static isMarkersHookInstalled = false;
   private static variableServiceRef: VariableService | null = null;
   public static lastFocusedEditor: MonacoEditorComponent | null = null;
@@ -390,17 +391,147 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
             noSyntaxValidation: false,
             diagnosticCodesToIgnore: [1232, 1234, 1375, 1378, 2304, 2307, 2552, 7016, 80001]
           });
+          if (!MonacoEditorComponent.stExtraLibRegistered && typeof monacoGlobal.languages.typescript.javascriptDefaults.addExtraLib === 'function') {
+            MonacoEditorComponent.stExtraLibRegistered = true;
+            monacoGlobal.languages.typescript.javascriptDefaults.addExtraLib(`
+              interface StVariableScope {
+                get(key: string): any;
+                has(key: string): boolean;
+                set(key: string, value: any): void;
+                unset?(key: string): void;
+                replaceIn?(input: string): string;
+                toObject?(): Record<string, any>;
+              }
+              interface StRuntimeApi {
+                headers: Array<{ enabled?: boolean; key: string; value: string }>;
+                body: any;
+                params: Array<{ enabled?: boolean; key: string; value: string }>;
+                bodyType: string;
+                rawType: string;
+                formData: any[];
+                urlEncodedData: any[];
+                graphql: { query: string; variables: any };
+                rawText: string;
+                responseStatus?: number;
+                responseTime?: number;
+                responseBody?: any;
+                responseHeaders?: Array<{ key: string; value: string }>;
+                environment: StVariableScope;
+                variables: StVariableScope;
+                collectionVariables: StVariableScope;
+                globals: StVariableScope;
+                request: {
+                  url: string;
+                  method: string;
+                  headers: {
+                    get(key: string): string | undefined;
+                    add(h: { key: string; value: any }): void;
+                    upsert(h: { key: string; value: any }): void;
+                    remove(key: string): void;
+                  };
+                  setHeader(name: string, value: any, targetRequest?: string): any;
+                  setParam(name: string, value: any, targetRequest?: string): any;
+                  setQuery(name: string, value: any, targetRequest?: string): any;
+                  setBodyField(path: string, value: any, targetRequest?: string): any;
+                };
+                response: {
+                  code: number;
+                  status: string;
+                  responseTime: number;
+                  text(): string;
+                  json(): any;
+                  headers: { get(key: string): string | undefined };
+                };
+                test(name: string, fn: () => any): void;
+                expect(actual: any): any;
+                sendRequest(req: string | { url: string; method?: string; header?: any; headers?: any; body?: any }, callback?: (err: any, res: any) => void): Promise<any>;
+                setNextRequest(requestNameOrId: string | null): void;
+                setHeader(name: string, value: any, targetRequest?: string): any;
+                setParam(name: string, value: any, targetRequest?: string): any;
+                setQuery(name: string, value: any, targetRequest?: string): any;
+                setBodyField(path: string, value: any, targetRequest?: string): any;
+                linkToRequest(targetType: 'body' | 'param' | 'query' | 'header', field: string, value: any, targetRequest?: string): any;
+                linkResponseToRequest(sourcePath: string, targetType: 'body' | 'param' | 'query' | 'header', targetField: string, targetRequest?: string): any;
+                traverseFields(target: any, paths: string[], transformFn: (val: any) => any, autoEncrypt?: boolean): Promise<any>;
+              }
+              declare const st: StRuntimeApi;
+              declare const pm: StRuntimeApi;
+              declare function getEnv(key: string): any;
+              declare function setEnv(key: string, value: any): void;
+              declare function unsetEnv(key: string): void;
+              declare function getVariable(key: string): any;
+              declare function setVariable(key: string, value: any): void;
+              declare function setHeader(name: string, value: any, targetRequest?: string): any;
+              declare function setParam(name: string, value: any, targetRequest?: string): any;
+              declare function setQuery(name: string, value: any, targetRequest?: string): any;
+              declare function setBodyField(path: string, value: any, targetRequest?: string): any;
+              declare function linkResponseToRequest(sourcePath: string, targetType: 'body' | 'param' | 'query' | 'header', targetField: string, targetRequest?: string): any;
+              declare function setNextRequest(requestNameOrId: string | null): void;
+              declare function test(name: string, fn: () => any): void;
+              declare function expect(actual: any): any;
+            `, 'ts:onsteroid-runtime.d.ts');
+          }
         }
 
         const targetLanguages = Array.from(new Set(['json', 'javascript', 'typescript', 'python', 'text', 'plaintext', 'html', 'xml', this.language()]));
         for (const lang of targetLanguages) {
           if (!MonacoEditorComponent.completionProvidersRegistered.has(lang)) {
             monacoGlobal.languages.registerCompletionItemProvider(lang, {
-              triggerCharacters: ['{', '$'],
+              triggerCharacters: ['{', '$', '.'],
               provideCompletionItems: (model: any, position: any) => {
                 const lineContent = model.getLineContent(position.lineNumber);
                 const textUntilCursor = lineContent.substring(0, position.column - 1);
                 const textAfterCursor = lineContent.substring(position.column - 1);
+
+                // 0. st.* / pm.* OnSteroid Script API autocomplete
+                const stMatch = textUntilCursor.match(/(?:^|[^\w$])(st|pm)\.([A-Za-z0-9_]*)$/);
+                if (stMatch && (lang === 'javascript' || lang === 'typescript' || lang === 'python')) {
+                  const prefix = stMatch[1];
+                  const replaceRange = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: position.column - stMatch[2].length,
+                    endColumn: position.column
+                  };
+                  const apiItems: Array<[string, string, string]> = [
+                    ['headers', `${prefix}.headers`, 'Request headers array ([{ enabled, key, value }])'],
+                    ['body', `${prefix}.body`, 'Parsed request body object'],
+                    ['params', `${prefix}.params`, 'Query parameters array ([{ enabled, key, value }])'],
+                    ['request', `${prefix}.request`, 'Current request object (url, method, headers, setters)'],
+                    ['response', `${prefix}.response`, 'Response object (code, status, json(), text(), headers)'],
+                    ['responseBody', `${prefix}.responseBody`, 'Parsed response body'],
+                    ['responseHeaders', `${prefix}.responseHeaders`, 'Response headers array'],
+                    ['responseStatus', `${prefix}.responseStatus`, 'HTTP response status code'],
+                    ['environment', `${prefix}.environment`, 'Active Environment scope (get, set, unset, has)'],
+                    ['variables', `${prefix}.variables`, 'Layered variable scope (env overrides capsule)'],
+                    ['collectionVariables', `${prefix}.collectionVariables`, 'Capsule-scoped variables (get, set, has)'],
+                    ['setHeader', 'setHeader(${1:"X-Custom"}, ${2:value})', 'Set or update a request header'],
+                    ['setParam', 'setParam(${1:"paramName"}, ${2:value})', 'Set a request parameter'],
+                    ['setQuery', 'setQuery(${1:"queryKey"}, ${2:value})', 'Set a URL query parameter'],
+                    ['setBodyField', 'setBodyField(${1:"field.path"}, ${2:value})', 'Set a nested field inside the request body'],
+                    ['linkResponseToRequest', 'linkResponseToRequest(${1:"data.token"}, ${2:"header"}, ${3:"Authorization"})', 'Extract response field into request param/header/body'],
+                    ['test', 'test(${1:"Status is 200"}, () => {\n  st.expect(st.response.code).to.equal(200);\n})', 'Register an automated test assertion'],
+                    ['expect', 'expect(${1:st.response.code}).to.equal(${2:200})', 'Chai-style assertion helper'],
+                    ['sendRequest', 'sendRequest(${1:"https://..."}).then(res => {})', 'Dispatch an async HTTP sub-request'],
+                    ['setNextRequest', 'setNextRequest(${1:"Next Request Name"})', 'Override chained next request in flow/runner']
+                  ];
+                  const suggestions = apiItems.map(([label, insert, doc], i) => ({
+                    label: `${prefix}.${label}`,
+                    filterText: label,
+                    sortText: `0_${String(i).padStart(2, '0')}`,
+                    kind: insert.includes('(')
+                      ? monacoGlobal.languages.CompletionItemKind.Method
+                      : monacoGlobal.languages.CompletionItemKind.Property,
+                    insertText: insert.startsWith(`${prefix}.`) ? label : insert,
+                    insertTextRules: insert.includes('${')
+                      ? monacoGlobal.languages.CompletionItemRules.InsertAsSnippet
+                      : undefined,
+                    range: replaceRange,
+                    detail: doc,
+                    documentation: doc
+                  }));
+                  return { suggestions, incomplete: false };
+                }
 
                 // 1. Utility variables ($guid, $timestamp, $randomUUID, etc.)
                 const lastDollar = textUntilCursor.lastIndexOf('$');
@@ -1018,13 +1149,10 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         let pyHeaderIdx = -1;
         for (let i = 0; i < lines.length; i++) {
           const t = lines[i].trim();
-          if (!t || t.startsWith('#') || /^import\s+/.test(t) || /^from\s+[A-Za-z_][\w.]*\s+import\s+/.test(t)) {
-            continue;
-          }
           if (/^(?:async\s+)?def\s+\w+\s*\(.*\)\s*(?:->\s*[^:]+)?:/.test(t)) {
             pyHeaderIdx = i;
+            break;
           }
-          break;
         }
         if (pyHeaderIdx === -1) {
           if (this.lastValidContent && this.lastValidContent !== currentContent && /^\s*(?:async\s+)?def\s+/m.test(this.lastValidContent)) {
@@ -1038,21 +1166,14 @@ export class MonacoEditorComponent implements ControlValueAccessor, OnDestroy {
         return;
       }
 
-      // Find the boilerplate JS function header (allowing optional leading import/comment lines above it)
+      // Find the boilerplate JS function header anywhere below top-level imports/comments/helpers
       let fnHeaderIdx = -1;
       for (let i = 0; i < lines.length; i++) {
         const t = lines[i].trim();
-        if (!t || t.startsWith('//') || t.startsWith('/*') || t.startsWith('*') || /^import\s+/.test(t) || /^const\s+\w+\s*=\s*require\(/.test(t)) {
-          if (/^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(t)) {
-            fnHeaderIdx = i;
-            break;
-          }
-          continue;
-        }
         if (/^(?:async\s+)?function\s+\w+\s*\(.*\)\s*\{/.test(t)) {
           fnHeaderIdx = i;
+          break;
         }
-        break;
       }
 
       const isFirstLineValid = fnHeaderIdx !== -1;

@@ -5,6 +5,7 @@ import { VariableService } from './variable.service';
 import { EnvironmentService } from './environment.service';
 import { RequestExecutionService } from './request.execution.service';
 import { SandboxPackagesService } from './sandbox-packages.service';
+import { SubscriptionService } from './subscription.service';
 import { APP_EDITION } from '../../../environments/edition';
 import { isElectronApp } from '../utils/url.util';
 import { generateUUID } from '../utils/uuid.util';
@@ -26,6 +27,7 @@ export class TerminalService {
   private variableService = inject(VariableService);
   private envService = inject(EnvironmentService);
   private requestExecutor = inject(RequestExecutionService);
+  private subscription = inject(SubscriptionService);
   readonly packagesService = inject(SandboxPackagesService);
 
   isOpen = signal<boolean>(false);
@@ -262,13 +264,13 @@ export class TerminalService {
 
     // npm sandbox package installation & management (Professional & Enterprise)
     if (lower === 'npm list' || lower === 'npm ls') {
-      if (!APP_EDITION.isProOrHigher) {
-        this.appendLine('warn', 'Sandbox npm packages require OnSteroid Professional or Enterprise edition.');
+      if (!this.subscription.isProOrHigher()) {
+        this.appendLine('warn', 'Sandbox npm packages require an active Professional or Enterprise subscription.');
         return;
       }
       const list = this.packagesService.packages();
       if (list.length === 0) {
-        this.appendLine('info', 'No sandbox npm packages installed yet. Run e.g. "npm install crypto-js" or "npm install lodash".');
+        this.appendLine('info', 'No sandbox npm packages installed yet. Run e.g. "npm install <package-name>".');
       } else {
         this.appendLine(
           'code',
@@ -279,8 +281,8 @@ export class TerminalService {
     }
 
     if (/^npm\s+(?:install|i)\s+/i.test(cmd)) {
-      if (!APP_EDITION.isProOrHigher) {
-        this.appendLine('warn', 'Sandbox `npm install` is restricted to Professional & Enterprise editions.');
+      if (!this.subscription.isProOrHigher()) {
+        this.appendLine('warn', 'Sandbox `npm install` requires an active Professional or Enterprise subscription.');
         return;
       }
       const rawArgs = cmd.replace(/^npm\s+(?:install|i)\s+/i, '').trim().split(/\s+/).filter(a => !a.startsWith('-'));
@@ -307,8 +309,8 @@ export class TerminalService {
     }
 
     if (/^npm\s+(?:uninstall|rm|remove)\s+/i.test(cmd)) {
-      if (!APP_EDITION.isProOrHigher) {
-        this.appendLine('warn', 'Sandbox npm package management requires Professional or Enterprise edition.');
+      if (!this.subscription.isProOrHigher()) {
+        this.appendLine('warn', 'Sandbox npm package management requires an active Professional or Enterprise subscription.');
         return;
       }
       const target = cmd.replace(/^npm\s+(?:uninstall|rm|remove)\s+/i, '').trim();
@@ -317,7 +319,7 @@ export class TerminalService {
       return;
     }
 
-    // Native OS Shell fallback in Electron
+    // Native OS Shell fallback in Desktop App
     const electronApi = this.isBrowser ? (window as any).electronAPI : null;
     if (isElectronApp() && electronApi?.executeTerminalCommand) {
       this.isBusy.set(true);
@@ -339,7 +341,7 @@ export class TerminalService {
     this.appendLine(
       'warn',
       `Unknown command "${cmd}". Built-in commands: help, env, env use <name>, vars, set k=v, ls, run <req>, schedule <req> <sec>, schedule stop${
-        APP_EDITION.isProOrHigher ? ', npm install <pkg>, npm list, npm uninstall <pkg>' : ''
+        this.subscription.isProOrHigher() ? ', npm install <pkg>, npm list, npm uninstall <pkg>' : ''
       }. Full OS shell commands are available in Desktop App.`
     );
   }
@@ -357,7 +359,7 @@ export class TerminalService {
       '  schedule list|stop    List or stop recurring scheduled runs',
       '  clear                 Clear terminal screen'
     ];
-    if (APP_EDITION.isProOrHigher) {
+    if (this.subscription.isProOrHigher()) {
       lines.push(
         '',
         'Sandbox Package Commands (Professional & Enterprise):',

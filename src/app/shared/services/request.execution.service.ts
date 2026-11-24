@@ -77,6 +77,54 @@ export class RequestExecutionService {
         endAt?: number | null;
         status: 'waiting' | 'running';
     }>>({});
+    readonly triggerScheduleLogs = signal<Array<{
+        id: string;
+        timestamp: number;
+        tabId: string;
+        requestName: string;
+        method: string;
+        status: number;
+        durationMs: number;
+        testsPassed: number;
+        testsFailed: number;
+        error?: string;
+    }>>([]);
+
+    clearTriggerScheduleLogs(): void {
+        this.triggerScheduleLogs.set([]);
+    }
+
+    private resolveTextWithOverrides(input: string, overrideVars?: Record<string, string>): string {
+        if (!input) return '';
+        let text = input;
+        if (overrideVars && Object.keys(overrideVars).length > 0) {
+            const lowerMap = new Map<string, string>();
+            for (const [k, v] of Object.entries(overrideVars)) {
+                lowerMap.set(k.trim().toLowerCase(), String(v ?? ''));
+            }
+            text = text.replace(/\{\{\s*([^{}\r\n]+?)\s*\}\}/g, (match, rawKey) => {
+                const k = String(rawKey || '').trim().toLowerCase();
+                return lowerMap.has(k) ? lowerMap.get(k)! : match;
+            });
+        }
+        return this.variableService.resolve(text);
+    }
+
+    private resolveJsonWithOverrides(input: string, overrideVars?: Record<string, string>): string {
+        if (!input) return '';
+        let text = input;
+        if (overrideVars && Object.keys(overrideVars).length > 0) {
+            const lowerMap = new Map<string, string>();
+            for (const [k, v] of Object.entries(overrideVars)) {
+                lowerMap.set(k.trim().toLowerCase(), String(v ?? ''));
+            }
+            text = text.replace(/\{\{\s*([^{}\r\n]+?)\s*\}\}/g, (match, rawKey) => {
+                const k = String(rawKey || '').trim().toLowerCase();
+                return lowerMap.has(k) ? lowerMap.get(k)! : match;
+            });
+        }
+        return this.variableService.resolveJson(text);
+    }
 
     private parseLocalDateTimeMs(value?: string | null): number | null {
         if (!value || typeof value !== 'string') return null;
@@ -156,7 +204,6 @@ export class RequestExecutionService {
                 this.stopSchedule(effectiveId, true);
                 return;
             }
-            if (st.isLoading) return;
             entry.status = 'running';
             entry.runCount += 1;
             const nextRunAt = Date.now() + safeMs;
@@ -171,7 +218,26 @@ export class RequestExecutionService {
                     status: 'running'
                 }
             }));
-            this.executeRequest(effectiveId, false, 0, 0);
+            void this.executeRequest(effectiveId, false, 0, 0, {
+                isolatedRun: true,
+                onComplete: (summary) => {
+                    this.triggerScheduleLogs.update(curr => [
+                        {
+                            id: generateUUID(),
+                            timestamp: Date.now(),
+                            tabId: effectiveId,
+                            requestName: st.name || st.url || 'Scheduled Request',
+                            method: st.method || 'GET',
+                            status: summary.status,
+                            durationMs: Math.round(summary.durationMs || 0),
+                            testsPassed: summary.testsPassed,
+                            testsFailed: summary.testsFailed,
+                            error: summary.error
+                        },
+                        ...curr
+                    ].slice(0, 150));
+                }
+            });
         };
 
         const startRecurringLoop = () => {
@@ -323,13 +389,25 @@ export class RequestExecutionService {
         }
     }
 
-    async executeRequest(tabId: string, isAutoAuthRetry: boolean = false, chainDepth: number = 0, retryAttempt: number = 0): Promise<void> {
+    async executeRequest(
+        tabId: string,
+        isAutoAuthRetry: boolean = false,
+        chainDepth: number = 0,
+        retryAttempt: number = 0,
+        options?: {
+            isolatedRun?: boolean;
+            overrideVars?: Record<string, string>;
+            onComplete?: (summary: { status: number; durationMs: number; testsPassed: number; testsFailed: number; error?: string }) => void;
+        }
+    ): Promise<void> {
         const effectiveTabId = this.tabStateService.resolveTabId(tabId);
         const state = this.tabStateService.getState(effectiveTabId);
         if (!state) return;
+        const isIsolated = !!options?.isolatedRun;
+        const overrideVars = options?.overrideVars;
 
         let originalTabId: string | null | undefined;
-        if (isAutoAuthRetry) {
+        if (isAutoAuthRetry && !isIsolated) {
             originalTabId = this.tabStateService.activeTabId();
             if (originalTabId && originalTabId !== effectiveTabId) {
                 this.tabStateService.setActiveTab(effectiveTabId);
@@ -339,36 +417,40 @@ export class RequestExecutionService {
         }
 
         const cancelToken = { cancelled: false, cancelFn: undefined as (() => void) | undefined };
-        this.cancellationTokens.set(effectiveTabId, cancelToken);
-        if (effectiveTabId !== tabId) {
-            this.cancellationTokens.set(tabId, cancelToken);
+        if (!isIsolated) {
+            this.cancellationTokens.set(effectiveTabId, cancelToken);
+            if (effectiveTabId !== tabId) {
+                this.cancellationTokens.set(tabId, cancelToken);
+            }
         }
 
         // Generate a new execution token for fencing against race conditions
-        const executionToken = this.tabStateService.nextExecutionToken(effectiveTabId);
+        const executionToken = isIsolated ? 0 : this.tabStateService.nextExecutionToken(effectiveTabId);
 
         // Reset Tab to Loading and clear previous response and consoles immediately so stale output won't linger
-        this.tabStateService.updateState(effectiveTabId, {
-            isLoading: true,
-            responseBody: null,
-            responseStatus: null,
-            responseTime: null,
-            responseSize: null,
-            responseHeaders: [],
-            responseCookies: [],
-            testResults: [],
-            scripts: {
-                ...(state.scripts || {}),
-                preRequestConsole: '',
-                postResponseConsole: '',
-                encryptionConsole: ''
-            }
-        });
+        if (!isIsolated) {
+            this.tabStateService.updateState(effectiveTabId, {
+                isLoading: true,
+                responseBody: null,
+                responseStatus: null,
+                responseTime: null,
+                responseSize: null,
+                responseHeaders: [],
+                responseCookies: [],
+                testResults: [],
+                scripts: {
+                    ...(state.scripts || {}),
+                    preRequestConsole: '',
+                    postResponseConsole: '',
+                    encryptionConsole: ''
+                }
+            });
+        }
 
         // Yield to the event loop to allow Angular to paint the "Cancel" button before heavy synchronous work
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) return;
+        if (cancelToken.cancelled || (!isIsolated && !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken))) return;
 
         if (!navigator.onLine) {
             this.tabStateService.updateState(effectiveTabId, { isLoading: false });
@@ -406,10 +488,11 @@ export class RequestExecutionService {
                 this.notificationService.notify('Please enter a request URL before sending', 'warning');
                 return;
             }
-            const resolvedUrl = this.variableService.resolve(freshState.url);
+            const resolvedUrl = this.resolveTextWithOverrides(freshState.url, overrideVars);
             if (!resolvedUrl.trim()) {
-                this.tabStateService.updateState(effectiveTabId, { isLoading: false });
+                if (!isIsolated) this.tabStateService.updateState(effectiveTabId, { isLoading: false });
                 this.notificationService.notify('Resolved request URL is empty. Please enter a valid URL', 'warning');
+                options?.onComplete?.({ status: 0, durationMs: 0, testsPassed: 0, testsFailed: 0, error: 'Empty resolved URL' });
                 return;
             }
 
@@ -418,15 +501,15 @@ export class RequestExecutionService {
                 .filter(h => h.enabled && h.key)
                 .map(h => ({
                     enabled: true,
-                    key: this.variableService.resolve(h.key).trim().replace(/[\r\n]+/g, ''),
-                    value: this.variableService.resolve(h.value).trim().replace(/[\r\n]+/g, '')
+                    key: this.resolveTextWithOverrides(h.key, overrideVars).trim().replace(/[\r\n]+/g, ''),
+                    value: this.resolveTextWithOverrides(h.value, overrideVars).trim().replace(/[\r\n]+/g, '')
                 }))
                 .filter(h => !!h.key);
 
             // 3. Prepare Params (needs to exist before apikey query injection)
             let params = freshState.params.filter(p => p.enabled && p.key).map(p => ({
-                key: this.variableService.resolve(p.key),
-                value: this.variableService.resolve(p.value)
+                key: this.resolveTextWithOverrides(p.key, overrideVars),
+                value: this.resolveTextWithOverrides(p.value, overrideVars)
             }));
 
             // Inject Auth Header / Query if applicable
@@ -496,8 +579,8 @@ export class RequestExecutionService {
                         : (isTextType ? (freshState.rawBodyText || freshState.rawBody || '') : (freshState.rawBodyJson || '{}'));
 
                     let resolvedRaw = (isXmlType || isTextType)
-                        ? this.variableService.resolve(rawBodyContent)
-                        : this.variableService.resolveJson(rawBodyContent);
+                        ? this.resolveTextWithOverrides(rawBodyContent, overrideVars)
+                        : this.resolveJsonWithOverrides(rawBodyContent, overrideVars);
 
                     // Safely strip comments and sanitize JSON payload so encrypted values with '/', '//', '/*' parse cleanly
                     if (freshState.rawType === 'JSON') {
@@ -516,14 +599,14 @@ export class RequestExecutionService {
                 } else if (freshState.bodyType === 'x-www-form-urlencoded') {
                     body = (freshState.urlEncodedData || []).filter((r: KeyValue) => r.enabled && r.key).map((r: KeyValue) => ({
                         ...r,
-                        key: this.variableService.resolve(r.key),
-                        value: this.variableService.resolve(r.value || '')
+                        key: this.resolveTextWithOverrides(r.key, overrideVars),
+                        value: this.resolveTextWithOverrides(r.value || '', overrideVars)
                     }));
                 } else if (freshState.bodyType === 'graphql') {
-                    const query = this.variableService.resolve(freshState.graphqlQuery || '');
+                    const query = this.resolveTextWithOverrides(freshState.graphqlQuery || '', overrideVars);
                     let variables: any = {};
                     try {
-                        const resolvedVars = this.variableService.resolveJson(freshState.graphqlVariables || '{}');
+                        const resolvedVars = this.resolveJsonWithOverrides(freshState.graphqlVariables || '{}', overrideVars);
                         variables = JSON.parse(resolvedVars || '{}');
                     } catch {
                         variables = {};
@@ -533,8 +616,8 @@ export class RequestExecutionService {
                     // For Sandbox passing we can pass form-data as array
                     body = freshState.formData.filter((f: FormDataRow) => f.enabled && f.key).map((f: FormDataRow) => ({
                         ...f,
-                        key: this.variableService.resolve(f.key),
-                        value: typeof f.value === 'string' ? this.variableService.resolve(f.value) : f.value
+                        key: this.resolveTextWithOverrides(f.key, overrideVars),
+                        value: typeof f.value === 'string' ? this.resolveTextWithOverrides(f.value, overrideVars) : f.value
                     }));
                 }
             }
@@ -1532,7 +1615,7 @@ export class RequestExecutionService {
             }
 
             // Check if this execution is still current before committing results
-            if (cancelToken.cancelled || !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) {
+            if (cancelToken.cancelled || (!isIsolated && !this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken))) {
                 return;
             }
 
@@ -1552,8 +1635,8 @@ export class RequestExecutionService {
                     'warning'
                 );
                 await new Promise(resolve => setTimeout(resolve, retryDelayMs));
-                if (!cancelToken.cancelled && this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) {
-                    await this.executeRequest(tabId, false, chainDepth, retryAttempt + 1);
+                if (!cancelToken.cancelled && (isIsolated || this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken))) {
+                    await this.executeRequest(tabId, false, chainDepth, retryAttempt + 1, options);
                 }
                 return;
             }
@@ -1636,6 +1719,13 @@ export class RequestExecutionService {
                 responseSize
             });
 
+            options?.onComplete?.({
+                status,
+                durationMs: responseTime,
+                testsPassed: testResults.filter(t => !!t.passed).length,
+                testsFailed: testResults.filter(t => !t.passed).length
+            });
+
             // Post-Response Request Chaining & Script-Controlled Flow (Trigger Next Request)
             let resolvedTriggerTargetId: string | null = null;
             if (scriptNextRequest === null) {
@@ -1701,8 +1791,8 @@ export class RequestExecutionService {
                     'warning'
                 );
                 await new Promise(resolve => setTimeout(resolve, catchDelayMs));
-                if (!cancelToken.cancelled && this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken)) {
-                    await this.executeRequest(tabId, false, chainDepth, retryAttempt + 1);
+                if (!cancelToken.cancelled && (isIsolated || this.tabStateService.isExecutionCurrent(effectiveTabId, executionToken))) {
+                    await this.executeRequest(tabId, false, chainDepth, retryAttempt + 1, options);
                 }
                 return;
             }
@@ -1713,11 +1803,20 @@ export class RequestExecutionService {
                 url: resolvedTargetUrl,
                 message: globalErr?.message || String(globalErr || 'Failed to connect to the server.')
             };
-            this.tabStateService.updateState(effectiveTabId, {
-                isLoading: false,
-                responseStatus: 0,
-                responseBody: fallbackBody,
-                responseSize: new Blob([JSON.stringify(fallbackBody)]).size
+            if (!isIsolated) {
+                this.tabStateService.updateState(effectiveTabId, {
+                    isLoading: false,
+                    responseStatus: 0,
+                    responseBody: fallbackBody,
+                    responseSize: new Blob([JSON.stringify(fallbackBody)]).size
+                });
+            }
+            options?.onComplete?.({
+                status: 0,
+                durationMs: 0,
+                testsPassed: 0,
+                testsFailed: 0,
+                error: globalErr?.message || String(globalErr || 'Execution error')
             });
         } finally {
             if (isAutoAuthRetry && originalTabId && originalTabId !== tabId) {

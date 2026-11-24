@@ -3,10 +3,22 @@
     <div class="w-[600px] max-h-[80vh] bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
         (click)="stopProp($event)">
         <!-- Header -->
-        <div class="p-4 border-b border-(--postonsteroids-border) flex items-center justify-between">
-            <div class="flex items-center gap-x-2">
+        <div class="p-4 border-b border-(--postonsteroids-border) flex items-center justify-between gap-3">
+            <div class="flex items-center gap-x-2 min-w-0">
                 <mat-icon class="text-(--postonsteroids-accent)">variables</mat-icon>
-                <h2 class="text-lg font-semibold text-(--postonsteroids-text-primary)">Environment Variables</h2>
+                <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-lg font-semibold text-(--postonsteroids-text-primary)">Capsule Variables</h2>
+                        <span class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-(--postonsteroids-text-secondary) truncate max-w-[180px]">
+                            {{ tabStateService.activeCapsuleName() }}
+                        </span>
+                    </div>
+                    @if (envService.activeEnvironment(); as activeEnv) {
+                        <span class="text-[11px] text-(--postonsteroids-text-muted)">
+                            Active environment <strong class="text-(--postonsteroids-text-secondary)">{{ activeEnv.name }}</strong> overrides matching keys at request runtime.
+                        </span>
+                    }
+                </div>
             </div>
             <button (click)="close()" class="p-1 hover:bg-(--postonsteroids-bg-hover) rounded-md transition-colors cursor-pointer">
                 <mat-icon class="text-(--postonsteroids-text-muted)">close</mat-icon>
@@ -43,6 +55,11 @@
                     <div class="flex flex-col min-w-0">
                         <input type="text" [(ngModel)]="v.key" (blur)="updateVar(v)" placeholder="Variable Name"
                             class="bg-transparent border-none outline-none text-sm text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)">
+                        @if (hasEnvOverride(v.key)) {
+                            <span class="text-[9px] text-amber-400 font-mono truncate" [title]="'Active environment overrides this capsule variable at runtime'">
+                                Overridden by Env: {{ envService.activeEnvironment()?.name }}
+                            </span>
+                        }
                         @if (v.source) {
                             <span class="text-[9px] text-status-info font-mono flex items-center gap-0.5 truncate" [title]="'Dynamic: ' + v.source.type + ' -> ' + v.source.propertyKey">
                                 <mat-icon class="text-[10px]! size-[10px]!">link</mat-icon>

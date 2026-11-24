@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { Subject, firstValueFrom } from 'rxjs';
 import { API_BASE_URL, AUTH_TOKEN_KEY, AUTH_USER_KEY, AUTH_REFRESH_TOKEN_KEY } from '../constants/api.constants';
 import { NotificationService } from './notification.service';
+import { SubscriptionService } from './subscription.service';
 import { APP_EDITION } from '../../../environments/edition';
 
 export interface UserAuth {
@@ -12,6 +13,7 @@ export interface UserAuth {
     email: string;
     isAuthenticated: boolean;
     hasPassword?: boolean;
+    subscriptionTier?: 'community' | 'professional' | 'enterprise';
     createdAt?: string;
     updatedAt?: string;
 }
@@ -77,6 +79,7 @@ export class AuthService {
     private http = inject(HttpClient);
     private router = inject(Router);
     private notificationService = inject(NotificationService);
+    private subscriptionService = inject(SubscriptionService);
     private platformId = inject(PLATFORM_ID);
     private isBrowser = isPlatformBrowser(this.platformId);
     private injector = inject(Injector);
@@ -225,6 +228,9 @@ export class AuthService {
                 this.userEmail.set(user.email);
                 this.isLoggedIn.set(true);
                 this.showAuthModal.set(false);
+                if (user.subscriptionTier) {
+                    this.subscriptionService.syncFromUserSubscription(user.subscriptionTier);
+                }
             } else {
                 this.showAuthModal.set(!APP_EDITION.isProOrHigher);
             }
@@ -398,6 +404,7 @@ export class AuthService {
                 email: cleanEmail,
                 isAuthenticated: true,
                 hasPassword: true,
+                subscriptionTier: this.subscriptionService.tier(),
                 createdAt: nowIso,
                 updatedAt: nowIso
             },
@@ -785,6 +792,9 @@ export class AuthService {
         this.currentUser.set(data.user);
         this.isLoggedIn.set(true);
         this.showAuthModal.set(false);
+        if (data.user?.subscriptionTier) {
+            this.subscriptionService.syncFromUserSubscription(data.user.subscriptionTier);
+        }
         this.authStep.set('email');
         this.isOtpSent.set(false);
         this.otp.set('');

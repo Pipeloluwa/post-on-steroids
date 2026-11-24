@@ -320,9 +320,90 @@ export class WorkspaceComponent {
     transferInitialMode = signal<'copy' | 'move'>('copy');
     curlModalRequest = signal<RequestState | null>(null);
 
-    // Request rename state
+    // Request rename & sidebar right-click context menu state
     editingRequestId = signal<string | null>(null);
     editingRequestName = signal<string>('');
+    sidebarContextMenu = signal<{
+        isOpen: boolean;
+        x: number;
+        y: number;
+        req: RequestState | null;
+        groupId: string | null;
+    }>({ isOpen: false, x: 0, y: 0, req: null, groupId: null });
+
+    openSidebarRequestContextMenu(req: RequestState, groupId: string | null, event: MouseEvent): void {
+        event.preventDefault();
+        event.stopPropagation();
+        this.moveMenuRequestId.set(null);
+        const viewportW = this.isBrowser ? window.innerWidth : 1280;
+        const viewportH = this.isBrowser ? window.innerHeight : 800;
+        const menuW = 228;
+        const menuH = 340;
+        const x = Math.max(8, Math.min(event.clientX, viewportW - menuW - 8));
+        const y = Math.max(8, Math.min(event.clientY, viewportH - menuH - 8));
+        this.sidebarContextMenu.set({
+            isOpen: true,
+            x,
+            y,
+            req,
+            groupId: groupId ?? req.groupId ?? null
+        });
+    }
+
+    closeSidebarRequestContextMenu(): void {
+        if (this.sidebarContextMenu().isOpen) {
+            this.sidebarContextMenu.set({ isOpen: false, x: 0, y: 0, req: null, groupId: null });
+        }
+    }
+
+    contextOpenRequest(event: Event): void {
+        event.stopPropagation();
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) this.openRequest(req);
+    }
+
+    contextDuplicateRequest(event: Event): void {
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) this.duplicateRequestFromSidebar(req.id, event);
+    }
+
+    contextRenameRequest(event: Event): void {
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) this.startEditingRequest(req, event);
+    }
+
+    contextMoveToGroup(targetGroupId: string | null, event: Event): void {
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) this.moveRequestToGroupFromMenu(req.id, targetGroupId, event);
+    }
+
+    contextMoveToNewGroup(event: Event): void {
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) this.moveRequestToNewGroupFromMenu(req.id, event);
+    }
+
+    contextTransferCapsule(mode: 'copy' | 'move', event: Event): void {
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) this.openTransferModalForRequest(req.id, mode, event);
+    }
+
+    contextOpenCurl(event: Event): void {
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) this.openCurlModalFromMenu(req, event);
+    }
+
+    contextDeleteRequest(event: Event): void {
+        const req = this.sidebarContextMenu().req;
+        this.closeSidebarRequestContextMenu();
+        if (req) void this.deleteRequestFromSidebar(req, event);
+    }
 
     startEditingRequest(req: RequestState, event?: Event): void {
         event?.stopPropagation();
@@ -508,6 +589,7 @@ export class WorkspaceComponent {
         if (this.moveMenuRequestId()) {
             this.moveMenuRequestId.set(null);
         }
+        this.closeSidebarRequestContextMenu();
     }
 
     onFolderDragStarted() {

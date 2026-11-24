@@ -17,11 +17,15 @@ export interface ScriptSnippet {
 export const DEFAULT_ENCRYPTION_SCRIPTS: DefaultScriptEntry[] = [
     {
         name: 'Encrypt',
-        code: `async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText) {
-    //only code written within this code block will be executed
+        code: `// Top-level imports are supported above this function (e.g. import CryptoJS from 'crypto-js';)
+// Available parameters (headers, body, params, encryptedHeaders, encryptedBodyPaths, ...) can also be accessed via st.* (type "st." for autocomplete)
+async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText) {
+    // Only code within this block (and top-level imports above) will be executed
 }`,
-        pythonCode: `async def encrypt_script(headers, body, params, encrypted_headers, encrypted_body_paths, body_type, raw_type, form_data, encrypted_form_data, url_encoded_data, encrypted_url_encoded_data, graphql, encrypted_graphql_paths, raw_text, encrypt_raw_text):
-    # only code written within this code block will be executed
+        pythonCode: `# Top-level imports are supported above this function (e.g. import hashlib, json)
+# Available parameters can also be accessed via st.* or snake_case helpers
+async def encrypt_script(headers, body, params, encrypted_headers, encrypted_body_paths, body_type, raw_type, form_data, encrypted_form_data, url_encoded_data, encrypted_url_encoded_data, graphql, encrypted_graphql_paths, raw_text, encrypt_raw_text):
+    # Only code within this block (and imports above) will be executed
     pass`
     },
     {
@@ -60,11 +64,14 @@ async def encrypt_script(headers, body, params, encrypted_headers, encrypted_bod
 export const DEFAULT_DECRYPTION_SCRIPTS: DefaultScriptEntry[] = [
     {
         name: 'Decrypt',
-        code: `async function decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText) {
-    //only code written within this code block will be executed
+        code: `// Top-level imports are supported above this function (e.g. import CryptoJS from 'crypto-js';)
+// Available parameters (headers, body, params, encryptedHeaders, encryptedBodyPaths, ...) can also be accessed via st.* (type "st." for autocomplete)
+async function decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText) {
+    // Only code within this block (and top-level imports above) will be executed
 }`,
-        pythonCode: `async def decrypt_script(headers, body, params, encrypted_headers, encrypted_body_paths, body_type, raw_type, form_data, encrypted_form_data, url_encoded_data, encrypted_url_encoded_data, graphql, encrypted_graphql_paths, raw_text, encrypt_raw_text):
-    # only code written within this code block will be executed
+        pythonCode: `# Top-level imports are supported above this function (e.g. import base64, json)
+async def decrypt_script(headers, body, params, encrypted_headers, encrypted_body_paths, body_type, raw_type, form_data, encrypted_form_data, url_encoded_data, encrypted_url_encoded_data, graphql, encrypted_graphql_paths, raw_text, encrypt_raw_text):
+    # Only code within this block (and imports above) will be executed
     pass`
     },
     {
@@ -109,11 +116,15 @@ async def decrypt_script(headers, body, params, encrypted_headers, encrypted_bod
 export const DEFAULT_PRE_REQUEST_SCRIPTS: DefaultScriptEntry[] = [
     {
         name: 'Pre-request',
-        code: `async function preScript(headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
-    //only code written within this code block will be executed
+        code: `// Top-level imports are supported above this function (e.g. import CryptoJS from 'crypto-js';)
+// Request parameters (headers, body, params, ...) & helpers can also be accessed via st.* (type "st." for autocomplete)
+async function preScript(headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
+    // Write your pre-request logic here
 }`,
-        pythonCode: `async def pre_script(headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text):
-    # only code written within this code block will be executed
+        pythonCode: `# Top-level imports are supported above this function (e.g. import uuid, time, json)
+# Request parameters & helpers can also be accessed via st.* or set_header/set_body_field/set_env
+async def pre_script(headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text):
+    # Write your pre-request logic here
     pass`
     },
     {
@@ -174,11 +185,15 @@ async def pre_script(headers, body, params, body_type, raw_type, form_data, url_
 export const DEFAULT_POST_RESPONSE_SCRIPTS: DefaultScriptEntry[] = [
     {
         name: 'Post-response',
-        code: `async function postScript(responseHeaders, responseBody, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
-    //only code written within this code block will be executed
+        code: `// Top-level imports are supported above this function across all script types
+// Response/request parameters (responseHeaders, responseBody, headers, body, ...) can be accessed directly or via st.* (type "st." for autocomplete)
+async function postScript(responseHeaders, responseBody, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
+    // Write your post-response logic here
 }`,
-        pythonCode: `async def post_script(response_headers, response_body, headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text):
-    # only code written within this code block will be executed
+        pythonCode: `# Top-level imports are supported above this function across all script types
+# Response/request parameters & st.* helpers are available directly inside this function
+async def post_script(response_headers, response_body, headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text):
+    # Write your post-response logic here
     pass`
     },
     {
@@ -211,13 +226,15 @@ export const DEFAULT_POST_RESPONSE_SCRIPTS: DefaultScriptEntry[] = [
 export const DEFAULT_TEST_SCRIPTS: DefaultScriptEntry[] = [
     {
         name: 'Test',
-        code: `async function testScript(responseStatus, responseTime, responseBody, responseHeaders, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
-    //only code written within this code block will be executed
+        code: `// Top-level imports are supported above this function (e.g. import Ajv from 'ajv';)
+// Access test assertions, response & parameters directly or via st.* (type "st." for autocomplete, e.g. st.test / st.expect)
+async function testScript(responseStatus, responseTime, responseBody, responseHeaders, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText) {
     let passed = true;
     return passed;
 }`,
-        pythonCode: `async def test_script(response_status, response_time, response_body, response_headers, headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text):
-    # only code written within this code block will be executed
+        pythonCode: `# Top-level imports are supported above this function
+# Return True/False or call st.test(...) / test(...) assertions
+async def test_script(response_status, response_time, response_body, response_headers, headers, body, params, body_type, raw_type, form_data, url_encoded_data, graphql, raw_text):
     passed = True
     return passed`
     },

@@ -9,7 +9,7 @@ import { DocBrdGeneratorModalComponent } from '../../../shared/components/doc-br
 import { CookieManagerModalComponent } from '../../../shared/components/cookie-manager.modal.component';
 import { CookieJarService } from '../../../shared/services/cookie-jar.service';
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
-import { TabStateService, RequestState } from '../../../shared/services/tab.state.service';
+import { TabStateService, RequestState, CapsuleLockMode } from '../../../shared/services/tab.state.service';
 import { copyTextToClipboard } from '../../../shared/utils/clipboard.util';
 import { convertCapsuleToPostmanCollection } from '../../../shared/utils/postman-export.util';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -43,6 +43,13 @@ export class RequestDetailsComponent {
     tabId = input.required<string>();
     
     requestName = computed(() => this.tabStateService.getState(this.tabId())?.name || '');
+    activeLockMode = computed<CapsuleLockMode>(() => this.tabStateService.activeCapsuleLockMode());
+    readonly lockModeOptions: ReadonlyArray<{ id: CapsuleLockMode; label: string; title: string }> = [
+        { id: 'unlocked', label: 'Unlocked', title: 'Full edit & delete access for you and shared receivers' },
+        { id: 'read-only', label: 'Read-Only', title: 'Blocks all edits, structural changes, and deletes (enforced on shared link too)' },
+        { id: 'edit-only', label: 'Edit-Only', title: 'Allows editing requests, blocks creating/deleting folders & deleting requests/capsule' },
+        { id: 'locked', label: 'Locked', title: 'Completely locked — read-only & non-deletable' },
+    ];
 
     constructor() {
         effect(() => {
@@ -60,7 +67,23 @@ export class RequestDetailsComponent {
     }
 
     onNameChange(newName: string) {
+        const block = this.tabStateService.getEditBlockReason(undefined, 'edit');
+        if (block) {
+            this.notificationService.notify(block, 'warning');
+            return;
+        }
         this.tabStateService.updateState(this.tabId(), { name: newName });
+    }
+
+    onLockModeChange(mode: CapsuleLockMode): void {
+        const capsuleId = this.tabStateService.activeCapsuleId();
+        if (!capsuleId) {
+            this.onNotify.emit('Select a capsule before setting a lock mode.');
+            return;
+        }
+        this.tabStateService.setCapsuleLockMode(capsuleId, mode);
+        const label = this.lockModeOptions.find((m) => m.id === mode)?.label || mode;
+        this.notificationService.notify(`Capsule access set to ${label} (shared links inherit this setting).`);
     }
     saveOptions = ['Copy as cURL', 'View cURL...', 'Generate Docs / BRD...', 'Copy to Capsule...', 'Move to Capsule...', 'Export Endpoint', 'Export Capsule', 'Export as Postman'];
 

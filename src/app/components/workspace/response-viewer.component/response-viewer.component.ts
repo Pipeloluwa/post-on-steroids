@@ -1,4 +1,4 @@
-import { Component, signal, computed, inject, effect, ViewChild, ChangeDetectionStrategy, input } from '@angular/core';
+import { Component, signal, computed, inject, effect, ViewChild, viewChild, ElementRef, ChangeDetectionStrategy, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -36,7 +36,11 @@ import {
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [CommonModule, FormsModule, MatIcon, ScrollableSelectComponent, MonacoEditorComponent, TerminalDrawerComponent],
     templateUrl: './response-viewer.component.html',
-    styleUrl: './response-viewer.component.css'
+    styleUrl: './response-viewer.component.css',
+    host: {
+        '(document:mousemove)': 'onRightPanelResizeMove($event)',
+        '(document:mouseup)': 'stopResizingRightPanel()'
+    }
 })
 export class ResponseViewerComponent {
     tabStateService = inject(TabStateService);
@@ -68,11 +72,6 @@ export class ResponseViewerComponent {
         const stateMode = this.tabState()?.responseActiveMode;
         if (stateMode === 'Preview' || stateMode === 'Visualize') return 'Preview';
         if (stateMode === 'Pretty' || stateMode === 'Raw') return stateMode;
-        if (typeof localStorage !== 'undefined') {
-            const saved = localStorage.getItem('onsteroids_response_active_mode');
-            if (saved === 'Preview' || saved === 'Visualize') return 'Preview';
-            if (saved === 'Pretty' || saved === 'Raw') return saved;
-        }
         return 'Pretty';
     });
     visualizerFilter = signal<string>('');
@@ -85,6 +84,38 @@ export class ResponseViewerComponent {
     editableSchemaText = signal<string>('{}');
     selectedCompareExampleId = signal<string>('__baseline__');
     pinnedBaselineText = signal<string>('');
+    responseSplitContainer = viewChild<ElementRef<HTMLElement>>('responseSplitContainer');
+    rightPanelPercent = signal<number>(this.loadSavedRightPanelPercent());
+    isResizingRightPanel = signal<boolean>(false);
+
+    private loadSavedRightPanelPercent(): number {
+        if (typeof localStorage === 'undefined') return 42;
+        const saved = Number(localStorage.getItem('onsteroids_response_right_panel_pct'));
+        return Number.isFinite(saved) && saved >= 20 && saved <= 75 ? saved : 42;
+    }
+
+    startResizingRightPanel(event: MouseEvent): void {
+        event.preventDefault();
+        this.isResizingRightPanel.set(true);
+    }
+
+    onRightPanelResizeMove(event: MouseEvent): void {
+        if (!this.isResizingRightPanel()) return;
+        const containerEl = this.responseSplitContainer()?.nativeElement;
+        if (!containerEl) return;
+        const rect = containerEl.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const rightPct = ((rect.right - event.clientX) / rect.width) * 100;
+        this.rightPanelPercent.set(Math.max(20, Math.min(72, Math.round(rightPct * 10) / 10)));
+    }
+
+    stopResizingRightPanel(): void {
+        if (!this.isResizingRightPanel()) return;
+        this.isResizingRightPanel.set(false);
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('onsteroids_response_right_panel_pct', String(this.rightPanelPercent()));
+        }
+    }
     manualResponseType = signal<string | null>(null);
     responseTypes = signal(['JSON', 'XML']);
     responseType = computed(() => {
@@ -108,6 +139,11 @@ export class ResponseViewerComponent {
             const val = ctHeader.value.toLowerCase();
             if (val.includes('xml') || val.includes('soap')) return 'XML';
             if (val.includes('json')) return 'JSON';
+        }
+
+        const reqRawType = (this.tabState()?.rawType || '').toUpperCase();
+        if (reqRawType.includes('XML') || reqRawType.includes('SOAP')) {
+            return 'XML';
         }
 
         return 'JSON';
@@ -175,9 +211,9 @@ export class ResponseViewerComponent {
         { name: 'Body', count: null },
         { name: 'Cookies', count: this.responseCookies().length || null },
         { name: 'Headers', count: this.responseHeaders().filter(h => h.enabled).length || null },
-        { name: 'Test Results', count: this.testResults().length || null },
-        { name: 'Encryption Console', count: null },
-        { name: 'Script Console', count: null },
+        { name: 'Test', count: this.testResults().length || null },
+        { name: 'Encryption', count: null },
+        { name: 'Script', count: null },
         { name: 'Terminal', count: this.terminalService.lines().length || null },
     ]);
 
@@ -237,7 +273,7 @@ export class ResponseViewerComponent {
     }
     setMode(mode: 'Pretty' | 'Raw' | 'Preview' | 'Visualize') {
         const normalized: 'Pretty' | 'Raw' | 'Preview' = mode === 'Visualize' ? 'Preview' : mode;
-        if (typeof localStorage !== 'undefined') {
+        if (typeof localStorage !== 'undefined' && normalized !== 'Preview') {
             localStorage.setItem('onsteroids_response_active_mode', normalized);
         }
         const id = this.tabId();

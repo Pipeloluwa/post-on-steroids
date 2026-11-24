@@ -10,6 +10,7 @@
     "start": "ng serve",
     "build": "node scripts/generate-version.mjs && ng build",
     "build:community": "node scripts/generate-version.mjs community && ng build --configuration=community",
+    "build:commercial": "node scripts/generate-version.mjs enterprise && ng build --configuration=enterprise",
     "build:professional": "node scripts/generate-version.mjs professional && ng build --configuration=professional",
     "build:enterprise": "node scripts/generate-version.mjs enterprise && ng build --configuration=enterprise",
     "start:community": "ng serve --configuration=community",

@@ -8,5 +8,6 @@ export interface EditionDescriptor {
   tagline: string;
   isProOrHigher: boolean;
   isEnterprise: boolean;
+  subscriptionGated?: boolean;
   toolbarComponent: Type<unknown> | null;
 }

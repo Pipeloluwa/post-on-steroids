@@ -10,7 +10,9 @@ import { VariableService } from '../../services/variable.service';
 import { EnvironmentService } from '../../services/environment.service';
 import { TerminalService } from '../../services/terminal.service';
 import { AuthService } from '../../services/auth.service';
+import { SubscriptionService } from '../../services/subscription.service';
 import { VersionCheckService } from '../../services/version-check.service';
+import { EditionTier } from '../../../../environments/edition.types';
 import { AboutModalComponent } from '../about.modal.component/about.modal.component';
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
@@ -58,6 +60,7 @@ export class NavbarComponent {
     sidebarService = inject(SidebarService);
     tabStateService = inject(TabStateService);
     authService = inject(AuthService);
+    subscriptionService = inject(SubscriptionService);
     envService = inject(EnvironmentService);
     terminalService = inject(TerminalService);
     private variableService = inject(VariableService);
@@ -70,6 +73,7 @@ export class NavbarComponent {
     showFileMenu = signal<boolean>(false);
     showUserMenu = signal<boolean>(false);
     showDownloadsMenu = signal<boolean>(false);
+    showEnvMenu = signal<boolean>(false);
     showAboutModal = signal<boolean>(false);
     showHelpModal = signal<boolean>(false);
     showEnvModal = signal<boolean>(false);
@@ -99,7 +103,38 @@ export class NavbarComponent {
         event.stopPropagation();
         this.showFileMenu.set(false);
         this.showUserMenu.set(false);
+        this.showEnvMenu.set(false);
         this.showDownloadsMenu.update(v => !v);
+    }
+
+    toggleEnvMenu(event: MouseEvent) {
+        event.stopPropagation();
+        this.showFileMenu.set(false);
+        this.showUserMenu.set(false);
+        this.showDownloadsMenu.set(false);
+        this.showEnvMenu.update(v => !v);
+    }
+
+    selectEnvironmentFromMenu(envId: string | null, event: Event) {
+        event.stopPropagation();
+        this.envService.setActiveEnvironment(envId);
+        this.showEnvMenu.set(false);
+    }
+
+    openEnvManagerFromMenu(event: Event) {
+        event.stopPropagation();
+        this.showEnvMenu.set(false);
+        this.showEnvModal.set(true);
+    }
+
+    getEnvVarCount(env: { variables?: Array<{ enabled?: boolean; key?: string }> }): number {
+        return (env.variables || []).filter(v => v.enabled !== false && v.key && v.key.trim() !== '').length;
+    }
+
+    switchSubscriptionPlan(plan: EditionTier, event: Event) {
+        event.stopPropagation();
+        this.subscriptionService.setTier(plan);
+        this.notificationService.notify(`Subscription plan switched to ${this.subscriptionService.label()}.`, 'success');
     }
 
     getDownloadUrl(pkg: DesktopPackage): string {
@@ -110,6 +145,7 @@ export class NavbarComponent {
         event.stopPropagation();
         this.showFileMenu.set(false);
         this.showDownloadsMenu.set(false);
+        this.showEnvMenu.set(false);
         this.showUserMenu.update(v => !v);
     }
 
@@ -294,6 +330,9 @@ export class NavbarComponent {
         }
         if (this.showDownloadsMenu()) {
             this.showDownloadsMenu.set(false);
+        }
+        if (this.showEnvMenu()) {
+            this.showEnvMenu.set(false);
         }
     }
 

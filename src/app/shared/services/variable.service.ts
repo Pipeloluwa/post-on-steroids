@@ -545,6 +545,7 @@ export class VariableService {
                     groupsPayload.order.length > 0 ||
                     (groupsPayload.autoAuthEnabled && groupsPayload.autoAuthEnabled !== 'off') ||
                     Boolean(groupsPayload.autoAuthEndpointId) ||
+                    (groupsPayload.lockMode && groupsPayload.lockMode !== 'unlocked') ||
                     (groupsPayload.requestMeta && Object.keys(groupsPayload.requestMeta).length > 0) ||
                     this.systemGroupsVarIds.has(capsuleId))
             );

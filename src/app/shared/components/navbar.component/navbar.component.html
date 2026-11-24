@@ -12,16 +12,16 @@
                     OnSteroid
                 </span>
                 <span class="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border"
-                      [class.bg-amber-500/15]="appEdition.id === 'enterprise'"
-                      [class.text-amber-500]="appEdition.id === 'enterprise'"
-                      [class.border-amber-500/35]="appEdition.id === 'enterprise'"
-                      [class.bg-indigo-500/15]="appEdition.id === 'professional'"
-                      [class.text-indigo-500]="appEdition.id === 'professional'"
-                      [class.border-indigo-500/35]="appEdition.id === 'professional'"
-                      [class.bg-(--postonsteroids-bg-tertiary)]="appEdition.id === 'community'"
-                      [class.text-(--postonsteroids-text-muted)]="appEdition.id === 'community'"
-                      [class.border-(--postonsteroids-border)]="appEdition.id === 'community'">
-                    {{ appEdition.id === 'professional' ? 'Pro' : appEdition.label }}
+                      [class.bg-amber-500/15]="subscriptionService.tier() === 'enterprise'"
+                      [class.text-amber-500]="subscriptionService.tier() === 'enterprise'"
+                      [class.border-amber-500/35]="subscriptionService.tier() === 'enterprise'"
+                      [class.bg-indigo-500/15]="subscriptionService.tier() === 'professional'"
+                      [class.text-indigo-500]="subscriptionService.tier() === 'professional'"
+                      [class.border-indigo-500/35]="subscriptionService.tier() === 'professional'"
+                      [class.bg-(--postonsteroids-bg-tertiary)]="subscriptionService.tier() === 'community'"
+                      [class.text-(--postonsteroids-text-muted)]="subscriptionService.tier() === 'community'"
+                      [class.border-(--postonsteroids-border)]="subscriptionService.tier() === 'community'">
+                    {{ subscriptionService.badgeLabel() }}
                 </span>
             </a>
 
@@ -170,23 +170,77 @@
 
         <!-- Right Section: Environment Switcher + Utilities + Auth (Pinned to far right) -->
         <div class="flex items-center justify-end gap-x-1.5 2xl:gap-x-2.5 shrink-0" style="-webkit-app-region: no-drag;">
-            <!-- Shared Multi-Environment Switcher (All Editions) -->
-            <div class="flex items-center rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) px-2 py-0.5 gap-1 shrink-0">
-                <span class="size-2 rounded-full shrink-0"
-                      [style.background-color]="envService.activeEnvironment()?.color || '#94a3b8'"></span>
-                <select aria-label="Active Environment"
-                        [ngModel]="envService.activeEnvironmentId() || ''"
-                        (ngModelChange)="envService.setActiveEnvironment($event || null)"
-                        class="bg-transparent text-[11px] font-semibold text-(--postonsteroids-text-primary) outline-none cursor-pointer max-w-[110px] truncate">
-                    <option value="" class="bg-(--postonsteroids-bg-secondary)">No Env</option>
-                    @for (env of envService.environments(); track env.id) {
-                        <option [value]="env.id" class="bg-(--postonsteroids-bg-secondary)">{{ env.name }}</option>
-                    }
-                </select>
-                <button type="button" (click)="showEnvModal.set(true)" title="Manage Environments"
-                        class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center">
-                    <mat-icon class="text-[14px]! size-[14px]!">tune</mat-icon>
-                </button>
+            <!-- Sleek Multi-Environment Switcher Card -->
+            <div class="relative shrink-0">
+                <div class="flex items-center rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 transition-colors overflow-hidden">
+                    <button type="button" (click)="toggleEnvMenu($event)" title="Switch Active Environment"
+                            class="flex items-center gap-1.5 pl-2.5 pr-2 py-1 text-[11px] font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer transition-colors">
+                        <span class="size-2 rounded-full shrink-0"
+                              [style.background-color]="envService.activeEnvironment()?.color || '#94a3b8'"></span>
+                        <span class="max-w-[100px] truncate">{{ envService.activeEnvironment()?.name || 'No Env' }}</span>
+                        @if (envService.activeEnvironment(); as activeEnv) {
+                            <span class="px-1 py-0 rounded text-[9px] font-mono bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) border border-(--postonsteroids-border)/50">
+                                {{ getEnvVarCount(activeEnv) }}
+                            </span>
+                        }
+                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">expand_more</mat-icon>
+                    </button>
+                    <button type="button" (click)="openEnvManagerFromMenu($event)" title="Manage Environments"
+                            class="px-2 py-1 border-l border-(--postonsteroids-border)/60 hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center transition-colors">
+                        <mat-icon class="text-[14px]! size-[14px]!">tune</mat-icon>
+                    </button>
+                </div>
+
+                @if (showEnvMenu()) {
+                    <div (click)="$event.stopPropagation()"
+                         class="absolute right-0 top-full mt-2 w-64 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl z-[120] overflow-hidden animate-fadeIn">
+                        <div class="px-3 py-2 border-b border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-tertiary)/40 flex items-center justify-between">
+                            <span class="text-[10.5px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">Environment</span>
+                            <button type="button" (click)="openEnvManagerFromMenu($event)" class="text-[10.5px] font-semibold text-(--postonsteroids-accent) hover:underline cursor-pointer">
+                                Manage
+                            </button>
+                        </div>
+
+                        <div class="p-1.5 max-h-60 overflow-y-auto flex flex-col gap-0.5 text-xs">
+                            <button type="button" (click)="selectEnvironmentFromMenu(null, $event)"
+                                    class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-left cursor-pointer transition-colors"
+                                    [class.bg-(--postonsteroids-accent)/10]="!envService.activeEnvironmentId()">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="size-2.5 rounded-full bg-slate-400 shrink-0"></span>
+                                    <span class="font-medium text-(--postonsteroids-text-secondary) truncate">No Environment</span>
+                                </div>
+                                @if (!envService.activeEnvironmentId()) {
+                                    <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent) shrink-0">check_circle</mat-icon>
+                                }
+                            </button>
+
+                            @for (env of envService.environments(); track env.id) {
+                                <button type="button" (click)="selectEnvironmentFromMenu(env.id, $event)"
+                                        class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-left cursor-pointer transition-colors"
+                                        [class.bg-(--postonsteroids-accent)/10]="envService.activeEnvironmentId() === env.id">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="size-2.5 rounded-full shrink-0" [style.background-color]="env.color || '#3b82f6'"></span>
+                                        <div class="flex flex-col min-w-0">
+                                            <span class="font-semibold text-(--postonsteroids-text-primary) truncate">{{ env.name }}</span>
+                                            <span class="text-[10px] font-mono text-(--postonsteroids-text-muted)">{{ getEnvVarCount(env) }} variable(s)</span>
+                                        </div>
+                                    </div>
+                                    @if (envService.activeEnvironmentId() === env.id) {
+                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent) shrink-0">check_circle</mat-icon>
+                                    }
+                                </button>
+                            }
+                        </div>
+
+                        <div class="px-2 py-1.5 border-t border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-primary)/40">
+                            <button type="button" (click)="openEnvManagerFromMenu($event)"
+                                    class="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold text-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent)/10 cursor-pointer transition-colors">
+                                <mat-icon class="text-[14px]! size-[14px]!">layers</mat-icon>
+                                <span>Manage Environments &amp; Variables</span>
+                            </button>
+                        </div>
+                    </div>
+                }
             </div>
             @if (!isElectron) {
                 <div class="flex items-center gap-x-2.5 shrink-0">
@@ -238,6 +292,38 @@
                         <div class="text-[10px] uppercase tracking-wider font-semibold text-(--postonsteroids-text-muted)">Signed in as</div>
                         <div class="text-[12px] font-semibold text-(--postonsteroids-text-primary) truncate mt-0.5">{{ userEmail() }}</div>
                     </div>
+
+                    @if (!subscriptionService.isOpenSourceCommunityBuild) {
+                        <div class="px-3 py-2 border-b border-(--postonsteroids-border)/60 mb-0.5">
+                            <div class="text-[10px] uppercase tracking-wider font-semibold text-(--postonsteroids-text-muted) mb-1.5">Subscription Plan</div>
+                            <div class="grid grid-cols-3 gap-1">
+                                <button type="button" (click)="switchSubscriptionPlan('community', $event)"
+                                        class="px-1.5 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors"
+                                        [class.bg-(--postonsteroids-accent)]="subscriptionService.tier() === 'community'"
+                                        [class.text-white]="subscriptionService.tier() === 'community'"
+                                        [class.border-(--postonsteroids-accent)]="subscriptionService.tier() === 'community'"
+                                        [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'community'">
+                                    Free
+                                </button>
+                                <button type="button" (click)="switchSubscriptionPlan('professional', $event)"
+                                        class="px-1.5 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors"
+                                        [class.bg-indigo-600]="subscriptionService.tier() === 'professional'"
+                                        [class.text-white]="subscriptionService.tier() === 'professional'"
+                                        [class.border-indigo-500]="subscriptionService.tier() === 'professional'"
+                                        [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'professional'">
+                                    Pro
+                                </button>
+                                <button type="button" (click)="switchSubscriptionPlan('enterprise', $event)"
+                                        class="px-1.5 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors"
+                                        [class.bg-amber-600]="subscriptionService.tier() === 'enterprise'"
+                                        [class.text-white]="subscriptionService.tier() === 'enterprise'"
+                                        [class.border-amber-500]="subscriptionService.tier() === 'enterprise'"
+                                        [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'enterprise'">
+                                    Ent
+                                </button>
+                            </div>
+                        </div>
+                    }
 
                     <button type="button" (click)="openChangePassword()"
                         class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) transition-all cursor-pointer text-left w-full group">

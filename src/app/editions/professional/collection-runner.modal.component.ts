@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
 import { RequestExecutionService } from '../../shared/services/request.execution.service';
-import { VariableService } from '../../shared/services/variable.service';
 import { NotificationService } from '../../shared/services/notification.service';
+import { BodyPortalDirective } from '../../shared/directives/body-portal.directive';
+import { RunnerSchedulerService } from '../../shared/services/runner-scheduler.service';
 
 interface RunnerResultRow {
   iteration: number;
@@ -20,14 +21,14 @@ interface RunnerResultRow {
 
 @Component({
   selector: 'app-collection-runner-modal',
-  imports: [FormsModule, MatIcon],
+  imports: [FormsModule, MatIcon, BodyPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscape($event)'
   },
   template: `
     @if (isOpen()) {
-      <div class="fixed inset-0 z-110 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
+      <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="runner-modal-title"
              class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
              (click)="$event.stopPropagation()">
@@ -77,8 +78,10 @@ interface RunnerResultRow {
             <div class="md:col-span-4 flex items-center justify-end gap-2">
               <input #dataFileInput type="file" accept=".csv,.json" class="hidden" (change)="onDataFileSelected($event)" />
               <button type="button" (click)="dataFileInput.click()" [disabled]="isRunning()"
-                      class="px-3 py-1.5 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) font-semibold cursor-pointer">
-                {{ dataRows().length > 0 ? 'Data: ' + dataRows().length + ' rows' : 'CSV / JSON Data' }}
+                      title="Import CSV or JSON test data file for sequential iterations"
+                      class="px-3 py-1.5 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) font-semibold cursor-pointer inline-flex items-center gap-1.5">
+                <mat-icon class="text-[15px]! size-[15px]! text-sky-400">upload_file</mat-icon>
+                <span>{{ dataRows().length > 0 ? 'Data: ' + dataRows().length + ' rows' : 'Import CSV / JSON Data' }}</span>
               </button>
               @if (dataRows().length > 0 && !isRunning()) {
                 <button type="button" (click)="dataRows.set([])" class="text-[11px] text-status-danger hover:underline cursor-pointer">Clear</button>
@@ -206,10 +209,10 @@ interface RunnerResultRow {
     }
   `
 })
-export class CollectionRunnerModalComponent implements OnDestroy {
+export class CollectionRunnerModalComponent {
   tabState = inject(TabStateService);
   private requestExecutor = inject(RequestExecutionService);
-  private variableService = inject(VariableService);
+  private runnerScheduler = inject(RunnerSchedulerService);
   private notification = inject(NotificationService);
   protected Math = Math;
 
@@ -226,13 +229,26 @@ export class CollectionRunnerModalComponent implements OnDestroy {
   scheduleStartAt = signal<string>('');
   scheduleEndAt = signal<string>('');
   scheduleRepeatSeconds = signal<number>(0);
-  isScheduled = signal<boolean>(false);
-  scheduledStatusLabel = signal<string>('');
+  activeScheduleJobId = signal<string | null>(null);
+
+  isScheduled = computed(() => {
+    const jobId = this.activeScheduleJobId();
+    if (!jobId) return false;
+    return this.runnerScheduler.activeJobs().some(j => j.id === jobId);
+  });
+
+  scheduledStatusLabel = computed(() => {
+    const jobId = this.activeScheduleJobId();
+    if (!jobId) return '';
+    const job = this.runnerScheduler.activeJobs().find(j => j.id === jobId);
+    if (!job) return '';
+    if (job.repeatMs > 0) {
+      return `Active (${job.runCount} runs · every ${Math.round(job.repeatMs / 1000)}s)`;
+    }
+    return `Scheduled: ${new Date(job.startAtMs).toLocaleString()}`;
+  });
 
   private stopRequested = false;
-  private startTimerId: ReturnType<typeof setTimeout> | null = null;
-  private repeatTimerId: ReturnType<typeof setInterval> | null = null;
-  private endTimerId: ReturnType<typeof setTimeout> | null = null;
 
   capsuleGroups = computed(() => this.tabState.getGroupsForCapsule(this.tabState.activeCapsuleId()));
 
@@ -272,26 +288,9 @@ export class CollectionRunnerModalComponent implements OnDestroy {
     this.close();
   }
 
-  ngOnDestroy(): void {
-    this.cancelScheduledRun(true);
-  }
-
-  private parseLocalDateTimeMs(value: string): number | null {
-    const trimmed = (value || '').trim();
-    if (!trimmed) return null;
-    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
-    if (match) {
-      const [, y, m, d, hh, mm, ss] = match;
-      const ms = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss || '0'), 0).getTime();
-      return Number.isFinite(ms) ? ms : null;
-    }
-    const ms = new Date(trimmed).getTime();
-    return Number.isFinite(ms) ? ms : null;
-  }
-
   scheduleRunner(): void {
-    const startMs = this.parseLocalDateTimeMs(this.scheduleStartAt());
-    const endMs = this.parseLocalDateTimeMs(this.scheduleEndAt());
+    const startMs = this.runnerScheduler.parseLocalDateTimeMs(this.scheduleStartAt());
+    const endMs = this.runnerScheduler.parseLocalDateTimeMs(this.scheduleEndAt());
     const now = Date.now();
     if (startMs === null) {
       this.notification.notify('Please select an execution start date & time.', 'warning');
@@ -301,66 +300,52 @@ export class CollectionRunnerModalComponent implements OnDestroy {
       this.notification.notify('Optional end date & time must be after start date & time and in the future.', 'warning');
       return;
     }
-    this.cancelScheduledRun(true);
-    this.isScheduled.set(true);
-
-    const delayUntilStart = Math.max(0, startMs - now);
+    const capsuleId = this.tabState.activeCapsuleId() || 'default';
+    const capsuleName = this.tabState.activeCapsuleName() || 'Capsule';
+    const gId = this.selectedGroupId();
+    const grpName = gId === '__all__'
+      ? 'All Requests'
+      : (this.capsuleGroups().find(g => g.id === gId)?.name || 'Folder');
     const repeatMs = this.scheduleRepeatSeconds() > 0 ? Math.max(1000, this.scheduleRepeatSeconds() * 1000) : 0;
-    this.scheduledStatusLabel.set(`Scheduled: ${new Date(startMs).toLocaleString()}`);
 
-    if (endMs !== null) {
-      this.endTimerId = setTimeout(() => {
-        this.cancelScheduledRun(true);
-        this.notification.notify('Scheduled Collection Runner ended at configured end date/time.');
-      }, Math.min(Math.max(0, endMs - now), 2_147_483_647));
-    }
-
-    const executeScheduled = () => {
-      if (endMs !== null && Date.now() >= endMs) {
-        this.cancelScheduledRun(true);
-        return;
+    const job = this.runnerScheduler.scheduleCollectionRun({
+      capsuleId,
+      capsuleName,
+      groupId: gId,
+      scopeLabel: grpName,
+      startAtMs: startMs,
+      endAtMs: endMs,
+      repeatMs,
+      iterations: this.iterations(),
+      delayMs: this.delayMs(),
+      dataRows: this.dataRows(),
+      onBatchResults: (rows) => {
+        this.results.set(rows.map(r => ({
+          iteration: r.iteration,
+          requestId: r.requestId,
+          requestName: r.requestName,
+          method: r.method,
+          status: r.status,
+          responseTime: r.responseTime,
+          testsPassed: r.testsPassed,
+          testsFailed: r.testsFailed,
+          dataRowLabel: r.dataRowLabel
+        })));
       }
-      if (!this.isRunning()) {
-        void this.startRun();
-      }
-    };
-
-    this.startTimerId = setTimeout(() => {
-      executeScheduled();
-      if (repeatMs > 0) {
-        this.scheduledStatusLabel.set(`Running every ${Math.round(repeatMs / 1000)}s`);
-        this.repeatTimerId = setInterval(executeScheduled, repeatMs);
-      } else {
-        this.cancelScheduledRun(true);
-      }
-    }, Math.min(delayUntilStart, 2_147_483_647));
-
-    this.notification.notify(`Collection run scheduled for ${new Date(startMs).toLocaleString()}`, 'success');
+    });
+    this.activeScheduleJobId.set(job.id);
   }
 
   cancelScheduledRun(silent = false): void {
-    if (this.startTimerId) {
-      clearTimeout(this.startTimerId);
-      this.startTimerId = null;
+    const jobId = this.activeScheduleJobId();
+    if (jobId) {
+      this.runnerScheduler.cancelJob(jobId, silent);
+      this.activeScheduleJobId.set(null);
     }
-    if (this.repeatTimerId) {
-      clearInterval(this.repeatTimerId);
-      this.repeatTimerId = null;
-    }
-    if (this.endTimerId) {
-      clearTimeout(this.endTimerId);
-      this.endTimerId = null;
-    }
-    if (this.isScheduled() && !silent) {
-      this.notification.notify('Scheduled collection run cancelled.');
-    }
-    this.isScheduled.set(false);
-    this.scheduledStatusLabel.set('');
   }
 
   close(): void {
     this.stopRun();
-    this.cancelScheduledRun(true);
     this.closed.emit();
   }
 
@@ -423,21 +408,18 @@ export class CollectionRunnerModalComponent implements OnDestroy {
 
     const data = this.dataRows();
     const totalIterations = data.length > 0 ? data.length : this.iterations();
-    let activeRowData: Record<string, string> | null = null;
-    const unregisterResolver = this.variableService.registerExternalResolver((key: string) => {
-      if (!activeRowData) return undefined;
-      return Object.prototype.hasOwnProperty.call(activeRowData, key) ? activeRowData[key] : undefined;
-    });
 
     try {
       for (let iter = 1; iter <= totalIterations; iter++) {
         if (this.stopRequested) break;
-        activeRowData = data.length > 0 ? data[iter - 1] : null;
+        const activeRowData = data.length > 0 ? data[iter - 1] : undefined;
 
         for (const req of queue) {
           if (this.stopRequested) break;
           this.tabState.addOpenTab(req);
-          await this.requestExecutor.executeRequest(req.id);
+          await this.requestExecutor.executeRequest(req.id, false, 0, 0, {
+            overrideVars: activeRowData
+          });
           const fresh = this.tabState.getState(req.id);
           const tests = fresh?.testResults || [];
           const passed = tests.filter(t => t.passed).length;
@@ -466,7 +448,6 @@ export class CollectionRunnerModalComponent implements OnDestroy {
         this.notification.notify(`Collection run finished (${this.results().length} executions).`, 'success');
       }
     } finally {
-      unregisterResolver();
       this.isRunning.set(false);
     }
   }

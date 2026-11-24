@@ -4,6 +4,7 @@ import { MatIcon } from '@angular/material/icon';
 import { TabStateService } from '../../shared/services/tab.state.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { isElectronApp } from '../../shared/utils/url.util';
+import { BodyPortalDirective } from '../../shared/directives/body-portal.directive';
 
 export interface MockRouteEntry {
   method: string;
@@ -17,14 +18,14 @@ export interface MockRouteEntry {
 
 @Component({
   selector: 'app-mock-server-modal',
-  imports: [FormsModule, MatIcon],
+  imports: [FormsModule, MatIcon, BodyPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscape($event)'
   },
   template: `
     @if (isOpen()) {
-      <div class="fixed inset-0 z-110 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
+      <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="mock-mgr-title"
              class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[86vh]"
              (click)="$event.stopPropagation()">

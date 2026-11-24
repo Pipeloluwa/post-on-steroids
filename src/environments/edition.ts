@@ -4,8 +4,9 @@ import { EnterpriseFullToolbarComponent } from '../app/editions/enterprise/enter
 export const APP_EDITION: EditionDescriptor = {
   id: 'enterprise',
   label: 'Enterprise',
-  tagline: 'Governance, Vault, mTLS, RBAC, Audit & Load Testing',
+  tagline: 'Unified Commercial Build (Subscription-Gated)',
   isProOrHigher: true,
   isEnterprise: true,
+  subscriptionGated: true,
   toolbarComponent: EnterpriseFullToolbarComponent
 };

@@ -6,5 +6,6 @@ export const APP_EDITION: EditionDescriptor = {
   tagline: 'Free & Open API Client',
   isProOrHigher: false,
   isEnterprise: false,
+  subscriptionGated: false,
   toolbarComponent: null
 };

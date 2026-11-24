@@ -1,11 +1,12 @@
 import { EditionDescriptor } from './edition.types';
-import { ProfessionalToolbarComponent } from '../app/editions/professional/professional-toolbar.component';
+import { EnterpriseFullToolbarComponent } from '../app/editions/enterprise/enterprise-full-toolbar.component';
 
 export const APP_EDITION: EditionDescriptor = {
   id: 'professional',
   label: 'Professional',
-  tagline: 'Environments, Runner, Mocks & Version History',
+  tagline: 'Unified Commercial Build (Subscription-Gated)',
   isProOrHigher: true,
   isEnterprise: false,
-  toolbarComponent: ProfessionalToolbarComponent
+  subscriptionGated: true,
+  toolbarComponent: EnterpriseFullToolbarComponent
 };

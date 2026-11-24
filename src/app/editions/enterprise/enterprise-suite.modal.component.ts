@@ -3,9 +3,10 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
 import { EnterpriseGovernanceService, EnterpriseRole } from './enterprise-governance.service';
-import { TabStateService } from '../../shared/services/tab.state.service';
+import { TabStateService, CapsuleLockMode } from '../../shared/services/tab.state.service';
 import { VariableService } from '../../shared/services/variable.service';
 import { NotificationService } from '../../shared/services/notification.service';
+import { BodyPortalDirective } from '../../shared/directives/body-portal.directive';
 import { isElectronApp } from '../../shared/utils/url.util';
 import { environment } from '../../../environments/environment';
 import { copyTextToClipboard } from '../../shared/utils/clipboard.util';
@@ -27,16 +28,16 @@ interface LoadTestSummary {
 
 @Component({
   selector: 'app-enterprise-suite-modal',
-  imports: [FormsModule, MatIcon, DatePipe],
+  imports: [FormsModule, MatIcon, DatePipe, BodyPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscape($event)'
   },
   template: `
     @if (isOpen()) {
-      <div class="fixed inset-0 z-115 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" (click)="close()">
+      <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="ent-suite-title"
-             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col h-[82vh] max-h-[82vh]"
              (click)="$event.stopPropagation()">
 
           <!-- Header -->
@@ -292,19 +293,29 @@ interface LoadTestSummary {
                   <p class="text-[11px] text-(--postonsteroids-text-muted)">Setting role to <strong>Viewer</strong> enforces read-only protection on requests and payloads while still permitting test execution.</p>
                 </div>
 
-                <div class="p-4 rounded-xl bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border) space-y-2">
-                  <div class="font-bold text-(--postonsteroids-text-primary)">Capsule Freeze / Lock</div>
-                  <div class="flex items-center justify-between">
-                    <span>Active Capsule: <strong>{{ tabState.activeCapsuleName() }}</strong></span>
-                    <button type="button" (click)="gov.toggleCapsuleLock(tabState.activeCapsuleId())"
-                            class="px-3 py-1.5 rounded-lg font-semibold cursor-pointer flex items-center gap-1"
-                            [class.bg-amber-600]="gov.isActiveCapsuleLocked()" [class.text-white]="gov.isActiveCapsuleLocked()"
-                            [class.bg-(--postonsteroids-bg-secondary)]="!gov.isActiveCapsuleLocked()"
-                            [class.border]="!gov.isActiveCapsuleLocked()" [class.border-(--postonsteroids-border)]="!gov.isActiveCapsuleLocked()">
-                      <mat-icon class="text-[14px]! size-[14px]!">{{ gov.isActiveCapsuleLocked() ? 'lock' : 'lock_open' }}</mat-icon>
-                      <span>{{ gov.isActiveCapsuleLocked() ? 'Locked (Click to Unlock)' : 'Lock Capsule' }}</span>
-                    </button>
+                <div class="p-4 rounded-xl bg-(--postonsteroids-bg-tertiary)/50 border border-(--postonsteroids-border) space-y-2.5">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="font-bold text-(--postonsteroids-text-primary)">Capsule Access &amp; Lock Mode</div>
+                    <span class="text-[11px] text-(--postonsteroids-text-muted)">Capsule: <strong>{{ tabState.activeCapsuleName() }}</strong></span>
                   </div>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    @for (m of lockModeOptions; track m.value) {
+                      <button type="button" (click)="setActiveCapsuleLockMode(m.value)"
+                              class="px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer flex items-center gap-1 transition-colors"
+                              [class.bg-amber-600]="tabState.activeCapsuleLockMode() === m.value && m.value !== 'unlocked'"
+                              [class.border-amber-500]="tabState.activeCapsuleLockMode() === m.value && m.value !== 'unlocked'"
+                              [class.bg-(--postonsteroids-accent)]="tabState.activeCapsuleLockMode() === m.value && m.value === 'unlocked'"
+                              [class.border-(--postonsteroids-accent)]="tabState.activeCapsuleLockMode() === m.value && m.value === 'unlocked'"
+                              [class.text-white]="tabState.activeCapsuleLockMode() === m.value"
+                              [class.bg-(--postonsteroids-bg-secondary)]="tabState.activeCapsuleLockMode() !== m.value"
+                              [class.border-(--postonsteroids-border)]="tabState.activeCapsuleLockMode() !== m.value"
+                              [class.text-(--postonsteroids-text-secondary)]="tabState.activeCapsuleLockMode() !== m.value">
+                        <mat-icon class="text-[13px]! size-[13px]!">{{ m.icon }}</mat-icon>
+                        <span>{{ m.label }}</span>
+                      </button>
+                    }
+                  </div>
+                  <p class="text-[10.5px] text-(--postonsteroids-text-muted)">Shared capsule links inherit the selected lock mode so recipients operate under the same Read-Only, Edit-Only, or Locked rules.</p>
                 </div>
               </div>
 
@@ -412,6 +423,19 @@ export class EnterpriseSuiteModalComponent {
 
   activeTab = signal<EnterpriseTab>('governance');
   roles: EnterpriseRole[] = ['Admin', 'Editor', 'Viewer'];
+  lockModeOptions: Array<{ value: CapsuleLockMode; label: string; icon: string }> = [
+    { value: 'unlocked', label: 'Unlocked', icon: 'lock_open' },
+    { value: 'read-only', label: 'Read-Only', icon: 'visibility' },
+    { value: 'edit-only', label: 'Edit-Only', icon: 'edit_note' },
+    { value: 'locked', label: 'Locked', icon: 'lock' }
+  ];
+
+  setActiveCapsuleLockMode(mode: CapsuleLockMode): void {
+    const capId = this.tabState.activeCapsuleId();
+    if (!capId) return;
+    this.tabState.setCapsuleLockMode(capId, mode);
+    this.notification.notify(`Capsule lock mode set to ${mode}.`);
+  }
 
   // Vault inputs
   vaultKeyInput = signal('');

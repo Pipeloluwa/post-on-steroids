@@ -8,7 +8,7 @@ import { getGlobalRequestTimeoutMs } from '../utils/request-timeout.util';
 import { sanitizeJsonBodyForScripts } from '../utils/format.utils';
 import { environment } from '../../../environments/environment';
 import { SandboxPackagesService } from './sandbox-packages.service';
-import { APP_EDITION } from '../../../environments/edition';
+import { SubscriptionService } from './subscription.service';
 import type { ScriptLanguage } from '../constants/script.snippets.constants';
 import { detectScriptLanguage, getPythonRuntimeBootstrapScript, transpilePythonToJs } from '../utils/python-script-engine.util';
 
@@ -138,6 +138,7 @@ export class SandboxExecutionService {
   private platformId = inject(PLATFORM_ID);
   private http = inject(HttpClient);
   private packagesService = inject(SandboxPackagesService);
+  private subscriptionService = inject(SubscriptionService);
   private iframe: HTMLIFrameElement | null = null;
 
   constructor() {
@@ -195,14 +196,15 @@ window.addEventListener("message", (event) => {
   }
 });
 
-function __osbBridgeFetch(payload) {
+function __osbBridgeFetch(payload, reqTimeoutMs) {
   return new Promise((resolve, reject) => {
     const fetchId = "f" + Date.now().toString(36) + "_" + (++__osbSeq);
-    const timer = __osbTimeoutMs > 0
+    const effectiveTimeoutMs = (typeof reqTimeoutMs === "number" && Number.isFinite(reqTimeoutMs) && reqTimeoutMs >= 0) ? reqTimeoutMs : 0;
+    const timer = effectiveTimeoutMs > 0
       ? setTimeout(() => {
           __osbPending.delete(fetchId);
-          reject(new Error("Request timed out after " + __osbTimeoutMs + " ms: " + payload.url));
-        }, __osbTimeoutMs)
+          reject(new Error("Request timed out after " + effectiveTimeoutMs + " ms: " + payload.url));
+        }, effectiveTimeoutMs)
       : null;
     __osbPending.set(fetchId, { resolve: resolve, reject: reject, timer: timer });
     window.parent.postMessage(Object.assign({ type: "__osb_fetch__", fetchId: fetchId }, payload), "*");
@@ -212,17 +214,23 @@ function __osbBridgeFetch(payload) {
 window.addEventListener("message", async (event) => {
   if (event.source !== window.parent) return;
   const { id, code, context, timeoutMs } = event.data || {};
-  if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs >= 0) {
-    __osbTimeoutMs = Math.floor(timeoutMs);
-  }
+  const execTimeoutMs = (typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs >= 0)
+    ? Math.floor(timeoutMs)
+    : 0;
   if (!id) return;
 
   let logs = [];
-  const originalConsoleLog = console.log;
-  console.log = (...args) => {
-    logs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
-    originalConsoleLog(...args);
-  };
+  const execConsole = Object.assign({}, console, {
+    log: (...args) => {
+      logs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
+    },
+    warn: (...args) => {
+      logs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
+    },
+    error: (...args) => {
+      logs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
+    }
+  });
 
   async function _proxyFetch(input, init) {
     let targetUrl = '';
@@ -268,7 +276,7 @@ window.addEventListener("message", async (event) => {
       method: method,
       headers: headersObj,
       body: (bodyPayload === undefined || bodyPayload === null) ? null : bodyPayload
-    });
+    }, execTimeoutMs);
 
     let status = Number(result.status) || 200;
     if (status < 200) status = 200;
@@ -547,7 +555,12 @@ window.addEventListener("message", async (event) => {
       })
     };
     pm.globals = pm.variables;
-    pm.collectionVariables = pm.variables;
+    pm.collectionVariables = {
+      get: (k) => Object.prototype.hasOwnProperty.call(variables, k) ? variables[k] : undefined,
+      has: (k) => Object.prototype.hasOwnProperty.call(variables, k),
+      set: setVariable,
+      toObject: () => Object.assign({}, variables)
+    };
 
     pm.request = {
       url: context.url || '',
@@ -829,15 +842,15 @@ window.addEventListener("message", async (event) => {
     const fnBody = fnBodyLines.join(String.fromCharCode(10));
       
     const executeInSandbox = new Function(
-      "pm", "context", "test", "expect", "_proxyFetch", "__osbImport", "require",
+      "st", "pm", "context", "test", "expect", "_proxyFetch", "__osbImport", "require",
       "postman", "setNextRequest", "environment", "variables",
-      "getEnv", "setEnv", "unsetEnv", "getVariable", "setVariable", "__py",
+      "getEnv", "setEnv", "unsetEnv", "getVariable", "setVariable", "__py", "console",
       fnBody
     );
     await executeInSandbox(
-      pm, context, test, pm.expect, _proxyFetch, __osbImport, require,
+      pm, pm, context, test, pm.expect, _proxyFetch, __osbImport, require,
       postman, setNextRequest, environment, variables,
-      getEnv, setEnv, unsetEnv, getVariable, setVariable, __py
+      getEnv, setEnv, unsetEnv, getVariable, setVariable, __py, execConsole
     );
 
     // Sync direct object mutations made on exposed \`environment\` and \`variables\` objects
@@ -925,7 +938,6 @@ window.addEventListener("message", async (event) => {
     if (__osbIsPythonRun) {
       __py.removeProtoShims();
     }
-    console.log = originalConsoleLog;
   }
 });`;
 
@@ -1209,7 +1221,7 @@ window.addEventListener("message", async (event) => {
       }
       safeContext.__scriptLanguage = scriptLang;
 
-      if (APP_EDITION.isProOrHigher) {
+      if (this.subscriptionService.isProOrHigher()) {
         safeContext.__allowSandboxPackages = true;
         safeContext.__installedPackages = this.packagesService.getPackageCodeMap();
       } else {

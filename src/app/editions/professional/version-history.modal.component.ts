@@ -5,6 +5,7 @@ import { MatIcon } from '@angular/material/icon';
 import { TabStateService, RequestState } from '../../shared/services/tab.state.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { generateUUID } from '../../shared/utils/uuid.util';
+import { BodyPortalDirective } from '../../shared/directives/body-portal.directive';
 
 export interface RequestVersionSnapshot {
   id: string;
@@ -19,14 +20,14 @@ const SNAPSHOT_STORAGE_KEY = 'onsteroids_pro_snapshots';
 
 @Component({
   selector: 'app-version-history-modal',
-  imports: [FormsModule, MatIcon, DatePipe],
+  imports: [FormsModule, MatIcon, DatePipe, BodyPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'onEscape($event)'
   },
   template: `
     @if (isOpen()) {
-      <div class="fixed inset-0 z-110 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
+      <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="ver-hist-title"
              class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[86vh]"
              (click)="$event.stopPropagation()">

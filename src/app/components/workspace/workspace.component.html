@@ -375,8 +375,9 @@
                      [class.bg-(--postonsteroids-accent)/8]="isRequestFocused(req.id) && !selectedRequestIds().has(req.id) && tabStateService.activeTabId() !== req.id"
                      [class.bg-(--postonsteroids-accent)/12]="selectedRequestIds().has(req.id)"
                      [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id && !selectedRequestIds().has(req.id)"
-                     [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)') + ' — Shift+Click or Ctrl+Click to multi-select'"
+                     [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)') + ' — Right-click for actions'"
                      (click)="onRequestRowContainerClick(req, $event, groupId)"
+                     (contextmenu)="openSidebarRequestContextMenu(req, groupId, $event)"
                      (dblclick)="startEditingRequest(req, $event)">
 
                     @if (tabStateService.activeTabId() === req.id || selectedRequestIds().has(req.id)) {
@@ -442,37 +443,12 @@
                         </button>
                     }
 
-                    <!-- Hover actions (only take layout space on row hover or when move menu is open) -->
-                    <div class="hidden group-hover/tab:flex items-center gap-x-0.5 shrink-0"
-                         [class.flex!]="moveMenuRequestId() === req.id"
+                    <!-- Hover action: Delete only (remaining actions live in the right-click context menu) -->
+                    <div class="hidden group-hover/tab:flex items-center shrink-0"
                          (click)="$event.stopPropagation()"
                          (mousedown)="$event.stopPropagation()"
                          (pointerdown)="$event.stopPropagation()"
                          (touchstart)="$event.stopPropagation()">
-                        <button class="cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
-                                type="button"
-                                title="Duplicate request"
-                                aria-label="Duplicate request"
-                                (click)="duplicateRequestFromSidebar(req.id, $event)">
-                            <mat-icon class="text-[14px]! size-[14px]!">content_copy</mat-icon>
-                        </button>
-
-                        <button class="cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
-                                type="button"
-                                title="Rename request"
-                                aria-label="Rename request"
-                                (click)="startEditingRequest(req, $event)">
-                            <mat-icon class="text-[14px]! size-[14px]!">edit</mat-icon>
-                        </button>
-
-                        <button class="cursor-pointer hover:text-(--postonsteroids-accent) text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
-                                type="button"
-                                title="Move to folder / group"
-                                aria-label="Move request to folder"
-                                (click)="toggleMoveMenu(req.id, $event)">
-                            <mat-icon class="text-[14px]! size-[14px]!">drive_file_move</mat-icon>
-                        </button>
-
                         <button class="cursor-pointer hover:text-status-danger text-(--postonsteroids-text-muted) p-0.5 rounded hover:bg-(--postonsteroids-bg-secondary) flex items-center justify-center"
                                 type="button"
                                 title="Delete request"
@@ -482,53 +458,6 @@
                         </button>
                     </div>
                 </div>
-
-            <!-- Quick Move-to-Folder Dropdown Menu -->
-                @if (moveMenuRequestId() === req.id) {
-                    <div class="mx-2 my-1 p-1 rounded-md bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) shadow-lg flex flex-col gap-y-0.5 z-30"
-                         (click)="$event.stopPropagation()">
-                        <span class="text-[9px] font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) px-1.5 py-0.5">
-                            Move to Folder
-                        </span>
-                        @for (g of tabStateService.activeCapsuleGroups(); track g.id) {
-                            @if (g.id !== groupId) {
-                                <button (click)="moveRequestToGroupFromMenu(req.id, g.id, $event)" type="button"
-                                        class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer truncate">
-                                    <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">folder</mat-icon>
-                                    <span class="truncate">{{ g.name }}</span>
-                                </button>
-                            }
-                        }
-                        @if (groupId) {
-                            <button (click)="moveRequestToGroupFromMenu(req.id, null, $event)" type="button"
-                                    class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
-                                <mat-icon class="text-[13px]! size-[13px]! shrink-0">folder_off</mat-icon>
-                                <span>Remove from folder (Ungroup)</span>
-                            </button>
-                        }
-                        <button (click)="moveRequestToNewGroupFromMenu(req.id, $event)" type="button"
-                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) cursor-pointer border-t border-(--postonsteroids-border)/40 mt-0.5 pt-1">
-                            <mat-icon class="text-[13px]! size-[13px]! shrink-0">create_new_folder</mat-icon>
-                            <span>+ New Folder with this request</span>
-                        </button>
-                        <div class="h-px bg-(--postonsteroids-border)/40 my-0.5"></div>
-                        <button (click)="openTransferModalForRequest(req.id, 'copy', $event)" type="button"
-                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
-                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">content_copy</mat-icon>
-                            <span>Copy to Capsule...</span>
-                        </button>
-                        <button (click)="openTransferModalForRequest(req.id, 'move', $event)" type="button"
-                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
-                            <mat-icon class="text-[13px]! size-[13px]! text-status-warning shrink-0">drive_file_move</mat-icon>
-                            <span>Move to Capsule...</span>
-                        </button>
-                        <button (click)="openCurlModalFromMenu(req, $event)" type="button"
-                                class="flex items-center gap-x-1.5 px-1.5 py-1 rounded text-[11px] text-left text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer">
-                            <mat-icon class="text-[13px]! size-[13px]! text-status-success shrink-0">code</mat-icon>
-                            <span>Copy / View as cURL</span>
-                        </button>
-                    </div>
-                }
 
                 <!-- Nested Examples list -->
                 @if (isRequestExpanded(req.id)) {
@@ -652,4 +581,100 @@
 <app-curl-modal [isOpen]="curlModalRequest() !== null"
                 [request]="curlModalRequest()"
                 (closed)="curlModalRequest.set(null)" />
+
+<!-- Vertical Sidebar Request Right-Click Context Menu -->
+@if (sidebarContextMenu().isOpen && sidebarContextMenu().req; as ctxReq) {
+    <div class="fixed inset-0 z-500"
+         (click)="closeSidebarRequestContextMenu()"
+         (contextmenu)="closeSidebarRequestContextMenu(); $event.preventDefault()">
+    </div>
+    <div class="fixed z-501 w-[224px] py-1.5 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) shadow-2xl text-[11.5px] text-(--postonsteroids-text-primary) flex flex-col"
+         [style.left.px]="sidebarContextMenu().x"
+         [style.top.px]="sidebarContextMenu().y"
+         (click)="$event.stopPropagation()">
+        <div class="px-3 py-1 border-b border-(--postonsteroids-border)/50 mb-1 flex items-center gap-1.5">
+            <span class="font-mono font-bold text-[10px] shrink-0" [class]="getMethodColor(ctxReq.method)">
+                {{ getShortMethod(ctxReq.method) }}
+            </span>
+            <span class="truncate font-semibold text-[11px] text-(--postonsteroids-text-secondary)">
+                {{ tabStateService.resolveRequestTitle(ctxReq.name, ctxReq.url) }}
+            </span>
+        </div>
+
+        <button type="button" (click)="contextOpenRequest($event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">open_in_new</mat-icon>
+            <span>Open Request</span>
+        </button>
+
+        <button type="button" (click)="contextRenameRequest($event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-secondary)">edit</mat-icon>
+            <span>Rename</span>
+        </button>
+
+        <button type="button" (click)="contextDuplicateRequest($event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">content_copy</mat-icon>
+            <span>Duplicate</span>
+        </button>
+
+        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
+
+        <div class="px-3 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+            Move to Folder
+        </div>
+        <div class="max-h-28 overflow-y-auto custom-scrollbar flex flex-col">
+            @for (g of tabStateService.activeCapsuleGroups(); track g.id) {
+                @if (g.id !== sidebarContextMenu().groupId) {
+                    <button type="button" (click)="contextMoveToGroup(g.id, $event)"
+                            class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer truncate">
+                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent) shrink-0">folder</mat-icon>
+                        <span class="truncate">{{ g.name }}</span>
+                    </button>
+                }
+            }
+            @if (sidebarContextMenu().groupId) {
+                <button type="button" (click)="contextMoveToGroup(null, $event)"
+                        class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) flex items-center gap-x-2 cursor-pointer">
+                    <mat-icon class="text-[14px]! size-[14px]! shrink-0">folder_off</mat-icon>
+                    <span>Remove from Folder</span>
+                </button>
+            }
+            <button type="button" (click)="contextMoveToNewGroup($event)"
+                    class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) flex items-center gap-x-2 cursor-pointer">
+                <mat-icon class="text-[14px]! size-[14px]! shrink-0">create_new_folder</mat-icon>
+                <span>New Folder with Request</span>
+            </button>
+        </div>
+
+        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
+
+        <button type="button" (click)="contextTransferCapsule('copy', $event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">content_copy</mat-icon>
+            <span>Copy to Capsule...</span>
+        </button>
+
+        <button type="button" (click)="contextTransferCapsule('move', $event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-status-warning">drive_file_move</mat-icon>
+            <span>Move to Capsule...</span>
+        </button>
+
+        <button type="button" (click)="contextOpenCurl($event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-status-success">code</mat-icon>
+            <span>Copy / View as cURL</span>
+        </button>
+
+        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
+
+        <button type="button" (click)="contextDeleteRequest($event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-status-danger/10 text-status-danger flex items-center gap-x-2 cursor-pointer font-medium">
+            <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+            <span>Delete Request</span>
+        </button>
+    </div>
+}
 </div>
