@@ -6,15 +6,25 @@ import { generateUUID } from '../utils/uuid.util';
 
 export interface CollectionRunnerRowResult {
   iteration: number;
+  capsuleId?: string;
   requestId: string;
   requestName: string;
   method: string;
+  url?: string;
   status: number;
   responseTime: number;
   testsPassed: number;
   testsFailed: number;
   dataRowLabel?: string;
+  responseHeaders?: any[];
+  responseBody?: any;
+  testResults?: Array<{ name: string; passed: boolean; error?: string }>;
   error?: string;
+}
+
+export interface CollectionScheduleTarget {
+  capsuleId: string;
+  requestId: string;
 }
 
 export interface CollectionScheduleJob {
@@ -23,6 +33,7 @@ export interface CollectionScheduleJob {
   capsuleName: string;
   scopeLabel: string;
   groupId: string;
+  selectedTargets?: CollectionScheduleTarget[];
   startAtMs: number;
   endAtMs: number | null;
   repeatMs: number;
@@ -42,12 +53,18 @@ export interface ScheduledExecutionLogEntry {
   sourceType: 'collection' | 'trigger';
   jobId: string;
   jobName: string;
+  capsuleId?: string;
+  requestId?: string;
   method: string;
   requestName: string;
+  url?: string;
   status: number;
   durationMs: number;
   testsPassed: number;
   testsFailed: number;
+  responseHeaders?: any[];
+  responseBody?: any;
+  testResults?: Array<{ name: string; passed: boolean; error?: string }>;
   error?: string;
 }
 
@@ -114,6 +131,7 @@ export class RunnerSchedulerService implements OnDestroy {
     capsuleName: string;
     groupId: string;
     scopeLabel: string;
+    selectedTargets?: CollectionScheduleTarget[];
     startAtMs: number;
     endAtMs: number | null;
     repeatMs: number;
@@ -130,6 +148,7 @@ export class RunnerSchedulerService implements OnDestroy {
       capsuleName: config.capsuleName,
       scopeLabel: config.scopeLabel,
       groupId: config.groupId,
+      selectedTargets: config.selectedTargets ? [...config.selectedTargets] : undefined,
       startAtMs: config.startAtMs,
       endAtMs: config.endAtMs,
       repeatMs: config.repeatMs,
@@ -287,6 +306,27 @@ export class RunnerSchedulerService implements OnDestroy {
   }
 
   private resolveJobRequests(job: CollectionScheduleJob): RequestState[] {
+    if (job.selectedTargets && job.selectedTargets.length > 0) {
+      const capCache = new Map<string, RequestState[]>();
+      const out: RequestState[] = [];
+      const seen = new Set<string>();
+      for (const target of job.selectedTargets) {
+        if (seen.has(target.requestId)) continue;
+        let match = this.tabState.getState(target.requestId);
+        if (!match && target.capsuleId) {
+          if (!capCache.has(target.capsuleId)) {
+            capCache.set(target.capsuleId, this.tabState.getCapsuleRequestsSync(target.capsuleId));
+          }
+          match = capCache.get(target.capsuleId)?.find(r => r.id === target.requestId);
+        }
+        if (match) {
+          seen.add(match.id);
+          out.push(match);
+        }
+      }
+      return out;
+    }
+
     const all = this.tabState.getCapsuleRequestsSync(job.capsuleId);
     if (!job.groupId || job.groupId === '__all__') return all;
     const grp = this.tabState.getGroupsForCapsule(job.capsuleId).find(g => g.id === job.groupId);
@@ -309,7 +349,18 @@ export class RunnerSchedulerService implements OnDestroy {
         const checkCancelled = this.jobs().find(j => j.id === job.id);
         if (!checkCancelled || checkCancelled.status === 'cancelled') break;
 
-        let summary = { status: 0, responseTime: 0, testsPassed: 0, testsFailed: 0, error: undefined as string | undefined };
+        let summary: {
+          status: number;
+          responseTime: number;
+          testsPassed: number;
+          testsFailed: number;
+          url?: string;
+          responseHeaders?: any[];
+          responseBody?: any;
+          testResults?: Array<{ name: string; passed: boolean; error?: string }>;
+          error?: string;
+        } = { status: 0, responseTime: 0, testsPassed: 0, testsFailed: 0 };
+
         await this.requestExecutor.executeRequest(req.id, false, 0, 0, {
           isolatedRun: true,
           overrideVars,
@@ -319,6 +370,10 @@ export class RunnerSchedulerService implements OnDestroy {
               responseTime: Math.round(res.durationMs || 0),
               testsPassed: res.testsPassed,
               testsFailed: res.testsFailed,
+              url: res.url || req.url,
+              responseHeaders: res.responseHeaders,
+              responseBody: res.responseBody,
+              testResults: res.testResults,
               error: res.error
             };
           }
@@ -326,13 +381,18 @@ export class RunnerSchedulerService implements OnDestroy {
 
         const row: CollectionRunnerRowResult = {
           iteration: iter,
+          capsuleId: req.capsuleId,
           requestId: req.id,
           requestName: req.name || req.url,
           method: req.method,
+          url: summary.url,
           status: summary.status,
           responseTime: summary.responseTime,
           testsPassed: summary.testsPassed,
           testsFailed: summary.testsFailed,
+          responseHeaders: summary.responseHeaders,
+          responseBody: summary.responseBody,
+          testResults: summary.testResults,
           error: summary.error
         };
         results.push(row);
@@ -342,12 +402,18 @@ export class RunnerSchedulerService implements OnDestroy {
           sourceType: 'collection',
           jobId: job.id,
           jobName: `${job.capsuleName} (${job.scopeLabel})`,
+          capsuleId: req.capsuleId,
+          requestId: req.id,
           method: row.method,
           requestName: row.requestName,
+          url: row.url,
           status: row.status,
           durationMs: row.responseTime,
           testsPassed: row.testsPassed,
           testsFailed: row.testsFailed,
+          responseHeaders: row.responseHeaders,
+          responseBody: row.responseBody,
+          testResults: row.testResults,
           error: row.error
         });
 

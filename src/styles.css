@@ -297,12 +297,22 @@ input[type="password"]::-ms-clear {
   z-index: 45 !important;
 }
 
+.monaco-editor .find-widget .button {
+  box-sizing: content-box !important;
+}
+
 .monaco-editor .find-widget > .button.codicon-widget-close,
 .monaco-editor .find-widget .button.codicon-widget-close {
   position: absolute !important;
-  top: 5px !important;
+  top: 4.5px !important;
   right: 4px !important;
+  width: 16px !important;
+  height: 16px !important;
+  padding: 3px !important;
   margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   z-index: 5 !important;
 }
 

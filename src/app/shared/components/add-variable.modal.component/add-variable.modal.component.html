@@ -1,5 +1,5 @@
 @if (variableService.showAddModal()) {
-<div class="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-3 sm:p-4" (click)="close()">
+<div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm overflow-y-auto p-3 sm:p-4" (click)="close()">
     <div class="w-full max-w-md my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 sm:p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-4 relative" (click)="$event.stopPropagation()">
         
         <!-- Header -->
@@ -20,6 +20,45 @@
 
         <!-- Form fields -->
         <div class="space-y-4 text-xs">
+            <!-- Save Scope Selection (Environment vs Capsule) -->
+            <div>
+                <label class="block font-semibold text-(--postonsteroids-text-secondary) mb-1.5">
+                    Save Destination Scope
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button"
+                            [disabled]="variableService.modalType() === 'path'"
+                            (click)="saveScope.set('environment')"
+                            class="px-2.5 py-2 rounded-xl border text-left transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                            [class.border-(--postonsteroids-accent)]="saveScope() === 'environment'"
+                            [class.bg-(--postonsteroids-accent)/12]="saveScope() === 'environment'"
+                            [class.border-(--postonsteroids-border)]="saveScope() !== 'environment'"
+                            [class.bg-(--postonsteroids-bg-tertiary)]="saveScope() !== 'environment'">
+                        <div class="font-bold text-(--postonsteroids-text-primary) truncate">
+                            {{ envService.activeEnvironment() ? 'Env: ' + envService.activeEnvironment()!.name : 'Env: DEV (Auto)' }}
+                        </div>
+                        <div class="text-[10px] text-(--postonsteroids-text-muted)">
+                            Switches per environment
+                        </div>
+                    </button>
+
+                    <button type="button"
+                            (click)="saveScope.set('capsule')"
+                            class="px-2.5 py-2 rounded-xl border text-left transition-all cursor-pointer"
+                            [class.border-(--postonsteroids-accent)]="saveScope() === 'capsule'"
+                            [class.bg-(--postonsteroids-accent)/12]="saveScope() === 'capsule'"
+                            [class.border-(--postonsteroids-border)]="saveScope() !== 'capsule'"
+                            [class.bg-(--postonsteroids-bg-tertiary)]="saveScope() !== 'capsule'">
+                        <div class="font-bold text-(--postonsteroids-text-primary) truncate">
+                            Capsule: {{ tabStateService.activeCapsuleName() || 'Default' }}
+                        </div>
+                        <div class="text-[10px] text-(--postonsteroids-text-muted)">
+                            Shared across environments
+                        </div>
+                    </button>
+                </div>
+            </div>
+
             <!-- Variable Type Selection -->
             <div>
                 <label class="block font-semibold text-(--postonsteroids-text-secondary) mb-1.5">
@@ -31,7 +70,7 @@
                         <span class="text-(--postonsteroids-text-primary)">Global <code class="text-status-success font-mono ml-1">{{'{{...}}'}}</code></span>
                     </label>
                     <label class="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" name="varType" value="path" [ngModel]="variableService.modalType()" (ngModelChange)="variableService.modalType.set($event)" class="accent-(--postonsteroids-accent)" />
+                        <input type="radio" name="varType" value="path" [ngModel]="variableService.modalType()" (ngModelChange)="variableService.modalType.set($event); saveScope.set('capsule')" class="accent-(--postonsteroids-accent)" />
                         <span class="text-(--postonsteroids-text-primary)">Path <code class="text-status-warning font-mono ml-1">:...</code></span>
                     </label>
                 </div>

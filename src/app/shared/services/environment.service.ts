@@ -1,6 +1,7 @@
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { VariableService } from './variable.service';
+import { VariableSource } from '../../interfaces/services/IVariableService';
 import { generateUUID } from '../utils/uuid.util';
 
 export interface EnvironmentVariableItem {
@@ -9,6 +10,7 @@ export interface EnvironmentVariableItem {
   value: string;
   type: 'default' | 'secret';
   enabled: boolean;
+  source?: VariableSource;
 }
 
 export interface ApiEnvironment {
@@ -120,7 +122,7 @@ export class EnvironmentService {
     return match ? match.value : undefined;
   }
 
-  setActiveVariable(key: string, value: string): void {
+  setActiveVariable(key: string, value: string, source?: VariableSource): void {
     const cleanKey = (key || '').trim();
     if (!cleanKey) return;
     let env = this.activeEnvironment();
@@ -132,11 +134,69 @@ export class EnvironmentService {
     const idx = env.variables.findIndex(v => v.key.trim().toLowerCase() === lower);
     const nextVars = [...env.variables];
     if (idx !== -1) {
-      nextVars[idx] = { ...nextVars[idx], value: String(value ?? ''), enabled: true };
+      nextVars[idx] = {
+        ...nextVars[idx],
+        value: String(value ?? ''),
+        enabled: true,
+        source: source !== undefined ? source : nextVars[idx].source
+      };
     } else {
-      nextVars.push({ id: generateUUID(), key: cleanKey, value: String(value ?? ''), type: 'default', enabled: true });
+      nextVars.push({
+        id: generateUUID(),
+        key: cleanKey,
+        value: String(value ?? ''),
+        type: 'default',
+        enabled: true,
+        source
+      });
     }
     this.updateEnvironment({ ...env, variables: nextVars });
+  }
+
+  syncActiveEnvVariablesFromResponse(
+    tabId: string,
+    responseBody: any,
+    responseHeaders: any[],
+    requestState?: { id?: string; url?: string; name?: string },
+    resolvedUrl?: string
+  ): void {
+    const env = this.activeEnvironment();
+    if (!env || (responseBody === undefined && (!responseHeaders || responseHeaders.length === 0))) return;
+
+    let changed = false;
+    const nextVars = env.variables.map(item => {
+      const src = item.source;
+      if (!src || src.type !== 'response' || !item.enabled) return item;
+      const matchesTab =
+        (src.tabId && src.tabId === tabId) ||
+        (src.requestId && requestState?.id && src.requestId === requestState.id) ||
+        (src.requestUrl && (requestState?.url === src.requestUrl || resolvedUrl === src.requestUrl));
+      if (!matchesTab) return item;
+
+      const prop = src.propertyKey?.trim();
+      let newVal: any = undefined;
+      if (prop && responseBody !== undefined && responseBody !== null) {
+        newVal = this.variableService.extractValue(responseBody, prop);
+      } else if (!prop && responseBody !== undefined && responseBody !== null) {
+        newVal = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+      }
+      if ((newVal === undefined || newVal === null) && prop && Array.isArray(responseHeaders)) {
+        const hMatch = responseHeaders.find((h: any) => h.key?.toLowerCase() === prop.toLowerCase());
+        if (hMatch && hMatch.value !== undefined) newVal = hMatch.value;
+      }
+      if (newVal !== undefined && newVal !== null) {
+        const strVal = typeof newVal === 'object' ? JSON.stringify(newVal) : String(newVal);
+        if (strVal !== item.value) {
+          changed = true;
+          return { ...item, value: strVal };
+        }
+      }
+      return item;
+    });
+
+    if (changed) {
+      this.updateEnvironment({ ...env, variables: nextVars });
+    }
   }
 
   unsetActiveVariable(key: string): void {

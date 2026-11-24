@@ -409,10 +409,30 @@ export class WorkspaceComponent {
         event?.stopPropagation();
         this.editingRequestId.set(req.id);
         this.editingRequestName.set(req.name || '');
+        this.tabStateService.setFocusedSidebarItem(null);
+        if (this.isBrowser) {
+            setTimeout(() => {
+                const inputEl = document.querySelector<HTMLInputElement>(`[data-request-rename-input="${req.id}"]`);
+                inputEl?.focus();
+                inputEl?.select();
+            }, 0);
+        }
+    }
+
+    onRequestFocusTriggerBlur(reqId: string, event: FocusEvent): void {
+        const nextFocused = event.relatedTarget as HTMLElement | null;
+        if (nextFocused && nextFocused.closest(`[data-request-row-id="${reqId}"]`)) {
+            return;
+        }
+        const currentFocus = this.tabStateService.focusedSidebarItem();
+        if (currentFocus?.type === 'request' && currentFocus.id === reqId) {
+            this.tabStateService.setFocusedSidebarItem(null);
+        }
     }
 
     saveRequestName(reqId: string, event?: Event): void {
         event?.stopPropagation();
+        if (this.editingRequestId() !== reqId) return;
         const newName = this.editingRequestName().trim();
         if (newName) {
             this.tabStateService.renameRequest(reqId, newName);
@@ -588,6 +608,9 @@ export class WorkspaceComponent {
     onDocumentClick() {
         if (this.moveMenuRequestId()) {
             this.moveMenuRequestId.set(null);
+        }
+        if (this.editingRequestId()) {
+            this.saveRequestName(this.editingRequestId()!);
         }
         this.closeSidebarRequestContextMenu();
     }
@@ -818,6 +841,9 @@ export class WorkspaceComponent {
 
     onRequestRowContainerClick(req: any, event: MouseEvent, groupId: string | null = null): void {
         const target = event.target as HTMLElement | null;
+        if (this.editingRequestId() && this.editingRequestId() !== req.id) {
+            this.saveRequestName(this.editingRequestId()!);
+        }
         if (target?.closest('button, input')) return;
         const trigger = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('.sidebar-focus-trigger');
         trigger?.focus?.();

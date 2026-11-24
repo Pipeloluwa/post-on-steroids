@@ -22,7 +22,7 @@ import { CODE_LANGUAGE_OPTIONS, CodeLanguageId, buildCodeSnippet } from '../util
                 <div role="dialog"
                      aria-modal="true"
                      aria-labelledby="curl-modal-title"
-                     class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
+                     class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[min(88dvh,calc(100dvh-28px))]"
                      (click)="$event.stopPropagation()">
 
                     <!-- Header -->

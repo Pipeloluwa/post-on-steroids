@@ -103,9 +103,13 @@
                     [class.rotate-180]="isTriggerDropdownOpen()">expand_more</mat-icon>
             </button>
 
-            <!-- Dropdown Menu Overlay -->
+            <!-- Dropdown Menu Overlay (Portal + Viewport Clamped above Windows bottom taskbar) -->
             @if (isTriggerDropdownOpen()) {
-            <div (click)="$event.stopPropagation()" class="absolute right-0 top-full mt-1.5 bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-50 py-1 min-w-[330px] max-w-[380px] max-h-[82vh] overflow-y-auto flex flex-col">
+            <div appBodyPortal (click)="$event.stopPropagation()"
+                 class="fixed bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-[9990] py-1 min-w-[330px] max-w-[380px] overflow-y-auto custom-scrollbar flex flex-col"
+                 [style.top.px]="triggerPopoverBox().top"
+                 [style.right.px]="triggerPopoverBox().right"
+                 [style.maxHeight]="'min(' + triggerPopoverBox().maxHeight + 'px, calc(100dvh - ' + (triggerPopoverBox().top + 16) + 'px))'">
                 <button (click)="selectTriggerTarget(null)" class="w-full text-left px-3 py-2 text-[12px] hover:bg-(--postonsteroids-bg-hover) flex items-center justify-between text-(--postonsteroids-text-primary) transition-colors cursor-pointer shrink-0">
                     <div class="flex items-center gap-1.5">
                         <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-text-muted)">block</mat-icon>

@@ -13,15 +13,17 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { ThemeService } from '../../../shared/services/theme.service';
 import { getHttpMethodColor } from '../../../shared/utils/http-method.util';
 import { input } from '@angular/core';
+import { BodyPortalDirective } from '../../../shared/directives/body-portal.directive';
 
 @Component({
     selector: 'app-request-url-component',
-    imports: [CommonModule, FormsModule, ScrollableSelectComponent, MatIcon, AutoAuthModalComponent, VariableInputComponent],
+    imports: [CommonModule, FormsModule, ScrollableSelectComponent, MatIcon, AutoAuthModalComponent, VariableInputComponent, BodyPortalDirective],
     templateUrl: './request-url.component.html',
     styleUrl: './request-url.component.css',
     host: {
         class: 'block relative z-40',
-        '(document:click)': 'onDocumentClick()'
+        '(document:click)': 'onDocumentClick()',
+        '(window:resize)': 'repositionTriggerDropdown()'
     }
 })
 export class RequestUrlComponent {
@@ -51,6 +53,12 @@ export class RequestUrlComponent {
 
     // Post Trigger Request Chaining State
     isTriggerDropdownOpen = signal(false);
+    triggerPopoverBox = signal<{ top: number; right: number; maxHeight: number }>({
+        top: 160,
+        right: 130,
+        maxHeight: 520
+    });
+    private lastTriggerAnchorEl: HTMLElement | null = null;
     postTriggerTabId = computed(() => {
         const targetId = this.tabState()?.postTriggerTabId || null;
         if (!targetId) return null;
@@ -194,7 +202,52 @@ export class RequestUrlComponent {
 
     toggleTriggerDropdown(event: MouseEvent) {
         event.stopPropagation();
-        this.isTriggerDropdownOpen.update(v => !v);
+        const nextOpen = !this.isTriggerDropdownOpen();
+        if (nextOpen) {
+            this.lastTriggerAnchorEl = (event.currentTarget as HTMLElement) || null;
+            this.repositionTriggerDropdown();
+        }
+        this.isTriggerDropdownOpen.set(nextOpen);
+    }
+
+    repositionTriggerDropdown() {
+        if (typeof window === 'undefined') return;
+        const vw = window.innerWidth || 1280;
+        const vh = window.innerHeight || 800;
+        const rect = this.lastTriggerAnchorEl?.getBoundingClientRect();
+        const safeBottomMargin = 16;
+        const safeTopMargin = 12;
+        const desiredMaxHeight = 560;
+        const maxAllowed = Math.max(240, vh - safeTopMargin - safeBottomMargin);
+
+        if (!rect) {
+            this.triggerPopoverBox.set({
+                top: safeTopMargin,
+                right: 16,
+                maxHeight: Math.min(desiredMaxHeight, maxAllowed)
+            });
+            return;
+        }
+
+        const spaceBelow = vh - rect.bottom - safeBottomMargin - 6;
+        const right = Math.max(8, vw - rect.right);
+
+        if (spaceBelow >= 420) {
+            this.triggerPopoverBox.set({
+                top: rect.bottom + 6,
+                right,
+                maxHeight: Math.min(desiredMaxHeight, spaceBelow)
+            });
+        } else {
+            // Keep completely clear of Windows bottom bar & bottom viewport edge
+            const panelHeight = Math.min(desiredMaxHeight, maxAllowed);
+            const top = Math.max(safeTopMargin, vh - safeBottomMargin - panelHeight);
+            this.triggerPopoverBox.set({
+                top,
+                right,
+                maxHeight: panelHeight
+            });
+        }
     }
 
     onMainTriggerClick() {

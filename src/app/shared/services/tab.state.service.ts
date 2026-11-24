@@ -6556,6 +6556,66 @@ export class TabStateService {
         }
     }
 
+    private runnerCapsuleLoadPromises = new Map<string, Promise<RequestState[]>>();
+    readonly runnerTreeVersion = signal<number>(0);
+
+    async preloadCapsuleRequestsForRunner(capsuleId: string): Promise<RequestState[]> {
+        if (!capsuleId || this.deletingCapsuleIds.has(capsuleId)) return [];
+        const existing = this.getCapsuleRequestsSync(capsuleId);
+        const targetCap = this.capsules().find(c => c.id === capsuleId);
+        if (existing.length > 0 || capsuleId === this.activeCapsuleId() || targetCap?.isLocalOnly || capsuleId === '1' || !this.isBrowser || !this.authService.isLoggedIn()) {
+            return existing;
+        }
+        const pending = this.runnerCapsuleLoadPromises.get(capsuleId);
+        if (pending) return pending;
+
+        const job = (async () => {
+            try {
+                const reqRes = await firstValueFrom(
+                    this.http.get<{ data: any[] }>(`${API_BASE_URL}/request/capsule/${capsuleId}`)
+                );
+                if (reqRes?.data) {
+                    const knownGroups = this.getGroupsForCapsule(capsuleId);
+                    const reqToGroup = new Map<string, string>();
+                    for (const g of knownGroups) {
+                        for (const rId of (g.requestIds || [])) {
+                            reqToGroup.set(rId, g.id);
+                        }
+                    }
+                    const currentMap = this.states();
+                    const mapped = reqRes.data
+                        .filter(dto => !dto?.id || !this.deletedRequestIds.has(dto.id))
+                        .map(dto => {
+                            const base = this.mapDtoToState({ ...dto, capsuleId });
+                            const prev = currentMap.get(base.id);
+                            return {
+                                ...base,
+                                groupId: reqToGroup.get(base.id) ?? prev?.groupId ?? base.groupId ?? null,
+                                postTriggerTabId: base.postTriggerTabId ?? prev?.postTriggerTabId ?? null,
+                                autoAuthEnabled: base.autoAuthEnabled || prev?.autoAuthEnabled || false
+                            };
+                        });
+                    this.states.update(map => {
+                        const next = new Map(map);
+                        for (const req of mapped) {
+                            if (!next.has(req.id)) next.set(req.id, req);
+                        }
+                        return next;
+                    });
+                    this.runnerTreeVersion.update(v => v + 1);
+                }
+            } catch (e) {
+                console.warn('Failed to preload runner requests for capsule', capsuleId, e);
+            } finally {
+                this.runnerCapsuleLoadPromises.delete(capsuleId);
+            }
+            return this.getCapsuleRequestsSync(capsuleId);
+        })();
+
+        this.runnerCapsuleLoadPromises.set(capsuleId, job);
+        return job;
+    }
+
     mapDtoToState(dto: any): RequestState {
         const base = this.getDefaultState(dto.id || this.createId());
         let encHeaders: string[] = [];

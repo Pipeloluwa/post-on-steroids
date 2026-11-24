@@ -29,7 +29,7 @@ const SNAPSHOT_STORAGE_KEY = 'onsteroids_pro_snapshots';
     @if (isOpen()) {
       <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="ver-hist-title"
-             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[86vh]"
+             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[min(86dvh,calc(100dvh-28px))]"
              (click)="$event.stopPropagation()">
 
           <div class="px-5 py-3.5 border-b border-(--postonsteroids-border) flex items-center justify-between bg-(--postonsteroids-bg-tertiary)/50">

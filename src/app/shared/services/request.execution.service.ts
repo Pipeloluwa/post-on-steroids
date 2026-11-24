@@ -83,10 +83,14 @@ export class RequestExecutionService {
         tabId: string;
         requestName: string;
         method: string;
+        url?: string;
         status: number;
         durationMs: number;
         testsPassed: number;
         testsFailed: number;
+        responseHeaders?: any[];
+        responseBody?: any;
+        testResults?: Array<{ name: string; passed: boolean; error?: string }>;
         error?: string;
     }>>([]);
 
@@ -228,10 +232,14 @@ export class RequestExecutionService {
                             tabId: effectiveId,
                             requestName: st.name || st.url || 'Scheduled Request',
                             method: st.method || 'GET',
+                            url: summary.url || st.url,
                             status: summary.status,
                             durationMs: Math.round(summary.durationMs || 0),
                             testsPassed: summary.testsPassed,
                             testsFailed: summary.testsFailed,
+                            responseHeaders: summary.responseHeaders,
+                            responseBody: summary.responseBody,
+                            testResults: summary.testResults,
                             error: summary.error
                         },
                         ...curr
@@ -397,7 +405,17 @@ export class RequestExecutionService {
         options?: {
             isolatedRun?: boolean;
             overrideVars?: Record<string, string>;
-            onComplete?: (summary: { status: number; durationMs: number; testsPassed: number; testsFailed: number; error?: string }) => void;
+            onComplete?: (summary: {
+                status: number;
+                durationMs: number;
+                testsPassed: number;
+                testsFailed: number;
+                error?: string;
+                url?: string;
+                responseHeaders?: any[];
+                responseBody?: any;
+                testResults?: Array<{ name: string; passed: boolean; error?: string }>;
+            }) => void;
         }
     ): Promise<void> {
         const effectiveTabId = this.tabStateService.resolveTabId(tabId);
@@ -1697,6 +1715,13 @@ export class RequestExecutionService {
                 latestReqState,
                 resolvedUrl
             );
+            this.environmentService.syncActiveEnvVariablesFromResponse(
+                targetId,
+                responseBodyParsed,
+                responseData.responseHeaders,
+                latestReqState,
+                resolvedUrl
+            );
 
             this.tabStateService.cacheResponse(targetId, freshState.url, {
                 responseBody: responseBodyParsed,
@@ -1723,7 +1748,11 @@ export class RequestExecutionService {
                 status,
                 durationMs: responseTime,
                 testsPassed: testResults.filter(t => !!t.passed).length,
-                testsFailed: testResults.filter(t => !t.passed).length
+                testsFailed: testResults.filter(t => !t.passed).length,
+                url: finalUrl,
+                responseHeaders: responseData.responseHeaders,
+                responseBody: responseBodyParsed,
+                testResults
             });
 
             // Post-Response Request Chaining & Script-Controlled Flow (Trigger Next Request)

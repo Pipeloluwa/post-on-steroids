@@ -3,10 +3,11 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { ThemeService } from '../../services/theme.service';
 import { NotificationService } from '../../services/notification.service';
+import { BodyPortalDirective } from '../../directives/body-portal.directive';
 
 @Component({
     selector: 'app-notification-component',
-    imports: [CommonModule, MatIcon],
+    imports: [CommonModule, MatIcon, BodyPortalDirective],
     templateUrl: './notification.component.html',
     styleUrl: './notification.component.css'
 })

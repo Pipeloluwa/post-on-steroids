@@ -37,7 +37,7 @@ interface LoadTestSummary {
     @if (isOpen()) {
       <div appBodyPortal class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4" (click)="close()">
         <div role="dialog" aria-modal="true" aria-labelledby="ent-suite-title"
-             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col h-[82vh] max-h-[82vh]"
+             class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col h-[min(82dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)]"
              (click)="$event.stopPropagation()">
 
           <!-- Header -->
@@ -227,7 +227,8 @@ interface LoadTestSummary {
                   <div class="text-[11px] text-(--postonsteroids-text-muted)">Attach <code class="font-mono">.pfx</code> / <code class="font-mono">.p12</code> or PEM (<code class="font-mono">.crt</code> + <code class="font-mono">.key</code>) certificates per host/domain for Desktop App requests.</div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-                  <input type="text" [ngModel]="certHost()" (ngModelChange)="certHost.set($event)" placeholder="Host (e.g. api.bank.internal or *.internal)"
+                  <input type="text" [ngModel]="certHost()" (ngModelChange)="certHost.set($event); certFormError.set('')" placeholder="Host (e.g. api.bank.internal or *.internal)"
+                         [class.border-red-500]="!!certFormError()"
                          class="md:col-span-4 px-2.5 py-1.5 rounded-lg bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) font-mono outline-none" />
                   <select [ngModel]="certType()" (ngModelChange)="certType.set($event)"
                           class="md:col-span-2 px-2 py-1.5 rounded-lg bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) outline-none">
@@ -255,6 +256,12 @@ interface LoadTestSummary {
                     + Add Cert
                   </button>
                 </div>
+                @if (certFormError()) {
+                  <div role="alert" class="px-3 py-2 rounded-lg bg-red-500/15 border border-red-500/40 text-red-300 text-[11.5px] font-medium flex items-center gap-2">
+                    <mat-icon class="text-[16px]! size-[16px]! text-red-400 shrink-0">error_outline</mat-icon>
+                    <span>{{ certFormError() }}</span>
+                  </div>
+                }
               </div>
 
               <div class="space-y-1.5">
@@ -452,6 +459,7 @@ export class EnterpriseSuiteModalComponent {
   certPfxB64 = signal('');
   certPem = signal('');
   keyPem = signal('');
+  certFormError = signal('');
 
   // Load test state
   loadVus = signal(5);
@@ -559,8 +567,11 @@ export class EnterpriseSuiteModalComponent {
   }
 
   saveClientCert(): void {
+    this.certFormError.set('');
     if (!this.certHost().trim()) {
-      this.notification.notify('Enter a target hostname (e.g. api.internal).', 'warning');
+      const msg = 'Enter a target hostname (e.g. api.internal) before saving the certificate.';
+      this.certFormError.set(msg);
+      this.notification.notify(msg, 'warning');
       return;
     }
     this.gov.upsertClientCert({
@@ -578,6 +589,7 @@ export class EnterpriseSuiteModalComponent {
     this.certPfxB64.set('');
     this.certPem.set('');
     this.keyPem.set('');
+    this.certFormError.set('');
     this.notification.notify('mTLS Client Certificate saved.', 'success');
   }
 

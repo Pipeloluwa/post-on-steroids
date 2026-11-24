@@ -1096,7 +1096,7 @@ export class VariableService {
         return v.value;
     }
 
-    private extractValue(data: any, path: string): any {
+    public extractValue(data: any, path: string): any {
         if (!path || data === undefined || data === null) return undefined;
         let current = data;
 
