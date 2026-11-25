@@ -1127,9 +1127,30 @@ export class WorkspaceComponent {
         }
     }
 
+    private getGroupSubtreeRequestIds(groupId: string, directRequests: any[] = []): string[] {
+        const descGroupSet = new Set(this.tabStateService.getDescendantGroupIds([groupId]));
+        const reqIds = new Set<string>();
+        for (const r of directRequests || []) {
+            if (r?.id) reqIds.add(r.id);
+        }
+        for (const r of this.tabStateService.allCapsuleRequests()) {
+            if (r?.id && r.groupId && descGroupSet.has(r.groupId)) {
+                reqIds.add(r.id);
+            }
+        }
+        return Array.from(reqIds);
+    }
+
     isGroupSelected(groupId: string, requests: any[]): boolean {
         if (this.selectedGroupIds().has(groupId)) return true;
-        return requests.length > 0 && requests.every(r => this.selectedRequestIds().has(r.id));
+        const allSubtreeReqIds = this.getGroupSubtreeRequestIds(groupId, requests);
+        const childGroups = this.tabStateService.activeCapsuleGroups().filter(g => (g.parentGroupId ?? null) === groupId);
+        if (allSubtreeReqIds.length === 0 && childGroups.length === 0) return false;
+        const reqSelected = this.selectedRequestIds();
+        const groupSelected = this.selectedGroupIds();
+        const allReqsSelected = allSubtreeReqIds.every(id => reqSelected.has(id));
+        const allChildrenSelected = childGroups.every(cg => groupSelected.has(cg.id));
+        return allReqsSelected && allChildrenSelected;
     }
 
     toggleSelectGroup(groupId: string, requests: any[], event: Event) {
@@ -1137,36 +1158,85 @@ export class WorkspaceComponent {
         const nextGroups = new Set(this.selectedGroupIds());
         const nextReqs = new Set(this.selectedRequestIds());
         const currentlySelected = this.isGroupSelected(groupId, requests);
+        const descGroupIds = this.tabStateService.getDescendantGroupIds([groupId]);
+        const subtreeReqIds = this.getGroupSubtreeRequestIds(groupId, requests);
 
         if (currentlySelected) {
-            nextGroups.delete(groupId);
-            for (const r of requests) {
-                nextReqs.delete(r.id);
+            for (const gid of descGroupIds) {
+                nextGroups.delete(gid);
+            }
+            for (const rid of subtreeReqIds) {
+                nextReqs.delete(rid);
+            }
+            // Clear ancestor folders when a child folder/subtree is unchecked
+            const groupsById = new Map(this.tabStateService.activeCapsuleGroups().map(g => [g.id, g]));
+            let parentId = groupsById.get(groupId)?.parentGroupId ?? null;
+            const visited = new Set<string>([groupId]);
+            while (parentId && !visited.has(parentId)) {
+                visited.add(parentId);
+                nextGroups.delete(parentId);
+                parentId = groupsById.get(parentId)?.parentGroupId ?? null;
             }
         } else {
-            nextGroups.add(groupId);
-            for (const r of requests) {
-                nextReqs.add(r.id);
+            for (const gid of descGroupIds) {
+                nextGroups.add(gid);
+            }
+            for (const rid of subtreeReqIds) {
+                nextReqs.add(rid);
             }
         }
         this.selectedGroupIds.set(nextGroups);
         this.selectedRequestIds.set(nextReqs);
+        this.syncGroupSelectionAfterRequestChange(nextReqs, nextGroups);
     }
 
-    private syncGroupSelectionAfterRequestChange(nextReqSet: Set<string>): void {
-        const currentGroups = this.selectedGroupIds();
-        if (currentGroups.size === 0) return;
-        const nextGroups = new Set(currentGroups);
-        const grouped = this.tabStateService.groupedCapsuleRequests();
-        for (const gId of currentGroups) {
-            const entry = grouped.find(item => item.group.id === gId);
-            if (entry && entry.requests.length > 0 && entry.requests.some(r => !nextReqSet.has(r.id))) {
-                nextGroups.delete(gId);
+    private syncGroupSelectionAfterRequestChange(nextReqSet: Set<string>, baseGroupSet?: Set<string>): void {
+        const nextGroups = new Set(baseGroupSet ?? this.selectedGroupIds());
+        const allGroups = this.tabStateService.activeCapsuleGroups();
+        const allReqs = this.tabStateService.allCapsuleRequests();
+        const directReqsByGroup = new Map<string, string[]>();
+        const childGroupsByParent = new Map<string, string[]>();
+
+        for (const r of allReqs) {
+            if (r?.id && r.groupId) {
+                const list = directReqsByGroup.get(r.groupId) ?? [];
+                list.push(r.id);
+                directReqsByGroup.set(r.groupId, list);
             }
         }
-        if (nextGroups.size !== currentGroups.size) {
-            this.selectedGroupIds.set(nextGroups);
+        for (const g of allGroups) {
+            if (g.parentGroupId) {
+                const children = childGroupsByParent.get(g.parentGroupId) ?? [];
+                children.push(g.id);
+                childGroupsByParent.set(g.parentGroupId, children);
+            }
         }
+
+        // Propagate bottom-up until stable so parent folders stay in sync across nested subfolders
+        let changed = true;
+        let guard = 0;
+        while (changed && guard < 32) {
+            changed = false;
+            guard++;
+            for (const g of allGroups) {
+                const directReqs = directReqsByGroup.get(g.id) ?? [];
+                const childGroups = childGroupsByParent.get(g.id) ?? [];
+                if (directReqs.length === 0 && childGroups.length === 0) continue;
+
+                const allDirectSelected = directReqs.every(id => nextReqSet.has(id));
+                const allChildrenSelected = childGroups.every(cid => nextGroups.has(cid));
+                const shouldBeSelected = allDirectSelected && allChildrenSelected;
+
+                if (shouldBeSelected && !nextGroups.has(g.id)) {
+                    nextGroups.add(g.id);
+                    changed = true;
+                } else if (!shouldBeSelected && nextGroups.has(g.id)) {
+                    nextGroups.delete(g.id);
+                    changed = true;
+                }
+            }
+        }
+        this.selectedGroupIds.set(nextGroups);
     }
 
     toggleMoveMenu(requestId: string, event: Event) {
@@ -1201,13 +1271,12 @@ export class WorkspaceComponent {
 
     getSelectedRequestIdsIncludingFolders(): string[] {
         const ids = new Set<string>(this.selectedRequestIds());
-        const groupSet = this.selectedGroupIds();
-        if (groupSet.size > 0) {
-            for (const entry of this.tabStateService.groupedCapsuleRequests()) {
-                if (groupSet.has(entry.group.id)) {
-                    for (const req of entry.requests) {
-                        if (req?.id) ids.add(req.id);
-                    }
+        const selectedGroups = Array.from(this.selectedGroupIds());
+        if (selectedGroups.length > 0) {
+            const expandedGroupSet = new Set(this.tabStateService.getDescendantGroupIds(selectedGroups));
+            for (const req of this.tabStateService.allCapsuleRequests()) {
+                if (req?.id && req.groupId && expandedGroupSet.has(req.groupId)) {
+                    ids.add(req.id);
                 }
             }
         }

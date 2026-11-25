@@ -7,8 +7,10 @@ import { VariableModalComponent } from '../../../shared/components/variable.moda
 import { SwaggerImportModalComponent } from '../../../shared/components/swagger-import.modal.component/swagger-import.modal.component';
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
 import { CurlModalComponent } from '../../../shared/components/curl-modal.component';
+import { EnvironmentManagerModalComponent } from '../../../shared/components/environment-manager.modal.component';
 import { VariableService } from '../../../shared/services/variable.service';
 import { EnvironmentService } from '../../../shared/services/environment.service';
+import { SubscriptionService } from '../../../shared/services/subscription.service';
 import { TabStateService, RequestState } from '../../../shared/services/tab.state.service';
 import { AuthService } from '../../../shared/services/auth.service';
 import { getHttpMethodColor } from '../../../shared/utils/http-method.util';
@@ -23,14 +25,18 @@ interface RequestTab {
 
 @Component({
     selector: 'app-request-tabs-component',
-    imports: [CommonModule, MatIcon, DragDropModule, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent, TransferCapsuleModalComponent, CurlModalComponent],
+    imports: [CommonModule, MatIcon, DragDropModule, ScrollableSelectComponent, VariableModalComponent, SwaggerImportModalComponent, TransferCapsuleModalComponent, CurlModalComponent, EnvironmentManagerModalComponent],
     templateUrl: './request-tabs.component.html',
     styleUrl: './request-tabs.component.css',
-    changeDetection: ChangeDetectionStrategy.OnPush
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    host: {
+        '(document:click)': 'onDocumentClick()'
+    }
 })
 export class RequestTabsComponent {
     variableService = inject(VariableService);
     envService = inject(EnvironmentService);
+    subscriptionService = inject(SubscriptionService);
     tabStateService = inject(TabStateService);
     authService = inject(AuthService);
     private destroyRef = inject(DestroyRef);
@@ -107,6 +113,36 @@ export class RequestTabsComponent {
     transferRequestIds = signal<string[]>([]);
     transferInitialMode = signal<'copy' | 'move'>('copy');
     curlModalRequest = signal<RequestState | null>(null);
+    showEnvMenu = signal<boolean>(false);
+    showEnvModal = signal<boolean>(false);
+
+    onDocumentClick() {
+        if (this.showEnvMenu()) {
+            this.showEnvMenu.set(false);
+        }
+    }
+
+    toggleEnvMenu(event: MouseEvent) {
+        event.stopPropagation();
+        this.closeContextMenu();
+        this.showEnvMenu.update(v => !v);
+    }
+
+    selectEnvironmentFromMenu(envId: string | null, event: Event) {
+        event.stopPropagation();
+        this.envService.setActiveEnvironment(envId);
+        this.showEnvMenu.set(false);
+    }
+
+    openEnvManagerFromMenu(event: Event) {
+        event.stopPropagation();
+        this.showEnvMenu.set(false);
+        this.showEnvModal.set(true);
+    }
+
+    getEnvVarCount(env: { variables?: Array<{ enabled?: boolean; key?: string }> }): number {
+        return (env.variables || []).filter(v => v.enabled !== false && v.key && v.key.trim() !== '').length;
+    }
 
     onDuplicateTabFromContext(event: Event) {
         event.stopPropagation();

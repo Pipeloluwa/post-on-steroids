@@ -197,7 +197,7 @@
     [initialMode]="transferMode()"
     (closed)="isTransferModalOpen.set(false)" />
 
-@if (isDocNotesModalOpen()) {
+@if (isDocNotesModalOpen() && tabStateService.activeTabId() === tabId()) {
     <div appBodyPortal class="fixed inset-0 z-[10020] flex items-center justify-center bg-black/65 backdrop-blur-xs p-4"
          (click)="isDocNotesModalOpen.set(false)">
         <div role="dialog" aria-modal="true" aria-labelledby="doc-notes-modal-title"
@@ -236,11 +236,78 @@
                         class="w-full px-3 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-blue-500" />
                 </div>
 
-                <div class="flex-1 flex flex-col min-h-[150px]">
+                <div class="flex-1 flex flex-col min-h-[140px]">
                     <label class="block font-semibold text-(--postonsteroids-text-secondary) mb-1">Detailed Doc / BRD Content (Markdown Supported)</label>
                     <textarea [ngModel]="requestDocNotes()" (ngModelChange)="onDocFieldChange('docNotes', $event)"
                         placeholder="Write detailed endpoint behavior, business rules, error codes, SLAs, or integration notes..."
-                        class="flex-1 w-full min-h-[140px] px-3 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) font-mono text-[11.5px] outline-none focus:border-blue-500 resize-none"></textarea>
+                        class="flex-1 w-full min-h-[120px] px-3 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) font-mono text-[11.5px] outline-none focus:border-blue-500 resize-y"></textarea>
+                </div>
+
+                <!-- Dynamic Custom Headings, Subheadings & Descriptions per Endpoint -->
+                <div class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary)/60 p-3 space-y-2.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <span class="font-semibold text-(--postonsteroids-text-primary)">Custom Headings, Subheadings &amp; Descriptions</span>
+                            <p class="text-[10.5px] text-(--postonsteroids-text-muted)">Add as many custom headings, subheadings, or descriptions as needed for this endpoint's BRD &amp; Docs.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" (click)="addCustomDocBlock('heading')"
+                                class="px-2 py-1 rounded border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 font-semibold cursor-pointer flex items-center gap-1 text-[10.5px]">
+                                <mat-icon class="text-[13px]! size-[13px]!">title</mat-icon>
+                                <span>+ Heading</span>
+                            </button>
+                            <button type="button" (click)="addCustomDocBlock('subheading')"
+                                class="px-2 py-1 rounded border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-semibold cursor-pointer flex items-center gap-1 text-[10.5px]">
+                                <mat-icon class="text-[13px]! size-[13px]!">subtitles</mat-icon>
+                                <span>+ Subheading</span>
+                            </button>
+                            <button type="button" (click)="addCustomDocBlock('description')"
+                                class="px-2 py-1 rounded border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold cursor-pointer flex items-center gap-1 text-[10.5px]">
+                                <mat-icon class="text-[13px]! size-[13px]!">notes</mat-icon>
+                                <span>+ Description</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (requestCustomDocBlocks().length > 0) {
+                        <div class="space-y-2">
+                            @for (blk of requestCustomDocBlocks(); track blk.id; let idx = $index) {
+                                <div class="rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-2.5 space-y-1.5">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <select [ngModel]="blk.kind" (ngModelChange)="updateCustomDocBlock(blk.id, { kind: $event })"
+                                            class="bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[10.5px] font-semibold outline-none cursor-pointer">
+                                            <option value="heading">Heading (H3)</option>
+                                            <option value="subheading">Subheading (H4)</option>
+                                            <option value="description">Description / Paragraph</option>
+                                        </select>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" (click)="moveCustomDocBlock(idx, -1)" [disabled]="idx === 0"
+                                                title="Move Up" class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 cursor-pointer">
+                                                <mat-icon class="text-[14px]! size-[14px]!">arrow_upward</mat-icon>
+                                            </button>
+                                            <button type="button" (click)="moveCustomDocBlock(idx, 1)" [disabled]="idx === requestCustomDocBlocks().length - 1"
+                                                title="Move Down" class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 cursor-pointer">
+                                                <mat-icon class="text-[14px]! size-[14px]!">arrow_downward</mat-icon>
+                                            </button>
+                                            <button type="button" (click)="removeCustomDocBlock(blk.id)"
+                                                title="Delete block" class="p-1 rounded hover:bg-red-500/15 text-status-danger cursor-pointer">
+                                                <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    @if (blk.kind === 'description') {
+                                        <textarea rows="3" [ngModel]="blk.text" (ngModelChange)="updateCustomDocBlock(blk.id, { text: $event })"
+                                            placeholder="Enter description, acceptance rule, or Markdown content..."
+                                            class="w-full px-2.5 py-1.5 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) font-mono text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-blue-500 resize-y"></textarea>
+                                    } @else {
+                                        <input type="text" [ngModel]="blk.text" (ngModelChange)="updateCustomDocBlock(blk.id, { text: $event })"
+                                            [placeholder]="blk.kind === 'heading' ? 'Custom section heading...' : 'Custom subheading...'"
+                                            class="w-full px-2.5 py-1.5 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-[11.5px] font-semibold text-(--postonsteroids-text-primary) outline-none focus:border-blue-500" />
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -276,10 +343,17 @@
                         Open TestRail Generator
                     </button>
                 </div>
-                <button type="button" (click)="isDocNotesModalOpen.set(false)"
-                    class="px-5 py-1.5 rounded-lg bg-(--postonsteroids-accent) text-white font-semibold cursor-pointer">
-                    Done
-                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" (click)="saveDocNotes()" [disabled]="isSaving()"
+                        class="px-4 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50">
+                        <mat-icon class="text-[15px]! size-[15px]!">save</mat-icon>
+                        <span>{{ isSaving() ? 'Saving...' : 'Save Notes' }}</span>
+                    </button>
+                    <button type="button" (click)="isDocNotesModalOpen.set(false)"
+                        class="px-5 py-1.5 rounded-lg bg-(--postonsteroids-accent) text-white font-semibold cursor-pointer">
+                        Done
+                    </button>
+                </div>
             </div>
         </div>
     </div>

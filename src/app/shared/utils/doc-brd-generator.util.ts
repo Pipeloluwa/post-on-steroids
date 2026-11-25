@@ -6,6 +6,12 @@ export interface DocBrdVariable {
     value: string;
 }
 
+export interface CustomDocBlock {
+    id: string;
+    kind: 'heading' | 'subheading' | 'description';
+    text: string;
+}
+
 export interface BrdEditableSections {
     documentStatus?: 'Draft' | 'In Review' | 'Approved' | 'Final' | string;
     targetRelease?: string;
@@ -17,6 +23,7 @@ export interface BrdEditableSections {
     nonFunctionalRequirements?: string;
     securityAndCompliance?: string;
     rolloutAndAssumptions?: string;
+    customBlocks?: CustomDocBlock[];
 }
 
 export interface DocBrdOptions {
@@ -510,6 +517,31 @@ function safeCurlSnippet(req: RequestState): string {
     }
 }
 
+function renderCustomDocBlocksToMarkdown(
+    blocks: CustomDocBlock[] | undefined,
+    opts?: { headingPrefix?: string; subheadingPrefix?: string }
+): string[] {
+    if (!Array.isArray(blocks) || blocks.length === 0) return [];
+    const hPrefix = opts?.headingPrefix || '##';
+    const subPrefix = opts?.subheadingPrefix || '###';
+    const out: string[] = [];
+    for (const block of blocks) {
+        const text = (block?.text || '').trim();
+        if (!text) continue;
+        if (block.kind === 'heading') {
+            out.push(`${hPrefix} ${text}`);
+            out.push('');
+        } else if (block.kind === 'subheading') {
+            out.push(`${subPrefix} ${text}`);
+            out.push('');
+        } else {
+            out.push(text);
+            out.push('');
+        }
+    }
+    return out;
+}
+
 function buildApiDocMarkdown(options: DocBrdOptions, generatedIso: string): { title: string; markdown: string } {
     const reqs = options.requests;
     const scopeLabel = options.scope === 'endpoint' && reqs[0]
@@ -522,6 +554,14 @@ function buildApiDocMarkdown(options: DocBrdOptions, generatedIso: string): { ti
     md.push('');
     md.push(`> **Version:** ${options.version || '1.0.0'} | **Organization:** ${options.organization || 'Engineering'} | **Author:** ${options.author || 'API Team'} | **Generated:** ${generatedIso}`);
     md.push('');
+
+    const capsuleCustomMd = renderCustomDocBlocksToMarkdown(options.brdSections?.customBlocks, {
+        headingPrefix: '##',
+        subheadingPrefix: '###'
+    });
+    if (capsuleCustomMd.length > 0) {
+        md.push(...capsuleCustomMd);
+    }
 
     if (options.variables && options.variables.length > 0) {
         md.push('## Environment & Collection Variables');
@@ -569,7 +609,16 @@ function buildApiDocMarkdown(options: DocBrdOptions, generatedIso: string): { ti
             md.push('### Detailed Documentation Notes');
             md.push(r.docNotes.trim());
         }
-        md.push('');
+        const epCustomMd = renderCustomDocBlocksToMarkdown(r.customDocBlocks, {
+            headingPrefix: '###',
+            subheadingPrefix: '####'
+        });
+        if (epCustomMd.length > 0) {
+            md.push('');
+            md.push(...epCustomMd);
+        } else {
+            md.push('');
+        }
 
         const pathVars = extractPathVariables(r.url || '');
         if (pathVars.length > 0) {
@@ -771,6 +820,14 @@ function buildBrdMarkdown(options: DocBrdOptions, generatedIso: string): { title
         if (r.docNotes?.trim()) {
             md.push(`- **Functional Rules & Notes:** ${r.docNotes.trim()}`);
         }
+        const epCustomBrdMd = renderCustomDocBlocksToMarkdown(r.customDocBlocks, {
+            headingPrefix: '####',
+            subheadingPrefix: '#####'
+        });
+        if (epCustomBrdMd.length > 0) {
+            md.push('');
+            md.push(...epCustomBrdMd);
+        }
         md.push(`- **Business Action:** Execute \`${r.method || 'GET'}\` call against \`${r.url || '(not set)'}\`.`);
         md.push(`- **Preconditions & Auth:** ${describeAuth(r)}${r.autoAuthEnabled ? '; Auto-Auth 401 refresh active' : ''}.`);
         if (r.scripts?.preRequest?.trim()) {
@@ -827,6 +884,14 @@ function buildBrdMarkdown(options: DocBrdOptions, generatedIso: string): { title
     md.push('');
 
     // Section 6: User Acceptance Testing (UAT), Rollout & Sign-Off Matrix
+    const capsuleCustomBrdMd = renderCustomDocBlocksToMarkdown(brd.customBlocks, {
+        headingPrefix: '##',
+        subheadingPrefix: '###'
+    });
+    if (capsuleCustomBrdMd.length > 0) {
+        md.push(...capsuleCustomBrdMd);
+    }
+
     md.push('## 6. User Acceptance Testing (UAT) & Verification Matrix');
     md.push('| UAT ID | Endpoint | Verification Case / Assertion | Expected Outcome |');
     md.push('| --- | --- | --- | --- |');

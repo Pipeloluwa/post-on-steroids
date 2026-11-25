@@ -9,7 +9,7 @@ import { CookieManagerModalComponent } from '../../../shared/components/cookie-m
 import { CookieJarService } from '../../../shared/services/cookie-jar.service';
 import { TransferCapsuleModalComponent } from '../../../shared/components/transfer-capsule.modal.component';
 import { BodyPortalDirective } from '../../../shared/directives/body-portal.directive';
-import { TabStateService, RequestState, CapsuleLockMode } from '../../../shared/services/tab.state.service';
+import { TabStateService, RequestState, CapsuleLockMode, CustomDocBlock } from '../../../shared/services/tab.state.service';
 import { copyTextToClipboard } from '../../../shared/utils/clipboard.util';
 import { convertCapsuleToPostmanCollection } from '../../../shared/utils/postman-export.util';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -51,12 +51,14 @@ export class RequestDetailsComponent {
     requestTestRailPreconditions = computed(() => this.tabStateService.getState(this.tabId())?.testRailPreconditions || '');
     requestTestRailSteps = computed(() => this.tabStateService.getState(this.tabId())?.testRailSteps || '');
     requestTestRailExpected = computed(() => this.tabStateService.getState(this.tabId())?.testRailExpected || '');
+    requestCustomDocBlocks = computed<CustomDocBlock[]>(() => this.tabStateService.getState(this.tabId())?.customDocBlocks || []);
     hasDocNotesContent = computed(() => Boolean(
         this.requestDescription().trim() ||
         this.requestDocNotes().trim() ||
         this.requestTestRailPreconditions().trim() ||
         this.requestTestRailSteps().trim() ||
-        this.requestTestRailExpected().trim()
+        this.requestTestRailExpected().trim() ||
+        this.requestCustomDocBlocks().some(b => (b.text || '').trim().length > 0)
     ));
     isDocNotesModalOpen = signal<boolean>(false);
     isActionsMenuOpen = signal<boolean>(false);
@@ -101,6 +103,58 @@ export class RequestDetailsComponent {
             return;
         }
         this.tabStateService.updateState(this.tabId(), { [field]: val });
+    }
+
+    addCustomDocBlock(kind: 'heading' | 'subheading' | 'description'): void {
+        const block = this.tabStateService.getEditBlockReason(undefined, 'edit');
+        if (block) {
+            this.notificationService.notify(block, 'warning');
+            return;
+        }
+        const curr = this.requestCustomDocBlocks();
+        const next: CustomDocBlock[] = [
+            ...curr,
+            { id: `cdb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, kind, text: '' }
+        ];
+        this.tabStateService.updateState(this.tabId(), { customDocBlocks: next });
+    }
+
+    updateCustomDocBlock(blockId: string, patch: Partial<CustomDocBlock>): void {
+        const block = this.tabStateService.getEditBlockReason(undefined, 'edit');
+        if (block) {
+            this.notificationService.notify(block, 'warning');
+            return;
+        }
+        const next = this.requestCustomDocBlocks().map(b => b.id === blockId ? { ...b, ...patch } : b);
+        this.tabStateService.updateState(this.tabId(), { customDocBlocks: next });
+    }
+
+    moveCustomDocBlock(index: number, delta: -1 | 1): void {
+        const block = this.tabStateService.getEditBlockReason(undefined, 'edit');
+        if (block) {
+            this.notificationService.notify(block, 'warning');
+            return;
+        }
+        const target = index + delta;
+        const curr = [...this.requestCustomDocBlocks()];
+        if (target < 0 || target >= curr.length) return;
+        const [moved] = curr.splice(index, 1);
+        curr.splice(target, 0, moved);
+        this.tabStateService.updateState(this.tabId(), { customDocBlocks: curr });
+    }
+
+    removeCustomDocBlock(blockId: string): void {
+        const block = this.tabStateService.getEditBlockReason(undefined, 'edit');
+        if (block) {
+            this.notificationService.notify(block, 'warning');
+            return;
+        }
+        const next = this.requestCustomDocBlocks().filter(b => b.id !== blockId);
+        this.tabStateService.updateState(this.tabId(), { customDocBlocks: next });
+    }
+
+    async saveDocNotes(): Promise<void> {
+        await this.saveRequest();
     }
 
     closeHeaderMenus(): void {

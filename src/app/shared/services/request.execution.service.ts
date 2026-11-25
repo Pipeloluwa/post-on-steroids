@@ -5,7 +5,7 @@ import { generateUUID } from '../utils/uuid.util';
 import { isLocalhostOrLoopbackUrl, isElectronApp } from '../utils/url.util';
 import { formatTimeoutLabel } from '../utils/request-timeout.util';
 import { environment } from '../../../environments/environment';
-import { TabStateService, FormDataRow, KeyValue, TriggerFlowConfig } from './tab.state.service';
+import { TabStateService, FormDataRow, KeyValue, TriggerFlowConfig, TriggerFlowCondition } from './tab.state.service';
 import { VariableService } from './variable.service';
 import { SandboxExecutionService } from './sandbox.execution.service';
 import { AutoAuthService } from './auto-auth.service';
@@ -19,6 +19,7 @@ import { generateAwsSigV4Headers } from '../utils/aws-sigv4.util';
 import { CookieJarService } from './cookie-jar.service';
 import { EnvironmentService } from './environment.service';
 import { applyRequestFieldLinksToTabState, buildTabPayloadsLookup, RequestFieldLinkMutation } from '../utils/script-field-link.util';
+import { detectProposedTriggerLoop } from '../utils/trigger-graph.util';
 
 export interface ClientCertConfig {
     id?: string;
@@ -59,6 +60,9 @@ export class RequestExecutionService {
     private cancellationTokens = new Map<string, { cancelled: boolean, cancelFn?: () => void }>();
     private clientCertProviders: Array<(targetUrl: string) => ClientCertConfig | null> = [];
     private executionObservers: Array<(event: ExecutionAuditEvent) => void> = [];
+    private runningRequestCounts = new Map<string, number>();
+    readonly activeRunningRequestIds = signal<Set<string>>(new Set());
+    readonly triggerConfiguredRequestIds = signal<string[]>([]);
     private schedules = new Map<string, {
         startTimerId?: ReturnType<typeof setTimeout>;
         intervalId?: ReturnType<typeof setInterval>;
@@ -227,10 +231,7 @@ export class RequestExecutionService {
             void this.executeRequest(effectiveId, false, 0, 0, {
                 isolatedRun: true,
                 recordTriggerLog: true,
-                chainVisitedIds: [effectiveId],
-                onComplete: (summary) => {
-                    this.recordTriggerExecutionLog(effectiveId, st, summary);
-                }
+                chainVisitedIds: [effectiveId]
             });
         };
 
@@ -384,6 +385,152 @@ export class RequestExecutionService {
         return ids.length;
     }
 
+    private markRequestRunning(tabId: string, active: boolean): void {
+        const current = this.runningRequestCounts.get(tabId) || 0;
+        const nextCount = active ? current + 1 : Math.max(0, current - 1);
+        if (nextCount > 0) {
+            this.runningRequestCounts.set(tabId, nextCount);
+        } else {
+            this.runningRequestCounts.delete(tabId);
+        }
+        this.activeRunningRequestIds.update(prev => {
+            const has = prev.has(tabId);
+            if ((nextCount > 0) === has) return prev;
+            const copy = new Set(prev);
+            if (nextCount > 0) copy.add(tabId);
+            else copy.delete(tabId);
+            return copy;
+        });
+    }
+
+    getTriggerConfigFor(tabId: string): TriggerFlowConfig {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        return this.tabStateService.getState(effectiveId)?.triggerConfig || {
+            condition: 'always',
+            expectedStatus: 200,
+            delayMs: 250,
+            retryCountOnFail: 0,
+            scheduleIntervalMs: 0,
+            scheduleStartAt: null,
+            scheduleEndAt: null
+        };
+    }
+
+    registerConfiguredTriggerId(tabId: string): void {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        this.triggerConfiguredRequestIds.update(curr => curr.includes(effectiveId) ? curr : [...curr, effectiveId]);
+    }
+
+    unregisterConfiguredTriggerId(tabId: string): void {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        this.triggerConfiguredRequestIds.update(curr => curr.filter(id => id !== effectiveId));
+    }
+
+    configureTriggerChain(
+        tabId: string,
+        targetId: string | null,
+        opts?: { notifyLoop?: boolean }
+    ): { hasLoop: boolean; descriptions: string[] } {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        const state = this.tabStateService.getState(effectiveId);
+        const cleanTarget = targetId || null;
+        const cfg = this.getTriggerConfigFor(effectiveId);
+        const nextCondition: TriggerFlowCondition = cleanTarget === '__script__'
+            ? 'script-only'
+            : (cfg.condition === 'script-only' ? 'always' : cfg.condition);
+
+        const capId = state?.capsuleId || this.tabStateService.activeCapsuleId();
+        const pool = capId ? this.tabStateService.getCapsuleRequestsSync(capId) : this.tabStateService.allCapsuleRequests();
+        const loopCheck = detectProposedTriggerLoop(
+            pool.length > 0 ? pool : this.tabStateService.allCapsuleRequests(),
+            effectiveId,
+            cleanTarget,
+            r => this.tabStateService.resolveRequestTitle(r.name, r.url)
+        );
+
+        this.registerConfiguredTriggerId(effectiveId);
+        this.tabStateService.updateState(effectiveId, {
+            postTriggerTabId: cleanTarget,
+            triggerConfig: { ...cfg, condition: nextCondition }
+        });
+
+        if (loopCheck.hasLoop && opts?.notifyLoop !== false) {
+            this.notificationService.notify(
+                `Warning: Linking to this target creates a trigger loop (${loopCheck.descriptions[0]}).`,
+                'warning'
+            );
+        }
+        return loopCheck;
+    }
+
+    patchTriggerConfig(tabId: string, patch: Partial<TriggerFlowConfig>): void {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        const nextCfg: TriggerFlowConfig = {
+            ...this.getTriggerConfigFor(effectiveId),
+            ...patch
+        };
+        this.registerConfiguredTriggerId(effectiveId);
+        this.tabStateService.updateState(effectiveId, { triggerConfig: nextCfg });
+
+        if (
+            this.isScheduleActive(effectiveId) &&
+            (patch.scheduleIntervalMs !== undefined || patch.scheduleStartAt !== undefined || patch.scheduleEndAt !== undefined)
+        ) {
+            const ms = Math.max(1000, Number(nextCfg.scheduleIntervalMs) || 10000);
+            this.startSchedule(effectiveId, ms, {
+                startAt: nextCfg.scheduleStartAt ?? null,
+                endAt: nextCfg.scheduleEndAt ?? null,
+                runImmediately: false
+            });
+        }
+    }
+
+    toggleTriggerSchedule(tabId: string): boolean {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        const cfg = this.getTriggerConfigFor(effectiveId);
+        const intervalMs = cfg.scheduleIntervalMs && cfg.scheduleIntervalMs > 0 ? cfg.scheduleIntervalMs : 10000;
+        if (!cfg.scheduleIntervalMs || cfg.scheduleIntervalMs <= 0) {
+            this.patchTriggerConfig(effectiveId, { scheduleIntervalMs: intervalMs });
+        } else {
+            this.registerConfiguredTriggerId(effectiveId);
+        }
+        return this.toggleSchedule(effectiveId, intervalMs, {
+            startAt: cfg.scheduleStartAt ?? null,
+            endAt: cfg.scheduleEndAt ?? null,
+            runImmediately: true
+        });
+    }
+
+    async runTriggerNow(
+        tabId: string,
+        opts?: { isolatedRun?: boolean; notifyResult?: boolean }
+    ): Promise<void> {
+        const effectiveId = this.tabStateService.resolveTabId(tabId);
+        const req = this.tabStateService.getState(effectiveId);
+        if (!req || !(req.url || '').trim()) {
+            this.notificationService.notify('Please configure a URL for this request before running.', 'warning');
+            return;
+        }
+        const notifyResult = opts?.notifyResult !== false;
+        if (notifyResult) {
+            this.notificationService.notify(`Running trigger "${this.tabStateService.resolveRequestTitle(req.name, req.url)}"...`);
+        }
+        await this.executeRequest(effectiveId, false, 0, 0, {
+            isolatedRun: opts?.isolatedRun ?? true,
+            recordTriggerLog: true,
+            chainVisitedIds: [effectiveId],
+            onComplete: notifyResult
+                ? (summary) => {
+                    if (summary.status >= 200 && summary.status < 300) {
+                        this.notificationService.notify(`Trigger completed (${summary.status} · ${Math.round(summary.durationMs)}ms).`, 'success');
+                    } else {
+                        this.notificationService.notify(`Trigger finished with status ${summary.status || 'Error'}.`, summary.status ? 'warning' : 'error');
+                    }
+                }
+                : undefined
+        });
+    }
+
     registerClientCertProvider(provider: (targetUrl: string) => ClientCertConfig | null): () => void {
         this.clientCertProviders.push(provider);
         return () => {
@@ -516,6 +663,7 @@ export class RequestExecutionService {
             return;
         }
 
+        this.markRequestRunning(effectiveTabId, true);
         try {
             const startTime = performance.now();
 
@@ -1797,7 +1945,7 @@ export class RequestExecutionService {
                 responseSize
             });
 
-            options?.onComplete?.({
+            const completionSummary = {
                 status,
                 durationMs: responseTime,
                 testsPassed: testResults.filter(t => !!t.passed).length,
@@ -1806,7 +1954,20 @@ export class RequestExecutionService {
                 responseHeaders: responseData.responseHeaders,
                 responseBody: responseBodyParsed,
                 testResults
-            });
+            };
+
+            const shouldRecordTriggerLog =
+                !!options?.recordTriggerLog ||
+                !!freshState.postTriggerTabId ||
+                chainDepth > 0 ||
+                (triggerCfg.retryCountOnFail ?? 0) > 0 ||
+                this.isScheduleActive(targetId);
+
+            if (shouldRecordTriggerLog) {
+                this.recordTriggerExecutionLog(targetId, latestReqState, completionSummary);
+            }
+
+            options?.onComplete?.(completionSummary);
 
             // Post-Response Request Chaining & Script-Controlled Flow (Trigger Next Request)
             const sourceCapId = freshState.capsuleId || this.tabStateService.activeCapsuleId();
@@ -1877,10 +2038,7 @@ export class RequestExecutionService {
                             ? {
                                 isolatedRun: true,
                                 recordTriggerLog: options?.recordTriggerLog,
-                                chainVisitedIds: nextVisited,
-                                onComplete: options?.recordTriggerLog
-                                    ? (chainSummary) => this.recordTriggerExecutionLog(targetTabId, targetState, chainSummary)
-                                    : undefined
+                                chainVisitedIds: nextVisited
                             }
                             : { chainVisitedIds: nextVisited });
                     }, delayMs);
@@ -1917,14 +2075,26 @@ export class RequestExecutionService {
                     responseSize: new Blob([JSON.stringify(fallbackBody)]).size
                 });
             }
-            options?.onComplete?.({
+            const errorSummary = {
                 status: 0,
                 durationMs: 0,
                 testsPassed: 0,
                 testsFailed: 0,
                 error: globalErr?.message || String(globalErr || 'Execution error')
-            });
+            };
+            const errReqState = latestCfgState || state;
+            const shouldRecordErrLog =
+                !!options?.recordTriggerLog ||
+                !!errReqState.postTriggerTabId ||
+                chainDepth > 0 ||
+                (errReqState.triggerConfig?.retryCountOnFail ?? 0) > 0 ||
+                this.isScheduleActive(effectiveTabId);
+            if (shouldRecordErrLog) {
+                this.recordTriggerExecutionLog(effectiveTabId, errReqState, errorSummary);
+            }
+            options?.onComplete?.(errorSummary);
         } finally {
+            this.markRequestRunning(effectiveTabId, false);
             if (isAutoAuthRetry && originalTabId && originalTabId !== tabId) {
                 this.tabStateService.setActiveTab(originalTabId);
             }

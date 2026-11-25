@@ -11,13 +11,12 @@ import { copyTextToClipboard } from '../../shared/utils/clipboard.util';
 import { getHttpMethodColor } from '../../shared/utils/http-method.util';
 import {
   BrdEditableSections,
+  CustomDocBlock,
   DocBrdVariable,
   generateDocumentationOrBrd
 } from '../../shared/utils/doc-brd-generator.util';
 
 type StudioViewTab = 'edit-brd' | 'edit-endpoints' | 'preview' | 'markdown';
-
-const BRD_SECTIONS_STORAGE_PREFIX = 'onsteroids_brd_sections_';
 
 @Component({
   selector: 'app-documentation',
@@ -49,6 +48,12 @@ const BRD_SECTIONS_STORAGE_PREFIX = 'onsteroids_brd_sections_';
             <span class="text-(--postonsteroids-text-muted)">Endpoint(s) in Document</span>
           </div>
 
+          <button type="button" (click)="saveAllDocumentation()" [disabled]="isSavingDocs()"
+                  class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors">
+            <mat-icon class="text-[15px]! size-[15px]!">save</mat-icon>
+            <span>{{ isSavingDocs() ? 'Saving...' : 'Save BRD & Notes' }}</span>
+          </button>
+
           <button type="button" (click)="goToWorkspace()"
                   class="px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/60 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors">
             <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">open_in_new</mat-icon>
@@ -60,30 +65,32 @@ const BRD_SECTIONS_STORAGE_PREFIX = 'onsteroids_brd_sections_';
       <!-- Mode, Capsule & View Controls Bar -->
       <div class="px-6 py-2.5 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/60 flex flex-wrap items-center justify-between gap-3 shrink-0 text-xs">
         <div class="flex flex-wrap items-center gap-2.5">
-          <!-- Format Switcher -->
-          <div class="inline-flex rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-0.5">
-            <button type="button" (click)="setDocMode('api-doc')"
-                    class="px-2.5 py-1 rounded-md font-semibold cursor-pointer transition-colors"
-                    [class.bg-(--postonsteroids-accent)]="mode() === 'api-doc'"
-                    [class.text-white]="mode() === 'api-doc'"
-                    [class.text-(--postonsteroids-text-secondary)]="mode() !== 'api-doc'">
-              Technical API Docs
-            </button>
-            <button type="button" (click)="setDocMode('brd')"
-                    class="px-2.5 py-1 rounded-md font-semibold cursor-pointer transition-colors"
-                    [class.bg-blue-600]="mode() === 'brd'"
-                    [class.text-white]="mode() === 'brd'"
-                    [class.text-(--postonsteroids-text-secondary)]="mode() !== 'brd'">
-              Enterprise BRD
-            </button>
-            <button type="button" (click)="setDocMode('testrail')"
-                    class="px-2.5 py-1 rounded-md font-semibold cursor-pointer transition-colors"
-                    [class.bg-teal-600]="mode() === 'testrail'"
-                    [class.text-white]="mode() === 'testrail'"
-                    [class.text-(--postonsteroids-text-secondary)]="mode() !== 'testrail'">
-              TestRail Suite
-            </button>
-          </div>
+          <!-- Format Switcher (only shown in Preview / Markdown views where switching output format applies) -->
+          @if (viewTab() === 'preview' || viewTab() === 'markdown') {
+            <div class="inline-flex rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) p-0.5">
+              <button type="button" (click)="setDocMode('api-doc')"
+                      class="px-2.5 py-1 rounded-md font-semibold cursor-pointer transition-colors"
+                      [class.bg-(--postonsteroids-accent)]="mode() === 'api-doc'"
+                      [class.text-white]="mode() === 'api-doc'"
+                      [class.text-(--postonsteroids-text-secondary)]="mode() !== 'api-doc'">
+                Technical API Docs
+              </button>
+              <button type="button" (click)="setDocMode('brd')"
+                      class="px-2.5 py-1 rounded-md font-semibold cursor-pointer transition-colors"
+                      [class.bg-blue-600]="mode() === 'brd'"
+                      [class.text-white]="mode() === 'brd'"
+                      [class.text-(--postonsteroids-text-secondary)]="mode() !== 'brd'">
+                Enterprise BRD
+              </button>
+              <button type="button" (click)="setDocMode('testrail')"
+                      class="px-2.5 py-1 rounded-md font-semibold cursor-pointer transition-colors"
+                      [class.bg-teal-600]="mode() === 'testrail'"
+                      [class.text-white]="mode() === 'testrail'"
+                      [class.text-(--postonsteroids-text-secondary)]="mode() !== 'testrail'">
+                TestRail Suite
+              </button>
+            </div>
+          }
 
           <!-- Capsule Selector -->
           <select aria-label="Documentation Capsule"
@@ -291,6 +298,78 @@ const BRD_SECTIONS_STORAGE_PREFIX = 'onsteroids_brd_sections_';
                           class="w-full px-3 py-2 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) font-mono text-[11.5px] outline-none focus:border-blue-500 resize-y"></textarea>
               </div>
             </div>
+
+            <!-- Unlimited Custom Headings, Subheadings & Descriptions per Capsule -->
+            <div class="rounded-xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-4 space-y-3 text-xs">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 class="text-sm font-bold text-(--postonsteroids-text-primary)">Custom Headings, Subheadings &amp; Descriptions</h2>
+                  <p class="text-[11px] text-(--postonsteroids-text-muted)">Add as many custom headers, subheadings, or detailed paragraphs as needed to include in this capsule's BRD &amp; Technical Docs.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <button type="button" (click)="addCapsuleCustomBlock('heading')"
+                          class="px-2.5 py-1 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 font-semibold cursor-pointer flex items-center gap-1">
+                    <mat-icon class="text-[14px]! size-[14px]!">title</mat-icon>
+                    <span>+ Add Heading</span>
+                  </button>
+                  <button type="button" (click)="addCapsuleCustomBlock('subheading')"
+                          class="px-2.5 py-1 rounded-lg border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-semibold cursor-pointer flex items-center gap-1">
+                    <mat-icon class="text-[14px]! size-[14px]!">subtitles</mat-icon>
+                    <span>+ Add Subheading</span>
+                  </button>
+                  <button type="button" (click)="addCapsuleCustomBlock('description')"
+                          class="px-2.5 py-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold cursor-pointer flex items-center gap-1">
+                    <mat-icon class="text-[14px]! size-[14px]!">notes</mat-icon>
+                    <span>+ Add Description</span>
+                  </button>
+                </div>
+              </div>
+
+              @let capBlocks = brdSections().customBlocks || [];
+              @if (capBlocks.length === 0) {
+                <div class="rounded-lg border border-dashed border-(--postonsteroids-border) p-4 text-center text-(--postonsteroids-text-muted)">
+                  No custom sections yet. Click <strong>+ Add Heading</strong>, <strong>+ Add Subheading</strong>, or <strong>+ Add Description</strong> above.
+                </div>
+              } @else {
+                <div class="space-y-2.5">
+                  @for (blk of capBlocks; track blk.id; let idx = $index) {
+                    <div class="rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-3 space-y-2">
+                      <div class="flex items-center justify-between gap-2">
+                        <select [ngModel]="blk.kind" (ngModelChange)="updateCapsuleCustomBlock(blk.id, { kind: $event })"
+                                class="bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded px-2 py-1 text-[11px] font-semibold outline-none cursor-pointer">
+                          <option value="heading">Heading (H2)</option>
+                          <option value="subheading">Subheading (H3)</option>
+                          <option value="description">Description / Paragraph</option>
+                        </select>
+                        <div class="flex items-center gap-1">
+                          <button type="button" (click)="moveCapsuleCustomBlock(idx, -1)" [disabled]="idx === 0"
+                                  title="Move Up" class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 cursor-pointer">
+                            <mat-icon class="text-[15px]! size-[15px]!">arrow_upward</mat-icon>
+                          </button>
+                          <button type="button" (click)="moveCapsuleCustomBlock(idx, 1)" [disabled]="idx === capBlocks.length - 1"
+                                  title="Move Down" class="p-1 rounded hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 cursor-pointer">
+                            <mat-icon class="text-[15px]! size-[15px]!">arrow_downward</mat-icon>
+                          </button>
+                          <button type="button" (click)="removeCapsuleCustomBlock(blk.id)"
+                                  title="Delete block" class="p-1 rounded hover:bg-red-500/15 text-status-danger cursor-pointer">
+                            <mat-icon class="text-[15px]! size-[15px]!">delete</mat-icon>
+                          </button>
+                        </div>
+                      </div>
+                      @if (blk.kind === 'description') {
+                        <textarea rows="3" [ngModel]="blk.text" (ngModelChange)="updateCapsuleCustomBlock(blk.id, { text: $event })"
+                                  placeholder="Enter detailed Markdown description or business narrative..."
+                                  class="w-full px-3 py-2 rounded-lg bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) font-mono text-[11.5px] outline-none focus:border-blue-500 resize-y"></textarea>
+                      } @else {
+                        <input type="text" [ngModel]="blk.text" (ngModelChange)="updateCapsuleCustomBlock(blk.id, { text: $event })"
+                               [placeholder]="blk.kind === 'heading' ? 'Custom section header...' : 'Custom subheading...'"
+                               class="w-full px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) text-xs font-semibold outline-none focus:border-blue-500" />
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
           </div>
         } @else if (viewTab() === 'edit-endpoints') {
           <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-3 text-xs">
@@ -299,14 +378,13 @@ const BRD_SECTIONS_STORAGE_PREFIX = 'onsteroids_brd_sections_';
                 Select endpoints to include and edit per-endpoint documentation notes &amp; TestRail steps (changes save straight to each request).
               </span>
               <div class="flex items-center gap-2">
-                <button type="button" (click)="selectAllEndpoints()"
-                        class="px-2.5 py-1 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) hover:border-(--postonsteroids-accent)/60 cursor-pointer">
-                  Select All ({{ scopedRequests().length }})
-                </button>
-                <button type="button" (click)="clearEndpointSelection()"
-                        class="px-2.5 py-1 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) hover:border-(--postonsteroids-accent)/60 cursor-pointer">
-                  Use All Automatically
-                </button>
+                <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) hover:border-(--postonsteroids-accent)/60 cursor-pointer select-none font-semibold">
+                  <input type="checkbox"
+                         [checked]="areAllEndpointsSelected()"
+                         (change)="toggleSelectAllEndpoints()"
+                         class="accent-(--postonsteroids-accent) cursor-pointer" />
+                  <span>{{ areAllEndpointsSelected() ? 'Deselect All' : 'Select All' }} ({{ scopedRequests().length }})</span>
+                </label>
               </div>
             </div>
 
@@ -368,6 +446,67 @@ const BRD_SECTIONS_STORAGE_PREFIX = 'onsteroids_brd_sections_';
                           <textarea rows="3" [ngModel]="req.testRailExpected || ''" (ngModelChange)="updateEndpointField(req.id, 'testRailExpected', $event)"
                                     class="w-full px-2.5 py-1.5 rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-[11px] outline-none focus:border-teal-500 resize-y"></textarea>
                         </div>
+                      </div>
+
+                      <!-- Per-Endpoint Custom Headings, Subheadings & Descriptions -->
+                      <div class="rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary)/60 p-3 space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <span class="font-semibold text-(--postonsteroids-text-secondary)">Custom Headings, Subheadings &amp; Descriptions (This Endpoint)</span>
+                          <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" (click)="addEndpointCustomBlock(req.id, 'heading')"
+                                    class="px-2 py-0.5 rounded border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 font-semibold cursor-pointer text-[10.5px]">
+                              + Heading
+                            </button>
+                            <button type="button" (click)="addEndpointCustomBlock(req.id, 'subheading')"
+                                    class="px-2 py-0.5 rounded border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-semibold cursor-pointer text-[10.5px]">
+                              + Subheading
+                            </button>
+                            <button type="button" (click)="addEndpointCustomBlock(req.id, 'description')"
+                                    class="px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-semibold cursor-pointer text-[10.5px]">
+                              + Description
+                            </button>
+                          </div>
+                        </div>
+                        @let epBlocks = req.customDocBlocks || [];
+                        @if (epBlocks.length > 0) {
+                          <div class="space-y-2">
+                            @for (eb of epBlocks; track eb.id; let eIdx = $index) {
+                              <div class="rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) p-2 space-y-1.5">
+                                <div class="flex items-center justify-between gap-2">
+                                  <select [ngModel]="eb.kind" (ngModelChange)="updateEndpointCustomBlock(req.id, eb.id, { kind: $event })"
+                                          class="bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[10.5px] font-semibold outline-none cursor-pointer">
+                                    <option value="heading">Heading</option>
+                                    <option value="subheading">Subheading</option>
+                                    <option value="description">Description</option>
+                                  </select>
+                                  <div class="flex items-center gap-1">
+                                    <button type="button" (click)="moveEndpointCustomBlock(req.id, eIdx, -1)" [disabled]="eIdx === 0"
+                                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 cursor-pointer">
+                                      <mat-icon class="text-[14px]! size-[14px]!">arrow_upward</mat-icon>
+                                    </button>
+                                    <button type="button" (click)="moveEndpointCustomBlock(req.id, eIdx, 1)" [disabled]="eIdx === epBlocks.length - 1"
+                                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) disabled:opacity-30 cursor-pointer">
+                                      <mat-icon class="text-[14px]! size-[14px]!">arrow_downward</mat-icon>
+                                    </button>
+                                    <button type="button" (click)="removeEndpointCustomBlock(req.id, eb.id)"
+                                            class="p-0.5 rounded hover:bg-red-500/15 text-status-danger cursor-pointer">
+                                      <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                                    </button>
+                                  </div>
+                                </div>
+                                @if (eb.kind === 'description') {
+                                  <textarea rows="2" [ngModel]="eb.text" (ngModelChange)="updateEndpointCustomBlock(req.id, eb.id, { text: $event })"
+                                            placeholder="Custom endpoint description..."
+                                            class="w-full px-2 py-1 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) font-mono text-[11px] outline-none focus:border-blue-500 resize-y"></textarea>
+                                } @else {
+                                  <input type="text" [ngModel]="eb.text" (ngModelChange)="updateEndpointCustomBlock(req.id, eb.id, { text: $event })"
+                                         [placeholder]="eb.kind === 'heading' ? 'Custom header...' : 'Custom subheading...'"
+                                         class="w-full px-2 py-1 rounded bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) text-[11px] font-semibold outline-none focus:border-blue-500" />
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
                       </div>
                     </div>
                   }
@@ -465,14 +604,17 @@ export class DocumentationComponent {
   viewTab = signal<StudioViewTab>('edit-brd');
   selectedCapsuleId = signal<string>(this.tabStateService.activeCapsuleId() || '1');
   selectedGroupId = signal<string>('__all__');
+  includeAllEndpoints = signal<boolean>(true);
   selectedRequestIds = signal<Set<string>>(new Set());
   expandedEndpointId = signal<string | null>(null);
+  isSavingDocs = signal<boolean>(false);
+  private lastSyncedActiveCapId = this.tabStateService.activeCapsuleId() || '1';
 
   projectTitle = signal<string>('');
   version = signal<string>('1.0.0');
   author = signal<string>('Solutions Architecture Team');
   organization = signal<string>('Engineering & Product');
-  brdSections = signal<BrdEditableSections>(this.loadBrdSections(this.tabStateService.activeCapsuleId() || '1'));
+  brdSections = signal<BrdEditableSections>(this.tabStateService.getBrdSectionsForCapsule(this.tabStateService.activeCapsuleId() || '1'));
   customMarkdownOverride = signal<string>('');
 
   showTestRailPanel = signal<boolean>(false);
@@ -494,10 +636,13 @@ export class DocumentationComponent {
   );
 
   allCapsuleRequests = computed<RequestState[]>(() => {
+    this.tabStateService.runnerTreeVersion();
     const capId = this.selectedCapsuleId();
     const list = this.tabStateService.getCapsuleRequestsSync(capId);
     if (list.length > 0) return list;
-    return this.tabStateService.allCapsuleRequests();
+    return capId === this.tabStateService.activeCapsuleId()
+      ? this.tabStateService.allCapsuleRequests()
+      : [];
   });
 
   scopedRequests = computed<RequestState[]>(() => {
@@ -508,12 +653,19 @@ export class DocumentationComponent {
     return all.filter(r => r.groupId && descIds.has(r.groupId));
   });
 
+  areAllEndpointsSelected = computed<boolean>(() => {
+    const scoped = this.scopedRequests();
+    if (scoped.length === 0) return false;
+    if (this.includeAllEndpoints()) return true;
+    const chosen = this.selectedRequestIds();
+    return scoped.every(r => chosen.has(r.id));
+  });
+
   targetRequests = computed<RequestState[]>(() => {
     const scoped = this.scopedRequests();
+    if (this.includeAllEndpoints()) return scoped;
     const chosen = this.selectedRequestIds();
-    if (chosen.size === 0) return scoped;
-    const filtered = scoped.filter(r => chosen.has(r.id));
-    return filtered.length > 0 ? filtered : scoped;
+    return scoped.filter(r => chosen.has(r.id));
   });
 
   mergedVariables = computed<DocBrdVariable[]>(() => {
@@ -544,7 +696,7 @@ export class DocumentationComponent {
     const targetReqs = this.targetRequests();
     return generateDocumentationOrBrd({
       mode: this.mode(),
-      scope: targetReqs.length === 1 && this.selectedRequestIds().size === 1 ? 'endpoint' : 'collection',
+      scope: targetReqs.length === 1 && !this.includeAllEndpoints() ? 'endpoint' : 'collection',
       projectTitle: this.projectTitle().trim() || this.capsuleName(),
       version: this.version().trim() || '1.0.0',
       author: this.author().trim() || 'Solutions Architecture Team',
@@ -562,6 +714,23 @@ export class DocumentationComponent {
     if (!this.projectTitle().trim()) {
       this.projectTitle.set(this.capsuleName());
     }
+    void this.tabStateService.preloadCapsuleRequestsForRunner(this.selectedCapsuleId());
+
+    // Keep Studio synchronized whenever user switches active capsule in OnSteroid workspace
+    effect(() => {
+      const workspaceCapId = this.tabStateService.activeCapsuleId();
+      if (workspaceCapId && workspaceCapId !== this.lastSyncedActiveCapId) {
+        this.lastSyncedActiveCapId = workspaceCapId;
+        this.applyCapsuleContext(workspaceCapId);
+      }
+    });
+
+    // Reload current capsule BRD sections when backend session / sync updates them
+    effect(() => {
+      this.tabStateService.brdSectionsVersion();
+      const capId = this.selectedCapsuleId();
+      this.brdSections.set(this.tabStateService.getBrdSectionsForCapsule(capId));
+    });
 
     effect(() => {
       const frame = this.previewFrame()?.nativeElement;
@@ -571,23 +740,17 @@ export class DocumentationComponent {
     });
   }
 
-  private loadBrdSections(capId: string): BrdEditableSections {
-    if (typeof localStorage === 'undefined') return { documentStatus: 'Draft' };
-    try {
-      const raw = localStorage.getItem(`${BRD_SECTIONS_STORAGE_PREFIX}${capId}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') return parsed;
-      }
-    } catch {}
-    return { documentStatus: 'Draft' };
-  }
-
-  private saveBrdSections(capId: string, next: BrdEditableSections): void {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      localStorage.setItem(`${BRD_SECTIONS_STORAGE_PREFIX}${capId}`, JSON.stringify(next));
-    } catch {}
+  private applyCapsuleContext(capId: string): void {
+    this.selectedCapsuleId.set(capId);
+    this.selectedGroupId.set('__all__');
+    this.includeAllEndpoints.set(true);
+    this.selectedRequestIds.set(new Set());
+    this.expandedEndpointId.set(null);
+    this.customMarkdownOverride.set('');
+    this.brdSections.set(this.tabStateService.getBrdSectionsForCapsule(capId));
+    const capName = this.tabStateService.capsules().find(c => c.id === capId)?.name || 'API Collection';
+    this.projectTitle.set(capName);
+    void this.tabStateService.preloadCapsuleRequestsForRunner(capId);
   }
 
   setDocMode(m: 'api-doc' | 'brd' | 'testrail'): void {
@@ -600,17 +763,14 @@ export class DocumentationComponent {
   }
 
   onCapsuleChange(capId: string): void {
-    this.selectedCapsuleId.set(capId);
-    this.selectedGroupId.set('__all__');
-    this.selectedRequestIds.set(new Set());
-    this.customMarkdownOverride.set('');
-    this.brdSections.set(this.loadBrdSections(capId));
-    this.projectTitle.set(this.capsuleName());
+    this.applyCapsuleContext(capId);
   }
 
   onGroupChange(groupId: string): void {
     this.selectedGroupId.set(groupId);
+    this.includeAllEndpoints.set(true);
     this.selectedRequestIds.set(new Set());
+    this.expandedEndpointId.set(null);
     this.customMarkdownOverride.set('');
   }
 
@@ -618,40 +778,122 @@ export class DocumentationComponent {
     this.customMarkdownOverride.set('');
     this.brdSections.update(curr => {
       const next = { ...curr, [field]: value };
-      this.saveBrdSections(this.selectedCapsuleId(), next);
+      this.tabStateService.saveBrdSectionsForCapsule(this.selectedCapsuleId(), next);
       return next;
     });
+  }
+
+  addCapsuleCustomBlock(kind: 'heading' | 'subheading' | 'description'): void {
+    const currBlocks = this.brdSections().customBlocks || [];
+    const nextBlocks: CustomDocBlock[] = [
+      ...currBlocks,
+      { id: `cbrd_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, kind, text: '' }
+    ];
+    this.patchBrdSection('customBlocks', nextBlocks);
+  }
+
+  updateCapsuleCustomBlock(blockId: string, patch: Partial<CustomDocBlock>): void {
+    const currBlocks = this.brdSections().customBlocks || [];
+    const nextBlocks = currBlocks.map(b => b.id === blockId ? { ...b, ...patch } : b);
+    this.patchBrdSection('customBlocks', nextBlocks);
+  }
+
+  moveCapsuleCustomBlock(index: number, delta: -1 | 1): void {
+    const currBlocks = [...(this.brdSections().customBlocks || [])];
+    const target = index + delta;
+    if (target < 0 || target >= currBlocks.length) return;
+    const [moved] = currBlocks.splice(index, 1);
+    currBlocks.splice(target, 0, moved);
+    this.patchBrdSection('customBlocks', currBlocks);
+  }
+
+  removeCapsuleCustomBlock(blockId: string): void {
+    const nextBlocks = (this.brdSections().customBlocks || []).filter(b => b.id !== blockId);
+    this.patchBrdSection('customBlocks', nextBlocks);
+  }
+
+  async saveAllDocumentation(): Promise<void> {
+    this.isSavingDocs.set(true);
+    try {
+      await this.tabStateService.saveDocumentationContext(this.selectedCapsuleId(), this.brdSections());
+    } finally {
+      this.isSavingDocs.set(false);
+    }
   }
 
   resetBrdSections(): void {
     const clean: BrdEditableSections = { documentStatus: 'Draft' };
     this.brdSections.set(clean);
     this.customMarkdownOverride.set('');
-    this.saveBrdSections(this.selectedCapsuleId(), clean);
+    this.tabStateService.saveBrdSectionsForCapsule(this.selectedCapsuleId(), clean);
     this.notificationService.notify('Reset custom BRD section overrides to auto-generated defaults.');
   }
 
   isEndpointSelected(id: string): boolean {
-    const chosen = this.selectedRequestIds();
-    return chosen.size === 0 || chosen.has(id);
+    if (this.includeAllEndpoints()) return true;
+    return this.selectedRequestIds().has(id);
   }
 
   toggleEndpointSelection(id: string): void {
     const scoped = this.scopedRequests().map(r => r.id);
+    if (this.includeAllEndpoints()) {
+      const next = new Set(scoped);
+      next.delete(id);
+      this.includeAllEndpoints.set(false);
+      this.selectedRequestIds.set(next);
+      return;
+    }
     this.selectedRequestIds.update(curr => {
-      const next = curr.size === 0 ? new Set(scoped) : new Set(curr);
+      const next = new Set(curr);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
   }
 
-  selectAllEndpoints(): void {
-    this.selectedRequestIds.set(new Set(this.scopedRequests().map(r => r.id)));
+  toggleSelectAllEndpoints(): void {
+    const scoped = this.scopedRequests().map(r => r.id);
+    if (this.areAllEndpointsSelected()) {
+      this.includeAllEndpoints.set(false);
+      this.selectedRequestIds.set(new Set());
+    } else {
+      this.includeAllEndpoints.set(true);
+      this.selectedRequestIds.set(new Set(scoped));
+    }
   }
 
-  clearEndpointSelection(): void {
-    this.selectedRequestIds.set(new Set());
+  addEndpointCustomBlock(reqId: string, kind: 'heading' | 'subheading' | 'description'): void {
+    this.customMarkdownOverride.set('');
+    const curr = this.tabStateService.getState(reqId)?.customDocBlocks || [];
+    const next: CustomDocBlock[] = [
+      ...curr,
+      { id: `epcb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, kind, text: '' }
+    ];
+    this.tabStateService.updateState(reqId, { customDocBlocks: next });
+  }
+
+  updateEndpointCustomBlock(reqId: string, blockId: string, patch: Partial<CustomDocBlock>): void {
+    this.customMarkdownOverride.set('');
+    const curr = this.tabStateService.getState(reqId)?.customDocBlocks || [];
+    const next = curr.map(b => b.id === blockId ? { ...b, ...patch } : b);
+    this.tabStateService.updateState(reqId, { customDocBlocks: next });
+  }
+
+  moveEndpointCustomBlock(reqId: string, index: number, delta: -1 | 1): void {
+    this.customMarkdownOverride.set('');
+    const curr = [...(this.tabStateService.getState(reqId)?.customDocBlocks || [])];
+    const target = index + delta;
+    if (target < 0 || target >= curr.length) return;
+    const [moved] = curr.splice(index, 1);
+    curr.splice(target, 0, moved);
+    this.tabStateService.updateState(reqId, { customDocBlocks: curr });
+  }
+
+  removeEndpointCustomBlock(reqId: string, blockId: string): void {
+    this.customMarkdownOverride.set('');
+    const curr = this.tabStateService.getState(reqId)?.customDocBlocks || [];
+    const next = curr.filter(b => b.id !== blockId);
+    this.tabStateService.updateState(reqId, { customDocBlocks: next });
   }
 
   updateEndpointField(

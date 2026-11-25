@@ -7,7 +7,6 @@ import { SidebarService } from '../../services/sidebar.service';
 import { TabStateService } from '../../services/tab.state.service';
 import { NotificationService } from '../../services/notification.service';
 import { VariableService } from '../../services/variable.service';
-import { EnvironmentService } from '../../services/environment.service';
 import { TerminalService } from '../../services/terminal.service';
 import { AuthService } from '../../services/auth.service';
 import { SubscriptionService } from '../../services/subscription.service';
@@ -16,7 +15,6 @@ import { EditionTier } from '../../../../environments/edition.types';
 import { AboutModalComponent } from '../about.modal.component/about.modal.component';
 import { HelpUpdatesModalComponent } from '../help-updates.modal.component/help-updates.modal.component';
 import { CreateCapsuleModalComponent } from '../create-capsule.modal.component/create-capsule.modal.component';
-import { EnvironmentManagerModalComponent } from '../environment-manager.modal.component';
 import { DocBrdGeneratorModalComponent } from '../doc-brd-generator.modal.component';
 import { DESKTOP_DOWNLOADS_CONFIG, DesktopPackage, buildDownloadLink } from '../../constants/desktop-downloads.constants';
 import { isElectronApp } from '../../utils/url.util';
@@ -33,7 +31,6 @@ import { APP_EDITION } from '../../../../environments/edition';
         AboutModalComponent,
         HelpUpdatesModalComponent,
         CreateCapsuleModalComponent,
-        EnvironmentManagerModalComponent,
         DocBrdGeneratorModalComponent
     ],
     templateUrl: './navbar.component.html',
@@ -61,7 +58,6 @@ export class NavbarComponent {
     tabStateService = inject(TabStateService);
     authService = inject(AuthService);
     subscriptionService = inject(SubscriptionService);
-    envService = inject(EnvironmentService);
     terminalService = inject(TerminalService);
     private variableService = inject(VariableService);
     private versionCheckService = inject(VersionCheckService);
@@ -73,10 +69,8 @@ export class NavbarComponent {
     showFileMenu = signal<boolean>(false);
     showUserMenu = signal<boolean>(false);
     showDownloadsMenu = signal<boolean>(false);
-    showEnvMenu = signal<boolean>(false);
     showAboutModal = signal<boolean>(false);
     showHelpModal = signal<boolean>(false);
-    showEnvModal = signal<boolean>(false);
     showDocBrdModal = signal<boolean>(false);
     activeRequestState = computed(() => {
         const id = this.tabStateService.activeTabId();
@@ -103,32 +97,7 @@ export class NavbarComponent {
         event.stopPropagation();
         this.showFileMenu.set(false);
         this.showUserMenu.set(false);
-        this.showEnvMenu.set(false);
         this.showDownloadsMenu.update(v => !v);
-    }
-
-    toggleEnvMenu(event: MouseEvent) {
-        event.stopPropagation();
-        this.showFileMenu.set(false);
-        this.showUserMenu.set(false);
-        this.showDownloadsMenu.set(false);
-        this.showEnvMenu.update(v => !v);
-    }
-
-    selectEnvironmentFromMenu(envId: string | null, event: Event) {
-        event.stopPropagation();
-        this.envService.setActiveEnvironment(envId);
-        this.showEnvMenu.set(false);
-    }
-
-    openEnvManagerFromMenu(event: Event) {
-        event.stopPropagation();
-        this.showEnvMenu.set(false);
-        this.showEnvModal.set(true);
-    }
-
-    getEnvVarCount(env: { variables?: Array<{ enabled?: boolean; key?: string }> }): number {
-        return (env.variables || []).filter(v => v.enabled !== false && v.key && v.key.trim() !== '').length;
     }
 
     switchSubscriptionPlan(plan: EditionTier, event: Event) {
@@ -145,7 +114,6 @@ export class NavbarComponent {
         event.stopPropagation();
         this.showFileMenu.set(false);
         this.showDownloadsMenu.set(false);
-        this.showEnvMenu.set(false);
         this.showUserMenu.update(v => !v);
     }
 
@@ -330,9 +298,6 @@ export class NavbarComponent {
         }
         if (this.showDownloadsMenu()) {
             this.showDownloadsMenu.set(false);
-        }
-        if (this.showEnvMenu()) {
-            this.showEnvMenu.set(false);
         }
     }
 

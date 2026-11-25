@@ -6,14 +6,13 @@ import { MatIcon } from '@angular/material/icon';
 import {
   TabStateService,
   RequestState,
-  TriggerFlowCondition,
   TriggerFlowConfig
 } from '../../shared/services/tab.state.service';
 import { RequestExecutionService } from '../../shared/services/request.execution.service';
 import { RunnerSchedulerService } from '../../shared/services/runner-scheduler.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { getHttpMethodColor } from '../../shared/utils/http-method.util';
-import { analyzeTriggerLoops, detectProposedTriggerLoop } from '../../shared/utils/trigger-graph.util';
+import { analyzeTriggerLoops } from '../../shared/utils/trigger-graph.util';
 
 type AutomationSection = 'triggers' | 'jobs' | 'logs';
 
@@ -183,7 +182,7 @@ interface UnifiedAutomationLog {
             <div class="rounded-xl border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5 flex items-center gap-2.5 text-xs text-amber-200/90">
               <mat-icon class="text-[17px]! size-[17px]! text-amber-400 shrink-0">info</mat-icon>
               <span>
-                <strong>Tip:</strong> Only configured triggers appear here for fast loading. Click <strong>+ Create Trigger</strong> to add another rule. Avoid linking two requests mutually (e.g. A &rarr; B and B &rarr; A) or a trigger loop can occur.
+                Avoid linking two requests mutually (e.g. A &rarr; B and B &rarr; A) or a trigger loop can occur.
               </span>
             </div>
           }
@@ -639,10 +638,8 @@ export class AutomationComponent {
   selectedCapsuleFilter = signal<string>(this.tabState.activeCapsuleId() || '__all__');
   searchQuery = signal<string>('');
   expandedLogId = signal<string | null>(null);
-  runningTriggerIds = signal<Set<string>>(new Set());
-
-  /** Explicit user-created trigger cards (starts empty, showing starter card when none are configured yet) */
-  private draftTriggerRequestIds = signal<string[]>([]);
+  readonly runningTriggerIds = this.executionService.activeRunningRequestIds;
+  readonly draftTriggerRequestIds = this.executionService.triggerConfiguredRequestIds;
   private dismissedStarterWhenEmpty = signal<boolean>(false);
 
   // Schedule new runner job form signals
@@ -788,7 +785,6 @@ export class AutomationComponent {
 
   onCapsuleFilterChange(capId: string): void {
     this.selectedCapsuleFilter.set(capId);
-    this.draftTriggerRequestIds.set([]);
     this.dismissedStarterWhenEmpty.set(false);
   }
 
@@ -802,10 +798,9 @@ export class AutomationComponent {
       return;
     }
     const nextReq = available[0];
-    this.draftTriggerRequestIds.update(curr => {
-      const merged = Array.from(new Set([...curr, ...currentCardIds, nextReq.id]));
-      return merged;
-    });
+    this.executionService.triggerConfiguredRequestIds.update(curr =>
+      Array.from(new Set([...curr, ...currentCardIds, nextReq.id]))
+    );
     this.notification.notify(`Added trigger card for "${this.tabState.resolveRequestTitle(nextReq.name, nextReq.url)}".`);
   }
 
@@ -822,7 +817,7 @@ export class AutomationComponent {
     const prevTarget = card.request.postTriggerTabId || null;
 
     // Move draft slot from old request to the newly picked source request
-    this.draftTriggerRequestIds.update(curr => [
+    this.executionService.triggerConfiguredRequestIds.update(curr => [
       ...curr.filter(id => id !== card.request.id && id !== newRequestId),
       newRequestId
     ]);
@@ -851,7 +846,7 @@ export class AutomationComponent {
         scheduleEndAt: null
       }
     });
-    this.draftTriggerRequestIds.update(curr => curr.filter(id => id !== req.id));
+    this.executionService.unregisterConfiguredTriggerId(req.id);
     if (this.allKnownRequests().filter(r => r.id !== req.id && this.isRequestConfigured(r, this.executionService.activeSchedules())).length === 0) {
       this.dismissedStarterWhenEmpty.set(true);
     }
@@ -868,15 +863,7 @@ export class AutomationComponent {
   }
 
   getTriggerConfig(req: RequestState): TriggerFlowConfig {
-    return req.triggerConfig || {
-      condition: 'always',
-      expectedStatus: 200,
-      delayMs: 250,
-      retryCountOnFail: 0,
-      scheduleIntervalMs: 0,
-      scheduleStartAt: null,
-      scheduleEndAt: null
-    };
+    return this.executionService.getTriggerConfigFor(req.id);
   }
 
   getChainCandidates(req: RequestState): RequestState[] {
@@ -885,41 +872,11 @@ export class AutomationComponent {
   }
 
   updateRequestChainTarget(req: RequestState, targetId: string): void {
-    const cleanTarget = targetId || null;
-    const cfg = this.getTriggerConfig(req);
-    const nextCondition: TriggerFlowCondition = cleanTarget === '__script__'
-      ? 'script-only'
-      : (cfg.condition === 'script-only' ? 'always' : cfg.condition);
-
-    this.draftTriggerRequestIds.update(curr => curr.includes(req.id) ? curr : [...curr, req.id]);
-    const loopCheck = detectProposedTriggerLoop(
-      this.allKnownRequests(),
-      req.id,
-      cleanTarget,
-      r => this.tabState.resolveRequestTitle(r.name, r.url)
-    );
-
-    this.tabState.updateState(req.id, {
-      postTriggerTabId: cleanTarget,
-      triggerConfig: { ...cfg, condition: nextCondition }
-    });
-
-    if (loopCheck.hasLoop) {
-      this.notification.notify(
-        `Warning: Linking to this target creates a trigger loop (${loopCheck.descriptions[0]}).`,
-        'warning'
-      );
-    }
+    this.executionService.configureTriggerChain(req.id, targetId || null, { notifyLoop: true });
   }
 
   patchRequestTriggerConfig(req: RequestState, patch: Partial<TriggerFlowConfig>): void {
-    this.draftTriggerRequestIds.update(curr => curr.includes(req.id) ? curr : [...curr, req.id]);
-    this.tabState.updateState(req.id, {
-      triggerConfig: {
-        ...this.getTriggerConfig(req),
-        ...patch
-      }
-    });
+    this.executionService.patchTriggerConfig(req.id, patch);
   }
 
   clampNonNeg(raw: unknown, max: number): number {
@@ -934,60 +891,15 @@ export class AutomationComponent {
 
   onScheduleSecondsChange(req: RequestState, rawSeconds: unknown): void {
     const sec = Math.max(1, Math.min(86400, Math.round(Number(rawSeconds) || 10)));
-    const ms = sec * 1000;
-    this.patchRequestTriggerConfig(req, { scheduleIntervalMs: ms });
-    if (this.executionService.isScheduleActive(req.id)) {
-      const cfg = this.getTriggerConfig(req);
-      this.executionService.startSchedule(req.id, ms, {
-        startAt: cfg.scheduleStartAt ?? null,
-        endAt: cfg.scheduleEndAt ?? null,
-        runImmediately: false
-      });
-    }
+    this.executionService.patchTriggerConfig(req.id, { scheduleIntervalMs: sec * 1000 });
   }
 
   toggleRequestSchedule(req: RequestState): void {
-    this.draftTriggerRequestIds.update(curr => curr.includes(req.id) ? curr : [...curr, req.id]);
-    const cfg = this.getTriggerConfig(req);
-    const intervalMs = cfg.scheduleIntervalMs && cfg.scheduleIntervalMs > 0 ? cfg.scheduleIntervalMs : 10000;
-    if (!cfg.scheduleIntervalMs || cfg.scheduleIntervalMs <= 0) {
-      this.patchRequestTriggerConfig(req, { scheduleIntervalMs: intervalMs });
-    }
-    this.executionService.toggleSchedule(req.id, intervalMs, {
-      startAt: cfg.scheduleStartAt ?? null,
-      endAt: cfg.scheduleEndAt ?? null,
-      runImmediately: true
-    });
+    this.executionService.toggleTriggerSchedule(req.id);
   }
 
   async runRequestOnce(req: RequestState): Promise<void> {
-    if (!req.url?.trim()) {
-      this.notification.notify('Please configure a URL for this request before running.', 'warning');
-      return;
-    }
-    this.runningTriggerIds.update(s => new Set(s).add(req.id));
-    this.notification.notify(`Running trigger "${this.tabState.resolveRequestTitle(req.name, req.url)}"...`);
-    try {
-      await this.executionService.executeRequest(req.id, false, 0, 0, {
-        isolatedRun: true,
-        recordTriggerLog: true,
-        chainVisitedIds: [req.id],
-        onComplete: (summary) => {
-          this.executionService.recordTriggerExecutionLog(req.id, req, summary);
-          if (summary.status >= 200 && summary.status < 300) {
-            this.notification.notify(`Trigger completed (${summary.status} · ${Math.round(summary.durationMs)}ms).`, 'success');
-          } else {
-            this.notification.notify(`Trigger finished with status ${summary.status || 'Error'}.`, summary.status ? 'warning' : 'error');
-          }
-        }
-      });
-    } finally {
-      this.runningTriggerIds.update(s => {
-        const next = new Set(s);
-        next.delete(req.id);
-        return next;
-      });
-    }
+    await this.executionService.runTriggerNow(req.id, { isolatedRun: true, notifyResult: true });
   }
 
   openRequestInWorkspace(req: RequestState): void {

@@ -1,6 +1,7 @@
-import { Component, signal, computed, inject, ViewChild, ElementRef } from '@angular/core';
+import { Component, signal, computed, inject, effect, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { ScrollableSelectComponent } from '../../../shared/components/scrollable.select.component/scrollable.select.component';
 import { VariableService } from '../../../shared/services/variable.service';
@@ -12,17 +13,19 @@ import { VariableInputComponent } from '../../../shared/components/variable-inpu
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ThemeService } from '../../../shared/services/theme.service';
 import { getHttpMethodColor } from '../../../shared/utils/http-method.util';
+import { analyzeTriggerLoops } from '../../../shared/utils/trigger-graph.util';
 import { input } from '@angular/core';
 import { BodyPortalDirective } from '../../../shared/directives/body-portal.directive';
 
 @Component({
     selector: 'app-request-url-component',
-    imports: [CommonModule, FormsModule, ScrollableSelectComponent, MatIcon, AutoAuthModalComponent, VariableInputComponent, BodyPortalDirective],
+    imports: [CommonModule, FormsModule, RouterModule, ScrollableSelectComponent, MatIcon, AutoAuthModalComponent, VariableInputComponent, BodyPortalDirective],
     templateUrl: './request-url.component.html',
     styleUrl: './request-url.component.css',
     host: {
         class: 'block relative z-40',
         '(document:click)': 'onDocumentClick()',
+        '(document:keydown.escape)': 'onDocumentEscape()',
         '(window:resize)': 'repositionTriggerDropdown()'
     }
 })
@@ -76,12 +79,12 @@ export class RequestUrlComponent {
     });
 
     availableTriggerRequests = computed(() => {
-        const currentId = this.tabId();
+        const currentId = this.tabStateService.resolveTabId(this.tabId());
         const all = this.tabStateService.allCapsuleRequests();
         const isAuthTab = this.isCurrentAuthTab();
 
         return all.filter(r => {
-            if (r.id === currentId) return false;
+            if (this.tabStateService.resolveTabId(r.id) === currentId) return false;
 
             // When on the auth tab request, exclude any request that has auto auth enabled linked to it
             if (isAuthTab) {
@@ -147,6 +150,16 @@ export class RequestUrlComponent {
         this.isScheduleActive() ||
         (this.triggerConfig().retryCountOnFail ?? 0) > 0
     );
+    isTriggerRunning = computed(() => this.executionService.activeRunningRequestIds().has(this.tabId()));
+    triggerLoopWarning = computed<string | null>(() => {
+        const currentId = this.tabId();
+        const analysis = analyzeTriggerLoops(
+            this.tabStateService.allCapsuleRequests(),
+            r => this.tabStateService.resolveRequestTitle(r.name, r.url)
+        );
+        if (!analysis.involvedRequestIds.has(currentId)) return null;
+        return analysis.requestCycleMessages.get(currentId)?.[0] || analysis.cycleDescriptions[0] || 'Circular trigger loop detected.';
+    });
 
     // Auto Auth Modal State
     showAutoAuthModal = signal(false);
@@ -158,6 +171,17 @@ export class RequestUrlComponent {
     @ViewChild(VariableInputComponent) variableInput?: VariableInputComponent;
 
     constructor() {
+        effect(() => {
+            if (this.tabStateService.activeTabId() !== this.tabId() && this.isTriggerDropdownOpen()) {
+                this.isTriggerDropdownOpen.set(false);
+            }
+        });
+    }
+
+    onDocumentEscape() {
+        if (this.isTriggerDropdownOpen()) {
+            this.isTriggerDropdownOpen.set(false);
+        }
     }
 
     resolvedUrl = computed(() => this.variableService.resolve(this.url()));
@@ -267,24 +291,12 @@ export class RequestUrlComponent {
                 return;
             }
         }
-        const currCfg = this.triggerConfig();
-        const nextCfg: TriggerFlowConfig = targetId === '__script__'
-            ? { ...currCfg, condition: 'script-only' }
-            : (currCfg.condition === 'script-only' ? { ...currCfg, condition: 'always' } : currCfg);
-        this.tabStateService.updateState(this.tabId(), {
-            postTriggerTabId: targetId,
-            triggerConfig: nextCfg
-        });
+        this.executionService.configureTriggerChain(this.tabId(), targetId, { notifyLoop: true });
         this.isTriggerDropdownOpen.set(false);
     }
 
     updateTriggerConfig(patch: Partial<TriggerFlowConfig>) {
-        this.tabStateService.updateState(this.tabId(), {
-            triggerConfig: {
-                ...this.triggerConfig(),
-                ...patch
-            }
-        });
+        this.executionService.patchTriggerConfig(this.tabId(), patch);
     }
 
     onConditionChange(condition: string) {
@@ -319,14 +331,7 @@ export class RequestUrlComponent {
 
     onScheduleSecondsChange(rawVal: string | number) {
         const sec = Math.max(1, Math.min(86400, Math.round(Number(rawVal) || 10)));
-        const ms = sec * 1000;
-        this.updateTriggerConfig({ scheduleIntervalMs: ms });
-        if (this.isScheduleActive()) {
-            this.executionService.startSchedule(this.tabId(), ms, {
-                startAt: this.triggerConfig().scheduleStartAt ?? null,
-                endAt: this.triggerConfig().scheduleEndAt ?? null
-            });
-        }
+        this.updateTriggerConfig({ scheduleIntervalMs: sec * 1000 });
     }
 
     private formatLocalDateTimeInput(date: Date): string {
@@ -365,11 +370,12 @@ export class RequestUrlComponent {
 
     toggleRecurringSchedule(event: MouseEvent) {
         event.stopPropagation();
-        const ms = this.scheduleIntervalSeconds() * 1000;
-        const startAt = this.triggerConfig().scheduleStartAt ?? null;
-        const endAt = this.triggerConfig().scheduleEndAt ?? null;
-        this.updateTriggerConfig({ scheduleIntervalMs: ms, scheduleStartAt: startAt, scheduleEndAt: endAt });
-        this.executionService.toggleSchedule(this.tabId(), ms, { startAt, endAt });
+        this.executionService.toggleTriggerSchedule(this.tabId());
+    }
+
+    runTriggerNowFromPopover(event: MouseEvent) {
+        event.stopPropagation();
+        void this.executionService.runTriggerNow(this.tabId(), { isolatedRun: false, notifyResult: true });
     }
 
     private cleanupAuthEndpointTriggerIfPointingToThisTab() {

@@ -98,13 +98,17 @@
                         [title]="scheduleStatusSummary()">
                         {{ scheduleBadgeText() }}
                     </span>
+                } @else if (isTriggerRunning()) {
+                    <span class="text-[9px] bg-white/25 text-white font-bold px-1.5 py-0.5 rounded font-mono animate-pulse">
+                        Running
+                    </span>
                 }
                 <mat-icon class="text-[16px]! size-[16px]! opacity-80 transition-transform duration-200"
                     [class.rotate-180]="isTriggerDropdownOpen()">expand_more</mat-icon>
             </button>
 
             <!-- Dropdown Menu Overlay (Portal + Viewport Clamped above Windows bottom taskbar) -->
-            @if (isTriggerDropdownOpen()) {
+            @if (isTriggerDropdownOpen() && tabStateService.activeTabId() === tabId()) {
             <div appBodyPortal (click)="$event.stopPropagation()"
                  class="fixed bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) rounded-lg shadow-2xl z-[9990] py-1 min-w-[330px] max-w-[380px] overflow-y-auto custom-scrollbar flex flex-col"
                  [style.top.px]="triggerPopoverBox().top"
@@ -134,6 +138,13 @@
                 <div class="px-3 py-1 text-[10px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider shrink-0">
                     Select Request to Call
                 </div>
+
+                @if (triggerLoopWarning(); as loopWarn) {
+                    <div class="mx-2 my-1 px-2.5 py-1.5 rounded bg-amber-500/12 border border-amber-500/35 flex items-start gap-1.5 text-amber-300 text-[11px] leading-tight shrink-0">
+                        <mat-icon class="text-[15px]! size-[15px]! text-amber-400 shrink-0 mt-0.5">warning</mat-icon>
+                        <span>Trigger loop: {{ loopWarn }}</span>
+                    </div>
+                }
 
                 @if (isCurrentAuthTab()) {
                     <div class="mx-2 my-1 px-2.5 py-1.5 rounded bg-status-warning/10 border border-status-warning/30 flex items-start gap-1.5 text-status-warning text-[11px] leading-tight shrink-0">
@@ -285,6 +296,19 @@
                             {{ scheduleStatusSummary() }}
                         </div>
                     }
+
+                    <div class="flex items-center gap-2 pt-1 border-t border-(--postonsteroids-border)/40">
+                        <button type="button" (click)="runTriggerNowFromPopover($event)" [disabled]="isTriggerRunning()"
+                            class="flex-1 px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors">
+                            <mat-icon class="text-[14px]! size-[14px]!">play_arrow</mat-icon>
+                            <span>{{ isTriggerRunning() ? 'Running...' : 'Run Now' }}</span>
+                        </button>
+                        <a routerLink="/automation" (click)="isTriggerDropdownOpen.set(false)"
+                            class="px-2.5 py-1.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) hover:bg-(--postonsteroids-bg-hover) text-[11px] font-semibold text-(--postonsteroids-text-primary) flex items-center gap-1 no-underline cursor-pointer transition-colors">
+                            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">alt_route</mat-icon>
+                            <span>Automation</span>
+                        </a>
+                    </div>
                 </div>
             </div>
             }

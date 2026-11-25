@@ -2,35 +2,23 @@
     class="w-full shrink-0 border-b border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) relative px-3 sm:px-4 z-50">
     <div class="w-full min-h-12 flex items-center justify-between gap-x-1.5 2xl:gap-x-4 py-1">
         
-        <!-- Left Section: Logo, Sidebar Toggle & Menu Tabs -->
-        <div class="flex items-center gap-x-2 shrink-0">
+        <!-- Left Section: Sidebar Toggle, Logo & Menu Tabs -->
+        <div class="flex items-center gap-x-1.5 shrink-0">
+            <!-- Sidebar Toggle (positioned close to sidebar edge) -->
+            <button (click)="toggleSidebar()" style="-webkit-app-region: no-drag;"
+                class="hidden md:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer shrink-0"
+                [title]="sidebarService.isCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'">
+                <mat-icon class="text-[20px]! size-[20px]!">{{ sidebarService.isCollapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left' }}</mat-icon>
+            </button>
+
             <!-- Logo -->
             <a routerLink="/steroid" style="-webkit-app-region: no-drag;"
-                class="flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline mr-0.5 2xl:mr-2">
+                class="flex items-center justify-center gap-x-2 select-none cursor-pointer group no-underline mr-1">
                 <img src="icons/onsteroids-icon.svg" alt="OnSteroid" width="24" height="24" loading="eager" fetchpriority="high" class="size-6 rounded-lg shadow-sm shadow-(--postonsteroids-accent)/30 group-hover:scale-105 transition-transform" />
                 <span class="text-[14px] font-bold tracking-wider text-(--postonsteroids-text-primary) group-hover:text-(--postonsteroids-accent) transition-colors">
                     OnSteroid
                 </span>
-                <span class="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border"
-                      [class.bg-amber-500/15]="subscriptionService.tier() === 'enterprise'"
-                      [class.text-amber-500]="subscriptionService.tier() === 'enterprise'"
-                      [class.border-amber-500/35]="subscriptionService.tier() === 'enterprise'"
-                      [class.bg-indigo-500/15]="subscriptionService.tier() === 'professional'"
-                      [class.text-indigo-500]="subscriptionService.tier() === 'professional'"
-                      [class.border-indigo-500/35]="subscriptionService.tier() === 'professional'"
-                      [class.bg-(--postonsteroids-bg-tertiary)]="subscriptionService.tier() === 'community'"
-                      [class.text-(--postonsteroids-text-muted)]="subscriptionService.tier() === 'community'"
-                      [class.border-(--postonsteroids-border)]="subscriptionService.tier() === 'community'">
-                    {{ subscriptionService.badgeLabel() }}
-                </span>
             </a>
-
-            <!-- Sidebar Toggle -->
-            <button (click)="toggleSidebar()" style="-webkit-app-region: no-drag;"
-                class="hidden md:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer"
-                [title]="sidebarService.isCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'">
-                <mat-icon class="text-[20px]! size-[20px]!">{{ sidebarService.isCollapsed() ? 'keyboard_double_arrow_right' : 'keyboard_double_arrow_left' }}</mat-icon>
-            </button>
 
             <!-- Menu Tabs: File, About, Help/Updates -->
             <div class="flex items-center gap-x-0.5 border-l border-(--postonsteroids-border) pl-1.5 sm:pl-2" style="-webkit-app-region: no-drag;">
@@ -168,88 +156,20 @@
         <!-- Center Section: Flexible Spacer (Postman / Insomnia clean header) -->
         <div class="flex-1 min-w-0"></div>
 
-        <!-- Right Section: Environment Switcher (Pro/Enterprise) + Utilities + Auth -->
+        <!-- Right Section: Edition Badge, Desktop Download & Auth/Settings -->
         <div class="flex items-center justify-end gap-x-1.5 2xl:gap-x-2.5 shrink-0" style="-webkit-app-region: no-drag;">
-            @if (subscriptionService.isProOrHigher()) {
-            <!-- Sleek Multi-Environment Switcher Card (Pro & Enterprise Only) -->
-            <div class="relative shrink-0">
-                <div class="flex items-center rounded-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 transition-colors overflow-hidden">
-                    <button type="button" (click)="toggleEnvMenu($event)" title="Switch Active Environment"
-                            class="flex items-center gap-1.5 pl-2.5 pr-2 py-1 text-[11px] font-semibold text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) cursor-pointer transition-colors">
-                        <span class="size-2 rounded-full shrink-0"
-                              [style.background-color]="envService.activeEnvironment()?.color || '#94a3b8'"></span>
-                        <span class="max-w-[100px] truncate">{{ envService.activeEnvironment()?.name || 'No Env' }}</span>
-                        @if (envService.activeEnvironment(); as activeEnv) {
-                            <span class="px-1 py-0 rounded text-[9px] font-mono bg-(--postonsteroids-bg-secondary) text-(--postonsteroids-text-muted) border border-(--postonsteroids-border)/50">
-                                {{ getEnvVarCount(activeEnv) }}
-                            </span>
-                        }
-                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted)">expand_more</mat-icon>
-                    </button>
-                    <button type="button" (click)="openEnvManagerFromMenu($event)" title="Manage Environments"
-                            class="px-2 py-1 border-l border-(--postonsteroids-border)/60 hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) cursor-pointer flex items-center transition-colors">
-                        <mat-icon class="text-[14px]! size-[14px]!">tune</mat-icon>
-                    </button>
-                </div>
-
-                @if (showEnvMenu()) {
-                    <div (click)="$event.stopPropagation()"
-                         class="absolute right-0 top-full mt-2 w-64 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl z-[120] overflow-hidden animate-fadeIn">
-                        <div class="px-3 py-2 border-b border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-tertiary)/40 flex items-center justify-between">
-                            <span class="text-[10.5px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">Environment</span>
-                            <button type="button" (click)="openEnvManagerFromMenu($event)" class="text-[10.5px] font-semibold text-(--postonsteroids-accent) hover:underline cursor-pointer">
-                                Manage
-                            </button>
-                        </div>
-
-                        <div class="p-1.5 max-h-60 overflow-y-auto flex flex-col gap-0.5 text-xs">
-                            <button type="button" (click)="selectEnvironmentFromMenu(null, $event)"
-                                    class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-left cursor-pointer transition-colors"
-                                    [class.bg-(--postonsteroids-accent)/10]="!envService.activeEnvironmentId()">
-                                <div class="flex items-center gap-2 min-w-0">
-                                    <span class="size-2.5 rounded-full bg-slate-400 shrink-0"></span>
-                                    <span class="font-medium text-(--postonsteroids-text-secondary) truncate">No Environment</span>
-                                </div>
-                                @if (!envService.activeEnvironmentId()) {
-                                    <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent) shrink-0">check_circle</mat-icon>
-                                }
-                            </button>
-
-                            @for (env of envService.environments(); track env.id) {
-                                <button type="button" (click)="selectEnvironmentFromMenu(env.id, $event)"
-                                        class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-left cursor-pointer transition-colors"
-                                        [class.bg-(--postonsteroids-accent)/10]="envService.activeEnvironmentId() === env.id">
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <span class="size-2.5 rounded-full shrink-0" [style.background-color]="env.color || '#3b82f6'"></span>
-                                        <div class="flex flex-col min-w-0">
-                                            <span class="font-semibold text-(--postonsteroids-text-primary) truncate">{{ env.name }}</span>
-                                            <span class="text-[10px] font-mono text-(--postonsteroids-text-muted)">{{ getEnvVarCount(env) }} variable(s)</span>
-                                        </div>
-                                    </div>
-                                    @if (envService.activeEnvironmentId() === env.id) {
-                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent) shrink-0">check_circle</mat-icon>
-                                    }
-                                </button>
-                            }
-                        </div>
-
-                        <div class="px-2 py-1.5 border-t border-(--postonsteroids-border)/60 bg-(--postonsteroids-bg-primary)/40">
-                            <button type="button" (click)="openEnvManagerFromMenu($event)"
-                                    class="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold text-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent)/10 cursor-pointer transition-colors">
-                                <mat-icon class="text-[14px]! size-[14px]!">layers</mat-icon>
-                                <span>Manage Environments &amp; Variables</span>
-                            </button>
-                        </div>
-                    </div>
-                }
-            </div>
-            } @else if (!subscriptionService.isOpenSourceCommunityBuild) {
-                <span title="Environments require Pro or Enterprise subscription"
-                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-(--postonsteroids-bg-tertiary)/70 border border-(--postonsteroids-border) text-[10.5px] font-semibold text-(--postonsteroids-text-muted) select-none shrink-0">
-                    <mat-icon class="text-[13px]! size-[13px]! text-amber-400">lock</mat-icon>
-                    <span>Env (Pro)</span>
-                </span>
-            }
+            <span class="px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider border leading-none shrink-0"
+                  [class.bg-amber-500/15]="subscriptionService.tier() === 'enterprise'"
+                  [class.text-amber-500]="subscriptionService.tier() === 'enterprise'"
+                  [class.border-amber-500/35]="subscriptionService.tier() === 'enterprise'"
+                  [class.bg-indigo-500/15]="subscriptionService.tier() === 'professional'"
+                  [class.text-indigo-500]="subscriptionService.tier() === 'professional'"
+                  [class.border-indigo-500/35]="subscriptionService.tier() === 'professional'"
+                  [class.bg-(--postonsteroids-bg-tertiary)]="subscriptionService.tier() === 'community'"
+                  [class.text-(--postonsteroids-text-muted)]="subscriptionService.tier() === 'community'"
+                  [class.border-(--postonsteroids-border)]="subscriptionService.tier() === 'community'">
+                {{ subscriptionService.badgeLabel() }}
+            </span>
             @if (!isElectron) {
                 <div class="flex items-center gap-x-2.5 shrink-0">
                     <span class="text-[10px] lg:text-[11px] text-(--postonsteroids-text-muted) italic whitespace-nowrap shrink-0 hidden min-[2200px]:inline-flex items-center gap-1">
@@ -265,12 +185,6 @@
                     </a>
                 </div>
             }
-
-            <a routerLink="/utilities" title="Utilities"
-                class="inline-flex items-center gap-x-2 rounded-full bg-(--postonsteroids-bg-tertiary) px-3 py-1 text-[12px] font-medium text-(--postonsteroids-text-secondary) hover:text-(--postonsteroids-text-primary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) transition-all duration-200 no-underline shrink-0">
-                <mat-icon class="text-[16px]! size-4!">handyman</mat-icon>
-                <span>Utilities</span>
-            </a>
 
             @if (isLoggedIn()) {
             <div class="flex items-center gap-x-2 relative shrink-0">
@@ -385,6 +299,5 @@
 <!-- Modals (Safely outside the drag region) -->
 <app-about-modal-component [show]="showAboutModal()" (onClose)="showAboutModal.set(false)" />
 <app-help-updates-modal-component [show]="showHelpModal()" [initialTab]="helpInitialTab()" (onClose)="showHelpModal.set(false)" />
-<app-environment-manager-modal [isOpen]="showEnvModal()" (closed)="showEnvModal.set(false)" />
 <app-doc-brd-generator-modal [isOpen]="showDocBrdModal()" [initialScope]="'collection'" [request]="activeRequestState()" (closed)="showDocBrdModal.set(false)" />
 <app-create-capsule-modal #createCapsuleModal />

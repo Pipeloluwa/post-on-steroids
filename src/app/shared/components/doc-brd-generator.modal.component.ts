@@ -357,6 +357,7 @@ export class DocBrdGeneratorModalComponent {
     });
 
     generated = computed(() => {
+        this.tabStateService.brdSectionsVersion();
         const capId = this.tabStateService.activeCapsuleId();
         const groupNamesById: Record<string, string> = {};
         if (capId) {
@@ -374,11 +375,13 @@ export class DocBrdGeneratorModalComponent {
             capsuleName: this.capsuleName(),
             requests: this.targetRequests(),
             variables: this.mergedVariables(),
-            groupNamesById
+            groupNamesById,
+            brdSections: capId ? this.tabStateService.getBrdSectionsForCapsule(capId) : undefined
         });
     });
 
     private wasOpen = false;
+    private lastOpenedCapsuleId = '';
 
     constructor() {
         effect(() => {
@@ -387,8 +390,10 @@ export class DocBrdGeneratorModalComponent {
                 this.mode.set(this.initialMode());
                 const req = this.request();
                 this.scope.set(req ? this.initialScope() : 'collection');
-                if (!this.projectTitle().trim()) {
+                const currentCapId = this.tabStateService.activeCapsuleId() || '';
+                if (currentCapId !== this.lastOpenedCapsuleId || !this.projectTitle().trim()) {
                     this.projectTitle.set(this.capsuleName());
+                    this.lastOpenedCapsuleId = currentCapId;
                 }
             }
             this.wasOpen = open;
@@ -418,7 +423,9 @@ export class DocBrdGeneratorModalComponent {
 
     openFullStudio() {
         this.close();
-        void this.router.navigate(['/documentation']);
+        setTimeout(() => {
+            void this.router.navigate(['/documentation']);
+        }, 0);
     }
 
     async copyMarkdown() {

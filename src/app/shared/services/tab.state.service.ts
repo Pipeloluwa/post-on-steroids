@@ -27,6 +27,9 @@ import {
     ScriptLanguage
 } from '../constants/script.snippets.constants';
 import { detectScriptLanguage } from '../utils/python-script-engine.util';
+import type { BrdEditableSections, CustomDocBlock } from '../utils/doc-brd-generator.util';
+
+export type { CustomDocBlock };
 
 export interface KeyValue {
     enabled: boolean;
@@ -171,6 +174,7 @@ export interface RequestState {
     testRailPreconditions?: string;
     testRailSteps?: string;
     testRailExpected?: string;
+    customDocBlocks?: CustomDocBlock[];
     isDirty: boolean;
     isLoading: boolean;
     autoAuthEnabled?: boolean;
@@ -787,6 +791,21 @@ export class TabStateService {
                     localStorage.setItem('onsteroids_responses', JSON.stringify(session.responses));
                 } catch {}
             }
+
+            if (session.responses['__brd_sections_map__'] && typeof session.responses['__brd_sections_map__'] === 'object') {
+                for (const [cId, brdObj] of Object.entries(session.responses['__brd_sections_map__'])) {
+                    if (this.deletingCapsuleIds.has(cId) || !brdObj || typeof brdObj !== 'object') continue;
+                    if (this.isBrowser) {
+                        try {
+                            const key = `onsteroids_brd_sections_${cId}`;
+                            if (!localStorage.getItem(key)) {
+                                localStorage.setItem(key, JSON.stringify(brdObj));
+                            }
+                        } catch {}
+                    }
+                }
+                this.brdSectionsVersion.update(v => v + 1);
+            }
         }
 
         if (!hasWork) {
@@ -871,6 +890,18 @@ export class TabStateService {
                             testResults: s.testResults
                         };
                     }
+                }
+
+                const brdMap: Record<string, BrdEditableSections> = {};
+                for (const c of this.capsules()) {
+                    if (this.deletingCapsuleIds.has(c.id)) continue;
+                    const brd = this.getBrdSectionsForCapsule(c.id);
+                    if (brd && (Object.keys(brd).length > 1 || (brd.customBlocks && brd.customBlocks.length > 0) || brd.documentStatus !== 'Draft')) {
+                        brdMap[c.id] = brd;
+                    }
+                }
+                if (Object.keys(brdMap).length > 0) {
+                    storedResponses['__brd_sections_map__'] = brdMap;
                 }
 
                 const tsMap: Record<string, number> = {};
@@ -1318,6 +1349,7 @@ export class TabStateService {
         autoAuthEnabled?: string;
         autoAuthEndpointId?: string | null;
         lockMode?: CapsuleLockMode;
+        brdSections?: BrdEditableSections;
         requestMeta?: Record<string, any>;
     } {
         const groups = this.getGroupsForCapsule(capId);
@@ -1351,6 +1383,7 @@ export class TabStateService {
                 testRailPreconditions: r.testRailPreconditions,
                 testRailSteps: r.testRailSteps,
                 testRailExpected: r.testRailExpected,
+                customDocBlocks: r.customDocBlocks || [],
                 bodyWrapStyle: r.bodyWrapStyle,
                 responseWrapStyle: r.responseWrapStyle,
                 responseActiveMode: r.responseActiveMode,
@@ -1366,8 +1399,59 @@ export class TabStateService {
             autoAuthEnabled,
             autoAuthEndpointId,
             lockMode,
+            brdSections: this.getBrdSectionsForCapsule(capId),
             requestMeta
         };
+    }
+
+    readonly brdSectionsVersion = signal<number>(0);
+
+    getBrdSectionsForCapsule(capId: string): BrdEditableSections {
+        if (!capId || !this.isBrowser) return { documentStatus: 'Draft' };
+        try {
+            const raw = localStorage.getItem(`onsteroids_brd_sections_${capId}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    return parsed;
+                }
+            }
+        } catch {}
+        return { documentStatus: 'Draft' };
+    }
+
+    saveBrdSectionsForCapsule(capId: string, next: BrdEditableSections, syncBackend = true): void {
+        if (!capId || !this.isBrowser) return;
+        try {
+            localStorage.setItem(`onsteroids_brd_sections_${capId}`, JSON.stringify(next));
+        } catch {}
+        this.brdSectionsVersion.update(v => v + 1);
+        if (syncBackend && this.authService.isLoggedIn() && !this.authService.isLoggingOut()) {
+            this.scheduleGroupsVariableSync(capId);
+            void this.syncWorkspaceStateToBackend();
+        }
+    }
+
+    async saveDocumentationContext(capId: string, sections: BrdEditableSections): Promise<void> {
+        this.saveBrdSectionsForCapsule(capId, sections, false);
+        if (this.isBrowser) {
+            this.snapshotCurrentSession(undefined, true);
+        }
+        if (this.authService.isLoggedIn() && !this.authService.isLoggingOut()) {
+            if (capId === this.activeCapsuleId()) {
+                await this.saveToCapsule();
+            } else {
+                const vs = this.getVariableService();
+                if (vs) {
+                    await vs.syncVariablesToBackend(capId).catch(() => {});
+                }
+                await this.syncWorkspaceStateToBackend(true, true);
+            }
+        } else {
+            this.notificationService.notify('Documentation & BRD saved locally! Sign in to sync to cloud.', 'info');
+            return;
+        }
+        this.notificationService.notify('Documentation, BRD & endpoint notes saved!', 'success');
     }
 
     applyBackendCapsuleGroups(capId: string, payload: {
@@ -1378,6 +1462,7 @@ export class TabStateService {
         autoAuthEnabled?: string;
         autoAuthEndpointId?: string | null;
         lockMode?: CapsuleLockMode;
+        brdSections?: BrdEditableSections;
         requestMeta?: Record<string, any>;
     }): void {
         if (!capId || this.deletingCapsuleIds.has(capId) || !payload || typeof payload !== 'object') return;
@@ -1389,6 +1474,16 @@ export class TabStateService {
             this.syncGroupAssignmentsToRequests(capId);
             this.scheduleGroupsVariableSync(capId);
             return;
+        }
+
+        if (payload.brdSections && typeof payload.brdSections === 'object' && this.isBrowser) {
+            try {
+                const brdKey = `onsteroids_brd_sections_${capId}`;
+                if (!localStorage.getItem(brdKey)) {
+                    localStorage.setItem(brdKey, JSON.stringify(payload.brdSections));
+                    this.brdSectionsVersion.update(v => v + 1);
+                }
+            } catch {}
         }
 
         const reqToGroup = new Map<string, string>();
@@ -1440,6 +1535,9 @@ export class TabStateService {
                         testRailPreconditions: st.testRailPreconditions || meta.testRailPreconditions || '',
                         testRailSteps: st.testRailSteps || meta.testRailSteps || '',
                         testRailExpected: st.testRailExpected || meta.testRailExpected || '',
+                        customDocBlocks: (Array.isArray(st.customDocBlocks) && st.customDocBlocks.length > 0)
+                            ? st.customDocBlocks
+                            : (Array.isArray(meta.customDocBlocks) ? meta.customDocBlocks : []),
                         postTriggerTabId: st.postTriggerTabId ?? meta.postTriggerTabId ?? null,
                         triggerConfig: st.triggerConfig ?? meta.triggerConfig,
                         autoAuthEnabled: st.autoAuthEnabled ?? meta.autoAuthEnabled ?? false,
@@ -4848,6 +4946,7 @@ export class TabStateService {
             testRailPreconditions: state.testRailPreconditions || '',
             testRailSteps: state.testRailSteps || '',
             testRailExpected: state.testRailExpected || '',
+            customDocBlocks: state.customDocBlocks || [],
             url: state.url || '',
             method: (state.method || 'GET').toUpperCase(),
             payloadType: state.payloadType || 'params',
@@ -6204,7 +6303,8 @@ export class TabStateService {
             partialState.docNotes !== undefined ||
             partialState.testRailPreconditions !== undefined ||
             partialState.testRailSteps !== undefined ||
-            partialState.testRailExpected !== undefined
+            partialState.testRailExpected !== undefined ||
+            partialState.customDocBlocks !== undefined
         ) {
             const latest = this.states().get(effectiveId);
             if (latest && this.savedCapsules().some(r => r.id === effectiveId || r.id === id)) {
@@ -7247,6 +7347,16 @@ export class TabStateService {
             testRailPreconditions: dto.testRailPreconditions || '',
             testRailSteps: dto.testRailSteps || '',
             testRailExpected: dto.testRailExpected || '',
+            customDocBlocks: (() => {
+                if (Array.isArray(dto.customDocBlocks)) return dto.customDocBlocks;
+                if (typeof dto.customDocBlocksJson === 'string' && dto.customDocBlocksJson.trim()) {
+                    try {
+                        const parsed = JSON.parse(dto.customDocBlocksJson);
+                        if (Array.isArray(parsed)) return parsed;
+                    } catch {}
+                }
+                return [];
+            })(),
             url: dto.url || '',
             method: dto.method || 'GET',
             payloadType: dto.payloadType || 'params',
@@ -7430,6 +7540,7 @@ export class TabStateService {
             testRailPreconditions: '',
             testRailSteps: '',
             testRailExpected: '',
+            customDocBlocks: [],
             isDirty: false,
             isLoading: false,
             autoAuthEnabled: false,
