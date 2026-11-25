@@ -1,5 +1,5 @@
 <div class="flex items-center justify-between w-full h-[34px] mb-2 gap-x-3">
-    <!-- Left Section: Icon, Request Name, and Compact Doc/BRD Notes Indicator Button -->
+    <!-- Left Section: Icon and Request Name -->
     <div class="flex items-center gap-x-2 flex-1 min-w-0">
         <div
             class="flex items-center justify-center w-6 h-6 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) shrink-0">
@@ -7,12 +7,15 @@
         </div>
 
         <input type="text" [ngModel]="requestName()" (ngModelChange)="onNameChange($event)"
-            class="bg-transparent border-none outline-none font-semibold text-[13px] text-(--postonsteroids-text-primary) flex-1 min-w-[120px] max-w-[360px] truncate"
+            class="bg-transparent border-none outline-none font-semibold text-[13px] text-(--postonsteroids-text-primary) flex-1 min-w-[120px] w-full truncate"
             placeholder="Request Name" />
+    </div>
 
+    <!-- Right Section: Doc / BRD Note, Grouped Utilities (Cookies, Code, Docs/BRD, Lock), Share, and Unified Save + Auto-Save -->
+    <div class="flex items-center gap-x-2 shrink-0">
         <button type="button" (click)="openDocNotesModal()"
             title="Add request description &amp; writeup to include in API Docs, BRD &amp; TestRail generation"
-            class="h-[26px] px-2 rounded-md border flex items-center gap-1.5 text-[11px] font-medium transition-colors cursor-pointer shrink-0"
+            class="h-[30px] px-2.5 rounded-[4px] border flex items-center gap-1.5 text-[11px] font-medium transition-colors cursor-pointer shrink-0"
             [class.bg-blue-500/12]="hasDocNotesContent()"
             [class.border-blue-500/40]="hasDocNotesContent()"
             [class.text-blue-400]="hasDocNotesContent()"
@@ -26,10 +29,7 @@
                 <span class="size-1.5 rounded-full bg-blue-400"></span>
             }
         </button>
-    </div>
 
-    <!-- Right Section: Grouped Utilities (Cookies, Code, Docs/BRD, Lock), Share, and Unified Save + Auto-Save -->
-    <div class="flex items-center gap-x-2 shrink-0">
         <!-- Grouped Request Tools & Capsule Lock Menu -->
         <div class="relative shrink-0">
             <button (click)="toggleActionsMenu($event)" type="button"

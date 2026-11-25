@@ -55,9 +55,10 @@ export class ScrollableSelectComponent {
 
 
   filteredOptions = computed(() => {
-    const query = this.searchQuery().toLowerCase();
-    if (!query) return this.optionValues();
-    return this.optionValues().filter(v => v.toLowerCase().includes(query));
+    const query = (this.searchQuery() || '').toLowerCase();
+    const opts = this.optionValues() || [];
+    if (!query) return opts;
+    return opts.filter(v => (v || '').toLowerCase().includes(query));
   });
 
   setActiveValue(value: string) {

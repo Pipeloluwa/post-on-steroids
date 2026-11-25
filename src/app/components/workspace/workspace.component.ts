@@ -1,5 +1,4 @@
 import { Component, signal, computed, inject, effect, PLATFORM_ID, ViewChild } from '@angular/core';
-import { DragDropModule, CdkDragDrop, CdkDrag, CdkDragMove } from '@angular/cdk/drag-drop';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RequestTabsComponent } from './request-tabs.component/request-tabs.component';
@@ -34,8 +33,7 @@ import { TerminalService } from '../../shared/services/terminal.service';
         CreateCapsuleModalComponent,
         TransferCapsuleModalComponent,
         CurlModalComponent,
-        MatIcon,
-        DragDropModule
+        MatIcon
     ],
     templateUrl: './workspace.component.html',
     styleUrl: './workspace.component.css',
@@ -43,6 +41,7 @@ import { TerminalService } from '../../shared/services/terminal.service';
         '(document:pointermove)': 'onPointerMove($event)',
         '(document:mousemove)': 'onMouseMove($event)',
         '(document:mouseup)': 'onMouseUp()',
+        '(window:blur)': 'clearTreeDragState()',
         '(document:click)': 'onDocumentClick()',
         '(document:keydown)': 'handleKeyboardShortcuts($event)',
         '(window:beforeunload)': 'onBeforeUnload($event)',
@@ -167,18 +166,25 @@ export class WorkspaceComponent {
     onPointerMove(event: PointerEvent) {
         this.lastPointerX = event.clientX;
         this.lastPointerY = event.clientY;
-
-        if (this.isDraggingRequest() && this.isBrowser) {
-            this.updateDragHoverTarget(event.clientX, event.clientY);
-        }
     }
 
     onMouseMove(event: MouseEvent) {
         this.lastPointerX = event.clientX;
         this.lastPointerY = event.clientY;
 
-        if (this.isDraggingRequest() && this.isBrowser) {
+        if (this.pendingTreeDrag && this.isBrowser) {
+            const dx = event.clientX - this.pendingTreeDrag.startX;
+            const dy = event.clientY - this.pendingTreeDrag.startY;
+            if (Math.hypot(dx, dy) >= this.TREE_DRAG_THRESHOLD_PX) {
+                this.activatePendingTreeDrag(event.clientX, event.clientY);
+            }
+        }
+
+        if ((this.isDraggingRequest() || this.isDraggingFolder()) && this.isBrowser) {
+            this.dragGhostPos.set({ x: event.clientX, y: event.clientY });
             this.updateDragHoverTarget(event.clientX, event.clientY);
+            this.autoScrollSidebarDuringDrag(event.clientY);
+            return;
         }
 
         if (!this.isResizing() && !this.isResizingSidebar()) return;
@@ -199,6 +205,10 @@ export class WorkspaceComponent {
     }
 
     onMouseUp() {
+        this.pendingTreeDrag = null;
+        if (this.isDraggingRequest() || this.isDraggingFolder()) {
+            this.commitTreeDragDrop();
+        }
         if (this.isResizing()) {
             this.isResizing.set(false);
             this.localStorageService.setItem(LocalStorageService.JSON_RESIZE_HEIGHT, this.requestHeight().toString());
@@ -532,74 +542,100 @@ export class WorkspaceComponent {
     }
 
     lastSelectedRequestId = signal<string | null>(null);
+    private readonly TREE_DRAG_THRESHOLD_PX = 8;
+    private justFinishedTreeDrag = false;
+    private pendingTreeDrag: {
+        type: 'request' | 'group';
+        id: string;
+        groupId: string | null;
+        startX: number;
+        startY: number;
+        req?: RequestState;
+        group?: RequestGroup;
+    } | null = null;
+
     isDraggingRequest = signal<boolean>(false);
     isDraggingFolder = signal<boolean>(false);
     draggedGroupId = signal<string | null>(null);
     draggedRequestIds = signal<string[]>([]);
     draggedSourceGroupId = signal<string | null>(null);
-    hoveredFolderHeaderId = signal<string | null>(null);
-    hoveredFolderZoneId = signal<string | null>(null);
+    dragGhostPos = signal<{ x: number; y: number } | null>(null);
+    dragGhostLabel = signal<string>('');
+    dragGhostMethod = signal<string | null>(null);
+
+    dragDropTarget = signal<{
+        targetType: 'root-top' | 'root-bottom' | 'group' | 'request';
+        targetId: string | null;
+        position: 'before' | 'inside' | 'after';
+    } | null>(null);
+
     hoveredFolderIdDuringDrag = computed<string | null>(() => {
-        const headerId = this.hoveredFolderHeaderId();
-        const draggedGrp = this.draggedGroupId();
-        if (headerId) {
-            if (this.isDraggingFolder() && draggedGrp) {
-                const blocked = new Set(this.tabStateService.getDescendantGroupIds([draggedGrp]));
-                if (blocked.has(headerId)) return null;
-            }
-            return headerId;
-        }
-        const zoneId = this.hoveredFolderZoneId();
-        if (zoneId && zoneId !== this.draggedSourceGroupId()) {
-            if (this.isDraggingFolder() && draggedGrp) {
-                const blocked = new Set(this.tabStateService.getDescendantGroupIds([draggedGrp]));
-                if (blocked.has(zoneId)) return null;
-            }
-            return zoneId;
-        }
-        return null;
+        const dt = this.dragDropTarget();
+        return dt && dt.targetType === 'group' && dt.position === 'inside' ? dt.targetId : null;
     });
+
     hoveredFolderName = computed<string | null>(() => {
         const fId = this.hoveredFolderIdDuringDrag();
         if (!fId) return null;
         return this.tabStateService.activeCapsuleGroups().find(g => g.id === fId)?.name || null;
     });
-    isRootSortingDisabled = computed<boolean>(() =>
-        (this.isDraggingRequest() || this.isDraggingFolder()) && this.hoveredFolderHeaderId() !== null
-    );
 
-    folderDropListIds = computed<string[]>(() =>
-        this.tabStateService.activeCapsuleGroups().map(g => 'folder-drop-' + g.id)
-    );
-
-    subfolderDropListIds = computed<string[]>(() =>
-        this.tabStateService.activeCapsuleGroups().map(g => 'subfolder-drop-' + g.id)
-    );
-
-    allRequestDropListIds = computed<string[]>(() => [
-        ...this.folderDropListIds(),
-        ...this.subfolderDropListIds(),
-        'sidebar-root-drop-list'
-    ]);
-
-    canEnterFolderDropList = (drag: CdkDrag): boolean => {
-        if (drag.data?.type === 'group') {
-            return true;
+    onTreeItemMouseDown(
+        type: 'request' | 'group',
+        item: RequestState | RequestGroup,
+        groupId: string | null,
+        event: MouseEvent
+    ): void {
+        if (event.button !== 0) return;
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('input, textarea, [data-skip-drag="true"]')) {
+            return;
         }
-        return true;
-    };
+        if (type === 'group' && this.editingGroupId() === item.id) return;
+        if (type === 'request' && this.editingRequestId() === item.id) return;
+        this.pendingTreeDrag = {
+            type,
+            id: item.id,
+            groupId,
+            startX: event.clientX,
+            startY: event.clientY,
+            req: type === 'request' ? (item as RequestState) : undefined,
+            group: type === 'group' ? (item as RequestGroup) : undefined
+        };
+    }
 
-    canEnterRootDropList = (drag: CdkDrag): boolean => {
-        if (drag.data?.type === 'group') return true;
-        if (!this.isBrowser) return true;
-        return this.findFolderZoneAtPoint(this.lastPointerX, this.lastPointerY) === null;
-    };
+    private activatePendingTreeDrag(x: number, y: number): void {
+        const p = this.pendingTreeDrag;
+        this.pendingTreeDrag = null;
+        if (!p) return;
 
-    canSortRootItem = (_index: number, drag: CdkDrag): boolean => {
-        if (drag.data?.type === 'group') return this.hoveredFolderHeaderId() === null;
-        if (this.hoveredFolderHeaderId()) return false;
-        return this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY) === null;
-    };
+        if (this.isBrowser) {
+            window.getSelection()?.removeAllRanges?.();
+        }
+
+        if (p.type === 'group' && p.group) {
+            this.draggedGroupId.set(p.group.id);
+            this.draggedSourceGroupId.set(p.group.parentGroupId ?? null);
+            this.dragGhostLabel.set(p.group.name || 'Folder');
+            this.dragGhostMethod.set(null);
+            this.isDraggingFolder.set(true);
+        } else if (p.type === 'request' && p.req) {
+            const effectiveIds = this.getEffectiveIdsForAction(p.req.id);
+            this.draggedRequestIds.set(effectiveIds);
+            this.draggedSourceGroupId.set(p.groupId ?? p.req.groupId ?? null);
+            if (effectiveIds.length > 1) {
+                this.dragGhostLabel.set(`Move ${effectiveIds.length} requests`);
+                this.dragGhostMethod.set(null);
+            } else {
+                this.dragGhostLabel.set(this.tabStateService.resolveRequestTitle(p.req.name, p.req.url));
+                this.dragGhostMethod.set(this.getShortMethod(p.req.method));
+            }
+            this.isDraggingRequest.set(true);
+        }
+
+        this.dragGhostPos.set({ x, y });
+        this.updateDragHoverTarget(x, y);
+    }
 
     private findElementAttrAtPoint(
         selector: string,
@@ -612,7 +648,6 @@ export class WorkspaceComponent {
         excludeGroupIds?: Set<string>
     ): string | null {
         if (!this.isBrowser) return null;
-        // Iterate in reverse DOM order so deepest nested subfolders take priority over outer ancestor folders
         const elements = Array.from(document.querySelectorAll<HTMLElement>(selector)).reverse();
         for (const el of elements) {
             const val = el.getAttribute(attr);
@@ -632,14 +667,6 @@ export class WorkspaceComponent {
         return null;
     }
 
-    private findFolderHeaderAtPoint(x: number, y: number, excludeGroupIds?: Set<string>): string | null {
-        return this.findElementAttrAtPoint('[data-folder-header-id]', 'data-folder-header-id', x, y, 4, 2, 1, excludeGroupIds);
-    }
-
-    private findFolderZoneAtPoint(x: number, y: number, excludeGroupIds?: Set<string>): string | null {
-        return this.findElementAttrAtPoint('[data-folder-zone-id]', 'data-folder-zone-id', x, y, 0, 0, 0, excludeGroupIds);
-    }
-
     private updateDragHoverTarget(x: number, y: number): void {
         if ((!this.isDraggingRequest() && !this.isDraggingFolder()) || !this.isBrowser) return;
         this.lastPointerX = x;
@@ -650,24 +677,154 @@ export class WorkspaceComponent {
             ? new Set(this.tabStateService.getDescendantGroupIds([draggedGrp]))
             : undefined;
 
-        const headerId = this.findFolderHeaderAtPoint(x, y, excludeIds);
-        if (headerId) {
-            if (this.hoveredFolderHeaderId() !== headerId) {
-                this.hoveredFolderHeaderId.set(headerId);
+        const scrollContainer = document.querySelector<HTMLElement>('[data-sidebar-scroll]');
+        if (scrollContainer) {
+            const cRect = scrollContainer.getBoundingClientRect();
+            if (x < cRect.left - 24 || x > cRect.right + 24 || y < cRect.top - 12 || y > cRect.bottom + 24) {
+                this.dragDropTarget.set(null);
+                return;
             }
-            if (this.hoveredFolderZoneId() !== null) {
-                this.hoveredFolderZoneId.set(null);
-            }
-            return;
-        }
-        if (this.hoveredFolderHeaderId() !== null) {
-            this.hoveredFolderHeaderId.set(null);
         }
 
-        const zoneId = this.findFolderZoneAtPoint(x, y, excludeIds);
-        if (this.hoveredFolderZoneId() !== zoneId) {
-            this.hoveredFolderZoneId.set(zoneId);
+        // Topmost root drop slot above first folder/request
+        const topSlotEl = document.getElementById('sidebar-root-top-slot');
+        if (topSlotEl) {
+            const topRect = topSlotEl.getBoundingClientRect();
+            if (y <= topRect.bottom + 3) {
+                this.dragDropTarget.set({ targetType: 'root-top', targetId: null, position: 'before' });
+                return;
+            }
         }
+
+        // Scan visible stacked tree rows (folders and requests) without overlapping placeholders
+        const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-tree-row]'));
+        let matchedRow: HTMLElement | null = null;
+        let closestRow: HTMLElement | null = null;
+        let closestDist = Infinity;
+
+        for (const row of rows) {
+            const rect = row.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) continue;
+            if (y >= rect.top - 2 && y <= rect.bottom + 2) {
+                matchedRow = row;
+                break;
+            }
+            const mid = (rect.top + rect.bottom) / 2;
+            const dist = Math.abs(y - mid);
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestRow = row;
+            }
+        }
+
+        const targetRow = matchedRow || (closestDist <= 14 ? closestRow : null);
+        if (targetRow) {
+            const tType = targetRow.getAttribute('data-tree-type');
+            const tId = targetRow.getAttribute('data-tree-id');
+            const rect = targetRow.getBoundingClientRect();
+            const relY = Math.max(0, Math.min(1, (y - rect.top) / Math.max(rect.height, 1)));
+
+            if (tType === 'group' && tId) {
+                if (excludeIds?.has(tId)) {
+                    this.dragDropTarget.set(null);
+                    return;
+                }
+                const isExpanded = targetRow.getAttribute('data-folder-expanded') !== 'false';
+                if (relY <= 0.24) {
+                    this.dragDropTarget.set({ targetType: 'group', targetId: tId, position: 'before' });
+                } else if (!isExpanded && relY >= 0.78) {
+                    this.dragDropTarget.set({ targetType: 'group', targetId: tId, position: 'after' });
+                } else {
+                    this.dragDropTarget.set({ targetType: 'group', targetId: tId, position: 'inside' });
+                }
+                return;
+            }
+
+            if (tType === 'request' && tId) {
+                const pos: 'before' | 'after' = relY < 0.5 ? 'before' : 'after';
+                this.dragDropTarget.set({ targetType: 'request', targetId: tId, position: pos });
+                return;
+            }
+        }
+
+        // Empty expanded folder interior or child drop zone below requests
+        const zoneId = this.findElementAttrAtPoint('[data-folder-zone-id]', 'data-folder-zone-id', x, y, 4, 4, 4, excludeIds);
+        if (zoneId) {
+            this.dragDropTarget.set({ targetType: 'group', targetId: zoneId, position: 'inside' });
+            return;
+        }
+
+        this.dragDropTarget.set({ targetType: 'root-bottom', targetId: null, position: 'after' });
+    }
+
+    private autoScrollSidebarDuringDrag(pointerY: number): void {
+        if (!this.isBrowser) return;
+        const el = document.querySelector<HTMLElement>('[data-sidebar-scroll]');
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const edgeThreshold = 28;
+        if (pointerY < rect.top + edgeThreshold) {
+            el.scrollTop = Math.max(0, el.scrollTop - 8);
+        } else if (pointerY > rect.bottom - edgeThreshold) {
+            el.scrollTop = Math.min(el.scrollHeight, el.scrollTop + 8);
+        }
+    }
+
+    private commitTreeDragDrop(): void {
+        const dt = this.dragDropTarget();
+        const wasFolder = this.isDraggingFolder();
+        const grpId = this.draggedGroupId();
+        const reqIds = [...this.draggedRequestIds()];
+        const sourceGrpId = this.draggedSourceGroupId();
+
+        this.clearTreeDragState();
+        this.justFinishedTreeDrag = true;
+        setTimeout(() => {
+            this.justFinishedTreeDrag = false;
+        }, 60);
+
+        if (!dt) return;
+
+        if (wasFolder && grpId) {
+            this.tabStateService.dropSidebarTreeItem({
+                draggedType: 'group',
+                draggedIds: [grpId],
+                targetType: dt.targetType,
+                targetId: dt.targetId,
+                position: dt.position
+            });
+            return;
+        }
+
+        if (!wasFolder && reqIds.length > 0) {
+            if (dt.targetType === 'request' && reqIds.length === 1 && dt.targetId === reqIds[0]) {
+                return;
+            }
+            const moved = this.tabStateService.dropSidebarTreeItem({
+                draggedType: 'request',
+                draggedIds: reqIds,
+                targetType: dt.targetType,
+                targetId: dt.targetId,
+                position: dt.position
+            });
+            if (moved && reqIds.length > 1 && (dt.targetType !== 'group' || dt.targetId !== sourceGrpId)) {
+                this.selectedGroupIds.set(new Set());
+                this.selectedRequestIds.set(new Set());
+            }
+        }
+    }
+
+    clearTreeDragState(): void {
+        this.pendingTreeDrag = null;
+        this.isDraggingFolder.set(false);
+        this.isDraggingRequest.set(false);
+        this.draggedGroupId.set(null);
+        this.draggedRequestIds.set([]);
+        this.draggedSourceGroupId.set(null);
+        this.dragGhostPos.set(null);
+        this.dragGhostLabel.set('');
+        this.dragGhostMethod.set(null);
+        this.dragDropTarget.set(null);
     }
 
     getVisibleOrderedRequestIds(): string[] {
@@ -731,169 +888,6 @@ export class WorkspaceComponent {
         }
         this.closeSidebarRequestContextMenu();
         this.closeFolderContextMenu();
-    }
-
-    onFolderDragStarted(group?: RequestGroup) {
-        this.isDraggingFolder.set(true);
-        this.draggedGroupId.set(group?.id || null);
-        this.hoveredFolderHeaderId.set(null);
-        this.hoveredFolderZoneId.set(null);
-    }
-
-    onFolderDragMoved(event: CdkDragMove) {
-        if (!this.isDraggingFolder() || !this.isBrowser) return;
-        this.updateDragHoverTarget(event.pointerPosition.x, event.pointerPosition.y);
-    }
-
-    onFolderDragEnded() {
-        this.isDraggingFolder.set(false);
-        this.draggedGroupId.set(null);
-        this.hoveredFolderHeaderId.set(null);
-        this.hoveredFolderZoneId.set(null);
-    }
-
-    onRequestDragStarted(req: any, sourceGroupId: string | null = null) {
-        if (!req?.id) return;
-        const effectiveIds = this.getEffectiveIdsForAction(req.id);
-        this.draggedRequestIds.set(effectiveIds);
-        this.draggedSourceGroupId.set(sourceGroupId ?? req.groupId ?? null);
-        this.isDraggingRequest.set(true);
-        this.hoveredFolderHeaderId.set(null);
-        this.hoveredFolderZoneId.set(null);
-    }
-
-    onRequestDragMoved(event: CdkDragMove) {
-        if (!this.isDraggingRequest() || !this.isBrowser) return;
-        this.updateDragHoverTarget(event.pointerPosition.x, event.pointerPosition.y);
-    }
-
-    onRequestDragEnded() {
-        this.isDraggingRequest.set(false);
-        this.draggedRequestIds.set([]);
-        this.draggedSourceGroupId.set(null);
-        this.hoveredFolderHeaderId.set(null);
-        this.hoveredFolderZoneId.set(null);
-    }
-
-    onDropInRoot(event: CdkDragDrop<any>) {
-        const dragData = event.item.data;
-        if (!dragData) return;
-
-        // Case 1: Repositioning or nesting/promoting a folder (at any elevation)
-        if (dragData.type === 'group') {
-            const groupId = dragData.groupId || dragData.group?.id;
-            if (!groupId) return;
-
-            const excludeIds = new Set(this.tabStateService.getDescendantGroupIds([groupId]));
-            const targetFolderId =
-                (this.hoveredFolderHeaderId() && !excludeIds.has(this.hoveredFolderHeaderId()!) ? this.hoveredFolderHeaderId() : null) ||
-                (this.hoveredFolderZoneId() && !excludeIds.has(this.hoveredFolderZoneId()!) ? this.hoveredFolderZoneId() : null) ||
-                this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY, excludeIds) ||
-                this.findFolderZoneAtPoint(this.lastPointerX, this.lastPointerY, excludeIds);
-
-            if (targetFolderId) {
-                this.tabStateService.moveGroupToParentGroup(groupId, targetFolderId);
-                this.onFolderDragEnded();
-                return;
-            }
-
-            this.tabStateService.reorderSidebarRootItem(groupId, event.previousIndex, event.currentIndex);
-            this.onFolderDragEnded();
-            return;
-        }
-
-        // Case 2: Dropping 1 or more requests
-        const req = dragData.req || dragData;
-        if (!req?.id) return;
-        const movingIds = this.draggedRequestIds().length > 0
-            ? this.draggedRequestIds()
-            : this.getEffectiveIdsForAction(req.id);
-        const sourceGroupId: string | null = dragData.groupId !== undefined ? dragData.groupId : (req.groupId ?? null);
-
-        // Prefer dropping into deepest hovered folder if pointer is over any folder header or folder drop zone
-        const dropTargetFolderId =
-            this.hoveredFolderHeaderId() ||
-            this.hoveredFolderZoneId() ||
-            this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY) ||
-            this.findFolderZoneAtPoint(this.lastPointerX, this.lastPointerY);
-
-        if (dropTargetFolderId) {
-            const targetGroupEntry = this.tabStateService.groupedCapsuleRequests().find(g => g.group.id === dropTargetFolderId);
-            const appendIndex = targetGroupEntry ? targetGroupEntry.requests.length : 999999;
-            this.tabStateService.handleRequestDrop(
-                movingIds,
-                sourceGroupId,
-                dropTargetFolderId,
-                event.previousIndex,
-                appendIndex
-            );
-            if (movingIds.length > 1) {
-                this.selectedGroupIds.set(new Set());
-                this.selectedRequestIds.set(new Set());
-            }
-            this.hoveredFolderHeaderId.set(null);
-            this.hoveredFolderZoneId.set(null);
-            return;
-        }
-
-        this.tabStateService.handleRequestDrop(
-            movingIds,
-            sourceGroupId,
-            null,
-            event.previousIndex,
-            event.currentIndex
-        );
-    }
-
-    onDropInFolder(event: CdkDragDrop<any>, targetGroupId: string) {
-        const dragData = event.item.data;
-        if (!dragData) return;
-
-        // Allow dropping any folder or subfolder into another folder or promoting via root check
-        if (dragData.type === 'group') {
-            const groupId = dragData.groupId || dragData.group?.id;
-            if (!groupId) return;
-            const excludeIds = new Set(this.tabStateService.getDescendantGroupIds([groupId]));
-            const deeperTarget =
-                (this.hoveredFolderHeaderId() && !excludeIds.has(this.hoveredFolderHeaderId()!) ? this.hoveredFolderHeaderId() : null) ||
-                this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY, excludeIds) ||
-                this.findFolderZoneAtPoint(this.lastPointerX, this.lastPointerY, excludeIds) ||
-                (!excludeIds.has(targetGroupId) ? targetGroupId : null);
-
-            if (deeperTarget) {
-                this.tabStateService.moveGroupToParentGroup(groupId, deeperTarget);
-            }
-            this.onFolderDragEnded();
-            return;
-        }
-
-        const req = dragData.req || dragData;
-        if (!req?.id) return;
-        const movingIds = this.draggedRequestIds().length > 0
-            ? this.draggedRequestIds()
-            : this.getEffectiveIdsForAction(req.id);
-        const sourceGroupId: string | null = dragData.groupId !== undefined ? dragData.groupId : (req.groupId ?? null);
-
-        // If user dropped right onto another folder header while CDK hadn't left this zone yet, route there
-        const headerOverride = this.hoveredFolderHeaderId() || this.findFolderHeaderAtPoint(this.lastPointerX, this.lastPointerY);
-        const effectiveTargetGroupId = headerOverride || targetGroupId;
-        const effectiveIndex = headerOverride && headerOverride !== targetGroupId
-            ? (this.tabStateService.groupedCapsuleRequests().find(g => g.group.id === headerOverride)?.requests.length ?? 999999)
-            : event.currentIndex;
-
-        this.tabStateService.handleRequestDrop(
-            movingIds,
-            sourceGroupId,
-            effectiveTargetGroupId,
-            event.previousIndex,
-            effectiveIndex
-        );
-        if (movingIds.length > 1 && sourceGroupId !== effectiveTargetGroupId) {
-            this.selectedGroupIds.set(new Set());
-            this.selectedRequestIds.set(new Set());
-        }
-        this.hoveredFolderHeaderId.set(null);
-        this.hoveredFolderZoneId.set(null);
     }
 
     private scrollFolderIntoView(groupId: string): void {
@@ -1040,12 +1034,14 @@ export class WorkspaceComponent {
     }
 
     onFolderRowClick(groupId: string, event?: Event): void {
+        if (this.justFinishedTreeDrag) return;
         this.onFocusGroup(groupId);
         (event?.currentTarget as HTMLElement | null)?.focus?.();
         this.toggleGroupExpanded(groupId, event);
     }
 
     onFolderContainerClick(groupId: string, event: MouseEvent): void {
+        if (this.justFinishedTreeDrag) return;
         const target = event.target as HTMLElement | null;
         if (target?.closest('button, input')) return;
         this.onFocusGroup(groupId);
@@ -1055,6 +1051,7 @@ export class WorkspaceComponent {
     }
 
     onRequestRowContainerClick(req: any, event: MouseEvent, groupId: string | null = null): void {
+        if (this.justFinishedTreeDrag) return;
         const target = event.target as HTMLElement | null;
         if (this.editingRequestId() && this.editingRequestId() !== req.id) {
             this.saveRequestName(this.editingRequestId()!);
@@ -1541,6 +1538,12 @@ export class WorkspaceComponent {
 
     handleKeyboardShortcuts(event: KeyboardEvent) {
         if (!this.isBrowser) return;
+
+        if (event.key === 'Escape' && (this.isDraggingRequest() || this.isDraggingFolder())) {
+            event.preventDefault();
+            this.clearTreeDragState();
+            return;
+        }
 
         if ((event.ctrlKey || event.metaKey) && event.key === '`') {
             event.preventDefault();

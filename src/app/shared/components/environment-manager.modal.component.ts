@@ -193,15 +193,17 @@ import { generateUUID } from '../utils/uuid.util';
                 <table class="w-full text-xs border-collapse">
                   <thead>
                     <tr class="text-(--postonsteroids-text-muted) border-b border-(--postonsteroids-border)/50">
-                      <th class="w-7 py-1.5 text-center">
-                        <input type="checkbox" [checked]="allVarsSelected()" (change)="toggleSelectAllVars(current)"
-                               title="Select all environment variables"
-                               class="accent-(--postonsteroids-accent) cursor-pointer" />
+                      <th class="w-8 py-1.5 text-center">
+                        <div class="flex items-center justify-center">
+                          <input type="checkbox" [checked]="allVarsSelected()" (change)="toggleSelectAllVars(current)"
+                                 title="Select all environment variables"
+                                 class="w-3.5 h-3.5 m-0 accent-(--postonsteroids-accent) cursor-pointer" />
+                        </div>
                       </th>
-                      <th class="w-12 py-1.5 text-center">
-                        <label class="inline-flex items-center gap-1 cursor-pointer select-none" title="Toggle all variables On/Off in this environment">
+                      <th class="w-14 py-1.5 pl-1.5 text-left">
+                        <label class="flex items-center justify-start gap-1 cursor-pointer select-none" title="Toggle all variables On/Off in this environment">
                           <input type="checkbox" [checked]="allVarsEnabled()" (change)="toggleAllVarsEnabled(current)"
-                                 class="accent-emerald-500 cursor-pointer" />
+                                 class="w-3.5 h-3.5 m-0 shrink-0 accent-emerald-500 cursor-pointer" />
                           <span>On</span>
                         </label>
                       </th>
@@ -215,13 +217,17 @@ import { generateUUID } from '../utils/uuid.util';
                     @for (v of current.variables; track v.id) {
                       <tr class="border-b border-(--postonsteroids-border)/25 hover:bg-(--postonsteroids-bg-hover)/25">
                         <td class="py-1.5 text-center">
-                          <input type="checkbox" [checked]="isVarSelected(v.id)" (change)="toggleVarSelection(v.id)"
-                                 title="Select row for batch actions"
-                                 class="accent-(--postonsteroids-accent) cursor-pointer" />
+                          <div class="flex items-center justify-center">
+                            <input type="checkbox" [checked]="isVarSelected(v.id)" (change)="toggleVarSelection(v.id)"
+                                   title="Select row for batch actions"
+                                   class="w-3.5 h-3.5 m-0 accent-(--postonsteroids-accent) cursor-pointer" />
+                          </div>
                         </td>
-                        <td class="py-1.5 text-center">
-                          <input type="checkbox" [checked]="v.enabled" (change)="updateVar(current, v.id, { enabled: $any($event.target).checked })"
-                                 class="accent-emerald-500 cursor-pointer" />
+                        <td class="py-1.5 pl-1.5 text-left">
+                          <div class="flex items-center justify-start">
+                            <input type="checkbox" [checked]="v.enabled" (change)="updateVar(current, v.id, { enabled: $any($event.target).checked })"
+                                   class="w-3.5 h-3.5 m-0 accent-emerald-500 cursor-pointer" />
+                          </div>
                         </td>
                         <td class="py-1.5 px-2">
                           <input type="text" [ngModel]="v.key"

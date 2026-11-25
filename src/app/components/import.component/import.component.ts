@@ -173,6 +173,7 @@ export class ImportComponent implements OnInit {
                 
                 this.pendingImport.set(pending);
                 this.importFileIntoActive.set(false);
+                this.openFileInTabs.set(true);
                 this.showSavePrompt.set(true);
             } catch (err: any) {
                 console.error('Import validation failed:', err);

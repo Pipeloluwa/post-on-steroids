@@ -127,13 +127,15 @@
 
             <div class="space-y-2">
                 <div
-                    class="grid grid-cols-[24px_38px_74px_1fr_1.2fr_64px] gap-x-2.5 px-2 text-[10.5px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider items-center">
-                    <input type="checkbox" [checked]="allSelected()" (change)="toggleSelectAll()"
-                           title="Select all variables"
-                           class="accent-(--postonsteroids-accent) cursor-pointer" />
-                    <label class="flex items-center gap-1 cursor-pointer select-none" title="Toggle all variables On/Off in active scope">
+                    class="grid grid-cols-[24px_48px_76px_1fr_1.2fr_64px] gap-x-2.5 px-2 py-0.5 border border-transparent text-[10.5px] font-semibold text-(--postonsteroids-text-muted) uppercase tracking-wider items-center">
+                    <div class="flex items-center justify-center">
+                        <input type="checkbox" [checked]="allSelected()" (change)="toggleSelectAll()"
+                               title="Select all variables"
+                               class="w-3.5 h-3.5 m-0 accent-(--postonsteroids-accent) cursor-pointer" />
+                    </div>
+                    <label class="flex items-center justify-start gap-1 cursor-pointer select-none" title="Toggle all variables On/Off in active scope">
                         <input type="checkbox" [checked]="allRowsEnabled()" (change)="toggleAllEnabled()"
-                               class="accent-emerald-500 cursor-pointer" />
+                               class="w-3.5 h-3.5 m-0 shrink-0 accent-emerald-500 cursor-pointer" />
                         <span>On</span>
                     </label>
                     <span>Type</span>
@@ -146,15 +148,19 @@
 
                 @for (row of unifiedRows(); track row.rowId) {
                 <div
-                    class="grid grid-cols-[24px_38px_74px_1fr_1.2fr_64px] gap-x-2.5 items-center p-2 bg-(--postonsteroids-bg-secondary) rounded-lg border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/40">
+                    class="grid grid-cols-[24px_48px_76px_1fr_1.2fr_64px] gap-x-2.5 items-center p-2 bg-(--postonsteroids-bg-secondary) rounded-lg border border-(--postonsteroids-border) group hover:border-(--postonsteroids-accent)/40">
                     <!-- Multi-select checkbox -->
-                    <input type="checkbox" [checked]="isRowSelected(row.rowId)" (change)="toggleRowSelection(row.rowId)"
-                        title="Select variable for batch copy or delete"
-                        class="accent-(--postonsteroids-accent) cursor-pointer">
+                    <div class="flex items-center justify-center">
+                        <input type="checkbox" [checked]="isRowSelected(row.rowId)" (change)="toggleRowSelection(row.rowId)"
+                            title="Select variable for batch copy or delete"
+                            class="w-3.5 h-3.5 m-0 accent-(--postonsteroids-accent) cursor-pointer">
+                    </div>
                     <!-- Enabled toggle -->
-                    <input type="checkbox" [checked]="row.enabled" (change)="onToggleEnabled(row)"
-                        title="Enable variable in active scope"
-                        class="accent-emerald-500 cursor-pointer">
+                    <div class="flex items-center justify-start">
+                        <input type="checkbox" [checked]="row.enabled" (change)="onToggleEnabled(row)"
+                            title="Enable variable in active scope"
+                            class="w-3.5 h-3.5 m-0 accent-emerald-500 cursor-pointer">
+                    </div>
                     <!-- Type -->
                     <select [ngModel]="row.type" (ngModelChange)="onTypeChange(row, $event)"
                             class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded outline-none text-[10px] py-1 px-1 text-(--postonsteroids-text-primary) cursor-pointer">

@@ -77,7 +77,7 @@
         }
 
         <!-- Capsule Requests list (visible when expanded) -->
-        <div class="flex-1 overflow-y-auto overflow-x-hidden pb-1 sidebar-scroll" [class.hidden]="!isSidebarOpen()" (click)="onSidebarBackgroundClick($event)">
+        <div data-sidebar-scroll="true" class="flex-1 overflow-y-auto overflow-x-hidden pb-1 sidebar-scroll" [class.hidden]="!isSidebarOpen()" (click)="onSidebarBackgroundClick($event)">
             <div class="sticky top-0 z-20 flex flex-col px-2.5 py-1.5 border-b border-(--postonsteroids-border)/60 mb-0.5 gap-y-1.5 bg-(--postonsteroids-bg-secondary) backdrop-blur-xs shadow-xs">
                 <div class="flex items-center justify-between gap-x-1 min-w-0">
                     <div class="flex items-center gap-x-2 min-w-0">
@@ -172,71 +172,35 @@
                 }
             </div>
 
-            <!-- Request Tree (Interleaved Draggable Folders + Requests) -->
+            <!-- Request Tree (Smooth Threshold-Based Draggable Folders + Requests at Any Elevation) -->
             <div class="flex flex-col">
-                <div cdkDropList
-                     id="sidebar-root-drop-list"
-                     cdkDropListOrientation="vertical"
-                     [cdkDropListData]="tabStateService.sidebarRootItems()"
-                    [cdkDropListConnectedTo]="allRequestDropListIds()"
-                    [cdkDropListEnterPredicate]="canEnterRootDropList"
-                    [cdkDropListSortPredicate]="canSortRootItem"
-                    [cdkDropListSortingDisabled]="isRootSortingDisabled()"
-                    [class.folder-target-active]="isRootSortingDisabled()"
-                    (cdkDropListDropped)="onDropInRoot($event)"
-                    class="flex flex-col gap-y-[2px] pt-1 pb-4 min-h-[36px]">
+                <div id="sidebar-root-top-slot"
+                     class="relative mx-1.5 h-2 -mb-0.5 flex items-center pointer-events-none">
+                    @if (dragDropTarget()?.targetType === 'root-top') {
+                        <div class="w-full h-[2.5px] rounded-full bg-(--postonsteroids-accent) relative">
+                            <span class="absolute -left-1 -top-[3px] size-2 rounded-full bg-(--postonsteroids-accent) ring-2 ring-(--postonsteroids-bg-secondary)"></span>
+                        </div>
+                    }
+                </div>
+
+                <div id="sidebar-root-drop-list"
+                     class="flex flex-col gap-y-[2px] pb-4 min-h-[36px]">
                     @for (item of tabStateService.sidebarRootItems(); track item.id) {
                         @if (item.type === 'group') {
-                            <div cdkDrag
-                                 [cdkDragData]="{ type: 'group', group: item.group, groupId: item.group.id }"
-                                 [cdkDragDisabled]="editingGroupId() === item.group.id"
-                                 (cdkDragStarted)="onFolderDragStarted(item.group)"
-                                 (cdkDragMoved)="onFolderDragMoved($event)"
-                                 (cdkDragEnded)="onFolderDragEnded()"
-                                 class="flex flex-col">
-                                
-                                <!-- Compact Folder Drag Preview -->
-                                <div *cdkDragPreview class="px-3 py-1.5 rounded-md bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-accent) shadow-xl flex items-center gap-x-2 text-[12px] text-(--postonsteroids-text-primary) select-none">
-                                    <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">folder</mat-icon>
-                                    <span class="font-medium">{{ item.group.name }}</span>
-                                    <span class="text-[10.5px] text-(--postonsteroids-accent) font-semibold tabular-nums">
-                                        ({{ item.requests.length }})
-                                    </span>
-                                </div>
-                                <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
-
-                                <!-- Top-level Folder Header + Nested Children (Endless Nesting Supported) -->
+                            <div class="flex flex-col">
                                 <ng-container *ngTemplateOutlet="folderNodeTpl; context: { $implicit: item, depth: 0 }"></ng-container>
                             </div>
                         } @else {
-                            <div cdkDrag
-                                 [cdkDragData]="{ type: 'request', req: item.request, groupId: null }"
-                                 (cdkDragStarted)="onRequestDragStarted(item.request, null)"
-                                 (cdkDragMoved)="onRequestDragMoved($event)"
-                                 (cdkDragEnded)="onRequestDragEnded()"
-                                 class="flex flex-col relative">
-                                <div *cdkDragPreview class="px-3 py-1.5 rounded-md bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-accent) shadow-xl flex items-center gap-x-2 text-[12px] text-(--postonsteroids-text-primary) select-none">
-                                    @if (draggedRequestIds().length > 1) {
-                                        <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">library_add_check</mat-icon>
-                                        <span class="font-semibold text-(--postonsteroids-accent)">
-                                            @if (hoveredFolderName(); as targetName) {
-                                                Move {{ draggedRequestIds().length }} into "{{ targetName }}"
-                                            } @else {
-                                                Moving {{ draggedRequestIds().length }} selected
-                                            }
-                                        </span>
-                                    } @else {
-                                        <span class="text-[10px] font-bold" [style.color]="getMethodColor(item.request.method)">{{ getShortMethod(item.request.method) }}</span>
-                                        <span class="font-medium">{{ tabStateService.resolveRequestTitle(item.request.name, item.request.url) }}</span>
-                                        @if (hoveredFolderName(); as targetName) {
-                                            <span class="text-[10.5px] font-semibold text-(--postonsteroids-accent) ml-1">→ {{ targetName }}</span>
-                                        }
-                                    }
-                                </div>
-                                <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
+                            <div class="flex flex-col relative">
                                 <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: item.request, groupId: null }"></ng-container>
                             </div>
                         }
+                    }
+
+                    @if (dragDropTarget()?.targetType === 'root-bottom') {
+                        <div class="mx-1.5 h-[2.5px] mt-1 rounded-full bg-(--postonsteroids-accent) relative pointer-events-none">
+                            <span class="absolute -left-1 -top-[3px] size-2 rounded-full bg-(--postonsteroids-accent) ring-2 ring-(--postonsteroids-bg-secondary)"></span>
+                        </div>
                     }
                 </div>
 
@@ -255,20 +219,41 @@
                 }
             </div>
 
-            <!-- Recursive Nested Folder Template (supports unlimited folder nesting & full drag/drop) -->
+            <!-- Recursive Nested Folder Template (supports unlimited folder nesting & smooth threshold drag/drop) -->
             <ng-template #folderNodeTpl let-folderNode let-depth="depth">
+                @let isTargetBeforeFolder = dragDropTarget()?.targetType === 'group' && dragDropTarget()?.targetId === folderNode.group.id && dragDropTarget()?.position === 'before';
+                @let isTargetInsideFolder = dragDropTarget()?.targetType === 'group' && dragDropTarget()?.targetId === folderNode.group.id && dragDropTarget()?.position === 'inside';
+                @let isTargetAfterFolder = dragDropTarget()?.targetType === 'group' && dragDropTarget()?.targetId === folderNode.group.id && dragDropTarget()?.position === 'after';
+
                 <div [attr.data-folder-header-id]="folderNode.group.id"
-                     class="sidebar-tree-row flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
+                     data-tree-row="true"
+                     data-tree-type="group"
+                     [attr.data-tree-id]="folderNode.group.id"
+                     [attr.data-folder-expanded]="folderNode.group.isExpanded !== false"
+                     class="sidebar-tree-row relative flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
+                     [class.opacity-45]="isDraggingFolder() && draggedGroupId() === folderNode.group.id"
                      [class.cursor-grabbing!]="isDraggingFolder() && draggedGroupId() === folderNode.group.id"
-                     [class.ring-1]="hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder())"
-                     [class.ring-(--postonsteroids-accent)]="hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder())"
-                     [class.bg-(--postonsteroids-accent)/20]="hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder())"
-                     [class.border-(--postonsteroids-accent)/65!]="isGroupFocused(folderNode.group.id) && !(hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder()))"
-                     [class.bg-(--postonsteroids-accent)/8]="isGroupFocused(folderNode.group.id) && !selectedGroupIds().has(folderNode.group.id) && !(hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder()))"
-                     [class.bg-(--postonsteroids-accent)/12]="selectedGroupIds().has(folderNode.group.id) && !(hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder()))"
+                     [class.ring-1]="isTargetInsideFolder"
+                     [class.ring-(--postonsteroids-accent)]="isTargetInsideFolder"
+                     [class.bg-(--postonsteroids-accent)/20]="isTargetInsideFolder"
+                     [class.border-(--postonsteroids-accent)/65!]="isGroupFocused(folderNode.group.id) && !isTargetInsideFolder"
+                     [class.bg-(--postonsteroids-accent)/8]="isGroupFocused(folderNode.group.id) && !selectedGroupIds().has(folderNode.group.id) && !isTargetInsideFolder"
+                     [class.bg-(--postonsteroids-accent)/12]="selectedGroupIds().has(folderNode.group.id) && !isTargetInsideFolder"
+                     (mousedown)="onTreeItemMouseDown('group', folderNode.group, folderNode.group.parentGroupId ?? null, $event)"
                      (click)="onFolderContainerClick(folderNode.group.id, $event)"
                      (contextmenu)="openFolderContextMenu(folderNode.group, folderNode.requests.length, $event)"
                      (dblclick)="startEditingGroup(folderNode.group, $event)">
+
+                    @if (isTargetBeforeFolder) {
+                        <div class="pointer-events-none absolute -top-[2px] left-1 right-1 h-[2.5px] rounded-full bg-(--postonsteroids-accent) z-20">
+                            <span class="absolute -left-1 -top-[2.5px] size-[7px] rounded-full bg-(--postonsteroids-accent) ring-2 ring-(--postonsteroids-bg-secondary)"></span>
+                        </div>
+                    }
+                    @if (isTargetAfterFolder) {
+                        <div class="pointer-events-none absolute -bottom-[2px] left-1 right-1 h-[2.5px] rounded-full bg-(--postonsteroids-accent) z-20">
+                            <span class="absolute -left-1 -top-[2.5px] size-[7px] rounded-full bg-(--postonsteroids-accent) ring-2 ring-(--postonsteroids-bg-secondary)"></span>
+                        </div>
+                    }
 
                     <input type="checkbox"
                            [checked]="isGroupSelected(folderNode.group.id, folderNode.requests)"
@@ -317,7 +302,7 @@
                             <span class="text-[12.5px] font-medium text-(--postonsteroids-text-primary) truncate flex-1 min-w-0">
                                 {{ folderNode.group.name }}
                             </span>
-                            @if (hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder())) {
+                            @if (isTargetInsideFolder) {
                                 <span class="text-[10px] font-semibold text-(--postonsteroids-accent) px-1.5 py-0.5 rounded bg-(--postonsteroids-accent)/15 shrink-0">
                                     Drop
                                 </span>
@@ -330,7 +315,8 @@
                     }
 
                     <!-- Folder Hover Actions -->
-                    <div class="hidden group-hover/folder:flex items-center gap-x-0.5 shrink-0"
+                    <div data-skip-drag="true"
+                         class="folder-hover-actions hidden group-hover/folder:flex items-center gap-x-0.5 shrink-0"
                          (click)="$event.stopPropagation()"
                          (mousedown)="$event.stopPropagation()"
                          (pointerdown)="$event.stopPropagation()"
@@ -358,62 +344,26 @@
                     </div>
                 </div>
 
-                <!-- Child Container (Separated Subfolders + Dedicated 1:1 Request Drop Zone) -->
+                <!-- Child Container (Separated Subfolders + Dedicated Requests) -->
                 @let childFoldersList = tabStateService.childGroupsMap().get(folderNode.group.id) || [];
                 <div [attr.data-folder-zone-id]="folderNode.group.isExpanded !== false ? folderNode.group.id : null"
                      class="folder-drop-zone flex flex-col gap-y-[2px] pl-1.5 border-l border-(--postonsteroids-border)/45 ml-[18px] my-[1px]"
-                     [class.bg-(--postonsteroids-accent)/5]="hoveredFolderIdDuringDrag() === folderNode.group.id && (isDraggingRequest() || isDraggingFolder()) && folderNode.group.isExpanded !== false"
+                     [class.bg-(--postonsteroids-accent)/5]="isTargetInsideFolder && folderNode.group.isExpanded !== false"
                      [class.hidden]="folderNode.group.isExpanded === false">
                     @if (folderNode.group.isExpanded !== false) {
                         @if (childFoldersList.length > 0) {
-                            <div cdkDropList
-                                 [id]="'subfolder-drop-' + folderNode.group.id"
-                                 cdkDropListOrientation="vertical"
-                                 [cdkDropListData]="childFoldersList"
-                                 [cdkDropListConnectedTo]="allRequestDropListIds()"
-                                 [cdkDropListEnterPredicate]="canEnterFolderDropList"
-                                 (cdkDropListDropped)="onDropInFolder($event, folderNode.group.id)"
-                                 class="flex flex-col gap-y-[2px]">
+                            <div class="flex flex-col gap-y-[2px]">
                                 @for (childFolder of childFoldersList; track childFolder.group.id) {
-                                    <div cdkDrag
-                                         [cdkDragData]="{ type: 'group', group: childFolder.group, groupId: childFolder.group.id }"
-                                         [cdkDragDisabled]="editingGroupId() === childFolder.group.id"
-                                         (cdkDragStarted)="onFolderDragStarted(childFolder.group)"
-                                         (cdkDragMoved)="onFolderDragMoved($event)"
-                                         (cdkDragEnded)="onFolderDragEnded()"
-                                         class="flex flex-col">
-                                        <div *cdkDragPreview class="px-3 py-1.5 rounded-md bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-accent) shadow-xl flex items-center gap-x-2 text-[12px] text-(--postonsteroids-text-primary) select-none">
-                                            <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">folder</mat-icon>
-                                            <span class="font-medium">{{ childFolder.group.name }}</span>
-                                            <span class="text-[10.5px] text-(--postonsteroids-accent) font-semibold tabular-nums">({{ childFolder.requests.length }})</span>
-                                        </div>
-                                        <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
+                                    <div class="flex flex-col">
                                         <ng-container *ngTemplateOutlet="folderNodeTpl; context: { $implicit: childFolder, depth: depth + 1 }"></ng-container>
                                     </div>
                                 }
                             </div>
                         }
 
-                        <div cdkDropList
-                             [id]="'folder-drop-' + folderNode.group.id"
-                             cdkDropListOrientation="vertical"
-                             [cdkDropListData]="folderNode.requests"
-                             [cdkDropListConnectedTo]="allRequestDropListIds()"
-                             [cdkDropListEnterPredicate]="canEnterFolderDropList"
-                             (cdkDropListDropped)="onDropInFolder($event, folderNode.group.id)"
-                             class="flex flex-col gap-y-[2px] min-h-[20px]">
+                        <div class="flex flex-col gap-y-[2px] min-h-[16px]">
                             @for (req of folderNode.requests; track req.id) {
-                                <div cdkDrag
-                                     [cdkDragData]="{ type: 'request', req: req, groupId: folderNode.group.id }"
-                                     (cdkDragStarted)="onRequestDragStarted(req, folderNode.group.id)"
-                                     (cdkDragMoved)="onRequestDragMoved($event)"
-                                     (cdkDragEnded)="onRequestDragEnded()"
-                                     class="flex flex-col relative">
-                                    <div *cdkDragPreview class="px-3 py-1.5 rounded-md bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-accent) shadow-xl flex items-center gap-x-2 text-[12px] text-(--postonsteroids-text-primary) select-none">
-                                        <span class="text-[10px] font-bold" [style.color]="getMethodColor(req.method)">{{ getShortMethod(req.method) }}</span>
-                                        <span class="font-medium">{{ tabStateService.resolveRequestTitle(req.name, req.url) }}</span>
-                                    </div>
-                                    <div *cdkDragPlaceholder class="h-[30px] bg-(--postonsteroids-accent)/10 border border-dashed border-(--postonsteroids-accent)/45 rounded-md mx-1.5 my-[1px]"></div>
+                                <div class="flex flex-col relative">
                                     <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: req, groupId: folderNode.group.id }"></ng-container>
                                 </div>
                             }
@@ -429,16 +379,36 @@
 
             <!-- Shared Request Item Template -->
             <ng-template #requestRowTpl let-req let-groupId="groupId">
+                @let isTargetBeforeReq = dragDropTarget()?.targetType === 'request' && dragDropTarget()?.targetId === req.id && dragDropTarget()?.position === 'before';
+                @let isTargetAfterReq = dragDropTarget()?.targetType === 'request' && dragDropTarget()?.targetId === req.id && dragDropTarget()?.position === 'after';
+
                 <div [attr.data-request-row-id]="req.id"
+                     data-tree-row="true"
+                     data-tree-type="request"
+                     [attr.data-tree-id]="req.id"
                      class="sidebar-tree-row relative flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)/75"
+                     [class.opacity-45]="isDraggingRequest() && draggedRequestIds().includes(req.id)"
+                     [class.cursor-grabbing!]="isDraggingRequest() && draggedRequestIds().includes(req.id)"
                      [class.border-(--postonsteroids-accent)/65!]="isRequestFocused(req.id) && editingRequestId() !== req.id"
                      [class.bg-(--postonsteroids-accent)/8]="isRequestFocused(req.id) && editingRequestId() !== req.id && !selectedRequestIds().has(req.id) && tabStateService.activeTabId() !== req.id"
                      [class.bg-(--postonsteroids-accent)/12]="selectedRequestIds().has(req.id)"
                      [class.bg-(--postonsteroids-bg-hover)]="tabStateService.activeTabId() === req.id && !selectedRequestIds().has(req.id)"
                      [title]="tabStateService.resolveRequestTitle(req.name, req.url) + (tabStateService.openTabIds().includes(req.id) ? ' (Open)' : ' (Click to open tab)') + ' — Right-click for actions'"
+                     (mousedown)="onTreeItemMouseDown('request', req, groupId, $event)"
                      (click)="onRequestRowContainerClick(req, $event, groupId)"
                      (contextmenu)="openSidebarRequestContextMenu(req, groupId, $event)"
                      (dblclick)="startEditingRequest(req, $event)">
+
+                    @if (isTargetBeforeReq) {
+                        <div class="pointer-events-none absolute -top-[2px] left-1 right-1 h-[2.5px] rounded-full bg-(--postonsteroids-accent) z-20">
+                            <span class="absolute -left-1 -top-[2.5px] size-[7px] rounded-full bg-(--postonsteroids-accent) ring-2 ring-(--postonsteroids-bg-secondary)"></span>
+                        </div>
+                    }
+                    @if (isTargetAfterReq) {
+                        <div class="pointer-events-none absolute -bottom-[2px] left-1 right-1 h-[2.5px] rounded-full bg-(--postonsteroids-accent) z-20">
+                            <span class="absolute -left-1 -top-[2.5px] size-[7px] rounded-full bg-(--postonsteroids-accent) ring-2 ring-(--postonsteroids-bg-secondary)"></span>
+                        </div>
+                    }
 
                     @if (tabStateService.activeTabId() === req.id || selectedRequestIds().has(req.id)) {
                         <span class="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-full bg-(--postonsteroids-accent)"></span>
@@ -683,6 +653,32 @@
 
         <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
 
+        <button type="button" (click)="contextTransferCapsule('copy', $event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">content_copy</mat-icon>
+            <span>Copy to Capsule...</span>
+        </button>
+
+        <button type="button" (click)="contextTransferCapsule('move', $event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-status-warning">drive_file_move</mat-icon>
+            <span>Move to Capsule...</span>
+        </button>
+
+        <button type="button" (click)="contextOpenCurl($event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
+            <mat-icon class="text-[14px]! size-[14px]! text-status-success">code</mat-icon>
+            <span>Copy / View as cURL</span>
+        </button>
+
+        <button type="button" (click)="contextDeleteRequest($event)"
+                class="w-full px-3 py-1.5 text-left hover:bg-status-danger/10 text-status-danger flex items-center gap-x-2 cursor-pointer font-medium">
+            <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+            <span>Delete Request</span>
+        </button>
+
+        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
+
         @if (sidebarContextMenu().groupId) {
             <button type="button" (click)="contextMoveToGroup(null, $event)"
                     class="w-full px-3 py-2 text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) flex items-center gap-x-2.5 cursor-pointer min-h-[34px] font-medium">
@@ -714,34 +710,6 @@
                 }
             </div>
         }
-
-        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
-
-        <button type="button" (click)="contextTransferCapsule('copy', $event)"
-                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
-            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">content_copy</mat-icon>
-            <span>Copy to Capsule...</span>
-        </button>
-
-        <button type="button" (click)="contextTransferCapsule('move', $event)"
-                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
-            <mat-icon class="text-[14px]! size-[14px]! text-status-warning">drive_file_move</mat-icon>
-            <span>Move to Capsule...</span>
-        </button>
-
-        <button type="button" (click)="contextOpenCurl($event)"
-                class="w-full px-3 py-1.5 text-left hover:bg-(--postonsteroids-bg-hover) flex items-center gap-x-2 cursor-pointer">
-            <mat-icon class="text-[14px]! size-[14px]! text-status-success">code</mat-icon>
-            <span>Copy / View as cURL</span>
-        </button>
-
-        <div class="h-px bg-(--postonsteroids-border)/60 my-1"></div>
-
-        <button type="button" (click)="contextDeleteRequest($event)"
-                class="w-full px-3 py-1.5 text-left hover:bg-status-danger/10 text-status-danger flex items-center gap-x-2 cursor-pointer font-medium">
-            <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
-            <span>Delete Request</span>
-        </button>
     </div>
 }
 
@@ -811,6 +779,25 @@
             <mat-icon class="text-[15px]! size-[15px]!">delete</mat-icon>
             <span>Delete Folder</span>
         </button>
+    </div>
+}
+
+<!-- Floating Tree Drag Ghost Pill -->
+@if ((isDraggingRequest() || isDraggingFolder()) && dragGhostPos(); as gp) {
+    <div class="fixed z-[1000] pointer-events-none px-2.5 py-1.5 rounded-md bg-(--postonsteroids-bg-secondary)/95 border border-(--postonsteroids-accent) shadow-2xl flex items-center gap-x-2 text-[11.5px] text-(--postonsteroids-text-primary) select-none max-w-[260px]"
+         [style.left.px]="gp.x + 14"
+         [style.top.px]="gp.y + 12">
+        @if (isDraggingFolder()) {
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent) shrink-0">folder</mat-icon>
+        } @else if (dragGhostMethod(); as gm) {
+            <span class="text-[10px] font-bold shrink-0" [style.color]="getMethodColor(gm)">{{ gm }}</span>
+        } @else {
+            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent) shrink-0">library_add_check</mat-icon>
+        }
+        <span class="font-medium truncate">{{ dragGhostLabel() }}</span>
+        @if (hoveredFolderName(); as targetFolderName) {
+            <span class="text-[10px] font-semibold text-(--postonsteroids-accent) shrink-0">→ {{ targetFolderName }}</span>
+        }
     </div>
 }
 </div>

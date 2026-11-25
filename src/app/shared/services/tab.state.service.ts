@@ -32,6 +32,15 @@ export interface KeyValue {
     key: string;
     value: string;
 }
+
+export interface SidebarTreeDropParams {
+    draggedType: 'request' | 'group';
+    draggedIds: string[];
+    targetType: 'root-top' | 'root-bottom' | 'group' | 'request';
+    targetId: string | null;
+    position: 'before' | 'inside' | 'after';
+    capsuleId?: string;
+}
 export interface FormDataRow {
     enabled: boolean;
     key: string;
@@ -1353,6 +1362,7 @@ export class TabStateService {
                     id: g.id || ('grp_' + this.createId()),
                     name: g.name || 'Folder',
                     capsuleId: capId,
+                    parentGroupId: g.parentGroupId ?? null,
                     isExpanded: g.isExpanded ?? true,
                     requestIds: Array.isArray(g.requestIds)
                         ? g.requestIds.filter(rId => !this.deletedRequestIds.has(rId))
@@ -2404,6 +2414,217 @@ export class TabStateService {
         this.setGroupsForCapsule(capId, updatedGroups, true);
     }
 
+    /**
+     * Unified, deterministic sidebar tree drop handler supporting moving/reordering
+     * requests (single or batch) and folders/subfolders across any elevation level,
+     * including dropping at root index 0 above folders or directly inside any folder.
+     */
+    dropSidebarTreeItem(params: SidebarTreeDropParams): boolean {
+        const capId = params.capsuleId || this.activeCapsuleId();
+        const blockReason = this.getEditBlockReason(capId, 'structure');
+        if (blockReason) {
+            this.notifyEditBlocked(blockReason);
+            return false;
+        }
+
+        const movingIds = Array.from(new Set((params.draggedIds || []).filter(Boolean)));
+        if (movingIds.length === 0) return false;
+
+        const currentGroups = [...this.getGroupsForCapsule(capId)];
+        const groupedView = this.groupedCapsuleRequests();
+
+        const getResolvedGroupRequestIds = (g: RequestGroup): string[] => {
+            const entry = groupedView.find(gi => gi.group.id === g.id);
+            return entry ? entry.requests.map(r => r.id) : [...(g.requestIds || [])];
+        };
+
+        const persistRootAndGroupOrder = (nextRootIds: string[], groups: RequestGroup[]) => {
+            const groupMap = new Map<string, RequestGroup>();
+            for (const g of groups) groupMap.set(g.id, g);
+            const orderedGroups: RequestGroup[] = [];
+            for (const id of nextRootIds) {
+                const grp = groupMap.get(id);
+                if (grp && !grp.parentGroupId) orderedGroups.push(grp);
+            }
+            for (const g of groups) {
+                if (!orderedGroups.some(og => og.id === g.id)) {
+                    orderedGroups.push(g);
+                }
+            }
+            const groupedReqIds = orderedGroups.flatMap(g => g.requestIds || []);
+            const nextOrder = [...nextRootIds, ...groupedReqIds];
+            this.capsuleRequestOrderMap.update(m => new Map(m).set(capId, nextOrder));
+            if (this.isBrowser) {
+                try {
+                    localStorage.setItem(`onsteroids_capsule_order_${capId}`, JSON.stringify(nextOrder));
+                } catch {}
+            }
+            this.setGroupsForCapsule(capId, orderedGroups, true);
+        };
+
+        // Branch 1: Dragging a folder (or subfolder)
+        if (params.draggedType === 'group') {
+            const groupId = movingIds[0];
+            const draggedGroup = currentGroups.find(g => g.id === groupId);
+            if (!draggedGroup) return false;
+
+            const excludeIds = new Set(this.getDescendantGroupIds([groupId], capId));
+
+            // 1A: Drop directly inside a target folder
+            if (params.targetType === 'group' && params.position === 'inside' && params.targetId) {
+                if (excludeIds.has(params.targetId)) {
+                    this.notificationService.notify('Cannot move a folder inside itself or its subfolder.', 'warning');
+                    return false;
+                }
+                return this.moveGroupToParentGroup(groupId, params.targetId, capId);
+            }
+
+            // 1B: Determine destination parent folder (or root null)
+            let targetParentId: string | null = null;
+            if (params.targetType === 'group' && params.targetId) {
+                if (excludeIds.has(params.targetId)) return false;
+                const targetGrp = currentGroups.find(g => g.id === params.targetId);
+                targetParentId = targetGrp?.parentGroupId || null;
+            } else if (params.targetType === 'request' && params.targetId) {
+                const owningGrp = currentGroups.find(g => getResolvedGroupRequestIds(g).includes(params.targetId!));
+                const st = this.states().get(params.targetId) || this.savedCapsules().find(r => r.id === params.targetId);
+                targetParentId = owningGrp?.id || (st?.groupId && currentGroups.some(g => g.id === st.groupId) ? st.groupId! : null);
+            }
+
+            if (targetParentId && excludeIds.has(targetParentId)) {
+                this.notificationService.notify('Cannot move a folder inside itself or its subfolder.', 'warning');
+                return false;
+            }
+
+            if (targetParentId) {
+                const withoutDragged = currentGroups
+                    .filter(g => g.id !== groupId)
+                    .map(g => g.id === targetParentId ? { ...g, isExpanded: true } : g);
+                const updatedDragged: RequestGroup = { ...draggedGroup, parentGroupId: targetParentId };
+                if (params.targetType === 'group' && params.targetId) {
+                    const tIdx = withoutDragged.findIndex(g => g.id === params.targetId);
+                    const insertAt = tIdx === -1 ? withoutDragged.length : (params.position === 'after' ? tIdx + 1 : tIdx);
+                    withoutDragged.splice(insertAt, 0, updatedDragged);
+                } else {
+                    withoutDragged.push(updatedDragged);
+                }
+                this.setGroupsForCapsule(capId, withoutDragged, true);
+                return true;
+            }
+
+            // Place at root level (supports topmost root slot #0 or before/after any root node)
+            const rootUpdatedGroups = currentGroups.map(g =>
+                g.id === groupId ? { ...g, parentGroupId: null } : g
+            );
+            const nextRootIds = this.sidebarRootItems().map(it => it.id).filter(id => id !== groupId);
+            let insertIdx = nextRootIds.length;
+            if (params.targetType === 'root-top') {
+                insertIdx = 0;
+            } else if (params.targetType === 'root-bottom') {
+                insertIdx = nextRootIds.length;
+            } else if (params.targetId) {
+                const tIdx = nextRootIds.indexOf(params.targetId);
+                if (tIdx !== -1) {
+                    insertIdx = params.position === 'after' ? tIdx + 1 : tIdx;
+                }
+            }
+            nextRootIds.splice(insertIdx, 0, groupId);
+            persistRootAndGroupOrder(nextRootIds, rootUpdatedGroups);
+            return true;
+        }
+
+        // Branch 2: Dragging 1 or more requests
+        const moveSet = new Set(movingIds);
+        const resolveReqGroupId = (reqId: string): string | null => {
+            const byGroup = currentGroups.find(g => getResolvedGroupRequestIds(g).includes(reqId));
+            if (byGroup) return byGroup.id;
+            const st = this.states().get(reqId) || this.savedCapsules().find(r => r.id === reqId);
+            return (st?.groupId && currentGroups.some(g => g.id === st.groupId)) ? st.groupId : null;
+        };
+
+        let destGroupId: string | null = null;
+        let anchorReqId: string | null = null;
+        let insertAtStartOfGroup = false;
+
+        if (params.targetType === 'group' && params.position === 'inside' && params.targetId) {
+            destGroupId = params.targetId;
+        } else if (params.targetType === 'request' && params.targetId) {
+            destGroupId = resolveReqGroupId(params.targetId);
+            if (destGroupId) {
+                anchorReqId = params.targetId;
+            }
+        } else if (params.targetType === 'group' && params.targetId && params.position !== 'inside') {
+            const targetGrp = currentGroups.find(g => g.id === params.targetId);
+            if (targetGrp?.parentGroupId) {
+                destGroupId = targetGrp.parentGroupId;
+                insertAtStartOfGroup = params.position === 'before';
+            }
+        }
+
+        const savedSetForDrop = new Set(this.savedCapsules().map(r => r.id));
+        const syncRequestGroupMembership = (nextGroupId: string | null) => {
+            this.states.update(map => {
+                const next = new Map(map);
+                for (const rId of moveSet) {
+                    const st = next.get(rId);
+                    if (st) {
+                        const needsSave = !savedSetForDrop.has(rId) || st.isDirty;
+                        next.set(rId, { ...st, groupId: nextGroupId, isDirty: needsSave });
+                    }
+                }
+                return next;
+            });
+            this.savedCapsules.update(col => col.map(r => moveSet.has(r.id) ? { ...r, groupId: nextGroupId } : r));
+        };
+
+        // 2A: Drop into a destination folder (at any nesting depth)
+        if (destGroupId) {
+            const updatedGroups = currentGroups.map(g => {
+                const filtered = getResolvedGroupRequestIds(g).filter(id => !moveSet.has(id));
+                if (g.id !== destGroupId) {
+                    return { ...g, requestIds: filtered };
+                }
+                let insertIdx = filtered.length;
+                if (anchorReqId) {
+                    const aIdx = filtered.indexOf(anchorReqId);
+                    if (aIdx !== -1) {
+                        insertIdx = params.position === 'after' ? aIdx + 1 : aIdx;
+                    }
+                } else if (insertAtStartOfGroup) {
+                    insertIdx = 0;
+                }
+                filtered.splice(insertIdx, 0, ...movingIds);
+                return { ...g, isExpanded: true, requestIds: filtered };
+            });
+
+            syncRequestGroupMembership(destGroupId);
+            this.setGroupsForCapsule(capId, updatedGroups, true);
+            return true;
+        }
+
+        // 2B: Drop at root level (before/after any root folder or request, or at root index 0)
+        const updatedGroups = currentGroups.map(g => ({
+            ...g,
+            requestIds: getResolvedGroupRequestIds(g).filter(id => !moveSet.has(id))
+        }));
+        const nextRootIds = this.sidebarRootItems().map(it => it.id).filter(id => !moveSet.has(id));
+        let insertIdx = nextRootIds.length;
+        if (params.targetType === 'root-top') {
+            insertIdx = 0;
+        } else if (params.targetType === 'root-bottom') {
+            insertIdx = nextRootIds.length;
+        } else if (params.targetId) {
+            const tIdx = nextRootIds.indexOf(params.targetId);
+            if (tIdx !== -1) {
+                insertIdx = params.position === 'after' ? tIdx + 1 : tIdx;
+            }
+        }
+        nextRootIds.splice(insertIdx, 0, ...movingIds);
+        syncRequestGroupMembership(null);
+        persistRootAndGroupOrder(nextRootIds, updatedGroups);
+        return true;
+    }
+
     getCapsuleRequestsSync(capsuleId: string): RequestState[] {
         if (!capsuleId || this.deletingCapsuleIds.has(capsuleId)) return [];
 
@@ -2663,7 +2884,7 @@ export class TabStateService {
             }
         }
 
-        if (this.openTabIds().length === 0 && this.states().size > 0) {
+        if (this.openTabIds().length === 0 && capOpenTabs === null && this.states().size > 0) {
             const capTabs = Array.from(this.states().values())
                 .filter(s => s.capsuleId === currentCapId || !s.capsuleId)
                 .map(s => s.id);
@@ -3071,13 +3292,14 @@ export class TabStateService {
                     this.activeTabId.set(tabsOpenedDuringLoad[0] || null);
                 }
             } else {
+                const hasExplicitSavedOpenTabs = savedCapOpen !== null;
                 const validSavedOpenIds = savedTargetOpenIds.filter(id => {
                     const st = this.states().get(id);
                     return Boolean(st) && (!st!.capsuleId || st!.capsuleId === capsule.id);
                 });
 
                 let finalOpenIds: string[] = [];
-                if (validSavedOpenIds.length > 0) {
+                if (hasExplicitSavedOpenTabs) {
                     finalOpenIds = validSavedOpenIds;
                 } else if (requestsInCapsule.length > 0) {
                     finalOpenIds = requestsInCapsule.map(r => r.id);
@@ -3110,14 +3332,15 @@ export class TabStateService {
 
     async createCapsule(name: string): Promise<Capsule> {
         const trimmed = name.trim() || 'New Capsule';
+        const isCloudSync = this.isBrowser && this.authService.isLoggedIn() && !this.authService.isTestUserSession();
         let newCap: Capsule = {
             id: this.createId(),
             name: trimmed,
             createdAt: Date.now(),
-            isLocalOnly: !this.authService.isLoggedIn()
+            isLocalOnly: !this.authService.isLoggedIn() || this.authService.isTestUserSession()
         };
 
-        if (this.isBrowser && this.authService.isLoggedIn()) {
+        if (isCloudSync) {
             try {
                 const res = await firstValueFrom(
                     this.http.post<{ data: any }>(`${API_BASE_URL}/capsule`, {
@@ -3128,8 +3351,8 @@ export class TabStateService {
                 );
                 if (res?.data) {
                     newCap = {
-                        id: res.data.id,
-                        name: res.data.name,
+                        id: res.data.id || newCap.id,
+                        name: res.data.name || trimmed,
                         autoAuthEnabled: res.data.autoAuthEnabled || 'off',
                         autoAuthEndpointId: res.data.autoAuthEndpointId || null,
                         createdAt: new Date(res.data.createdAt).getTime() || Date.now(),
@@ -4874,6 +5097,10 @@ export class TabStateService {
                 }
             }
         } else {
+            if (this.isBrowser && !openTabs && localStorage.getItem(`onsteroids_open_tab_ids_${targetCapId}`) === null) {
+                localStorage.setItem(`onsteroids_open_tab_ids_${targetCapId}`, JSON.stringify([]));
+                localStorage.setItem(`onsteroids_active_tab_${targetCapId}`, '');
+            }
             await this.switchCapsule({ id: targetCapId, name: targetCap.name });
             if (openTabs && allNewRequests.length > 0) {
                 this.openTabIds.update(ids => {
@@ -4934,7 +5161,7 @@ export class TabStateService {
         let lastCreatedRequests: RequestState[] = [];
         let lastCreatedCapVars: IGlobalVariable[] = [];
 
-        if (this.isBrowser && this.authService.isLoggedIn() && shouldSaveToBackend) {
+        if (this.isBrowser && this.authService.isLoggedIn() && !this.authService.isTestUserSession() && shouldSaveToBackend) {
             const payload = {
                 capsules: data.capsules.map(c => ({
                     id: c.id,
@@ -5164,6 +5391,11 @@ export class TabStateService {
                         if (u?.email) localStorage.setItem(`onsteroids_user_vars_${newCap.id}_${u.email}`, varsJson);
                     }
 
+                    if (this.isBrowser && !shouldOpenTabs) {
+                        localStorage.setItem(`onsteroids_open_tab_ids_${newCap.id}`, JSON.stringify([]));
+                        localStorage.setItem(`onsteroids_active_tab_${newCap.id}`, '');
+                    }
+
                     totalRequests += mappedRequests.length;
                     lastCreatedCap = newCap;
                     lastCreatedRequests = mappedRequests;
@@ -5288,6 +5520,11 @@ export class TabStateService {
                     const varsJson = JSON.stringify(capVars);
                     localStorage.setItem(`onsteroids_vars_${capId}`, varsJson);
                     localStorage.setItem(`onsteroids_last_vars_${capId}`, varsJson);
+                }
+
+                if (this.isBrowser && !shouldOpenTabs) {
+                    localStorage.setItem(`onsteroids_open_tab_ids_${capId}`, JSON.stringify([]));
+                    localStorage.setItem(`onsteroids_active_tab_${capId}`, '');
                 }
 
                 totalRequests += reqs.length;

@@ -479,9 +479,9 @@ export function buildFieldLinkCodeSnippet(opts: {
             header: 'set_header'
         };
         if (!cleanPath || cleanPath === '$' || cleanPath === 'responseBody' || cleanPath === 'response_body') {
-            return `    ${pyFnMap[opts.target]}(${JSON.stringify(field)}, response_body${targetReqArg})`;
+            return `${pyFnMap[opts.target]}(${JSON.stringify(field)}, response_body${targetReqArg})`;
         }
-        return `    link_response_to_request(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, response_body${targetReqArg}` : ''})`;
+        return `link_response_to_request(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, response_body${targetReqArg}` : ''})`;
     }
 
     const jsFnMap: Record<RequestFieldTarget, string> = {
@@ -491,7 +491,7 @@ export function buildFieldLinkCodeSnippet(opts: {
         header: 'setHeader'
     };
     if (!cleanPath || cleanPath === '$' || cleanPath === 'responseBody' || cleanPath === 'response_body') {
-        return `    ${jsFnMap[opts.target]}(${JSON.stringify(field)}, responseBody${targetReqArg});`;
+        return `${jsFnMap[opts.target]}(${JSON.stringify(field)}, responseBody${targetReqArg});`;
     }
-    return `    linkResponseToRequest(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, responseBody${targetReqArg}` : ''});`;
+    return `linkResponseToRequest(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, responseBody${targetReqArg}` : ''});`;
 }

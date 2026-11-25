@@ -43,6 +43,7 @@ export class SwaggerImportModalComponent {
         this.hasError.set(false);
         this.saveToBackend.set(true);
         this.importIntoActiveCapsule.set(false);
+        this.openInTabs.set(true);
         setTimeout(() => this.inputRef?.nativeElement?.focus(), 150);
     }
 

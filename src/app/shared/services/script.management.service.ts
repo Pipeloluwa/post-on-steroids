@@ -14,7 +14,8 @@ import {
     DEFAULT_TEST_SCRIPTS,
     DefaultScriptEntry,
     ScriptLanguage,
-    getDefaultScriptCode
+    getDefaultScriptCode,
+    getNewScriptGuidelineCode
 } from '../constants/script.snippets.constants';
 
 export interface ScriptDto {
@@ -112,6 +113,10 @@ export class ScriptManagementService {
 
     getDefaultContentForScript(type: string, name?: string, language: ScriptLanguage = 'javascript'): string {
         return getDefaultScriptCode(type, name, language);
+    }
+
+    getNewScriptGuideline(type: string, language: ScriptLanguage = 'javascript'): string {
+        return getNewScriptGuidelineCode(type, language);
     }
 
     getScriptContent(type: string, name: string): string {
@@ -247,13 +252,18 @@ export class ScriptManagementService {
 
         // Include custom (non-default) scripts from local cache
         for (const cached of localCache) {
+            if (!cached || !cached.name) continue;
             const isDefault = this.isBuiltInDefaultScript(cached.type, cached.name, cached.isDefault, cached.id);
             if (!isDefault) {
+                const normalizedCached: ScriptDto = {
+                    ...cached,
+                    id: cached.id || generateUUID()
+                };
                 const alreadyIncluded = result.some(
-                    s => s.id === cached.id || (s.type === cached.type && s.name.toLowerCase() === cached.name.toLowerCase())
+                    s => s.id === normalizedCached.id || (s.type === normalizedCached.type && s.name.toLowerCase() === normalizedCached.name.toLowerCase())
                 );
                 if (!alreadyIncluded) {
-                    result.push(cached);
+                    result.push(normalizedCached);
                 }
             }
         }
@@ -303,7 +313,7 @@ export class ScriptManagementService {
     }
 
     async fetchMyScripts(): Promise<void> {
-        const isAuth = this.authService.isLoggedIn();
+        const isAuth = this.authService.isLoggedIn() && !this.authService.isTestUserSession();
         const storageKey = this.getStorageKey();
         const localCachedScripts = this.readFromLocalCache(storageKey);
 
@@ -340,10 +350,10 @@ export class ScriptManagementService {
     }
 
     async createScript(type: string, name: string, content: string, language: ScriptLanguage = 'javascript'): Promise<ScriptDto | null> {
-        if (!this.authService.isLoggedIn()) {
+        if (!this.authService.isLoggedIn() || this.authService.isTestUserSession()) {
             const script: ScriptDto = { 
                 id: generateUUID(), 
-                userId: 'offline', 
+                userId: this.authService.currentUser()?.id || 'offline', 
                 type, 
                 name, 
                 content, 
@@ -354,7 +364,7 @@ export class ScriptManagementService {
             };
             this.scripts.update(s => [...s, script]);
             this.saveToLocalCache();
-            this.notificationService.notify('Script created locally (offline)');
+            this.notificationService.notify('Script created successfully');
             return script;
         }
 
@@ -364,10 +374,18 @@ export class ScriptManagementService {
                 this.http.post<ApiResponse<ScriptDto>>(`${API_BASE_URL}/scripts`, script)
             );
             if (res && res.data) {
-                this.scripts.update(s => [...s, res.data]);
+                const normalized: ScriptDto = {
+                    ...res.data,
+                    id: res.data.id || generateUUID(),
+                    type: res.data.type || type,
+                    name: res.data.name || name,
+                    content: res.data.content ?? content,
+                    isDefault: res.data.isDefault ?? false
+                };
+                this.scripts.update(s => [...s, normalized]);
                 this.saveToLocalCache();
                 this.notificationService.notify('Script created successfully');
-                return res.data;
+                return normalized;
             }
         } catch (err) {
             console.error('Failed to create script', err);
@@ -377,7 +395,7 @@ export class ScriptManagementService {
     }
 
     async updateScript(id: string, name: string, content: string): Promise<ScriptDto | null> {
-        const isVirtual = id.startsWith('default_');
+        const isVirtual = (id || '').startsWith('default_');
         const target = this.scripts().find(x => x.id === id);
         const scriptType = target?.type || (
             name.toLowerCase().includes('decrypt') ? 'Encryption' :
@@ -400,8 +418,8 @@ export class ScriptManagementService {
         // 2. Persist to local cache immediately
         this.saveToLocalCache();
 
-        // 3. Offline: Done
-        if (!this.authService.isLoggedIn()) {
+        // 3. Offline or local test session: Done
+        if (!this.authService.isLoggedIn() || this.authService.isTestUserSession()) {
             return updatedScript;
         }
 
@@ -480,15 +498,15 @@ export class ScriptManagementService {
 
     async deleteScript(id: string): Promise<boolean> {
         const target = this.scripts().find(s => s.id === id);
-        if (id.startsWith('default_') || target?.isDefault || this.isBuiltInDefaultScript(target?.type || '', target?.name, target?.isDefault, id)) {
+        if ((id || '').startsWith('default_') || target?.isDefault || this.isBuiltInDefaultScript(target?.type || '', target?.name, target?.isDefault, id)) {
             this.notificationService.notify('Cannot delete built-in default scripts.');
             return false;
         }
 
-        if (!this.authService.isLoggedIn()) {
+        if (!this.authService.isLoggedIn() || this.authService.isTestUserSession()) {
             this.scripts.update(s => s.filter(x => x.id !== id));
             this.saveToLocalCache();
-            this.notificationService.notify('Script deleted locally (offline)');
+            this.notificationService.notify('Script deleted successfully');
             return true;
         }
 
@@ -516,7 +534,7 @@ export class ScriptManagementService {
             targetScript.name,
             language || targetScript.language || 'javascript'
         );
-        const isVirtual = id.startsWith('default_');
+        const isVirtual = (id || '').startsWith('default_');
 
         let updatedScript: ScriptDto | null = null;
         this.scripts.update(list => list.map(x => {
@@ -528,7 +546,7 @@ export class ScriptManagementService {
         }));
         this.saveToLocalCache();
 
-        if (!this.authService.isLoggedIn() || isVirtual) {
+        if (!this.authService.isLoggedIn() || this.authService.isTestUserSession() || isVirtual) {
             this.notificationService.notify('Script reset to default');
             return updatedScript;
         }

@@ -284,6 +284,14 @@ import { BodyPortalDirective } from '../directives/body-portal.directive';
                             <span>Open destination capsule after {{ mode() === 'copy' ? 'copying' : 'moving' }}</span>
                         </label>
 
+                        <label class="flex items-center gap-2 text-[12px] text-(--postonsteroids-text-secondary) cursor-pointer select-none">
+                            <input type="checkbox"
+                                   [ngModel]="openTransferredTabs()"
+                                   (ngModelChange)="openTransferredTabs.set($event)"
+                                   class="accent-(--postonsteroids-accent) cursor-pointer" />
+                            <span>Open transferred request(s) in horizontal tabs</span>
+                        </label>
+
                         @if (errorMsg()) {
                             <div class="px-3 py-2 rounded-lg bg-status-danger/10 border border-status-danger/30 text-[11.5px] text-status-danger">
                                 {{ errorMsg() }}
@@ -340,6 +348,7 @@ export class TransferCapsuleModalComponent {
     newCapsuleName = signal<string>('');
     targetGroupId = signal<string>('');
     switchAfterTransfer = signal<boolean>(false);
+    openTransferredTabs = signal<boolean>(true);
     targetGroups = signal<RequestGroup[]>([]);
     isLoadingGroups = signal<boolean>(false);
     isCapsuleDropdownOpen = signal<boolean>(false);
@@ -565,18 +574,28 @@ export class TransferCapsuleModalComponent {
             }
 
             const shouldSwitch = this.switchAfterTransfer();
+            const shouldOpenTabs = this.openTransferredTabs();
+            if (!shouldOpenTabs && typeof window !== 'undefined') {
+                try {
+                    if (localStorage.getItem(`onsteroids_open_tab_ids_${result.targetCapsuleId}`) === null) {
+                        localStorage.setItem(`onsteroids_open_tab_ids_${result.targetCapsuleId}`, JSON.stringify([]));
+                        localStorage.setItem(`onsteroids_active_tab_${result.targetCapsuleId}`, '');
+                    }
+                } catch {}
+            }
             if (shouldSwitch) {
                 await this.tabStateService.switchCapsule({
                     id: result.targetCapsuleId,
                     name: result.targetCapsuleName
                 });
-                if (result.savedIds.length > 0) {
-                    const firstId = result.savedIds[0];
-                    const targetReq = this.tabStateService.getState(firstId);
-                    if (targetReq) {
-                        this.tabStateService.addOpenTab(targetReq);
+                if (shouldOpenTabs && result.savedIds.length > 0) {
+                    for (const savedId of result.savedIds) {
+                        const targetReq = this.tabStateService.getState(savedId);
+                        if (targetReq) {
+                            this.tabStateService.addOpenTab(targetReq);
+                        }
                     }
-                    this.tabStateService.setActiveTab(firstId);
+                    this.tabStateService.setActiveTab(result.savedIds[0]);
                 }
             }
 

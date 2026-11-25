@@ -390,7 +390,9 @@
 
     <!-- ─── SCRIPTS ─── -->
     @if (payloadType() === 'scripts') {
-    <div class="p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full">
+    <div [class]="isScriptFullscreen()
+            ? 'fixed inset-0 z-[9990] bg-(--postonsteroids-bg-primary) p-4 flex flex-col gap-y-2.5 shadow-2xl'
+            : 'p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full'">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-x-2">
                 <app-scrollable-select-component [activeValue]="displayScriptTab()" [optionValues]="scriptOptions()"
@@ -450,15 +452,39 @@
                     <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">delete</mat-icon>
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">Delete</span>
                 </button>
+                <button type="button" (click)="toggleScriptFullscreen()"
+                    [title]="isScriptFullscreen() ? 'Exit fullscreen (Esc)' : 'Maximize script editor'"
+                    [attr.aria-label]="isScriptFullscreen() ? 'Exit fullscreen script editor' : 'Maximize script editor'"
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/60 rounded px-2.5 py-1 transition-colors group cursor-pointer"
+                    [class.border-(--postonsteroids-accent)]="isScriptFullscreen()"
+                    [class.text-(--postonsteroids-accent)]="isScriptFullscreen()">
+                    <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-accent) transition-colors">{{ isScriptFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">{{ isScriptFullscreen() ? 'Exit Fullscreen' : 'Maximize' }}</span>
+                </button>
             </div>
         </div>
 
-        <!-- Direct Response -> Request Field Linking Bar -->
+        <!-- Direct Response -> Request Field Linking Bar (Current Tab OR Cross-Tab) -->
         <div class="flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/70 text-[11px]">
             <div class="flex items-center gap-1 text-(--postonsteroids-text-secondary) font-semibold shrink-0 mr-1">
                 <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">link</mat-icon>
                 <span>Link Response &rarr; Field</span>
             </div>
+
+            <select aria-label="Target Request Tab"
+                title="Choose Current Request Tab or any other request tab in this capsule"
+                [ngModel]="linkTargetRequestId()"
+                (ngModelChange)="linkTargetRequestId.set($event)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer max-w-[180px]">
+                <option value="" class="bg-(--postonsteroids-bg-secondary)">Current Request Tab</option>
+                @for (req of availableLinkTargetRequests(); track req.id) {
+                    @if (req.id !== tabId()) {
+                        <option [value]="req.id" class="bg-(--postonsteroids-bg-secondary)">
+                            {{ req.method }} · {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
+                        </option>
+                    }
+                }
+            </select>
 
             <select aria-label="Target Request Section"
                 [ngModel]="linkTargetType()"
@@ -546,12 +572,12 @@
                             <!-- Script Dropdown -->
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
-                                <app-scrollable-select-component [activeValue]="activeTestScriptName"
-                                    [optionValues]="testScriptOptions" [optionTooltips]="testScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                <app-scrollable-select-component [activeValue]="activeTestScriptName()"
+                                    [optionValues]="testScriptOptions()" [optionTooltips]="testScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
                                             <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
-                                            <span>{{ activeTestScriptName }}</span>
+                                            <span>{{ activeTestScriptName() }}</span>
                                         </div>
                                         <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
                                     </div>
@@ -576,12 +602,12 @@
                             </div>
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
-                                <app-scrollable-select-component [activeValue]="activePreRequestScriptName"
-                                    [optionValues]="preRequestScriptOptions" [optionTooltips]="preRequestScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                <app-scrollable-select-component [activeValue]="activePreRequestScriptName()"
+                                    [optionValues]="preRequestScriptOptions()" [optionTooltips]="preRequestScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
                                             <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
-                                            <span>{{ activePreRequestScriptName }}</span>
+                                            <span>{{ activePreRequestScriptName() }}</span>
                                         </div>
                                         <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
                                     </div>
@@ -606,12 +632,12 @@
                             </div>
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
-                                <app-scrollable-select-component [activeValue]="activePostRequestScriptName"
-                                    [optionValues]="postRequestScriptOptions" [optionTooltips]="postRequestScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                <app-scrollable-select-component [activeValue]="activePostRequestScriptName()"
+                                    [optionValues]="postRequestScriptOptions()" [optionTooltips]="postRequestScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
                                     <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                         <div class="flex items-center gap-x-1.5">
                                             <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
-                                            <span>{{ activePostRequestScriptName }}</span>
+                                            <span>{{ activePostRequestScriptName() }}</span>
                                         </div>
                                         <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
                                     </div>
@@ -623,14 +649,14 @@
 
                 @if (activeScriptTab() === 'test') {
                     <app-monaco-editor [ngModel]="scripts().testScript"
-                        (ngModelChange)="updateScript('test', $event)" [restrictToFunctionBody]="true"
+                        (ngModelChange)="updateScript('test', $event)" [restrictToFunctionBody]="false"
                         [language]="activePhaseLanguage()"
                         [enableFloatingVar]="false"
                         class="flex-1 min-h-0 block w-full" [editorId]="'script-test'" [ownerTabId]="tabId()">
                     </app-monaco-editor>
                 } @else {
                     <app-monaco-editor [ngModel]="getScriptContent()"
-                        (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="true"
+                        (ngModelChange)="updateScript(activeScriptTab(), $event)" [restrictToFunctionBody]="false"
                         [language]="activePhaseLanguage()"
                         [enableFloatingVar]="false"
                         class="flex-1 min-h-0 block w-full" [editorId]="'script-' + activeScriptTab()" [ownerTabId]="tabId()">
@@ -644,7 +670,9 @@
 
     <!-- ─── ENCRYPTION ─── -->
     @if (payloadType() === 'encryption') {
-    <div class="p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full">
+    <div [class]="isEncryptionFullscreen()
+            ? 'fixed inset-0 z-[9990] bg-(--postonsteroids-bg-primary) p-4 flex flex-col gap-y-2.5 shadow-2xl'
+            : 'p-2 flex flex-col gap-y-2 flex-1 min-h-[150px] h-full'">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-x-2">
                 <div class="text-[12px] text-(--postonsteroids-text-primary) font-semibold mr-2">Encryption Script</div>
@@ -693,6 +721,15 @@
                     <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">delete</mat-icon>
                     <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-red-500 transition-colors">Delete</span>
                 </button>
+                <button type="button" (click)="toggleEncryptionFullscreen()"
+                    [title]="isEncryptionFullscreen() ? 'Exit fullscreen (Esc)' : 'Maximize encryption script editor'"
+                    [attr.aria-label]="isEncryptionFullscreen() ? 'Exit fullscreen encryption editor' : 'Maximize encryption script editor'"
+                    class="flex items-center justify-center bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/60 rounded px-2.5 py-1 transition-colors group cursor-pointer"
+                    [class.border-(--postonsteroids-accent)]="isEncryptionFullscreen()"
+                    [class.text-(--postonsteroids-accent)]="isEncryptionFullscreen()">
+                    <mat-icon class="text-[14px]! size-[14px]! mr-1 text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-accent) transition-colors">{{ isEncryptionFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+                    <span class="text-[11px] font-medium text-(--postonsteroids-text-muted) group-hover:text-(--postonsteroids-text-primary) transition-colors">{{ isEncryptionFullscreen() ? 'Exit Fullscreen' : 'Maximize' }}</span>
+                </button>
             </div>
         </div>
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
@@ -701,12 +738,12 @@
                     <div class="flex items-center gap-x-3"></div>
                     <div class="flex items-center gap-x-2">
                         <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
-                        <app-scrollable-select-component [activeValue]="activeEncryptionScriptName"
-                            [optionValues]="encryptionScriptOptions" [optionTooltips]="encryptionScriptTooltips" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadEncryptionScript($event)">
+                        <app-scrollable-select-component [activeValue]="activeEncryptionScriptName()"
+                            [optionValues]="encryptionScriptOptions()" [optionTooltips]="encryptionScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadEncryptionScript($event)">
                             <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
                                 <div class="flex items-center gap-x-1.5">
                                     <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">lock</mat-icon>
-                                    <span>{{ activeEncryptionScriptName }}</span>
+                                    <span>{{ activeEncryptionScriptName() }}</span>
                                 </div>
                                 <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
                             </div>
@@ -714,7 +751,7 @@
                     </div>
                 </div>
                 <app-monaco-editor [ngModel]="encryption().script"
-                    (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="true"
+                    (ngModelChange)="setEncryptionField('script', $event)" [restrictToFunctionBody]="false"
                     [language]="activeEncryptionLanguage()"
                     [enableFloatingVar]="false"
                     class="flex-1 min-h-0 block w-full" [editorId]="'encryption-script'" [ownerTabId]="tabId()">

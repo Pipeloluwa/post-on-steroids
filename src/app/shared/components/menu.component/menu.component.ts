@@ -41,6 +41,7 @@ export class MenuComponent {
     { name: 'Export', icon: 'file_download', path: '/export' },
     { name: 'Import', icon: 'file_upload', path: '/import' },
     { name: 'Utilities', icon: 'handyman', path: '/utilities' },
+    { name: 'Automation', icon: 'alt_route', path: '/automation' },
     { name: 'History', icon: 'history', path: '/history' }
   ]);
 

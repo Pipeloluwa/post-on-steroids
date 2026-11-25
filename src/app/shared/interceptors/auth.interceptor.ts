@@ -5,6 +5,7 @@ import { catchError, switchMap, finalize } from 'rxjs/operators';
 import { throwError, from, of } from 'rxjs';
 import { AUTH_TOKEN_KEY, API_BASE_URL } from '../constants/api.constants';
 import { AuthService } from '../services/auth.service';
+import { generateUUID } from '../utils/uuid.util';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
     const platformId = inject(PLATFORM_ID);
@@ -15,13 +16,52 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         if (authService.isTestUserSession()) {
             const singleItemUrl = req.url.includes('/WorkspaceState') || req.url.includes('/capsule/shared/');
             const listData = req.method === 'GET' && !singleItemUrl ? [] : null;
+            let mockData: any = listData ?? (req.method === 'GET' ? null : (req.body ?? null));
+
+            if (req.method !== 'GET' && req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
+                const bodyObj = req.body as Record<string, any>;
+                if (req.url.includes('/import') && Array.isArray(bodyObj['capsules'])) {
+                    const capsules = bodyObj['capsules'].map((c: any) => {
+                        const capId = c.id || generateUUID();
+                        return {
+                            capsule: {
+                                id: capId,
+                                name: c.name || 'Imported Capsule',
+                                autoAuthEnabled: c.autoAuthEnabled || 'off',
+                                autoAuthEndpointId: c.autoAuthEndpointId || null,
+                                createdAt: new Date().toISOString()
+                            },
+                            requests: (c.requests || []).map((r: any) => ({
+                                ...r,
+                                id: r.id || generateUUID(),
+                                capsuleId: capId
+                            })),
+                            variables: c.variables || []
+                        };
+                    });
+                    mockData = {
+                        capsulesCount: capsules.length,
+                        requestsCount: capsules.reduce((sum: number, item: any) => sum + (item.requests?.length || 0), 0),
+                        capsules
+                    };
+                } else {
+                    const nowIso = new Date().toISOString();
+                    mockData = {
+                        ...bodyObj,
+                        id: bodyObj['id'] || generateUUID(),
+                        createdAt: bodyObj['createdAt'] || nowIso,
+                        updatedAt: nowIso
+                    };
+                }
+            }
+
             return of(new HttpResponse({
                 status: 200,
                 body: {
                     title: 'Test Session',
                     responseCode: '01',
                     message: 'Handled locally for test user session',
-                    data: listData ?? (req.method === 'GET' ? null : (req.body ?? null))
+                    data: mockData
                 }
             }));
         }
