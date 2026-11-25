@@ -1,5 +1,6 @@
-import { Component, ChangeDetectionStrategy, OnInit, signal, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, OnInit, computed, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
@@ -25,7 +26,7 @@ export interface HistoryItem {
 
 @Component({
     selector: 'app-history-component',
-    imports: [CommonModule, MatIcon],
+    imports: [CommonModule, FormsModule, MatIcon],
     templateUrl: './history.component.html',
     styleUrl: './history.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -39,8 +40,25 @@ export class HistoryComponent implements OnInit {
     dialogService = inject(DialogService);
 
     history = signal<HistoryItem[]>([]);
+    searchQuery = signal<string>('');
+    statusFilter = signal<'all' | '2xx' | '4xx' | '5xx'>('all');
     isLoading = signal<boolean>(false);
     deletingId = signal<string | null>(null);
+
+    filteredHistory = computed(() => {
+        const q = this.searchQuery().trim().toLowerCase();
+        const stFilter = this.statusFilter();
+        return this.history().filter(item => {
+            if (stFilter !== 'all') {
+                const code = item.responseStatus || 0;
+                if (stFilter === '2xx' && (code < 200 || code >= 300)) return false;
+                if (stFilter === '4xx' && (code < 400 || code >= 500)) return false;
+                if (stFilter === '5xx' && code > 0 && code < 500) return false;
+            }
+            if (!q) return true;
+            return (item.url || '').toLowerCase().includes(q) || (item.method || '').toLowerCase().includes(q);
+        });
+    });
 
     async ngOnInit() {
         await this.loadHistory();
@@ -58,14 +76,14 @@ export class HistoryComponent implements OnInit {
             }
         } catch { }
 
-        // 2. Fetch from backend if logged in
-        if (this.authService.isLoggedIn()) {
+        // 2. Fetch from backend for real authenticated sessions (never wipe local cache in test sessions or empty remote results)
+        if (this.authService.isLoggedIn() && !this.authService.isTestUserSession()) {
             try {
                 const res = await firstValueFrom(
                     this.http.get<{ data: any[] }>(`${API_BASE_URL}/History?limit=100`)
                 );
-                if (res?.data && Array.isArray(res.data)) {
-                    items = res.data.map(d => ({
+                if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+                    const remoteItems: HistoryItem[] = res.data.map(d => ({
                         id: String(d.id),
                         method: d.method || 'GET',
                         url: d.url || '',
@@ -76,7 +94,9 @@ export class HistoryComponent implements OnInit {
                         createdAt: d.createdAt,
                         time: this.formatTime(d.createdAt)
                     }));
-                    // Sync backend history to localStorage
+                    const seenIds = new Set(remoteItems.map(r => r.id));
+                    const localExtras = items.filter(l => !seenIds.has(l.id));
+                    items = [...remoteItems, ...localExtras].slice(0, 200);
                     try {
                         localStorage.setItem('onsteroids_history', JSON.stringify(items));
                     } catch { }
@@ -166,7 +186,7 @@ export class HistoryComponent implements OnInit {
             this.tabStateService.addOpenTab(restoredState);
             this.tabStateService.setActiveTab(newId);
             this.notificationService.notify(`Restored "${restoredState.name}" into workspace.`);
-            this.router.navigate(['/workspace']);
+            this.router.navigate(['/']);
         } catch (err: any) {
             console.error('Failed to restore history item:', err);
             this.notificationService.notify('Could not restore request from history.');
@@ -180,7 +200,7 @@ export class HistoryComponent implements OnInit {
 
         this.deletingId.set(item.id);
         try {
-            if (this.authService.isLoggedIn()) {
+            if (this.authService.isLoggedIn() && !this.authService.isTestUserSession()) {
                 await firstValueFrom(
                     this.http.delete(`${API_BASE_URL}/History/${item.id}`)
                 );
@@ -208,7 +228,7 @@ export class HistoryComponent implements OnInit {
         if (!confirmed) return;
 
         try {
-            if (this.authService.isLoggedIn()) {
+            if (this.authService.isLoggedIn() && !this.authService.isTestUserSession()) {
                 await firstValueFrom(
                     this.http.delete(`${API_BASE_URL}/History/clear`)
                 );

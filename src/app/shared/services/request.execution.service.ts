@@ -94,6 +94,8 @@ export class RequestExecutionService {
         error?: string;
     }>>([]);
 
+    readonly historyVersion = signal<number>(0);
+
     clearTriggerScheduleLogs(): void {
         this.triggerScheduleLogs.set([]);
     }
@@ -156,7 +158,7 @@ export class RequestExecutionService {
     startSchedule(
         tabId: string,
         intervalMs: number,
-        options?: { startAt?: string | null; endAt?: string | null }
+        options?: { startAt?: string | null; endAt?: string | null; runImmediately?: boolean }
     ): boolean {
         const effectiveId = this.tabStateService.resolveTabId(tabId);
         const state = this.tabStateService.getState(effectiveId);
@@ -224,26 +226,10 @@ export class RequestExecutionService {
             }));
             void this.executeRequest(effectiveId, false, 0, 0, {
                 isolatedRun: true,
+                recordTriggerLog: true,
+                chainVisitedIds: [effectiveId],
                 onComplete: (summary) => {
-                    this.triggerScheduleLogs.update(curr => [
-                        {
-                            id: generateUUID(),
-                            timestamp: Date.now(),
-                            tabId: effectiveId,
-                            requestName: st.name || st.url || 'Scheduled Request',
-                            method: st.method || 'GET',
-                            url: summary.url || st.url,
-                            status: summary.status,
-                            durationMs: Math.round(summary.durationMs || 0),
-                            testsPassed: summary.testsPassed,
-                            testsFailed: summary.testsFailed,
-                            responseHeaders: summary.responseHeaders,
-                            responseBody: summary.responseBody,
-                            testResults: summary.testResults,
-                            error: summary.error
-                        },
-                        ...curr
-                    ].slice(0, 150));
+                    this.recordTriggerExecutionLog(effectiveId, st, summary);
                 }
             });
         };
@@ -261,6 +247,9 @@ export class RequestExecutionService {
             }, Math.max(0, endAtMs - now));
         }
 
+        const shouldRunImmediately = options?.runImmediately !== false;
+        this.schedules.set(effectiveId, entry);
+
         if (isFutureStart && startAtMs !== null) {
             entry.startTimerId = this.scheduleTimeoutSafe(() => {
                 if (this.schedules.get(effectiveId) !== entry) return;
@@ -271,21 +260,27 @@ export class RequestExecutionService {
                 }
             }, startAtMs - now);
         } else {
-            startRecurringLoop();
+            if (shouldRunImmediately) {
+                runTick();
+            }
+            if (this.schedules.get(effectiveId) === entry) {
+                startRecurringLoop();
+            }
         }
 
-        this.schedules.set(effectiveId, entry);
-        this.activeSchedules.update(curr => ({
-            ...curr,
-            [effectiveId]: {
-                intervalMs: safeMs,
-                runCount: 0,
-                nextRunAt: isFutureStart && startAtMs !== null ? startAtMs : Date.now() + safeMs,
-                startAt: startAtMs,
-                endAt: endAtMs,
-                status: entry.status
-            }
-        }));
+        if (this.schedules.get(effectiveId) === entry && (!shouldRunImmediately || isFutureStart)) {
+            this.activeSchedules.update(curr => ({
+                ...curr,
+                [effectiveId]: {
+                    intervalMs: safeMs,
+                    runCount: entry.runCount,
+                    nextRunAt: isFutureStart && startAtMs !== null ? startAtMs : Date.now() + safeMs,
+                    startAt: startAtMs,
+                    endAt: endAtMs,
+                    status: entry.status
+                }
+            }));
+        }
         const label = state?.name || 'Request';
         if (isFutureStart && startAtMs !== null) {
             const startLabel = new Date(startAtMs).toLocaleString();
@@ -323,10 +318,46 @@ export class RequestExecutionService {
         }
     }
 
+    recordTriggerExecutionLog(
+        tabId: string,
+        reqState: { name?: string; url?: string; method?: string },
+        summary: {
+            status: number;
+            durationMs: number;
+            testsPassed: number;
+            testsFailed: number;
+            error?: string;
+            url?: string;
+            responseHeaders?: any[];
+            responseBody?: any;
+            testResults?: Array<{ name: string; passed: boolean; error?: string }>;
+        }
+    ): void {
+        this.triggerScheduleLogs.update(curr => [
+            {
+                id: generateUUID(),
+                timestamp: Date.now(),
+                tabId,
+                requestName: reqState.name || reqState.url || 'Triggered Request',
+                method: reqState.method || 'GET',
+                url: summary.url || reqState.url,
+                status: summary.status,
+                durationMs: Math.round(summary.durationMs || 0),
+                testsPassed: summary.testsPassed,
+                testsFailed: summary.testsFailed,
+                responseHeaders: summary.responseHeaders,
+                responseBody: summary.responseBody,
+                testResults: summary.testResults,
+                error: summary.error
+            },
+            ...curr
+        ].slice(0, 150));
+    }
+
     toggleSchedule(
         tabId: string,
         intervalMs: number,
-        options?: { startAt?: string | null; endAt?: string | null }
+        options?: { startAt?: string | null; endAt?: string | null; runImmediately?: boolean }
     ): boolean {
         if (this.isScheduleActive(tabId)) {
             this.stopSchedule(tabId);
@@ -404,6 +435,8 @@ export class RequestExecutionService {
         retryAttempt: number = 0,
         options?: {
             isolatedRun?: boolean;
+            recordTriggerLog?: boolean;
+            chainVisitedIds?: string[];
             overrideVars?: Record<string, string>;
             onComplete?: (summary: {
                 status: number;
@@ -1776,15 +1809,20 @@ export class RequestExecutionService {
             });
 
             // Post-Response Request Chaining & Script-Controlled Flow (Trigger Next Request)
+            const sourceCapId = freshState.capsuleId || this.tabStateService.activeCapsuleId();
+            const capsuleReqs = sourceCapId
+                ? this.tabStateService.getCapsuleRequestsSync(sourceCapId)
+                : this.tabStateService.allCapsuleRequests();
+            const searchPool = capsuleReqs.length > 0 ? capsuleReqs : this.tabStateService.allCapsuleRequests();
+
             let resolvedTriggerTargetId: string | null = null;
             if (scriptNextRequest === null) {
                 resolvedTriggerTargetId = null;
             } else if (typeof scriptNextRequest === 'string' && scriptNextRequest.trim()) {
                 const needle = scriptNextRequest.trim().toLowerCase();
-                const allReqs = this.tabStateService.allCapsuleRequests();
-                const matched = allReqs.find(r => r.id.toLowerCase() === needle)
-                    || allReqs.find(r => (r.name || '').trim().toLowerCase() === needle)
-                    || allReqs.find(r => (r.name || '').toLowerCase().includes(needle));
+                const matched = searchPool.find(r => r.id.toLowerCase() === needle)
+                    || searchPool.find(r => (r.name || '').trim().toLowerCase() === needle)
+                    || searchPool.find(r => (r.name || '').toLowerCase().includes(needle));
                 if (matched) {
                     resolvedTriggerTargetId = matched.id;
                 } else {
@@ -1805,14 +1843,21 @@ export class RequestExecutionService {
 
             if (resolvedTriggerTargetId && resolvedTriggerTargetId !== '__script__') {
                 const targetTabId = resolvedTriggerTargetId;
+                const visited = options?.chainVisitedIds || [targetId];
                 const authEndpointId = this.autoAuthService.getAutoAuthEndpointId();
                 const isCurrentAuthTab = !!(authEndpointId && authEndpointId === tabId);
-                const targetReq = this.tabStateService.allCapsuleRequests().find(r => r.id === targetTabId);
+                const targetReq = searchPool.find(r => r.id === targetTabId);
                 const targetState = this.tabStateService.getState(targetTabId) || targetReq;
                 const targetHasAutoAuth = this.autoAuthService.isAutoAuthEnabled(targetTabId) || !!(targetState?.autoAuthEnabled ?? targetReq?.autoAuthEnabled);
 
                 if (isCurrentAuthTab && targetHasAutoAuth) {
                     console.warn(`[Trigger] Skipped chained trigger to "${targetState?.name || targetTabId}" because it has Auto Auth enabled linked to this auth endpoint (prevents infinite loop).`);
+                } else if (visited.includes(targetTabId)) {
+                    const targetTitle = targetState?.name || targetState?.url || targetTabId;
+                    this.notificationService.notify(
+                        `Trigger loop detected ("${freshState.name || targetId}" → "${targetTitle}") — halted chain to prevent an infinite loop.`,
+                        'warning'
+                    );
                 } else if (chainDepth >= 10) {
                     this.notificationService.notify('Chained request depth limit reached (max 10) to prevent infinite loops.', 'warning');
                 } else if (targetState) {
@@ -1820,12 +1865,24 @@ export class RequestExecutionService {
                     this.notificationService.notify(
                         `Triggering chained request: "${targetState.name || 'Request'}"${delayMs > 0 ? ` in ${delayMs}ms` : ''}...`
                     );
-                    if (targetReq) {
-                        this.tabStateService.addOpenTab(targetReq);
+                    if (!isIsolated) {
+                        if (targetReq) {
+                            this.tabStateService.addOpenTab(targetReq);
+                        }
+                        this.tabStateService.setActiveTab(targetTabId);
                     }
-                    this.tabStateService.setActiveTab(targetTabId);
+                    const nextVisited = [...visited, targetTabId];
                     setTimeout(() => {
-                        this.executeRequest(targetTabId, false, chainDepth + 1, 0);
+                        void this.executeRequest(targetTabId, false, chainDepth + 1, 0, isIsolated
+                            ? {
+                                isolatedRun: true,
+                                recordTriggerLog: options?.recordTriggerLog,
+                                chainVisitedIds: nextVisited,
+                                onComplete: options?.recordTriggerLog
+                                    ? (chainSummary) => this.recordTriggerExecutionLog(targetTabId, targetState, chainSummary)
+                                    : undefined
+                            }
+                            : { chainVisitedIds: nextVisited });
                     }, delayMs);
                 }
             }
@@ -1893,9 +1950,10 @@ export class RequestExecutionService {
             list.unshift(historyItem);
             if (list.length > 200) list.pop();
             localStorage.setItem('onsteroids_history', JSON.stringify(list));
+            this.historyVersion.update(v => v + 1);
         } catch (e) { }
 
-        if (this.authService.isLoggedIn()) {
+        if (this.authService.isLoggedIn() && !this.authService.isTestUserSession()) {
             this.http.post(`${API_BASE_URL}/History`, entry).subscribe({
                 error: (err) => console.warn('Could not persist history to backend', err)
             });

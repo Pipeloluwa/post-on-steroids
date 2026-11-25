@@ -25,7 +25,7 @@ const monacoConfig: NgxMonacoEditorConfig = {
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes, ...(typeof window !== 'undefined' && window.location.protocol === 'file:' ? [withHashLocation()] : [])),
+    provideRouter(routes, ...(typeof window !== 'undefined' && window.location?.protocol === 'file:' ? [withHashLocation()] : [])),
     provideHttpClient(withFetch(), withInterceptors([requestIdInterceptor, authInterceptor])),
     provideClientHydration(withEventReplay()),
     importProvidersFrom(MonacoEditorModule.forRoot(monacoConfig)),

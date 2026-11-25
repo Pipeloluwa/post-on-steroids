@@ -1,16 +1,33 @@
-<div class="p-6 h-full flex flex-col bg-(--postonsteroids-bg-primary)">
-    <div class="flex items-center justify-between mb-6">
+<div class="p-6 flex-1 min-h-0 h-full flex flex-col bg-(--postonsteroids-bg-primary) overflow-hidden">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 shrink-0">
         <div class="flex items-center gap-3">
             <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">History</h2>
             <span class="text-xs px-2 py-0.5 rounded-full bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-muted) border border-(--postonsteroids-border)">
-                {{ history().length }}
+                {{ filteredHistory().length }} / {{ history().length }}
             </span>
         </div>
-        <button (click)="clearHistory()" [disabled]="history().length === 0"
-            class="text-[12px] text-status-danger hover:opacity-80 font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
-            <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
-            Clear All
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+            <input type="text"
+                   [ngModel]="searchQuery()"
+                   (ngModelChange)="searchQuery.set($event)"
+                   placeholder="Filter URL or HTTP method..."
+                   aria-label="Filter history"
+                   class="px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) text-xs text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) w-56" />
+            <select aria-label="Filter by status"
+                    [ngModel]="statusFilter()"
+                    (ngModelChange)="statusFilter.set($event)"
+                    class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-lg px-2.5 py-1.5 text-xs text-(--postonsteroids-text-primary) outline-none cursor-pointer">
+                <option value="all" class="bg-(--postonsteroids-bg-secondary)">All Statuses</option>
+                <option value="2xx" class="bg-(--postonsteroids-bg-secondary)">2xx Success</option>
+                <option value="4xx" class="bg-(--postonsteroids-bg-secondary)">4xx Client Error</option>
+                <option value="5xx" class="bg-(--postonsteroids-bg-secondary)">5xx / Network Error</option>
+            </select>
+            <button (click)="clearHistory()" [disabled]="history().length === 0"
+                class="text-[12px] text-status-danger hover:opacity-80 font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 ml-1">
+                <mat-icon class="text-[14px]! size-[14px]!">delete_sweep</mat-icon>
+                Clear All
+            </button>
+        </div>
     </div>
 
     @if (isLoading()) {
@@ -19,8 +36,8 @@
             <span class="text-xs font-medium">Loading history...</span>
         </div>
     } @else {
-        <div class="flex-1 overflow-auto space-y-2">
-            @for (item of history(); track item.id) {
+        <div class="flex-1 min-h-0 overflow-y-auto space-y-2">
+            @for (item of filteredHistory(); track item.id) {
             <div (click)="restoreHistoryItem(item)"
                 class="flex items-center gap-x-4 p-3.5 rounded-xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative">
                 

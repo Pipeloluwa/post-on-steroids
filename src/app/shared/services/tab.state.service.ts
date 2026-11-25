@@ -1036,9 +1036,34 @@ export class TabStateService {
         return current === token;
     }
 
+    private findFallbackRequestState(effectiveId: string, rawId?: string): RequestState | undefined {
+        const savedMatch = this.savedCapsules().find(
+            r => r.id === effectiveId || (rawId && r.id === rawId)
+        );
+        if (savedMatch) return savedMatch;
+
+        if (this.isBrowser) {
+            try {
+                const rawSession = localStorage.getItem('onsteroids_last_session');
+                if (rawSession) {
+                    const session = JSON.parse(rawSession);
+                    if (Array.isArray(session?.states)) {
+                        for (const entry of session.states) {
+                            const r: RequestState | undefined = Array.isArray(entry) ? entry[1] : entry;
+                            if (r && (r.id === effectiveId || (rawId && r.id === rawId))) {
+                                return r;
+                            }
+                        }
+                    }
+                }
+            } catch {}
+        }
+        return undefined;
+    }
+
     getState(id: string): RequestState | undefined {
         const effectiveId = this.resolveTabId(id);
-        return this.states().get(effectiveId) ?? this.states().get(id);
+        return this.states().get(effectiveId) ?? this.states().get(id) ?? this.findFallbackRequestState(effectiveId, id);
     }
     private backendSyncTimeout: any;
     private workspaceStateSyncTimeout: any;
@@ -4804,8 +4829,8 @@ export class TabStateService {
 
         if (res?.data) {
             const baseUrl = getAppBaseUrl();
-            const isFile = typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.origin.startsWith('file:'));
-            const hasHash = isFile || (typeof window !== 'undefined' && window.location.hash && window.location.hash.startsWith('#/'));
+            const isFile = typeof window !== 'undefined' && !!window.location && (window.location.protocol === 'file:' || (window.location.origin || '').startsWith('file:'));
+            const hasHash = isFile || (typeof window !== 'undefined' && !!window.location?.hash && window.location.hash.startsWith('#/'));
             const lockSuffix = currentLockMode !== 'unlocked' ? `&lockMode=${encodeURIComponent(currentLockMode)}` : '';
             return `${baseUrl}${hasHash ? '/#/' : '/'}import?share=${res.data.shareToken}${lockSuffix}`;
         }
@@ -6119,7 +6144,7 @@ export class TabStateService {
         let becameDirty = false;
 
         this.states.update(map => {
-            const currentState = map.get(effectiveId) || map.get(id) || this.getDefaultState(effectiveId);
+            const currentState = map.get(effectiveId) || map.get(id) || this.findFallbackRequestState(effectiveId, id) || this.getDefaultState(effectiveId);
 
             const isSignificantChange = Object.keys(partialState).some(k => !ignorableKeys.includes(k));
             const isTextInputFocused = this.isBrowser && typeof document !== 'undefined'
@@ -6170,6 +6195,24 @@ export class TabStateService {
             }
             return new Map(map);
         });
+
+        // Keep savedCapsules metadata synchronized for automation triggers and documentation fields
+        if (
+            partialState.postTriggerTabId !== undefined ||
+            partialState.triggerConfig !== undefined ||
+            partialState.description !== undefined ||
+            partialState.docNotes !== undefined ||
+            partialState.testRailPreconditions !== undefined ||
+            partialState.testRailSteps !== undefined ||
+            partialState.testRailExpected !== undefined
+        ) {
+            const latest = this.states().get(effectiveId);
+            if (latest && this.savedCapsules().some(r => r.id === effectiveId || r.id === id)) {
+                this.savedCapsules.update(col =>
+                    col.map(r => (r.id === effectiveId || r.id === id ? { ...r, ...partialState } : r))
+                );
+            }
+        }
 
         if (partialState.headers || partialState.params || partialState.rawBody || partialState.rawBodyJson) {
             const updated = this.states().get(effectiveId);

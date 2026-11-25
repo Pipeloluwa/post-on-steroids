@@ -1,4 +1,4 @@
-<div class="p-6 h-full flex flex-col gap-6 bg-(--postonsteroids-bg-primary)">
+<div class="p-6 flex-1 min-h-0 h-full flex flex-col gap-6 bg-(--postonsteroids-bg-primary) overflow-hidden">
     <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
             <h2 class="text-xl font-bold text-(--postonsteroids-text-primary)">Capsules</h2>
@@ -45,7 +45,7 @@
         }
     </div>
 
-    <div class="flex-1 overflow-auto space-y-2">
+    <div class="flex-1 min-h-0 overflow-y-auto space-y-2">
         @for (item of sortedCapsules(); track item.id) {
         <div
             class="flex items-center justify-between p-4 rounded-xl bg-(--postonsteroids-bg-secondary) border transition-all"

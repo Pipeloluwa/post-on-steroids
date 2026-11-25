@@ -1,5 +1,6 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { TabStateService } from '../../shared/services/tab.state.service';
 import { VariableService } from '../../shared/services/variable.service';
@@ -9,11 +10,17 @@ import { convertCapsuleToPostmanCollection } from '../../shared/utils/postman-ex
     selector: 'app-export-component',
     imports: [CommonModule, MatIcon],
     templateUrl: './export.component.html',
-    styleUrl: './export.component.css'
+    styleUrl: './export.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ExportComponent {
     tabStateService = inject(TabStateService);
     private variableService = inject(VariableService);
+    private router = inject(Router);
+
+    openDocsStudio(): void {
+        void this.router.navigate(['/documentation']);
+    }
     
     capsules = this.tabStateService.capsules;
 

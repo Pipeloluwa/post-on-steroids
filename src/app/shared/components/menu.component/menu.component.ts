@@ -38,6 +38,7 @@ export class MenuComponent {
   menu = signal<{ name: string; icon: string; path: string; exact?: boolean }[]>([
     { name: 'OnSteroid', icon: 'dashboard', path: '/', exact: true },
     { name: 'Automation', icon: 'alt_route', path: '/automation' },
+    { name: 'Docs / BRD', icon: 'menu_book', path: '/documentation' },
     { name: 'Capsules', icon: 'collections', path: '/capsules' },
     { name: 'Export', icon: 'file_download', path: '/export' },
     { name: 'Import', icon: 'file_upload', path: '/import' },

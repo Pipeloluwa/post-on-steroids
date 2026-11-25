@@ -54,8 +54,8 @@ export function isLocalhostOrLoopbackUrl(url: string | null | undefined): boolea
  * - Electron / file protocol: file:///path/to/app -> http://localhost:5000
  */
 export function getAppBaseUrl(): string {
-    if (typeof window === 'undefined') return '';
-    const isFile = window.location.protocol === 'file:' || window.location.origin.startsWith('file:');
+    if (typeof window === 'undefined' || !window.location) return '';
+    const isFile = window.location.protocol === 'file:' || (window.location.origin || '').startsWith('file:');
     if (isFile) {
         return environment.appBaseUrl;
     }

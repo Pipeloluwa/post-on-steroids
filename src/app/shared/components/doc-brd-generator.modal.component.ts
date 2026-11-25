@@ -10,6 +10,7 @@ import {
     signal,
     viewChild
 } from '@angular/core';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIcon } from '@angular/material/icon';
@@ -57,6 +58,11 @@ import { BodyPortalDirective } from '../directives/body-portal.directive';
                                     <span>Back to Edit Notes</span>
                                 </button>
                             }
+                            <button type="button" (click)="openFullStudio()"
+                                class="px-3 py-1.5 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-tertiary) hover:border-blue-500/50 text-(--postonsteroids-text-primary) text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors">
+                                <mat-icon class="text-[14px]! size-[14px]! text-blue-400">menu_book</mat-icon>
+                                <span>Full Docs / BRD Studio</span>
+                            </button>
                             <button type="button" (click)="close()"
                                 class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
                                 <mat-icon class="text-[18px]! size-[18px]!">close</mat-icon>
@@ -242,6 +248,12 @@ import { BodyPortalDirective } from '../directives/body-portal.directive';
                                 <mat-icon class="text-[14px]! size-[14px]!">article</mat-icon>
                                 <span>Export Word (.doc)</span>
                             </button>
+                            <button type="button" (click)="downloadTestRailXml()"
+                                title="Download TestRail-native Suite XML format (Import -> XML in TestRail)"
+                                class="px-3 py-1.5 rounded-md border border-teal-500/50 bg-teal-500/15 hover:bg-teal-500/25 text-[11px] font-semibold text-teal-300 flex items-center gap-1.5 cursor-pointer">
+                                <mat-icon class="text-[14px]! size-[14px]!">code</mat-icon>
+                                <span>TestRail .xml</span>
+                            </button>
                             <button type="button" (click)="downloadTestRailCsv()"
                                 class="px-3 py-1.5 rounded-md border border-teal-500/40 bg-teal-500/10 hover:bg-teal-500/20 text-[11px] font-semibold text-teal-400 flex items-center gap-1.5 cursor-pointer">
                                 <mat-icon class="text-[14px]! size-[14px]!">table_view</mat-icon>
@@ -269,6 +281,7 @@ export class DocBrdGeneratorModalComponent {
     private variableService = inject(VariableService);
     private environmentService = inject(EnvironmentService);
     private notificationService = inject(NotificationService);
+    private router = inject(Router);
 
     isOpen = input<boolean>(false);
     initialScope = input<'endpoint' | 'collection'>('endpoint');
@@ -343,8 +356,15 @@ export class DocBrdGeneratorModalComponent {
         return out;
     });
 
-    generated = computed(() =>
-        generateDocumentationOrBrd({
+    generated = computed(() => {
+        const capId = this.tabStateService.activeCapsuleId();
+        const groupNamesById: Record<string, string> = {};
+        if (capId) {
+            for (const g of this.tabStateService.getGroupsForCapsule(capId)) {
+                groupNamesById[g.id] = this.tabStateService.getFolderFullPath(g.id, capId) || g.name;
+            }
+        }
+        return generateDocumentationOrBrd({
             mode: this.mode(),
             scope: this.scope(),
             projectTitle: this.projectTitle().trim() || this.capsuleName(),
@@ -353,9 +373,10 @@ export class DocBrdGeneratorModalComponent {
             organization: this.organization().trim() || 'Engineering & Product',
             capsuleName: this.capsuleName(),
             requests: this.targetRequests(),
-            variables: this.mergedVariables()
-        })
-    );
+            variables: this.mergedVariables(),
+            groupNamesById
+        });
+    });
 
     private wasOpen = false;
 
@@ -395,6 +416,11 @@ export class DocBrdGeneratorModalComponent {
         this.backToNotes.emit();
     }
 
+    openFullStudio() {
+        this.close();
+        void this.router.navigate(['/documentation']);
+    }
+
     async copyMarkdown() {
         await copyTextToClipboard(this.generated().markdown);
         this.notificationService.notify('Markdown document copied to clipboard.', 'success');
@@ -407,6 +433,13 @@ export class DocBrdGeneratorModalComponent {
             .toLowerCase() || 'api_document';
         const suffix = this.mode() === 'brd' ? 'brd' : (this.mode() === 'testrail' ? 'testrail_cases' : 'api_docs');
         return `${clean}_${suffix}`;
+    }
+
+    downloadTestRailXml(): void {
+        const xml = this.generated().testRailXml || '';
+        if (!xml) return;
+        this.triggerDownload(xml, `${this.fileBaseName()}_testrail.xml`, 'application/xml;charset=utf-8;');
+        this.notificationService.notify('Exported native TestRail Suite XML file (import via TestRail Import -> XML).', 'success');
     }
 
     downloadTestRailCsv(): void {
