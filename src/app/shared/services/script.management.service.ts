@@ -203,24 +203,28 @@ export class ScriptManagementService {
             const dbHasContent = !!(dbMatch && dbMatch.content && dbMatch.content.trim().length > 0);
 
             if (cachedHasContent) {
-                // Tier 1: Load from local cache
+                // Tier 1: Load from local cache (and upgrade any legacy wrapped built-in default scripts to st.* syntax)
+                const lang: ScriptLanguage = (cached!.language === 'python' ? 'python' : 'javascript');
+                const upgradedContent = this.upgradeLegacyBuiltInContent(cached!.content, def, lang);
                 result.push({
                     ...cached!,
                     id: (isAuth && dbMatch) ? dbMatch.id : (cached!.id || def.virtualId),
                     userId: (isAuth && dbMatch) ? dbMatch.userId : (cached!.userId || 'virtual'),
                     type: def.type,
                     name: def.name,
-                    content: cached!.content,
+                    content: upgradedContent,
                     isDefault: true,
                     updatedAt: cached!.updatedAt || now
                 });
             } else if (isAuth && dbHasContent) {
-                // Tier 2: Load from DB for authenticated user
+                // Tier 2: Load from DB for authenticated user (and upgrade legacy wrapped built-in defaults)
+                const lang: ScriptLanguage = (dbMatch!.language === 'python' ? 'python' : 'javascript');
+                const upgradedContent = this.upgradeLegacyBuiltInContent(dbMatch!.content, def, lang);
                 result.push({
                     ...dbMatch!,
                     type: def.type,
                     name: def.name,
-                    content: dbMatch!.content,
+                    content: upgradedContent,
                     isDefault: true
                 });
             } else {
@@ -268,42 +272,80 @@ export class ScriptManagementService {
             }
         }
 
-        // Apply comment replacement fix safely without corrupting quotes and upgrade legacy default signatures
+        // Apply safe JSON-comment stripping fix (never re-wrap scripts back into legacy parent functions)
         for (const script of result) {
             if (script.content) {
                 script.content = script.content
                     .split(".replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, '')")
                     .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? \'\' : m)')
                     .split('.replace(/\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*/g, "")')
-                    .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)')
-                    .replace(
-                        /^(async\s+function\s+encryptScript\s*\([^)]*\))/,
-                        (match, sig) => (sig.includes('encryptedFormData')
-                            ? sig
-                            : 'async function encryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText)')
-                    )
-                    .replace(
-                        /^(async\s+function\s+decryptScript\s*\([^)]*\))/,
-                        (match, sig) => (sig.includes('encryptedFormData')
-                            ? sig
-                            : 'async function decryptScript(headers, body, params, encryptedHeaders, encryptedBodyPaths, bodyType, rawType, formData, encryptedFormData, urlEncodedData, encryptedUrlEncodedData, graphql, encryptedGraphqlPaths, rawText, encryptRawText)')
-                    )
-                    .replace(
-                        /^(async\s+function\s+preScript\s*\(\s*headers\s*,\s*body\s*,\s*params\s*\))/,
-                        'async function preScript(headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText)'
-                    )
-                    .replace(
-                        /^(async\s+function\s+postScript\s*\(\s*responseHeaders\s*,\s*responseBody\s*,\s*headers\s*,\s*body\s*,\s*params\s*\))/,
-                        'async function postScript(responseHeaders, responseBody, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText)'
-                    )
-                    .replace(
-                        /^(async\s+function\s+testScript\s*\(\s*responseStatus\s*,\s*responseTime\s*,\s*responseBody\s*,\s*responseHeaders\s*\))/,
-                        'async function testScript(responseStatus, responseTime, responseBody, responseHeaders, headers, body, params, bodyType, rawType, formData, urlEncodedData, graphql, rawText)'
-                    );
+                    .join('.replace(/"(?:[^"\\\\]|\\\\.)*"|(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/.*)/g, (m, c) => c ? "" : m)');
             }
         }
 
         return result;
+    }
+
+    /**
+     * Upgrades legacy built-in default scripts that still contain an outer
+     * `async function preScript/postScript/testScript/encryptScript/decryptScript(...)` wrapper
+     * to top-level `st.*` syntax without losing user-authored custom lines.
+     */
+    private upgradeLegacyBuiltInContent(
+        rawContent: string,
+        def: BuiltInDefaultScriptDef,
+        language: ScriptLanguage
+    ): string {
+        const content = (rawContent || '').trim();
+        if (!content) return def.getDefaultContent(language);
+
+        const legacyJsHeader = /^(?:\/\*(?:[\s\S]*?)\*\/\s*|\/\/[^\n]*\n\s*)*(?:async\s+)?function\s+(?:pre|post|test|encrypt|decrypt)Script\s*\([^)]*\)\s*\{([\s\S]*)\}\s*;?\s*$/;
+        const match = content.match(legacyJsHeader);
+        if (!match) return rawContent;
+
+        const innerRaw = match[1] || '';
+        const unindentedLines = innerRaw
+            .split(/\r?\n/)
+            .map(line => line.replace(/^[ \t]{1,4}/, ''));
+        // Drop legacy `let passed = true;` / `return passed;` test wrapper boilerplate
+        const meaningfulLines = unindentedLines.filter(line => {
+            const t = line.trim();
+            if (!t) return false;
+            if (t.startsWith('//') || t.startsWith('/*') || t.startsWith('*')) return false;
+            if (/^(?:let|var|const)\s+passed\s*=\s*true\s*;?$/.test(t)) return false;
+            if (/^return\s+passed\s*;?$/.test(t)) return false;
+            if (/^console\.log\(\s*["']Running (?:pre-request|post-response|test)/i.test(t)) return false;
+            return true;
+        });
+
+        const legacySampleMarkers = [
+            'Encode targeted headers',
+            'Decode targeted Base64 headers',
+            'X-Correlation-ID',
+            'Set env var "authUrl"',
+            'X-Session-Token',
+            'Status code is 2xx',
+            'Enter custom pre-request',
+            'Enter custom post-response',
+            'Enter custom test'
+        ];
+        const isUnmodifiedLegacyTemplate =
+            meaningfulLines.length === 0 ||
+            legacySampleMarkers.some(marker => content.includes(marker));
+
+        if (isUnmodifiedLegacyTemplate) {
+            return def.getDefaultContent(language);
+        }
+
+        // Preserve custom user code inside the old built-in default, stripped of its outer function wrapper
+        const strippedBody = unindentedLines
+            .filter(line => {
+                const t = line.trim();
+                return !/^(?:let|var|const)\s+passed\s*=\s*true\s*;?$/.test(t) && !/^return\s+passed\s*;?$/.test(t);
+            })
+            .join('\n')
+            .trim();
+        return strippedBody || def.getDefaultContent(language);
     }
 
     ensureDefaultScripts(userScripts: ScriptDto[]): ScriptDto[] {

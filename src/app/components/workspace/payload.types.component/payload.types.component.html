@@ -464,19 +464,57 @@
             </div>
         </div>
 
-        <!-- Direct Response -> Request Field Linking Bar (Current Tab OR Cross-Tab) -->
+        <!-- Source -> Destination Request/Response Field Linking Bar (Same Tab OR Cross-Tab) -->
         <div class="flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 rounded border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary)/70 text-[11px]">
-            <div class="flex items-center gap-1 text-(--postonsteroids-text-secondary) font-semibold shrink-0 mr-1">
+            <div class="flex items-center gap-1 text-(--postonsteroids-text-secondary) font-semibold shrink-0">
                 <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent)">link</mat-icon>
-                <span>Link Response &rarr; Field</span>
+                <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border)">From</span>
+            </div>
+
+            <select aria-label="Source Request Tab"
+                title="Choose source request tab (Current Request or another request tab in this capsule)"
+                [ngModel]="linkSourceRequestId()"
+                (ngModelChange)="linkSourceRequestId.set($event)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer w-[145px] truncate">
+                <option value="" class="bg-(--postonsteroids-bg-secondary)">Current Request</option>
+                @for (req of availableLinkTargetRequests(); track req.id) {
+                    @if (req.id !== tabId()) {
+                        <option [value]="req.id" class="bg-(--postonsteroids-bg-secondary)">
+                            {{ req.method }} · {{ tabStateService.resolveRequestTitle(req.name, req.url) }}
+                        </option>
+                    }
+                }
+            </select>
+
+            <select aria-label="Source Data Section"
+                title="Choose whether to extract from Response Body/Headers or Request Body/Headers/Params/Query"
+                [ngModel]="linkSourceType()"
+                (ngModelChange)="linkSourceType.set($event)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer w-[105px]">
+                @for (opt of linkSourceOptions; track opt.value) {
+                    <option [value]="opt.value" class="bg-(--postonsteroids-bg-secondary)">{{ opt.label }}</option>
+                }
+            </select>
+
+            <input type="text"
+                aria-label="Source path or key"
+                list="script-response-field-paths"
+                [ngModel]="linkSourcePath()"
+                (ngModelChange)="linkSourcePath.set($event)"
+                placeholder="Source path / key (e.g. data.token)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) min-w-[140px] flex-1 max-w-[200px]" />
+
+            <div class="flex items-center gap-1 text-(--postonsteroids-text-secondary) font-semibold shrink-0 mx-0.5">
+                <span class="text-(--postonsteroids-accent) font-mono font-bold">&rarr;</span>
+                <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border)">To</span>
             </div>
 
             <select aria-label="Target Request Tab"
-                title="Choose Current Request Tab or any other request tab in this capsule"
+                title="Choose destination request tab (Current Request or another request tab in this capsule)"
                 [ngModel]="linkTargetRequestId()"
                 (ngModelChange)="linkTargetRequestId.set($event)"
-                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer max-w-[180px]">
-                <option value="" class="bg-(--postonsteroids-bg-secondary)">Current Request Tab</option>
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer w-[145px] truncate">
+                <option value="" class="bg-(--postonsteroids-bg-secondary)">Current Request</option>
                 @for (req of availableLinkTargetRequests(); track req.id) {
                     @if (req.id !== tabId()) {
                         <option [value]="req.id" class="bg-(--postonsteroids-bg-secondary)">
@@ -487,31 +525,22 @@
             </select>
 
             <select aria-label="Target Request Section"
+                title="Destination section in target request (Body, Header, Param, or Query)"
                 [ngModel]="linkTargetType()"
                 (ngModelChange)="linkTargetType.set($event)"
-                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer">
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer w-[84px]">
                 @for (opt of linkTargetOptions; track opt.value) {
                     <option [value]="opt.value" class="bg-(--postonsteroids-bg-secondary)">{{ opt.label }}</option>
                 }
             </select>
 
             <input type="text"
-                aria-label="Response source path"
-                list="script-response-field-paths"
-                [ngModel]="linkSourcePath()"
-                (ngModelChange)="linkSourcePath.set($event)"
-                placeholder="Response path (e.g. data.token)"
-                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) min-w-[165px] flex-1 max-w-[230px]" />
-
-            <span class="text-(--postonsteroids-text-muted) font-mono">&rarr;</span>
-
-            <input type="text"
-                aria-label="Target request field path"
+                aria-label="Destination field path or key"
                 list="script-request-field-paths"
                 [ngModel]="linkTargetField()"
                 (ngModelChange)="linkTargetField.set($event)"
-                placeholder="Target field (e.g. auth.token or Authorization)"
-                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) min-w-[175px] flex-1 max-w-[250px]" />
+                placeholder="Dest field (e.g. auth.token)"
+                class="bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded px-2 py-0.5 text-[11px] font-mono text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) min-w-[140px] flex-1 max-w-[200px]" />
 
             <datalist id="script-response-field-paths">
                 @for (rp of responseFieldSuggestions(); track rp) {
@@ -524,19 +553,21 @@
                 }
             </datalist>
 
-            <button type="button" (click)="insertResponseFieldLinkCode()"
-                title="Insert code linking this response path into the target request field"
-                class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/60 text-(--postonsteroids-text-primary) font-medium cursor-pointer transition-colors">
-                <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">add_circle_outline</mat-icon>
-                <span>Insert Code</span>
-            </button>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" (click)="insertResponseFieldLinkCode()"
+                    title="Insert script line linking the selected source field into the destination field"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/60 text-(--postonsteroids-text-primary) font-medium cursor-pointer transition-colors">
+                    <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">add_circle_outline</mat-icon>
+                    <span>Insert Code</span>
+                </button>
 
-            <button type="button" (click)="populateRequestFieldFromResponse()"
-                title="Extract from latest response and populate the target request field immediately"
-                class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 border border-(--postonsteroids-accent)/40 text-(--postonsteroids-accent) font-semibold cursor-pointer transition-colors">
-                <mat-icon class="text-[13px]! size-[13px]!">bolt</mat-icon>
-                <span>Populate Now</span>
-            </button>
+                <button type="button" (click)="populateRequestFieldFromResponse()"
+                    title="Copy value from the source field into the destination field immediately"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 border border-(--postonsteroids-accent)/40 text-(--postonsteroids-accent) font-semibold cursor-pointer transition-colors">
+                    <mat-icon class="text-[13px]! size-[13px]!">bolt</mat-icon>
+                    <span>Apply Now</span>
+                </button>
+            </div>
         </div>
 
         <div class="w-full flex-1 min-h-0 flex border border-(--postonsteroids-border) rounded overflow-hidden">
@@ -559,13 +590,13 @@
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
                                 <app-scrollable-select-component [activeValue]="selectedTestSnippet()" [optionValues]="testSnippetOptions()" [optionTooltips]="testSnippetTooltips()"
-                                    [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="addTestSnippet($event)">
-                                    <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
-                                        <div class="flex items-center gap-x-1.5">
-                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">playlist_add</mat-icon>
-                                            <span>Add Standard Test</span>
+                                    [verticalPosition]="28" [modalWidth]="185" [absoluteStartLeft]="false" (outputSelectedValue)="addTestSnippet($event)">
+                                    <div class="w-[160px] flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                        <div class="flex items-center gap-x-1.5 min-w-0 flex-1">
+                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">playlist_add</mat-icon>
+                                            <span class="truncate">Add Standard Test</span>
                                         </div>
-                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1 shrink-0">expand_more</mat-icon>
                                     </div>
                                 </app-scrollable-select-component>
                             </div>
@@ -573,13 +604,14 @@
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                                 <app-scrollable-select-component [activeValue]="activeTestScriptName()"
-                                    [optionValues]="testScriptOptions()" [optionTooltips]="testScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
-                                    <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
-                                        <div class="flex items-center gap-x-1.5">
-                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
-                                            <span>{{ activeTestScriptName() }}</span>
+                                    [optionValues]="testScriptOptions()" [optionTooltips]="testScriptTooltips()" [verticalPosition]="28" [modalWidth]="185" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                    <div [title]="activeTestScriptName()"
+                                        class="w-[185px] flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                        <div class="flex items-center gap-x-1.5 min-w-0 flex-1">
+                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">code</mat-icon>
+                                            <span class="truncate">{{ activeTestScriptName() }}</span>
                                         </div>
-                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1 shrink-0">expand_more</mat-icon>
                                     </div>
                                 </app-scrollable-select-component>
                             </div>
@@ -590,26 +622,27 @@
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
                                 <app-scrollable-select-component [activeValue]="selectedPreRequestSnippet()" [optionValues]="preRequestSnippetOptions()" [optionTooltips]="preRequestSnippetTooltips()"
-                                    [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="addPhaseSnippet('preRequest', $event)">
-                                    <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
-                                        <div class="flex items-center gap-x-1.5">
-                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">playlist_add</mat-icon>
-                                            <span>Add Snippet</span>
+                                    [verticalPosition]="28" [modalWidth]="185" [absoluteStartLeft]="false" (outputSelectedValue)="addPhaseSnippet('preRequest', $event)">
+                                    <div class="w-[160px] flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                        <div class="flex items-center gap-x-1.5 min-w-0 flex-1">
+                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">playlist_add</mat-icon>
+                                            <span class="truncate">Add Snippet</span>
                                         </div>
-                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1 shrink-0">expand_more</mat-icon>
                                     </div>
                                 </app-scrollable-select-component>
                             </div>
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                                 <app-scrollable-select-component [activeValue]="activePreRequestScriptName()"
-                                    [optionValues]="preRequestScriptOptions()" [optionTooltips]="preRequestScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
-                                    <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
-                                        <div class="flex items-center gap-x-1.5">
-                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
-                                            <span>{{ activePreRequestScriptName() }}</span>
+                                    [optionValues]="preRequestScriptOptions()" [optionTooltips]="preRequestScriptTooltips()" [verticalPosition]="28" [modalWidth]="185" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                    <div [title]="activePreRequestScriptName()"
+                                        class="w-[185px] flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                        <div class="flex items-center gap-x-1.5 min-w-0 flex-1">
+                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">code</mat-icon>
+                                            <span class="truncate">{{ activePreRequestScriptName() }}</span>
                                         </div>
-                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1 shrink-0">expand_more</mat-icon>
                                     </div>
                                 </app-scrollable-select-component>
                             </div>
@@ -620,26 +653,27 @@
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Snippets:</span>
                                 <app-scrollable-select-component [activeValue]="selectedPostResponseSnippet()" [optionValues]="postResponseSnippetOptions()" [optionTooltips]="postResponseSnippetTooltips()"
-                                    [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="addPhaseSnippet('postResponse', $event)">
-                                    <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
-                                        <div class="flex items-center gap-x-1.5">
-                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">playlist_add</mat-icon>
-                                            <span>Add Snippet</span>
+                                    [verticalPosition]="28" [modalWidth]="185" [absoluteStartLeft]="false" (outputSelectedValue)="addPhaseSnippet('postResponse', $event)">
+                                    <div class="w-[160px] flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                        <div class="flex items-center gap-x-1.5 min-w-0 flex-1">
+                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">playlist_add</mat-icon>
+                                            <span class="truncate">Add Snippet</span>
                                         </div>
-                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1 shrink-0">expand_more</mat-icon>
                                     </div>
                                 </app-scrollable-select-component>
                             </div>
                             <div class="flex items-center gap-x-2">
                                 <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                                 <app-scrollable-select-component [activeValue]="activePostRequestScriptName()"
-                                    [optionValues]="postRequestScriptOptions()" [optionTooltips]="postRequestScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
-                                    <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
-                                        <div class="flex items-center gap-x-1.5">
-                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">code</mat-icon>
-                                            <span>{{ activePostRequestScriptName() }}</span>
+                                    [optionValues]="postRequestScriptOptions()" [optionTooltips]="postRequestScriptTooltips()" [verticalPosition]="28" [modalWidth]="185" [absoluteStartLeft]="false" (outputSelectedValue)="loadCurrentPhaseScript($event)">
+                                    <div [title]="activePostRequestScriptName()"
+                                        class="w-[185px] flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                        <div class="flex items-center gap-x-1.5 min-w-0 flex-1">
+                                            <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">code</mat-icon>
+                                            <span class="truncate">{{ activePostRequestScriptName() }}</span>
                                         </div>
-                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                        <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1 shrink-0">expand_more</mat-icon>
                                     </div>
                                 </app-scrollable-select-component>
                             </div>
@@ -739,13 +773,14 @@
                     <div class="flex items-center gap-x-2">
                         <span class="text-[11px] text-(--postonsteroids-text-muted)">Script:</span>
                         <app-scrollable-select-component [activeValue]="activeEncryptionScriptName()"
-                            [optionValues]="encryptionScriptOptions()" [optionTooltips]="encryptionScriptTooltips()" [verticalPosition]="28" [modalWidth]="180" [absoluteStartLeft]="false" (outputSelectedValue)="loadEncryptionScript($event)">
-                            <div class="flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
-                                <div class="flex items-center gap-x-1.5">
-                                    <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent)">lock</mat-icon>
-                                    <span>{{ activeEncryptionScriptName() }}</span>
+                            [optionValues]="encryptionScriptOptions()" [optionTooltips]="encryptionScriptTooltips()" [verticalPosition]="28" [modalWidth]="185" [absoluteStartLeft]="false" (outputSelectedValue)="loadEncryptionScript($event)">
+                            <div [title]="activeEncryptionScriptName()"
+                                class="w-[185px] flex items-center justify-between bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/50 rounded px-2.5 py-1 cursor-pointer transition-colors text-[11px] text-(--postonsteroids-text-primary)">
+                                <div class="flex items-center gap-x-1.5 min-w-0 flex-1">
+                                    <mat-icon class="text-[13px]! size-[13px]! text-(--postonsteroids-accent) shrink-0">lock</mat-icon>
+                                    <span class="truncate">{{ activeEncryptionScriptName() }}</span>
                                 </div>
-                                <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1">expand_more</mat-icon>
+                                <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-text-muted) ml-1 shrink-0">expand_more</mat-icon>
                             </div>
                         </app-scrollable-select-component>
                     </div>

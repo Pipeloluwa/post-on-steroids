@@ -18,7 +18,7 @@ import { buildEncryptionPayloadContext, reconcileEncryptionResult } from '../uti
 import { generateAwsSigV4Headers } from '../utils/aws-sigv4.util';
 import { CookieJarService } from './cookie-jar.service';
 import { EnvironmentService } from './environment.service';
-import { applyRequestFieldLinksToTabState, RequestFieldLinkMutation } from '../utils/script-field-link.util';
+import { applyRequestFieldLinksToTabState, buildTabPayloadsLookup, RequestFieldLinkMutation } from '../utils/script-field-link.util';
 
 export interface ClientCertConfig {
     id?: string;
@@ -1918,10 +1918,15 @@ export class RequestExecutionService {
                 capsuleVars[v.key.trim()] = v.value ?? '';
             }
         }
+        const tabPayloads = buildTabPayloadsLookup(
+            this.tabStateService.allCapsuleRequests(),
+            (name, url) => this.tabStateService.resolveRequestTitle(name, url)
+        );
         return {
             ...extra,
             __envVars: envVars,
-            __capsuleVars: capsuleVars
+            __capsuleVars: capsuleVars,
+            __tabPayloads: tabPayloads
         };
     }
 

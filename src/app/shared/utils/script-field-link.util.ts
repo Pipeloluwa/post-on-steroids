@@ -1,6 +1,13 @@
 import type { ScriptLanguage } from '../constants/script.snippets.constants';
 
 export type RequestFieldTarget = 'body' | 'param' | 'query' | 'header';
+export type RequestSourceSection =
+    | 'response_body'
+    | 'response_header'
+    | 'request_body'
+    | 'request_header'
+    | 'request_param'
+    | 'request_query';
 
 export interface RequestFieldLinkMutation {
     target: RequestFieldTarget;
@@ -459,39 +466,197 @@ export function collectJsonFieldPaths(value: unknown, prefix = '', max = 40): st
     return Array.from(new Set(out));
 }
 
+export function extractRequestBodySource(state: LinkableRequestState | null | undefined): unknown {
+    if (!state) return undefined;
+    const bt = (state.bodyType || 'none').toLowerCase();
+    const rt = (state.rawType || 'JSON').toUpperCase();
+    if (bt === 'form-data') {
+        const obj: Record<string, string> = {};
+        for (const r of state.formData || []) {
+            if (r && r.enabled !== false && (r.key || '').trim()) {
+                obj[r.key.trim()] = r.value ?? '';
+            }
+        }
+        return obj;
+    }
+    if (bt === 'x-www-form-urlencoded') {
+        const obj: Record<string, string> = {};
+        for (const r of state.urlEncodedData || []) {
+            if (r && r.enabled !== false && (r.key || '').trim()) {
+                obj[r.key.trim()] = r.value ?? '';
+            }
+        }
+        return obj;
+    }
+    if (bt === 'graphql') {
+        const varsParsed = tryParseJson(state.graphqlVariables || '{}');
+        return varsParsed && typeof varsParsed === 'object' ? varsParsed : state.graphqlVariables;
+    }
+    if (bt === 'raw') {
+        if (rt === 'XML' || rt === 'XML (SOAP)' || rt === 'SOAP') return state.rawBodyXml || state.rawBody || '';
+        if (rt === 'TEXT') return state.rawBodyText || state.rawBody || '';
+        return tryParseJson(state.rawBodyJson || state.rawBody || '');
+    }
+    return tryParseJson(state.rawBodyJson || state.rawBody || '');
+}
+
+export function extractRequestQueryPairs(state: LinkableRequestState | null | undefined): LinkableKeyValueRow[] {
+    if (!state) return [];
+    const seen = new Set<string>();
+    const out: LinkableKeyValueRow[] = [];
+    for (const p of state.params || []) {
+        const k = (p?.key || '').trim();
+        if (p && p.enabled !== false && k) {
+            seen.add(k.toLowerCase());
+            out.push({ enabled: true, key: k, value: p.value ?? '' });
+        }
+    }
+    const rawUrl = String(state.url || '').trim();
+    const qIdx = rawUrl.indexOf('?');
+    if (qIdx >= 0) {
+        const hashIdx = rawUrl.indexOf('#', qIdx);
+        const qs = hashIdx >= 0 ? rawUrl.slice(qIdx + 1, hashIdx) : rawUrl.slice(qIdx + 1);
+        for (const pair of qs.split('&').filter(Boolean)) {
+            const eqIdx = pair.indexOf('=');
+            const rawKey = eqIdx >= 0 ? pair.slice(0, eqIdx) : pair;
+            const rawVal = eqIdx >= 0 ? pair.slice(eqIdx + 1) : '';
+            let key = rawKey;
+            let value = rawVal;
+            try { key = decodeURIComponent(rawKey); } catch {}
+            try { value = decodeURIComponent(rawVal); } catch {}
+            if (key.trim() && !seen.has(key.trim().toLowerCase())) {
+                seen.add(key.trim().toLowerCase());
+                out.push({ enabled: true, key: key.trim(), value });
+            }
+        }
+    }
+    return out;
+}
+
+export function extractFromRequestSource(
+    state: (LinkableRequestState & { responseBody?: unknown; responseHeaders?: LinkableKeyValueRow[] }) | null | undefined,
+    sourceSection: RequestSourceSection,
+    sourcePath: string
+): unknown {
+    if (!state) return undefined;
+    switch (sourceSection) {
+        case 'response_header':
+            return extractValueByPath(state.responseHeaders || [], sourcePath);
+        case 'request_body':
+            return extractValueByPath(extractRequestBodySource(state), sourcePath);
+        case 'request_header':
+            return extractValueByPath(state.headers || [], sourcePath);
+        case 'request_param':
+            return extractValueByPath(state.params || [], sourcePath);
+        case 'request_query':
+            return extractValueByPath(extractRequestQueryPairs(state), sourcePath);
+        case 'response_body':
+        default:
+            return extractValueByPath(state.responseBody, sourcePath);
+    }
+}
+
+export function collectSuggestionsForSource(
+    state: (LinkableRequestState & { responseBody?: unknown; responseHeaders?: LinkableKeyValueRow[] }) | null | undefined,
+    sourceSection: RequestSourceSection
+): string[] {
+    if (!state) return [];
+    switch (sourceSection) {
+        case 'response_header':
+            return Array.from(new Set((state.responseHeaders || []).map(h => (h?.key || '').trim()).filter(Boolean)));
+        case 'request_body':
+            return collectJsonFieldPaths(extractRequestBodySource(state), '', 35);
+        case 'request_header':
+            return Array.from(new Set((state.headers || []).map(h => (h?.key || '').trim()).filter(Boolean)));
+        case 'request_param':
+            return Array.from(new Set((state.params || []).map(p => (p?.key || '').trim()).filter(Boolean)));
+        case 'request_query':
+            return Array.from(new Set(extractRequestQueryPairs(state).map(q => q.key).filter(Boolean)));
+        case 'response_body':
+        default:
+            return collectJsonFieldPaths(state.responseBody, '', 35);
+    }
+}
+
+export function buildTabPayloadsLookup(
+    allRequests: Array<LinkableRequestState & { id: string; name?: string; responseBody?: unknown; responseHeaders?: LinkableKeyValueRow[] }>,
+    resolveTitle: (name?: string, url?: string) => string
+): Array<Record<string, any>> {
+    return (allRequests || []).map(req => ({
+        id: req.id,
+        title: resolveTitle(req.name, req.url),
+        body: extractRequestBodySource(req),
+        headers: req.headers || [],
+        params: req.params || [],
+        query: extractRequestQueryPairs(req),
+        responseBody: req.responseBody ?? null,
+        responseHeaders: req.responseHeaders || []
+    }));
+}
+
 export function buildFieldLinkCodeSnippet(opts: {
     target: RequestFieldTarget;
     field: string;
     sourceExpr: string;
     language: ScriptLanguage;
+    sourceSection?: RequestSourceSection;
+    sourceRequest?: string;
     targetRequest?: string;
 }): string {
     const field = (opts.field || 'token').trim();
+    const sourceSection: RequestSourceSection = opts.sourceSection || 'response_body';
     const rawSource = (opts.sourceExpr || 'data.token').trim();
-    const cleanPath = rawSource.replace(/^(?:responseBody\.|response_body\.|\$\.)/, '');
-    const targetReqArg = opts.targetRequest?.trim() ? `, ${JSON.stringify(opts.targetRequest.trim())}` : '';
+    const cleanPath = rawSource.replace(/^(?:responseBody\.|response_body\.|body\.|\$\.)/, '');
+    const cleanSrcReq = (opts.sourceRequest || '').trim();
+    const cleanTargetReq = (opts.targetRequest || '').trim();
+
+    if (sourceSection !== 'response_body' || cleanSrcReq) {
+        const pathArg = cleanPath && cleanPath !== '$' ? cleanPath : '';
+        if (opts.language === 'python') {
+            const args = [
+                JSON.stringify(sourceSection),
+                JSON.stringify(pathArg),
+                JSON.stringify(opts.target),
+                JSON.stringify(field)
+            ];
+            if (cleanSrcReq || cleanTargetReq) args.push(JSON.stringify(cleanSrcReq));
+            if (cleanTargetReq) args.push(JSON.stringify(cleanTargetReq));
+            return `st.link_request_to_request(${args.join(', ')})`;
+        }
+        const args = [
+            JSON.stringify(sourceSection),
+            JSON.stringify(pathArg),
+            JSON.stringify(opts.target),
+            JSON.stringify(field)
+        ];
+        if (cleanSrcReq || cleanTargetReq) args.push(cleanSrcReq ? JSON.stringify(cleanSrcReq) : 'undefined');
+        if (cleanTargetReq) args.push(JSON.stringify(cleanTargetReq));
+        return `st.linkRequestToRequest(${args.join(', ')});`;
+    }
+
+    const targetReqArg = cleanTargetReq ? `, ${JSON.stringify(cleanTargetReq)}` : '';
 
     if (opts.language === 'python') {
         const pyFnMap: Record<RequestFieldTarget, string> = {
-            body: 'set_body_field',
-            param: 'set_param',
-            query: 'set_query',
-            header: 'set_header'
+            body: 'st.set_body_field',
+            param: 'st.set_param',
+            query: 'st.set_query',
+            header: 'st.set_header'
         };
         if (!cleanPath || cleanPath === '$' || cleanPath === 'responseBody' || cleanPath === 'response_body') {
-            return `${pyFnMap[opts.target]}(${JSON.stringify(field)}, response_body${targetReqArg})`;
+            return `${pyFnMap[opts.target]}(${JSON.stringify(field)}, st.response_body${targetReqArg})`;
         }
-        return `link_response_to_request(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, response_body${targetReqArg}` : ''})`;
+        return `st.link_response_to_request(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, st.response_body${targetReqArg}` : ''})`;
     }
 
     const jsFnMap: Record<RequestFieldTarget, string> = {
-        body: 'setBodyField',
-        param: 'setParam',
-        query: 'setQuery',
-        header: 'setHeader'
+        body: 'st.setBodyField',
+        param: 'st.setParam',
+        query: 'st.setQuery',
+        header: 'st.setHeader'
     };
     if (!cleanPath || cleanPath === '$' || cleanPath === 'responseBody' || cleanPath === 'response_body') {
-        return `${jsFnMap[opts.target]}(${JSON.stringify(field)}, responseBody${targetReqArg});`;
+        return `${jsFnMap[opts.target]}(${JSON.stringify(field)}, st.responseBody${targetReqArg});`;
     }
-    return `linkResponseToRequest(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, responseBody${targetReqArg}` : ''});`;
+    return `st.linkResponseToRequest(${JSON.stringify(cleanPath)}, ${JSON.stringify(opts.target)}, ${JSON.stringify(field)}${targetReqArg ? `, st.responseBody${targetReqArg}` : ''});`;
 }

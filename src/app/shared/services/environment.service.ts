@@ -23,8 +23,11 @@ export interface ApiEnvironment {
   updatedAt: number;
 }
 
-const ENV_LIST_STORAGE_KEY = 'onsteroids_pro_environments';
-const ACTIVE_ENV_STORAGE_KEY = 'onsteroids_pro_active_env';
+const ENV_LIST_STORAGE_KEY_PREFIX = 'onsteroids_pro_envs_cap_';
+const ACTIVE_ENV_STORAGE_KEY_PREFIX = 'onsteroids_pro_active_env_cap_';
+const LEGACY_ENV_LIST_STORAGE_KEY = 'onsteroids_pro_environments';
+const LEGACY_ACTIVE_ENV_STORAGE_KEY = 'onsteroids_pro_active_env';
+const LEGACY_ENV_MIGRATED_KEY = 'onsteroids_pro_envs_migrated_v1';
 
 @Injectable({
   providedIn: 'root'
@@ -38,8 +41,11 @@ export class EnvironmentService {
 
   readonly isEnvironmentFeatureEnabled = computed<boolean>(() => this.subscription.isProOrHigher());
 
-  environments = signal<ApiEnvironment[]>(this.loadEnvironments());
-  activeEnvironmentId = signal<string | null>(this.loadActiveEnvId());
+  private activeCapsuleIdSignal = signal<string>(this.readInitialCapsuleId());
+  readonly currentCapsuleId = this.activeCapsuleIdSignal.asReadonly();
+
+  environments = signal<ApiEnvironment[]>(this.loadEnvironmentsForCapsule(this.activeCapsuleIdSignal()));
+  activeEnvironmentId = signal<string | null>(this.loadActiveEnvIdForCapsule(this.activeCapsuleIdSignal()));
 
   activeEnvironment = computed<ApiEnvironment | null>(() => {
     if (!this.isEnvironmentFeatureEnabled()) return null;
@@ -60,30 +66,84 @@ export class EnvironmentService {
     });
   }
 
-  private loadEnvironments(): ApiEnvironment[] {
-    if (!this.isBrowser) return [];
+  private readInitialCapsuleId(): string {
+    if (!this.isBrowser) return '1';
     try {
-      const raw = localStorage.getItem(ENV_LIST_STORAGE_KEY);
+      return localStorage.getItem('onsteroids_active_capsule')?.trim() || '1';
+    } catch {
+      return '1';
+    }
+  }
+
+  private envListKey(capsuleId: string): string {
+    return `${ENV_LIST_STORAGE_KEY_PREFIX}${capsuleId || '1'}`;
+  }
+
+  private activeEnvKey(capsuleId: string): string {
+    return `${ACTIVE_ENV_STORAGE_KEY_PREFIX}${capsuleId || '1'}`;
+  }
+
+  private createStarterEnvironments(): ApiEnvironment[] {
+    const now = Date.now();
+    return [
+      { id: 'env_dev', name: 'DEV', color: '#10b981', variables: [], updatedAt: now },
+      { id: 'env_sit', name: 'SIT', color: '#3b82f6', variables: [], updatedAt: now },
+      { id: 'env_uat', name: 'UAT', color: '#f59e0b', variables: [], updatedAt: now },
+      { id: 'env_prod', name: 'PROD', color: '#ef4444', variables: [], updatedAt: now }
+    ];
+  }
+
+  setCapsuleContext(capsuleId: string | null | undefined): void {
+    const nextCapId = (capsuleId || '').trim() || '1';
+    if (nextCapId === this.activeCapsuleIdSignal()) return;
+    this.activeCapsuleIdSignal.set(nextCapId);
+    this.environments.set(this.loadEnvironmentsForCapsule(nextCapId));
+    this.activeEnvironmentId.set(this.loadActiveEnvIdForCapsule(nextCapId));
+  }
+
+  deleteCapsuleContext(capsuleId: string): void {
+    if (!this.isBrowser || !capsuleId) return;
+    try {
+      localStorage.removeItem(this.envListKey(capsuleId));
+      localStorage.removeItem(this.activeEnvKey(capsuleId));
+    } catch {}
+  }
+
+  private loadEnvironmentsForCapsule(capsuleId: string): ApiEnvironment[] {
+    if (!this.isBrowser) return [];
+    const capKey = this.envListKey(capsuleId);
+    try {
+      const raw = localStorage.getItem(capKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       }
+      // Migrate legacy global environments once ONLY to the default/initial capsule '1'
+      if (capsuleId === '1' && !localStorage.getItem(LEGACY_ENV_MIGRATED_KEY)) {
+        const legacyRaw = localStorage.getItem(LEGACY_ENV_LIST_STORAGE_KEY);
+        localStorage.setItem(LEGACY_ENV_MIGRATED_KEY, '1');
+        if (legacyRaw) {
+          const parsedLegacy = JSON.parse(legacyRaw);
+          if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+            localStorage.setItem(capKey, JSON.stringify(parsedLegacy));
+            const legacyActive = localStorage.getItem(LEGACY_ACTIVE_ENV_STORAGE_KEY);
+            if (legacyActive) {
+              localStorage.setItem(this.activeEnvKey(capsuleId), legacyActive);
+            }
+            return parsedLegacy;
+          }
+        }
+      }
     } catch {}
-    // Seed standard DEV / SIT / UAT / PROD starter presets
-    return [
-      { id: 'env_dev', name: 'DEV', color: '#10b981', variables: [{ id: generateUUID(), key: 'baseUrl', value: 'http://localhost:5000', type: 'default', enabled: true }], updatedAt: Date.now() },
-      { id: 'env_sit', name: 'SIT', color: '#3b82f6', variables: [{ id: generateUUID(), key: 'baseUrl', value: 'https://sit.example.com', type: 'default', enabled: true }], updatedAt: Date.now() },
-      { id: 'env_uat', name: 'UAT', color: '#f59e0b', variables: [{ id: generateUUID(), key: 'baseUrl', value: 'https://uat.example.com', type: 'default', enabled: true }], updatedAt: Date.now() },
-      { id: 'env_prod', name: 'PROD', color: '#ef4444', variables: [{ id: generateUUID(), key: 'baseUrl', value: 'https://api.example.com', type: 'default', enabled: true }], updatedAt: Date.now() }
-    ];
+    return this.createStarterEnvironments();
   }
 
-  private loadActiveEnvId(): string | null {
+  private loadActiveEnvIdForCapsule(capsuleId: string): string | null {
     if (!this.isBrowser) return null;
     try {
-      return localStorage.getItem(ACTIVE_ENV_STORAGE_KEY) || null;
+      return localStorage.getItem(this.activeEnvKey(capsuleId)) || null;
     } catch {
       return null;
     }
@@ -91,8 +151,9 @@ export class EnvironmentService {
 
   private persist(envs: ApiEnvironment[]): void {
     if (!this.isBrowser) return;
+    const capId = this.activeCapsuleIdSignal();
     try {
-      localStorage.setItem(ENV_LIST_STORAGE_KEY, JSON.stringify(envs));
+      localStorage.setItem(this.envListKey(capId), JSON.stringify(envs));
     } catch {}
   }
 
@@ -102,11 +163,13 @@ export class EnvironmentService {
       return;
     }
     const clean = id || null;
+    const capId = this.activeCapsuleIdSignal();
     this.activeEnvironmentId.set(clean);
     if (this.isBrowser) {
       try {
-        if (clean) localStorage.setItem(ACTIVE_ENV_STORAGE_KEY, clean);
-        else localStorage.removeItem(ACTIVE_ENV_STORAGE_KEY);
+        const key = this.activeEnvKey(capId);
+        if (clean) localStorage.setItem(key, clean);
+        else localStorage.removeItem(key);
       } catch {}
     }
   }

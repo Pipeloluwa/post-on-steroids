@@ -78,7 +78,7 @@ interface UnifiedAutomationLog {
           <button type="button" (click)="goToWorkspace()"
                   class="px-3 py-1.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent)/60 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors">
             <mat-icon class="text-[15px]! size-[15px]! text-(--postonsteroids-accent)">open_in_new</mat-icon>
-            <span>Workspace</span>
+            <span>OnSteroid</span>
           </button>
         </div>
       </div>

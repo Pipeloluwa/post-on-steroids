@@ -123,6 +123,7 @@ export class RequestDetailsComponent {
     openDocNotesModal(): void {
         this.isActionsMenuOpen.set(false);
         this.isSaveMenuOpen.set(false);
+        this.returnToDocNotesModal.set(false);
         this.isDocNotesModalOpen.set(true);
     }
 
@@ -142,6 +143,7 @@ export class RequestDetailsComponent {
     generatedLink = signal<string>('');
     isCurlModalOpen = signal<boolean>(false);
     isDocBrdModalOpen = signal<boolean>(false);
+    returnToDocNotesModal = signal<boolean>(false);
     isTransferModalOpen = signal<boolean>(false);
     transferMode = signal<'copy' | 'move'>('copy');
 
@@ -155,9 +157,21 @@ export class RequestDetailsComponent {
         this.isCurlModalOpen.set(true);
     }
 
-    openDocBrdModal(mode: 'api-doc' | 'brd' | 'testrail' = 'api-doc'): void {
+    openDocBrdModal(mode: 'api-doc' | 'brd' | 'testrail' = 'api-doc', fromNotes = false): void {
         this.docBrdInitialMode.set(mode);
+        this.returnToDocNotesModal.set(fromNotes);
         this.isDocBrdModalOpen.set(true);
+    }
+
+    closeDocBrdModal(): void {
+        this.isDocBrdModalOpen.set(false);
+        this.returnToDocNotesModal.set(false);
+    }
+
+    onBackFromDocBrdToNotes(): void {
+        this.isDocBrdModalOpen.set(false);
+        this.returnToDocNotesModal.set(false);
+        this.isDocNotesModalOpen.set(true);
     }
 
     async shareCapsule() {

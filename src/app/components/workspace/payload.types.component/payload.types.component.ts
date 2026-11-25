@@ -32,10 +32,13 @@ import {
 import { detectScriptLanguage } from '../../../shared/utils/python-script-engine.util';
 import {
   RequestFieldTarget,
+  RequestSourceSection,
   RequestFieldLinkMutation,
-  extractValueByPath,
+  extractFromRequestSource,
+  collectSuggestionsForSource,
   applyRequestFieldLinksToTabState,
   collectJsonFieldPaths,
+  buildTabPayloadsLookup,
   buildFieldLinkCodeSnippet
 } from '../../../shared/utils/script-field-link.util';
 import { DialogService } from '../../../shared/services/dialog.service';
@@ -574,19 +577,39 @@ export class PayloadTypesComponent {
     if (this.isEncryptionFullscreen()) this.isEncryptionFullscreen.set(false);
   }
 
-  // Response -> Request Field Direct Linking state (supports cross-tab request targeting)
+  // Cross-Tab / Same-Tab Request & Response Field Linking state
+  linkSourceRequestId = signal<string>('');
+  linkSourceType = signal<RequestSourceSection>('response_body');
+  linkSourcePath = signal<string>('');
   linkTargetRequestId = signal<string>('');
   linkTargetType = signal<RequestFieldTarget>('body');
   linkTargetField = signal<string>('');
-  linkSourcePath = signal<string>('');
+
+  linkSourceOptions: Array<{ value: RequestSourceSection; label: string }> = [
+    { value: 'response_body', label: 'Resp Body' },
+    { value: 'response_header', label: 'Resp Header' },
+    { value: 'request_body', label: 'Req Body' },
+    { value: 'request_header', label: 'Req Header' },
+    { value: 'request_param', label: 'Req Param' },
+    { value: 'request_query', label: 'Req Query' }
+  ];
+
   linkTargetOptions: Array<{ value: RequestFieldTarget; label: string }> = [
     { value: 'body', label: 'Body' },
+    { value: 'header', label: 'Header' },
     { value: 'param', label: 'Param' },
-    { value: 'query', label: 'Query' },
-    { value: 'header', label: 'Header' }
+    { value: 'query', label: 'Query' }
   ];
 
   availableLinkTargetRequests = computed(() => this.tabStateService.allCapsuleRequests());
+
+  linkSourceState = computed(() => {
+    const sid = this.linkSourceRequestId().trim();
+    if (!sid) return this.tabState();
+    return this.tabStateService.getState(sid)
+      || this.availableLinkTargetRequests().find(r => r.id === sid)
+      || this.tabState();
+  });
 
   linkTargetState = computed(() => {
     const tid = this.linkTargetRequestId().trim();
@@ -597,13 +620,7 @@ export class PayloadTypesComponent {
   });
 
   responseFieldSuggestions = computed<string[]>(() => {
-    const st = this.tabState();
-    const bodySuggestions = collectJsonFieldPaths(st?.responseBody, '', 30);
-    const hdrSuggestions = (st?.responseHeaders || [])
-      .filter(h => h && h.key)
-      .slice(0, 12)
-      .map(h => `responseHeaders.${h.key}`);
-    return Array.from(new Set([...bodySuggestions, ...hdrSuggestions]));
+    return collectSuggestionsForSource(this.linkSourceState(), this.linkSourceType());
   });
 
   requestFieldSuggestions = computed<string[]>(() => {
@@ -659,13 +676,23 @@ export class PayloadTypesComponent {
 
   insertResponseFieldLinkCode() {
     const field = this.linkTargetField().trim();
-    const sourceExpr = this.linkSourcePath().trim() || 'data.token';
+    const sourceSection = this.linkSourceType();
+    const sourceExpr = this.linkSourcePath().trim() || (sourceSection.includes('header') ? 'Authorization' : 'data.token');
     if (!field) {
-      this.notificationService.notify('Enter the destination request field name or path first.', 'warning');
+      this.notificationService.notify('Enter the destination field name or path first.', 'warning');
       return;
     }
     const phase = this.activeScriptTab();
     const lang = this.activePhaseLanguage();
+    const sourceReqId = this.linkSourceRequestId().trim();
+    const isSourceCrossTab = !!sourceReqId && sourceReqId !== this.tabId();
+    const sourceReqObj = isSourceCrossTab
+      ? (this.tabStateService.getState(sourceReqId) || this.availableLinkTargetRequests().find(r => r.id === sourceReqId))
+      : null;
+    const sourceRequestName = sourceReqObj
+      ? this.tabStateService.resolveRequestTitle(sourceReqObj.name, sourceReqObj.url)
+      : undefined;
+
     const targetReqId = this.linkTargetRequestId().trim();
     const isCrossTab = !!targetReqId && targetReqId !== this.tabId();
     const targetReqObj = isCrossTab
@@ -680,6 +707,8 @@ export class PayloadTypesComponent {
       field,
       sourceExpr,
       language: lang,
+      sourceSection,
+      sourceRequest: sourceRequestName,
       targetRequest: targetRequestName
     });
     const current = this.scripts();
@@ -704,32 +733,28 @@ export class PayloadTypesComponent {
   }
 
   populateRequestFieldFromResponse() {
-    const state = this.tabState();
-    if (!state) return;
+    const srcState = this.linkSourceState();
+    const currentTabState = this.tabState();
+    if (!srcState || !currentTabState) return;
     const field = this.linkTargetField().trim();
     const sourcePath = this.linkSourcePath().trim();
-    if (!field || !sourcePath) {
-      this.notificationService.notify('Specify both response path and target request field.', 'warning');
+    const sourceSection = this.linkSourceType();
+    if (!field || (!sourcePath && sourceSection !== 'response_body' && sourceSection !== 'request_body')) {
+      this.notificationService.notify('Specify both source path/key and target field.', 'warning');
       return;
     }
 
-    let extracted = /^(?:responseHeaders\.|response_headers\.)/i.test(sourcePath)
-      ? extractValueByPath(state.responseHeaders || [], sourcePath)
-      : extractValueByPath(state.responseBody, sourcePath);
-
-    if (extracted === undefined && state.responseHeaders?.length) {
-      extracted = extractValueByPath(state.responseHeaders, sourcePath);
-    }
-
+    const extracted = extractFromRequestSource(srcState, sourceSection, sourcePath);
     if (extracted === undefined) {
-      this.notificationService.notify(`No value found at response path "${sourcePath}". Send a request first or check the path.`, 'warning');
+      const srcLabel = this.linkSourceOptions.find(o => o.value === sourceSection)?.label || sourceSection;
+      this.notificationService.notify(`No value found at ${srcLabel} path "${sourcePath || '(root)'}". Check the source tab/path first.`, 'warning');
       return;
     }
 
     const destReqId = this.linkTargetRequestId().trim() || this.tabId();
     const destState = this.tabStateService.getState(destReqId)
       || this.availableLinkTargetRequests().find(r => r.id === destReqId)
-      || state;
+      || currentTabState;
     const patch = applyRequestFieldLinksToTabState(destState, [
       { target: this.linkTargetType(), field, value: extracted }
     ]);
@@ -740,7 +765,7 @@ export class PayloadTypesComponent {
       const destLabel = destReqId !== this.tabId()
         ? ` (${this.tabStateService.resolveRequestTitle(destState.name, destState.url)})`
         : '';
-      this.notificationService.notify(`Populated ${this.linkTargetType()} "${field}" = ${shortPreview}${destLabel}`, 'success');
+      this.notificationService.notify(`Linked to ${this.linkTargetType()} "${field}" = ${shortPreview}${destLabel}`, 'success');
     }
   }
 
@@ -778,6 +803,11 @@ export class PayloadTypesComponent {
               graphqlVariables: state.graphqlVariables || '{}'
           });
 
+          const tabPayloads = buildTabPayloadsLookup(
+              this.tabStateService.allCapsuleRequests(),
+              (name, url) => this.tabStateService.resolveRequestTitle(name, url)
+          );
+
           const context = {
               url: state.url || '',
               method: state.method || 'GET',
@@ -796,7 +826,8 @@ export class PayloadTypesComponent {
               responseHeaders: state.responseHeaders ?? [],
               responseHeader: state.responseHeaders ?? [],
               __envVars: envVars,
-              __capsuleVars: capsuleVars
+              __capsuleVars: capsuleVars,
+              __tabPayloads: tabPayloads
           };
 
           const result = await this.sandboxService.executeScript(code, context, lang);
@@ -826,10 +857,30 @@ export class PayloadTypesComponent {
 
               const fieldLinks = result.context['__requestFieldLinks'] as RequestFieldLinkMutation[] | undefined;
               if (Array.isArray(fieldLinks) && fieldLinks.length > 0) {
-                  const latest = this.tabState() || state;
-                  const linkPatch = applyRequestFieldLinksToTabState(latest, fieldLinks);
-                  if (Object.keys(linkPatch).length > 0) {
-                      this.tabStateService.updateState(this.tabId(), linkPatch);
+                  const byTargetId = new Map<string, RequestFieldLinkMutation[]>();
+                  const allReqs = this.tabStateService.allCapsuleRequests();
+                  for (const rawLink of fieldLinks) {
+                      if (!rawLink) continue;
+                      let destId = this.tabId();
+                      if (rawLink.request && String(rawLink.request).trim()) {
+                          const needle = String(rawLink.request).trim().toLowerCase();
+                          const matched = allReqs.find(r => r.id.toLowerCase() === needle)
+                              || allReqs.find(r => (r.name || '').trim().toLowerCase() === needle)
+                              || allReqs.find(r => (r.name || '').toLowerCase().includes(needle));
+                          if (matched) destId = this.tabStateService.resolveTabId(matched.id);
+                      }
+                      const arr = byTargetId.get(destId) || [];
+                      arr.push(rawLink);
+                      byTargetId.set(destId, arr);
+                  }
+                  for (const [destId, linksForTab] of byTargetId.entries()) {
+                      const destState = this.tabStateService.getState(destId);
+                      if (destState) {
+                          const linkPatch = applyRequestFieldLinksToTabState(destState, linksForTab);
+                          if (Object.keys(linkPatch).length > 0) {
+                              this.tabStateService.updateState(destId, linkPatch);
+                          }
+                      }
                   }
               }
 

@@ -49,10 +49,19 @@ import { BodyPortalDirective } from '../directives/body-portal.directive';
                                 </p>
                             </div>
                         </div>
-                        <button type="button" (click)="close()"
-                            class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
-                            <mat-icon class="text-[18px]! size-[18px]!">close</mat-icon>
-                        </button>
+                        <div class="flex items-center gap-2 shrink-0">
+                            @if (canReturnToNotes()) {
+                                <button type="button" (click)="onBackToNotes()"
+                                    class="px-3 py-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors">
+                                    <mat-icon class="text-[14px]! size-[14px]!">arrow_back</mat-icon>
+                                    <span>Back to Edit Notes</span>
+                                </button>
+                            }
+                            <button type="button" (click)="close()"
+                                class="p-1.5 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) cursor-pointer">
+                                <mat-icon class="text-[18px]! size-[18px]!">close</mat-icon>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Controls Bar -->
@@ -267,7 +276,9 @@ export class DocBrdGeneratorModalComponent {
     request = input<RequestState | null>(null);
     customRequests = input<RequestState[] | null>(null);
     customTitle = input<string | null>(null);
+    canReturnToNotes = input<boolean>(false);
     closed = output<void>();
+    backToNotes = output<void>();
 
     previewFrame = viewChild<ElementRef<HTMLIFrameElement>>('previewFrame');
 
@@ -378,6 +389,10 @@ export class DocBrdGeneratorModalComponent {
 
     close() {
         this.closed.emit();
+    }
+
+    onBackToNotes() {
+        this.backToNotes.emit();
     }
 
     async copyMarkdown() {

@@ -7,6 +7,7 @@ import { AuthService, UserAuth } from './auth.service';
 import { NotificationService } from './notification.service';
 import { API_BASE_URL } from '../constants/api.constants';
 import { VariableService } from './variable.service';
+import { EnvironmentService } from './environment.service';
 import { AutoAuthService } from './auto-auth.service';
 import { IGlobalVariable } from '../../interfaces/services/IVariableService';
 import { extractRequestsVariables } from '../utils/import-variable.util';
@@ -132,6 +133,7 @@ export interface RequestGroup {
     parentGroupId?: string | null;
     isExpanded?: boolean;
     requestIds: string[];
+    childOrder?: string[];
     createdAt: number;
 }
 
@@ -326,6 +328,14 @@ export class TabStateService {
     private getVariableService(): VariableService | null {
         try {
             return this.injector.get(VariableService);
+        } catch {
+            return null;
+        }
+    }
+
+    private getEnvironmentService(): EnvironmentService | null {
+        try {
+            return this.injector.get(EnvironmentService);
         } catch {
             return null;
         }
@@ -799,12 +809,14 @@ export class TabStateService {
         if (session.autoAuthEndpointId) {
             this.autoAuthEndpointId.set(session.autoAuthEndpointId);
         }
+        /* Auto-Save currently unplugged (manual Save only)
         if (session.autoSaveEnabled !== undefined) {
             this.autoSaveEnabled.set(session.autoSaveEnabled);
             if (this.isBrowser) {
                 localStorage.setItem('onsteroids_autosave', session.autoSaveEnabled ? 'true' : 'false');
             }
         }
+        */
         if (session.responses && session.responses['__global_request_timeout_ms__'] !== undefined) {
             const hasLocalTimeout = this.isBrowser && localStorage.getItem(GLOBAL_TIMEOUT_STORAGE_KEY) !== null;
             if (!hasLocalTimeout) {
@@ -1567,6 +1579,45 @@ export class TabStateService {
         return map;
     });
 
+    /** Unified ordered children (interleaving subfolders and requests) inside each parent folder */
+    folderChildrenMap = computed<Map<string, SidebarRootItem[]>>(() => {
+        const map = new Map<string, SidebarRootItem[]>();
+        const grouped = this.groupedCapsuleRequests();
+        const childrenByParent = this.childGroupsMap();
+
+        for (const entry of grouped) {
+            const gId = entry.group.id;
+            const childGroups = childrenByParent.get(gId) || [];
+            const items: SidebarRootItem[] = [
+                ...childGroups.map(cg => ({
+                    type: 'group' as const,
+                    id: cg.group.id,
+                    group: cg.group,
+                    requests: cg.requests
+                })),
+                ...entry.requests.map(r => ({
+                    type: 'request' as const,
+                    id: r.id,
+                    request: r
+                }))
+            ];
+
+            const childOrder = entry.group.childOrder;
+            if (Array.isArray(childOrder) && childOrder.length > 0) {
+                const idxMap = new Map<string, number>();
+                childOrder.forEach((id, idx) => idxMap.set(id, idx));
+                items.sort((a, b) => {
+                    const idxA = idxMap.has(a.id) ? idxMap.get(a.id)! : 999999;
+                    const idxB = idxMap.has(b.id) ? idxMap.get(b.id)! : 999999;
+                    return idxA - idxB;
+                });
+            }
+
+            map.set(gId, items);
+        }
+        return map;
+    });
+
     getDescendantGroupIds(rootGroupIds: string[], capsuleId?: string): string[] {
         const capId = capsuleId || this.activeCapsuleId();
         const groups = this.getGroupsForCapsule(capId);
@@ -1616,9 +1667,20 @@ export class TabStateService {
             }
         }
         const updated = currentGroups.map(g => {
-            if (g.id === groupId) return { ...g, parentGroupId: newParentGroupId || null };
-            if (newParentGroupId && g.id === newParentGroupId) return { ...g, isExpanded: true };
-            return g;
+            const prunedOrder = Array.isArray(g.childOrder)
+                ? g.childOrder.filter(id => id !== groupId)
+                : undefined;
+            if (g.id === groupId) {
+                return { ...g, parentGroupId: newParentGroupId || null };
+            }
+            if (newParentGroupId && g.id === newParentGroupId) {
+                const currentChildren = (this.folderChildrenMap().get(g.id) || [])
+                    .map(it => it.id)
+                    .filter(id => id !== groupId);
+                currentChildren.push(groupId);
+                return { ...g, isExpanded: true, childOrder: currentChildren };
+            }
+            return prunedOrder ? { ...g, childOrder: prunedOrder } : g;
         });
         this.setGroupsForCapsule(capId, updated, true);
         return true;
@@ -2462,6 +2524,12 @@ export class TabStateService {
             this.setGroupsForCapsule(capId, orderedGroups, true);
         };
 
+        const getCurrentFolderChildIds = (parentId: string, excludeSet?: Set<string>): string[] => {
+            return (this.folderChildrenMap().get(parentId) || [])
+                .map(it => it.id)
+                .filter(id => !excludeSet?.has(id));
+        };
+
         // Branch 1: Dragging a folder (or subfolder)
         if (params.draggedType === 'group') {
             const groupId = movingIds[0];
@@ -2497,9 +2565,27 @@ export class TabStateService {
             }
 
             if (targetParentId) {
+                const nextChildIds = getCurrentFolderChildIds(targetParentId, new Set([groupId]));
+                let insertIdx = nextChildIds.length;
+                if (params.targetId) {
+                    const tIdx = nextChildIds.indexOf(params.targetId);
+                    if (tIdx !== -1) {
+                        insertIdx = params.position === 'after' ? tIdx + 1 : tIdx;
+                    }
+                }
+                nextChildIds.splice(insertIdx, 0, groupId);
+
                 const withoutDragged = currentGroups
                     .filter(g => g.id !== groupId)
-                    .map(g => g.id === targetParentId ? { ...g, isExpanded: true } : g);
+                    .map(g => {
+                        if (g.id === targetParentId) {
+                            return { ...g, isExpanded: true, childOrder: nextChildIds };
+                        }
+                        if (Array.isArray(g.childOrder) && g.childOrder.includes(groupId)) {
+                            return { ...g, childOrder: g.childOrder.filter(id => id !== groupId) };
+                        }
+                        return g;
+                    });
                 const updatedDragged: RequestGroup = { ...draggedGroup, parentGroupId: targetParentId };
                 if (params.targetType === 'group' && params.targetId) {
                     const tIdx = withoutDragged.findIndex(g => g.id === params.targetId);
@@ -2513,9 +2599,13 @@ export class TabStateService {
             }
 
             // Place at root level (supports topmost root slot #0 or before/after any root node)
-            const rootUpdatedGroups = currentGroups.map(g =>
-                g.id === groupId ? { ...g, parentGroupId: null } : g
-            );
+            const rootUpdatedGroups = currentGroups.map(g => {
+                if (g.id === groupId) return { ...g, parentGroupId: null };
+                if (Array.isArray(g.childOrder) && g.childOrder.includes(groupId)) {
+                    return { ...g, childOrder: g.childOrder.filter(id => id !== groupId) };
+                }
+                return g;
+            });
             const nextRootIds = this.sidebarRootItems().map(it => it.id).filter(id => id !== groupId);
             let insertIdx = nextRootIds.length;
             if (params.targetType === 'root-top') {
@@ -2543,21 +2633,20 @@ export class TabStateService {
         };
 
         let destGroupId: string | null = null;
-        let anchorReqId: string | null = null;
-        let insertAtStartOfGroup = false;
+        let anchorChildId: string | null = null;
 
         if (params.targetType === 'group' && params.position === 'inside' && params.targetId) {
             destGroupId = params.targetId;
         } else if (params.targetType === 'request' && params.targetId) {
             destGroupId = resolveReqGroupId(params.targetId);
             if (destGroupId) {
-                anchorReqId = params.targetId;
+                anchorChildId = params.targetId;
             }
         } else if (params.targetType === 'group' && params.targetId && params.position !== 'inside') {
             const targetGrp = currentGroups.find(g => g.id === params.targetId);
             if (targetGrp?.parentGroupId) {
                 destGroupId = targetGrp.parentGroupId;
-                insertAtStartOfGroup = params.position === 'before';
+                anchorChildId = params.targetId;
             }
         }
 
@@ -2577,24 +2666,41 @@ export class TabStateService {
             this.savedCapsules.update(col => col.map(r => moveSet.has(r.id) ? { ...r, groupId: nextGroupId } : r));
         };
 
-        // 2A: Drop into a destination folder (at any nesting depth)
+        // 2A: Drop into a destination folder (at any nesting depth, interleaving freely with subfolders)
         if (destGroupId) {
             const updatedGroups = currentGroups.map(g => {
-                const filtered = getResolvedGroupRequestIds(g).filter(id => !moveSet.has(id));
+                const filteredReqs = getResolvedGroupRequestIds(g).filter(id => !moveSet.has(id));
+                const filteredOrder = Array.isArray(g.childOrder)
+                    ? g.childOrder.filter(id => !moveSet.has(id))
+                    : undefined;
                 if (g.id !== destGroupId) {
-                    return { ...g, requestIds: filtered };
+                    return {
+                        ...g,
+                        requestIds: filteredReqs,
+                        ...(filteredOrder ? { childOrder: filteredOrder } : {})
+                    };
                 }
-                let insertIdx = filtered.length;
-                if (anchorReqId) {
-                    const aIdx = filtered.indexOf(anchorReqId);
+                const nextChildIds = getCurrentFolderChildIds(destGroupId, moveSet);
+                let insertChildIdx = nextChildIds.length;
+                if (anchorChildId) {
+                    const aIdx = nextChildIds.indexOf(anchorChildId);
                     if (aIdx !== -1) {
-                        insertIdx = params.position === 'after' ? aIdx + 1 : aIdx;
+                        insertChildIdx = params.position === 'after' ? aIdx + 1 : aIdx;
                     }
-                } else if (insertAtStartOfGroup) {
-                    insertIdx = 0;
                 }
-                filtered.splice(insertIdx, 0, ...movingIds);
-                return { ...g, isExpanded: true, requestIds: filtered };
+                nextChildIds.splice(insertChildIdx, 0, ...movingIds);
+
+                const validReqSet = new Set([...filteredReqs, ...movingIds]);
+                const nextReqIds = nextChildIds.filter(id => validReqSet.has(id));
+                for (const id of validReqSet) {
+                    if (!nextReqIds.includes(id)) nextReqIds.push(id);
+                }
+                return {
+                    ...g,
+                    isExpanded: true,
+                    requestIds: nextReqIds,
+                    childOrder: nextChildIds
+                };
             });
 
             syncRequestGroupMembership(destGroupId);
@@ -2605,7 +2711,8 @@ export class TabStateService {
         // 2B: Drop at root level (before/after any root folder or request, or at root index 0)
         const updatedGroups = currentGroups.map(g => ({
             ...g,
-            requestIds: getResolvedGroupRequestIds(g).filter(id => !moveSet.has(id))
+            requestIds: getResolvedGroupRequestIds(g).filter(id => !moveSet.has(id)),
+            ...(Array.isArray(g.childOrder) ? { childOrder: g.childOrder.filter(id => !moveSet.has(id)) } : {})
         }));
         const nextRootIds = this.sidebarRootItems().map(it => it.id).filter(id => !moveSet.has(id));
         let insertIdx = nextRootIds.length;
@@ -2734,8 +2841,11 @@ export class TabStateService {
 
         // 1. Lightweight tab & capsule metadata persisted immediately
         effect(() => {
+            const capId = this.activeCapsuleId();
             if (this.isBrowser) {
-                const capId = this.activeCapsuleId();
+                if (capId) {
+                    this.getEnvironmentService()?.setCapsuleContext(capId);
+                }
                 const isLoadingCap = this.isCapsuleLoading() || this.isLoadingBackendData();
                 if (capId) {
                     localStorage.setItem('onsteroids_active_capsule', capId);
@@ -2803,10 +2913,12 @@ export class TabStateService {
     private loadFromStorage() {
         if (!this.isBrowser) return;
 
+        /* Auto-Save currently unplugged (manual Save only)
         const autoSavePref = localStorage.getItem('onsteroids_autosave');
         if (autoSavePref === 'true') {
             this.autoSaveEnabled.set(true);
         }
+        */
 
         const storedTimeout = localStorage.getItem(GLOBAL_TIMEOUT_STORAGE_KEY);
         if (storedTimeout !== null && storedTimeout.trim() !== '') {
@@ -3208,6 +3320,7 @@ export class TabStateService {
         try {
             this.activeCapsuleId.set(capsule.id);
             this.activeCapsuleName.set(capsule.name);
+            this.getEnvironmentService()?.setCapsuleContext(capsule.id);
             // Clear savedCapsules and sidebar focus immediately to avoid stale state from previous capsule
             this.savedCapsules.set([]);
             this.focusedSidebarItem.set(null);
@@ -3766,9 +3879,11 @@ export class TabStateService {
             return next;
         });
 
-        if (vs) {
+        const envSvc = this.getEnvironmentService();
+        if (vs || envSvc) {
             for (const capId of idSet) {
-                vs.clearCapsuleLocalData(capId);
+                vs?.clearCapsuleLocalData(capId);
+                envSvc?.deleteCapsuleContext(capId);
             }
         }
 
@@ -5540,6 +5655,7 @@ export class TabStateService {
         if (lastCreatedCap) {
             this.activeCapsuleId.set(lastCreatedCap.id);
             this.activeCapsuleName.set(lastCreatedCap.name);
+            this.getEnvironmentService()?.setCapsuleContext(lastCreatedCap.id);
             this.autoAuthEnabled.set((lastCreatedCap.autoAuthEnabled as any) || 'off');
             this.autoAuthEndpointId.set(lastCreatedCap.autoAuthEndpointId || null);
 
@@ -6162,20 +6278,24 @@ export class TabStateService {
         ]);
     }
 
-    triggerAutoSave(delayMs = 1500) {
+    /* Auto-Save currently unplugged (manual Save only) */
+    triggerAutoSave(_delayMs = 1500) {
         if (this.autoSaveTimeout) {
             clearTimeout(this.autoSaveTimeout);
+            this.autoSaveTimeout = null;
         }
+        /*
         this.autoSaveTimeout = setTimeout(() => this.runAutoSave(), delayMs);
+        */
     }
 
     private async runAutoSave() {
+        /*
         if (!this.autoSaveEnabled() || !this.authService.isLoggedIn() || this.authService.isLoggingOut()) return;
 
         const currentCap = this.capsules().find(c => c.id === this.activeCapsuleId());
         if (!currentCap || currentCap.isLocalOnly || this.deletingCapsuleIds.has(currentCap.id)) return;
 
-        // Never run two saves concurrently — retry shortly after the current one finishes
         if (this.isSaving() || this.isAutoSaving()) {
             this.triggerAutoSave(800);
             return;
@@ -6191,22 +6311,23 @@ export class TabStateService {
         } catch (e) {
             console.warn('Auto-save failed', e);
         }
+        */
     }
 
     toggleAutoSave() {
+        /* Auto-Save currently unplugged (manual Save only)
         const next = !this.autoSaveEnabled();
         this.autoSaveEnabled.set(next);
         if (this.isBrowser) {
             localStorage.setItem('onsteroids_autosave', next ? 'true' : 'false');
         }
         if (this.authService.isLoggedIn()) {
-            // Persist the preference to the backend right away for cross-device sync
             this.syncWorkspaceStateToBackend();
             if (next) {
-                // Flush any pending unsaved edits immediately when enabling auto-save
                 this.runAutoSave();
             }
         }
+        */
     }
 
     setRequestTimeoutMs(timeoutMs: number) {

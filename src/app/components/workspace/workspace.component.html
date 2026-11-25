@@ -344,35 +344,32 @@
                     </div>
                 </div>
 
-                <!-- Child Container (Separated Subfolders + Dedicated Requests) -->
-                @let childFoldersList = tabStateService.childGroupsMap().get(folderNode.group.id) || [];
+                <!-- Child Container (Unified Interleaved Subfolders & Requests) -->
+                @let childItems = tabStateService.folderChildrenMap().get(folderNode.group.id) || [];
                 <div [attr.data-folder-zone-id]="folderNode.group.isExpanded !== false ? folderNode.group.id : null"
                      class="folder-drop-zone flex flex-col gap-y-[2px] pl-1.5 border-l border-(--postonsteroids-border)/45 ml-[18px] my-[1px]"
                      [class.bg-(--postonsteroids-accent)/5]="isTargetInsideFolder && folderNode.group.isExpanded !== false"
                      [class.hidden]="folderNode.group.isExpanded === false">
                     @if (folderNode.group.isExpanded !== false) {
-                        @if (childFoldersList.length > 0) {
-                            <div class="flex flex-col gap-y-[2px]">
-                                @for (childFolder of childFoldersList; track childFolder.group.id) {
-                                    <div class="flex flex-col">
-                                        <ng-container *ngTemplateOutlet="folderNodeTpl; context: { $implicit: childFolder, depth: depth + 1 }"></ng-container>
-                                    </div>
+                        @if (childItems.length > 0) {
+                            <div class="flex flex-col gap-y-[2px] min-h-[16px]">
+                                @for (child of childItems; track child.id) {
+                                    @if (child.type === 'group') {
+                                        <div class="flex flex-col">
+                                            <ng-container *ngTemplateOutlet="folderNodeTpl; context: { $implicit: child, depth: depth + 1 }"></ng-container>
+                                        </div>
+                                    } @else {
+                                        <div class="flex flex-col relative">
+                                            <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: child.request, groupId: folderNode.group.id }"></ng-container>
+                                        </div>
+                                    }
                                 }
                             </div>
+                        } @else {
+                            <div class="py-1.5 px-2 text-[10.5px] text-(--postonsteroids-text-muted)/75 italic select-none">
+                                Empty folder — drag requests/folders here or add subfolder
+                            </div>
                         }
-
-                        <div class="flex flex-col gap-y-[2px] min-h-[16px]">
-                            @for (req of folderNode.requests; track req.id) {
-                                <div class="flex flex-col relative">
-                                    <ng-container *ngTemplateOutlet="requestRowTpl; context: { $implicit: req, groupId: folderNode.group.id }"></ng-container>
-                                </div>
-                            }
-                            @if (folderNode.requests.length === 0 && childFoldersList.length === 0) {
-                                <div class="py-1.5 px-2 text-[10.5px] text-(--postonsteroids-text-muted)/75 italic select-none">
-                                    Empty folder — drag requests/folders here or add subfolder
-                                </div>
-                            }
-                        </div>
                     }
                 </div>
             </ng-template>
