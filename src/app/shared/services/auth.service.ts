@@ -14,6 +14,14 @@ export interface UserAuth {
     isAuthenticated: boolean;
     hasPassword?: boolean;
     subscriptionTier?: 'community' | 'professional' | 'enterprise';
+    subscriptionExpiresAt?: string | null;
+    maskedLicenseCode?: string | null;
+    licenseType?: string | null;
+    individualType?: string | null;
+    isPersonalLicense?: boolean;
+    isEmailOtpVerified?: boolean;
+    licenseAccessSource?: string | null;
+    licensedEmailPattern?: string | null;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -43,6 +51,8 @@ export interface ApiResponse<T> {
 }
 
 export type AuthStep = 'email' | 'otp' | 'create-password' | 'login-password' | 'change-password';
+export type AuthPlanIntent = 'free' | 'pro' | 'enterprise';
+export type AuthActionMode = 'signin' | 'signup';
 
 export interface PasswordValidationState {
     minLength: boolean;
@@ -100,6 +110,11 @@ export class AuthService {
     confirmPassword = signal<string>('');
 
     authStep = signal<AuthStep>('email');
+    authIntent = signal<AuthPlanIntent>(
+        APP_EDITION.id === 'enterprise' ? 'enterprise' : APP_EDITION.id === 'professional' ? 'pro' : 'free'
+    );
+    authAction = signal<AuthActionMode>('signin');
+    pendingLicenseCode = signal<string>('');
     isOtpSent = signal<boolean>(false);
     isPasswordResetFlow = signal<boolean>(false);
     isAuthenticating = signal<boolean>(false);
@@ -228,10 +243,13 @@ export class AuthService {
                 this.userEmail.set(user.email);
                 this.isLoggedIn.set(true);
                 this.showAuthModal.set(false);
-                if (user.subscriptionTier) {
-                    this.subscriptionService.syncFromUserSubscription(user.subscriptionTier);
+                const isTest = savedToken.startsWith('onsteroid-test-token-');
+                this.syncSubscriptionFromUser(user, isTest);
+                if (!isTest) {
+                    void this.subscriptionService.refreshStatusFromBackend();
                 }
             } else {
+                this.subscriptionService.resetToFreeOnLogout();
                 this.showAuthModal.set(!APP_EDITION.isProOrHigher);
             }
         } catch (e) {
@@ -395,16 +413,42 @@ export class AuthService {
         this.authStep.set('login-password');
     }
 
+    private resolveTestUserDefaultSelection(email: string): { tier: 'community' | 'professional' | 'enterprise'; licenseType: string | null; individualType: string | null } {
+        const clean = (email || '').trim().toLowerCase();
+        if (clean === 'enterprise@onsteroid.com') return { tier: 'enterprise', licenseType: 'enterprise', individualType: 'organization' };
+        if (clean === 'pro@onsteroid.com') return { tier: 'professional', licenseType: 'individual', individualType: 'personal' };
+        return this.subscriptionService.getStoredQaPreviewSelection() ?? { tier: 'community', licenseType: null, individualType: null };
+    }
+
+    private syncSubscriptionFromUser(user: UserAuth | null | undefined, isTestUser: boolean): void {
+        this.subscriptionService.syncFromUserSubscription(user?.subscriptionTier ?? 'community', {
+            isTestUser,
+            expiresAt: user?.subscriptionExpiresAt,
+            maskedCode: user?.maskedLicenseCode,
+            licenseType: user?.licenseType,
+            individualType: user?.individualType,
+            isPersonalLicense: user?.isPersonalLicense,
+            isEmailOtpVerified: user?.isEmailOtpVerified,
+            accessSource: user?.licenseAccessSource,
+            licensedEmailPattern: user?.licensedEmailPattern,
+        });
+    }
+
     loginAsTestUser(email = AuthService.TEST_USER_EMAIL): boolean {
         const cleanEmail = (email || AuthService.TEST_USER_EMAIL).trim().toLowerCase();
         const nowIso = new Date().toISOString();
+        const selection = this.resolveTestUserDefaultSelection(cleanEmail);
         const testData: AuthLoginResponseData = {
             user: {
                 id: 'onsteroid-test-user-001',
                 email: cleanEmail,
                 isAuthenticated: true,
                 hasPassword: true,
-                subscriptionTier: this.subscriptionService.tier(),
+                subscriptionTier: selection.tier,
+                licenseType: selection.licenseType,
+                individualType: selection.individualType,
+                isPersonalLicense: selection.individualType === 'personal',
+                isEmailOtpVerified: true,
                 createdAt: nowIso,
                 updatedAt: nowIso
             },
@@ -419,6 +463,31 @@ export class AuthService {
         return true;
     }
 
+    setAuthIntent(intent: AuthPlanIntent, action?: AuthActionMode) {
+        this.authIntent.set(intent);
+        if (intent === 'enterprise') {
+            // Enterprise supports Sign In only; new company users are automatically OTP-verified & registered on first sign-in.
+            this.authAction.set('signin');
+        } else if (action) {
+            this.authAction.set(action);
+        }
+        if (intent !== 'pro') {
+            this.pendingLicenseCode.set('');
+        }
+        this.errorMessage.set(null);
+        this.successMessage.set(null);
+    }
+
+    setAuthAction(action: AuthActionMode) {
+        if (this.authIntent() === 'enterprise') {
+            this.authAction.set('signin');
+            return;
+        }
+        this.authAction.set(action);
+        this.errorMessage.set(null);
+        this.successMessage.set(null);
+    }
+
     resetToEmailStep() {
         this.authStep.set('email');
         this.isOtpSent.set(false);
@@ -427,6 +496,7 @@ export class AuthService {
         this.currentPassword.set('');
         this.password.set('');
         this.confirmPassword.set('');
+        this.pendingLicenseCode.set('');
         this.errorMessage.set(null);
         this.successMessage.set(null);
     }
@@ -466,11 +536,16 @@ export class AuthService {
                     this.http.post<ApiResponse<SendOtpResponseData>>(`${API_BASE_URL}/auth/check-email`, { email, forceOtp: false })
                 );
                 if (checkRes?.data?.hasPassword) {
+                    const wasSignupChoice = this.authIntent() !== 'enterprise' && this.authAction() === 'signup';
                     this.isOtpSent.set(false);
                     this.authStep.set('login-password');
                     this.password.set('');
                     this.confirmPassword.set('');
-                    this.successMessage.set(null);
+                    this.successMessage.set(
+                        wasSignupChoice
+                            ? 'This email already has an account — enter your password to sign in.'
+                            : null
+                    );
                     this.isAuthenticating.set(false);
                     return true;
                 }
@@ -499,7 +574,9 @@ export class AuthService {
                     this.authStep.set('otp');
                     this.otp.set('');
                     this.startOtpCooldown(data?.retryAfterSeconds ?? 60);
-                    this.successMessage.set(res.message || `Verification code sent to ${email}`);
+                    this.successMessage.set(res.message || (this.authIntent() === 'enterprise'
+                        ? `First-time Enterprise verification code sent to ${email}`
+                        : `Verification code sent to ${email}`));
                     this.isAuthenticating.set(false);
                     resolve(true);
                 },
@@ -605,7 +682,9 @@ export class AuthService {
                         res.message ||
                         (this.isPasswordResetFlow()
                             ? 'Code verified! Enter your new password below.'
-                            : 'Email verified! Create a strong password to complete your account.')
+                            : this.authIntent() === 'enterprise'
+                                ? 'Corporate email OTP verified! Create your password to finish Enterprise registration.'
+                                : 'Email verified! Create a strong password to complete your account.')
                     );
                     resolve(false);
                 },
@@ -779,8 +858,18 @@ export class AuthService {
         });
     }
 
+    private async activatePendingProKeyAfterAuth(code: string): Promise<void> {
+        const res = await this.subscriptionService.activateRegistrationCode(code);
+        if (res.ok) {
+            this.notificationService.notify('Pro (Personal) license activated!', 'success');
+        } else if (res.message) {
+            this.notificationService.notify(`Signed in, but Pro key could not be activated: ${res.message}`, 'warning');
+        }
+    }
+
     private finalizeLogin(data: AuthLoginResponseData) {
         const prevUser = this.currentUser();
+        const pendingProCode = this.authIntent() === 'pro' ? this.pendingLicenseCode().trim() : '';
 
         if (prevUser && prevUser.id !== data.user.id) {
             this.onLogout.next(prevUser);
@@ -792,8 +881,15 @@ export class AuthService {
         this.currentUser.set(data.user);
         this.isLoggedIn.set(true);
         this.showAuthModal.set(false);
-        if (data.user?.subscriptionTier) {
-            this.subscriptionService.syncFromUserSubscription(data.user.subscriptionTier);
+        const isTest = (data.token || '').startsWith('onsteroid-test-token-');
+        this.syncSubscriptionFromUser(data.user, isTest);
+        this.pendingLicenseCode.set('');
+        if (!isTest) {
+            if (pendingProCode) {
+                void this.activatePendingProKeyAfterAuth(pendingProCode);
+            } else {
+                void this.subscriptionService.refreshStatusFromBackend();
+            }
         }
         this.authStep.set('email');
         this.isOtpSent.set(false);
@@ -845,6 +941,7 @@ export class AuthService {
         this.onLogout.next(user);
 
         this.clearStorage();
+        this.subscriptionService.resetToFreeOnLogout();
         this.isLoggedIn.set(false);
         this.currentUser.set(null);
         this.token.set(null);
@@ -898,9 +995,16 @@ export class AuthService {
                 if (res && res.data && res.data.token) {
                     this.token.set(res.data.token);
                     this.refreshToken.set(res.data.refreshToken);
+                    if (res.data.user) {
+                        this.currentUser.set(res.data.user);
+                        this.syncSubscriptionFromUser(res.data.user, false);
+                    }
                     if (this.isBrowser) {
                         localStorage.setItem(AUTH_TOKEN_KEY, res.data.token);
                         localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, res.data.refreshToken);
+                        if (res.data.user) {
+                            localStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.data.user));
+                        }
                     }
                     return true;
                 }

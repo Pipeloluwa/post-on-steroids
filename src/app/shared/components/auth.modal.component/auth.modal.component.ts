@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { MatIcon } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
+import { DESKTOP_DOWNLOADS_CONFIG } from '../../constants/desktop-downloads.constants';
+import { formatRegistrationCodeInput } from '../../utils/license-code.util';
 import { APP_EDITION } from '../../../../environments/edition';
 
 @Component({
@@ -14,6 +16,7 @@ import { APP_EDITION } from '../../../../environments/edition';
 export class AuthModalComponent {
     authService = inject(AuthService);
     readonly appEdition = APP_EDITION;
+    readonly pricingPlansUrl = `${DESKTOP_DOWNLOADS_CONFIG.homepagePricingUrl}?plan=pro`;
     readonly testUserEmail = AuthService.TEST_USER_EMAIL;
     readonly testUserPassword = AuthService.TEST_USER_PASSWORD;
 
@@ -124,6 +127,10 @@ export class AuthModalComponent {
         } else {
             await this.authService.sendOtp(true);
         }
+    }
+
+    onPendingLicenseInput(raw: string) {
+        this.authService.pendingLicenseCode.set(formatRegistrationCodeInput(raw));
     }
 
     backToEmail() {

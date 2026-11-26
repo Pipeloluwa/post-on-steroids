@@ -1,10 +1,11 @@
 import { Component, ChangeDetectionStrategy, inject, OnInit } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { VersionCheckService } from './shared/services/version-check.service';
+import { LicenseUpgradeModalComponent } from './shared/components/license-upgrade.modal.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, LicenseUpgradeModalComponent],
   templateUrl: './app.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })

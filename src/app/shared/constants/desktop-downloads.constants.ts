@@ -32,6 +32,12 @@ export interface DesktopDownloadsConfig {
   homepageDownloadUrl: string;
 
   /**
+   * Dedicated URL for the Homepage App's Pricing & Plans page
+   * e.g. 'https://onsteroid.com/pricing'
+   */
+  homepagePricingUrl: string;
+
+  /**
    * Relative or absolute path where built installer files are located
    * e.g. '/downloads' -> '/downloads/OnSteroid-Setup.exe'
    * e.g. ''           -> '/OnSteroid-Setup.exe'
@@ -48,6 +54,7 @@ export const DESKTOP_DOWNLOADS_CONFIG: DesktopDownloadsConfig = {
   // Configurable Homepage URL
   homepageUrl: 'https://onsteroid.com',
   homepageDownloadUrl: 'https://onsteroid.com/download',
+  homepagePricingUrl: 'https://onsteroid.com/pricing',
   downloadsDirectoryUrl: 'https://onsteroid.com/download',
 
   packages: [

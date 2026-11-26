@@ -179,8 +179,8 @@ interface UnifiedAutomationLog {
               </div>
             </div>
           } @else {
-            <div class="rounded-xl border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5 flex items-center gap-2.5 text-xs text-amber-200/90">
-              <mat-icon class="text-[17px]! size-[17px]! text-amber-400 shrink-0">info</mat-icon>
+            <div class="inline-flex w-fit max-w-full items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-2.5 py-1 text-[11px] text-amber-200/90">
+              <mat-icon class="text-[14px]! size-[14px]! text-amber-400 shrink-0">info</mat-icon>
               <span>
                 Avoid linking two requests mutually (e.g. A &rarr; B and B &rarr; A) or a trigger loop can occur.
               </span>

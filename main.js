@@ -142,6 +142,9 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    center: true,
+    show: false,
+    backgroundColor: '#212121',
     title: 'OnSteroid',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -156,6 +159,42 @@ function createWindow() {
       webSecurity: false,
       preload: path.join(__dirname, 'preload.js')
     },
+  });
+
+  const revealMainWindow = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.moveTop();
+    mainWindow.focus();
+  };
+
+  mainWindow.once('ready-to-show', () => {
+    revealMainWindow();
+    if (typeof app.focus === 'function') {
+      app.focus({ steal: true });
+    }
+  });
+
+  mainWindow.webContents.once('did-finish-load', revealMainWindow);
+  setTimeout(revealMainWindow, 1500);
+
+  mainWindow.webContents.on('will-prevent-unload', (event) => {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['Close App', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: 'Unsaved Cloud Sync Changes',
+      message: 'You have unsaved request changes not yet saved to cloud.',
+      detail: 'Close OnSteroid anyway? Your local drafts are preserved.'
+    });
+    if (choice === 0) {
+      // Preventing the will-prevent-unload event tells Chromium to proceed with closing.
+      event.preventDefault();
+    }
   });
 
   ipcMain.on('theme-changed', (event, theme) => {
@@ -216,9 +255,38 @@ function createWindow() {
     }
   });
 
+  mainWindow.on('close', function () {
+    cleanupRuntimeResources();
+  });
+
   mainWindow.on('closed', function () {
+    cleanupRuntimeResources();
     mainWindow = null;
   });
+}
+
+function cleanupRuntimeResources() {
+  if (updateCheckInterval) {
+    clearInterval(updateCheckInterval);
+    updateCheckInterval = null;
+  }
+  if (typeof activeHttpRequests !== 'undefined' && activeHttpRequests && activeHttpRequests.size > 0) {
+    for (const [reqId, activeReq] of activeHttpRequests.entries()) {
+      try {
+        activeReq.destroy(new Error('APP_CLOSING'));
+      } catch {}
+      activeHttpRequests.delete(reqId);
+    }
+  }
+  if (typeof activeMockServer !== 'undefined' && activeMockServer) {
+    try {
+      if (typeof activeMockServer.closeAllConnections === 'function') {
+        activeMockServer.closeAllConnections();
+      }
+      activeMockServer.close();
+    } catch {}
+    activeMockServer = null;
+  }
 }
 
 function showDialogBox(options) {
@@ -1329,11 +1397,12 @@ app.on('ready', () => {
   }, 30 * 60 * 1000);
 });
 
+app.on('before-quit', function () {
+  cleanupRuntimeResources();
+});
+
 app.on('window-all-closed', function () {
-  if (updateCheckInterval) {
-    clearInterval(updateCheckInterval);
-    updateCheckInterval = null;
-  }
+  cleanupRuntimeResources();
   if (process.platform !== 'darwin') app.quit();
 });
 

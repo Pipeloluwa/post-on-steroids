@@ -158,18 +158,29 @@
 
         <!-- Right Section: Edition Badge, Desktop Download & Auth/Settings -->
         <div class="flex items-center justify-end gap-x-1.5 2xl:gap-x-2.5 shrink-0" style="-webkit-app-region: no-drag;">
-            <span class="px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider border leading-none shrink-0"
-                  [class.bg-amber-500/15]="subscriptionService.tier() === 'enterprise'"
-                  [class.text-amber-500]="subscriptionService.tier() === 'enterprise'"
-                  [class.border-amber-500/35]="subscriptionService.tier() === 'enterprise'"
-                  [class.bg-indigo-500/15]="subscriptionService.tier() === 'professional'"
-                  [class.text-indigo-500]="subscriptionService.tier() === 'professional'"
-                  [class.border-indigo-500/35]="subscriptionService.tier() === 'professional'"
-                  [class.bg-(--postonsteroids-bg-tertiary)]="subscriptionService.tier() === 'community'"
-                  [class.text-(--postonsteroids-text-muted)]="subscriptionService.tier() === 'community'"
-                  [class.border-(--postonsteroids-border)]="subscriptionService.tier() === 'community'">
-                {{ subscriptionService.badgeLabel() }}
-            </span>
+            @if (!subscriptionService.isOpenSourceCommunityBuild) {
+                <button type="button" (click)="openLicenseModal($event)"
+                      [title]="subscriptionService.isPersonalLicense() ? 'Personal Individual License — Enterprise restricted (click to manage)' : 'Manage Plan or Activate Registration Code'"
+                      class="px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider border leading-none shrink-0 cursor-pointer hover:brightness-110 transition-all"
+                      [class.bg-sky-500/15]="subscriptionService.isPersonalLicense()"
+                      [class.text-sky-300]="subscriptionService.isPersonalLicense()"
+                      [class.border-sky-500/40]="subscriptionService.isPersonalLicense()"
+                      [class.bg-amber-500/15]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'enterprise'"
+                      [class.text-amber-500]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'enterprise'"
+                      [class.border-amber-500/35]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'enterprise'"
+                      [class.bg-indigo-500/15]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'professional'"
+                      [class.text-indigo-500]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'professional'"
+                      [class.border-indigo-500/35]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'professional'"
+                      [class.bg-(--postonsteroids-bg-tertiary)]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'community'"
+                      [class.text-(--postonsteroids-text-muted)]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'community'"
+                      [class.border-(--postonsteroids-border)]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'community'">
+                    {{ subscriptionService.badgeLabel() }}
+                </button>
+            } @else {
+                <span class="px-1 py-px rounded text-[8px] font-bold uppercase tracking-wider border leading-none shrink-0 bg-(--postonsteroids-bg-tertiary) text-(--postonsteroids-text-muted) border-(--postonsteroids-border)">
+                    {{ subscriptionService.badgeLabel() }}
+                </span>
+            }
             @if (!isElectron) {
                 <div class="flex items-center gap-x-2.5 shrink-0">
                     <span class="text-[10px] lg:text-[11px] text-(--postonsteroids-text-muted) italic whitespace-nowrap shrink-0 hidden min-[2200px]:inline-flex items-center gap-1">
@@ -216,34 +227,78 @@
                     </div>
 
                     @if (!subscriptionService.isOpenSourceCommunityBuild) {
-                        <div class="px-3 py-2 border-b border-(--postonsteroids-border)/60 mb-0.5">
-                            <div class="text-[10px] uppercase tracking-wider font-semibold text-(--postonsteroids-text-muted) mb-1.5">Subscription Plan</div>
-                            <div class="grid grid-cols-3 gap-1">
-                                <button type="button" (click)="switchSubscriptionPlan('community', $event)"
-                                        class="px-1.5 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors"
-                                        [class.bg-(--postonsteroids-accent)]="subscriptionService.tier() === 'community'"
-                                        [class.text-white]="subscriptionService.tier() === 'community'"
-                                        [class.border-(--postonsteroids-accent)]="subscriptionService.tier() === 'community'"
-                                        [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'community'">
-                                    Free
-                                </button>
-                                <button type="button" (click)="switchSubscriptionPlan('professional', $event)"
-                                        class="px-1.5 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors"
-                                        [class.bg-indigo-600]="subscriptionService.tier() === 'professional'"
-                                        [class.text-white]="subscriptionService.tier() === 'professional'"
-                                        [class.border-indigo-500]="subscriptionService.tier() === 'professional'"
-                                        [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'professional'">
-                                    Pro
-                                </button>
-                                <button type="button" (click)="switchSubscriptionPlan('enterprise', $event)"
-                                        class="px-1.5 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors"
-                                        [class.bg-amber-600]="subscriptionService.tier() === 'enterprise'"
-                                        [class.text-white]="subscriptionService.tier() === 'enterprise'"
-                                        [class.border-amber-500]="subscriptionService.tier() === 'enterprise'"
-                                        [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'enterprise'">
-                                    Ent
-                                </button>
+                        <div class="px-3 py-2 border-b border-(--postonsteroids-border)/60 mb-0.5 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-[10px] uppercase tracking-wider font-semibold text-(--postonsteroids-text-muted)">Plan</span>
+                                <span class="text-[10.5px] font-bold"
+                                      [class.text-sky-300]="subscriptionService.isPersonalLicense()"
+                                      [class.text-amber-400]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'enterprise'"
+                                      [class.text-indigo-400]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'professional'"
+                                      [class.text-(--postonsteroids-text-secondary)]="!subscriptionService.isPersonalLicense() && subscriptionService.tier() === 'community'">
+                                    {{ subscriptionService.label() }}
+                                </span>
                             </div>
+
+                            @if (subscriptionService.isPersonalLicense()) {
+                                <div class="px-2 py-1 rounded bg-sky-500/12 border border-sky-500/30 text-[10px] font-semibold text-sky-300 flex items-center justify-between gap-1.5">
+                                    <span>Personal Individual</span>
+                                    <span class="uppercase text-[9px] text-sky-400/90">No Ent</span>
+                                </div>
+                            } @else if (subscriptionService.entitlement().accessSource === 'domain' && subscriptionService.entitlement().licensedEmailPattern) {
+                                <div class="px-2 py-1 rounded bg-indigo-500/12 border border-indigo-500/30 text-[10px] font-semibold text-indigo-300 truncate">
+                                    OTP Domain: {{ subscriptionService.entitlement().licensedEmailPattern }}
+                                </div>
+                            }
+
+                            @if (subscriptionService.tier() === 'community') {
+                                <a [href]="subscriptionService.getHomepagePricingUrl('pro')"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   class="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold cursor-pointer transition-colors no-underline">
+                                    <mat-icon class="text-[14px]! size-[14px]!">rocket_launch</mat-icon>
+                                    <span>Activate Pro · Pricing &amp; Plans</span>
+                                    <mat-icon class="text-[12px]! size-[12px]!">open_in_new</mat-icon>
+                                </a>
+                            }
+
+                            <button type="button" (click)="openLicenseModal($event)"
+                                class="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 text-(--postonsteroids-accent) border border-(--postonsteroids-accent)/35 text-[11px] font-semibold cursor-pointer transition-colors">
+                                <mat-icon class="text-[14px]! size-[14px]!">vpn_key</mat-icon>
+                                <span>{{ subscriptionService.entitlement().isActive ? 'Manage License Key' : 'Have a Key? Redeem Code' }}</span>
+                            </button>
+
+                            @if (authService.isTestUserSession()) {
+                                <div class="pt-1 border-t border-(--postonsteroids-border)/40">
+                                    <div class="text-[9.5px] uppercase tracking-wider font-semibold text-(--postonsteroids-text-muted) mb-1">QA Preview Switcher</div>
+                                    <div class="grid grid-cols-3 gap-1">
+                                        <button type="button" (click)="switchSubscriptionPlan('community', $event)"
+                                                class="px-1 py-1 rounded text-[9.5px] font-bold border cursor-pointer transition-colors"
+                                                [class.bg-(--postonsteroids-accent)]="subscriptionService.tier() === 'community'"
+                                                [class.text-white]="subscriptionService.tier() === 'community'"
+                                                [class.border-(--postonsteroids-accent)]="subscriptionService.tier() === 'community'"
+                                                [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'community'">
+                                            Free
+                                        </button>
+                                        <button type="button" (click)="switchSubscriptionPlan('professional', $event)"
+                                                title="Pro (Personal Individual by default)"
+                                                class="px-1 py-1 rounded text-[9.5px] font-bold border cursor-pointer transition-colors"
+                                                [class.bg-sky-600]="subscriptionService.tier() === 'professional'"
+                                                [class.text-white]="subscriptionService.tier() === 'professional'"
+                                                [class.border-sky-500]="subscriptionService.tier() === 'professional'"
+                                                [class.border-(--postonsteroids-border)]="subscriptionService.tier() !== 'professional'">
+                                            Pro
+                                        </button>
+                                        <button type="button" (click)="switchSubscriptionPlan('enterprise', $event)"
+                                                class="px-1 py-1 rounded text-[9.5px] font-bold border cursor-pointer transition-colors"
+                                                [class.bg-amber-600]="subscriptionService.tier() === 'enterprise' && !subscriptionService.isPersonalLicense()"
+                                                [class.text-white]="subscriptionService.tier() === 'enterprise' && !subscriptionService.isPersonalLicense()"
+                                                [class.border-amber-500]="subscriptionService.tier() === 'enterprise' && !subscriptionService.isPersonalLicense()"
+                                                [class.border-(--postonsteroids-border)]="!(subscriptionService.tier() === 'enterprise' && !subscriptionService.isPersonalLicense())">
+                                            Ent
+                                        </button>
+                                    </div>
+                                </div>
+                            }
                         </div>
                     }
 

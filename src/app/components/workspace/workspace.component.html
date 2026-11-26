@@ -76,104 +76,107 @@
             </div>
         }
 
-        <!-- Capsule Requests list (visible when expanded) -->
-        <div data-sidebar-scroll="true" class="flex-1 overflow-y-auto overflow-x-hidden pb-1 sidebar-scroll" [class.hidden]="!isSidebarOpen()" (click)="onSidebarBackgroundClick($event)">
-            <div class="sticky top-0 z-20 flex flex-col px-2.5 py-1.5 border-b border-(--postonsteroids-border)/60 mb-0.5 gap-y-1.5 bg-(--postonsteroids-bg-secondary) backdrop-blur-xs shadow-xs">
-                <div class="flex items-center justify-between gap-x-1 min-w-0">
-                    <div class="flex items-center gap-x-2 min-w-0">
-                        <input type="checkbox"
-                               [checked]="isAllSidebarSelected()"
-                               (change)="toggleSelectAllRequests()"
-                               title="Select all folders and requests"
-                               aria-label="Select all folders and requests"
-                               class="sidebar-checkbox shrink-0" />
-                        <span class="text-[10.5px] font-semibold text-(--postonsteroids-text-muted) tracking-wider uppercase select-none truncate">Requests</span>
-                    </div>
-                    <div class="flex items-center gap-x-0.5 shrink-0">
-                        <button (click)="createNewFolder($event)" type="button" title="New Folder / Group" aria-label="New Folder"
-                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer flex items-center justify-center">
-                            <mat-icon class="text-[15px]! size-[15px]!">create_new_folder</mat-icon>
-                        </button>
-                        <button (click)="addNewRequest()" type="button" [title]="newRequestButtonTitle()" aria-label="New Request"
-                                class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
-                            <mat-icon class="text-[15px]! size-[15px]!">add</mat-icon>
-                        </button>
-                    </div>
+        <!-- Capsule Requests header (pinned above vertical/horizontal tree scroller) -->
+        <div class="shrink-0 flex flex-col px-2.5 py-1.5 border-b border-(--postonsteroids-border)/60 gap-y-1.5 bg-(--postonsteroids-bg-secondary) shadow-xs z-20"
+             [class.hidden]="!isSidebarOpen()">
+            <div class="flex items-center justify-between gap-x-1 min-w-0">
+                <div class="flex items-center gap-x-2 min-w-0">
+                    <input type="checkbox"
+                           [checked]="isAllSidebarSelected()"
+                           (change)="toggleSelectAllRequests()"
+                           title="Select all folders and requests"
+                           aria-label="Select all folders and requests"
+                           class="sidebar-checkbox shrink-0" />
+                    <span class="text-[10.5px] font-semibold text-(--postonsteroids-text-muted) tracking-wider uppercase select-none truncate">Requests</span>
                 </div>
-
-                @if (selectedRequestIds().size > 0 || selectedGroupIds().size > 0) {
-                    <div class="flex flex-wrap items-center gap-1 pt-1 border-t border-(--postonsteroids-border)/30 relative">
-                        @if (selectedRequestIds().size > 0) {
-                            <button (click)="groupSelectedRequests($event)" type="button"
-                                    title="Group selected requests into a new or existing folder"
-                                    class="py-0.5 px-1.5 rounded bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 text-(--postonsteroids-accent) text-[10px] font-semibold flex items-center gap-x-0.5 cursor-pointer transition-colors">
-                                <mat-icon class="text-[12px]! size-[12px]!">create_new_folder</mat-icon>
-                                <span>Group ({{ selectedRequestIds().size }})</span>
-                                <mat-icon class="text-[11px]! size-[11px]! opacity-75">expand_more</mat-icon>
-                            </button>
-                        }
-                        <button (click)="openTransferModalFromSelection('copy', $event)" type="button"
-                                title="Copy or move selected request(s) to another capsule"
-                                class="py-0.5 px-1.5 rounded bg-(--postonsteroids-accent)/12 hover:bg-(--postonsteroids-accent)/22 text-(--postonsteroids-accent) text-[10px] font-semibold flex items-center gap-x-0.5 cursor-pointer transition-colors">
-                            <mat-icon class="text-[12px]! size-[12px]!">drive_file_move</mat-icon>
-                            <span>Capsule</span>
-                        </button>
-                        <button (click)="batchDeleteSelectedRequests()" type="button"
-                                [disabled]="isDeletingRequests()"
-                                title="Delete selected folder(s) and request(s)"
-                                class="py-0.5 px-1.5 rounded bg-status-danger/12 hover:bg-status-danger/22 text-status-danger text-[10px] font-semibold flex items-center gap-x-0.5 cursor-pointer disabled:opacity-50 transition-colors">
-                            <mat-icon class="text-[12px]! size-[12px]!">delete</mat-icon>
-                            <span>{{ batchDeleteCountLabel() }}</span>
-                        </button>
-
-                        @if (groupSelectionMenuOpen()) {
-                            <div (click)="$event.stopPropagation()"
-                                 class="mt-1 w-full rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) shadow-2xl p-2 space-y-1.5 text-[11px] z-30">
-                                <div class="text-[9.5px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
-                                    Group {{ selectedRequestIds().size }} Request(s)
-                                </div>
-                                <div class="flex items-center gap-1">
-                                    <input type="text"
-                                           [ngModel]="customGroupName()"
-                                           (ngModelChange)="customGroupName.set($event)"
-                                           (keydown.enter)="groupSelectedIntoNewFolder(customGroupName(), $event)"
-                                           placeholder="Custom folder name..."
-                                           class="flex-1 min-w-0 px-2 py-1 rounded bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
-                                    <button type="button" (click)="groupSelectedIntoNewFolder(customGroupName(), $event)"
-                                            class="px-2 py-1 rounded bg-(--postonsteroids-accent) text-white font-semibold cursor-pointer shrink-0">
-                                        Create
-                                    </button>
-                                </div>
-                                <button type="button" (click)="groupSelectedIntoNewFolder('New Folder', $event)"
-                                        class="w-full px-2 py-1.5 rounded text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) font-medium flex items-center gap-1.5 cursor-pointer">
-                                    <mat-icon class="text-[14px]! size-[14px]!">create_new_folder</mat-icon>
-                                    <span>Quick New Folder</span>
-                                </button>
-                                @if (tabStateService.activeCapsuleGroups().length > 0) {
-                                    <div class="h-px bg-(--postonsteroids-border)/50"></div>
-                                    <div class="text-[9px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
-                                        Or Move into Existing Folder
-                                    </div>
-                                    <div class="max-h-40 overflow-y-auto custom-scrollbar space-y-0.5">
-                                        @for (g of tabStateService.activeCapsuleGroups(); track g.id) {
-                                            @let gFull = tabStateService.getFolderFullPath(g.id);
-                                            <button type="button" (click)="groupSelectedIntoExistingFolder(g.id, $event)"
-                                                    [title]="gFull"
-                                                    class="w-full px-2 py-1.5 rounded text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) flex items-start gap-1.5 cursor-pointer">
-                                                <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent) shrink-0 mt-0.5">folder</mat-icon>
-                                                <span class="break-words leading-snug">{{ gFull }}</span>
-                                            </button>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
+                <div class="flex items-center gap-x-0.5 shrink-0">
+                    <button (click)="createNewFolder($event)" type="button" title="New Folder / Group" aria-label="New Folder"
+                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-accent) transition-colors cursor-pointer flex items-center justify-center">
+                        <mat-icon class="text-[15px]! size-[15px]!">create_new_folder</mat-icon>
+                    </button>
+                    <button (click)="addNewRequest()" type="button" [title]="newRequestButtonTitle()" aria-label="New Request"
+                            class="p-0.5 rounded hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-colors cursor-pointer flex items-center justify-center">
+                        <mat-icon class="text-[15px]! size-[15px]!">add</mat-icon>
+                    </button>
+                </div>
             </div>
 
+            @if (selectedRequestIds().size > 0 || selectedGroupIds().size > 0) {
+                <div class="flex flex-wrap items-center gap-1 pt-1 border-t border-(--postonsteroids-border)/30 relative">
+                    @if (selectedRequestIds().size > 0) {
+                        <button (click)="groupSelectedRequests($event)" type="button"
+                                title="Group selected requests into a new or existing folder"
+                                class="py-0.5 px-1.5 rounded bg-(--postonsteroids-accent)/15 hover:bg-(--postonsteroids-accent)/25 text-(--postonsteroids-accent) text-[10px] font-semibold flex items-center gap-x-0.5 cursor-pointer transition-colors">
+                            <mat-icon class="text-[12px]! size-[12px]!">create_new_folder</mat-icon>
+                            <span>Group ({{ selectedRequestIds().size }})</span>
+                            <mat-icon class="text-[11px]! size-[11px]! opacity-75">expand_more</mat-icon>
+                        </button>
+                    }
+                    <button (click)="openTransferModalFromSelection('copy', $event)" type="button"
+                            title="Copy or move selected request(s) to another capsule"
+                            class="py-0.5 px-1.5 rounded bg-(--postonsteroids-accent)/12 hover:bg-(--postonsteroids-accent)/22 text-(--postonsteroids-accent) text-[10px] font-semibold flex items-center gap-x-0.5 cursor-pointer transition-colors">
+                        <mat-icon class="text-[12px]! size-[12px]!">drive_file_move</mat-icon>
+                        <span>Capsule</span>
+                    </button>
+                    <button (click)="batchDeleteSelectedRequests()" type="button"
+                            [disabled]="isDeletingRequests()"
+                            title="Delete selected folder(s) and request(s)"
+                            class="py-0.5 px-1.5 rounded bg-status-danger/12 hover:bg-status-danger/22 text-status-danger text-[10px] font-semibold flex items-center gap-x-0.5 cursor-pointer disabled:opacity-50 transition-colors">
+                        <mat-icon class="text-[12px]! size-[12px]!">delete</mat-icon>
+                        <span>{{ batchDeleteCountLabel() }}</span>
+                    </button>
+
+                    @if (groupSelectionMenuOpen()) {
+                        <div (click)="$event.stopPropagation()"
+                             class="mt-1 w-full rounded-lg bg-(--postonsteroids-bg-primary) border border-(--postonsteroids-border) shadow-2xl p-2 space-y-1.5 text-[11px] z-30">
+                            <div class="text-[9.5px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                                Group {{ selectedRequestIds().size }} Request(s)
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <input type="text"
+                                       [ngModel]="customGroupName()"
+                                       (ngModelChange)="customGroupName.set($event)"
+                                       (keydown.enter)="groupSelectedIntoNewFolder(customGroupName(), $event)"
+                                       placeholder="Custom folder name..."
+                                       class="flex-1 min-w-0 px-2 py-1 rounded bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent)" />
+                                <button type="button" (click)="groupSelectedIntoNewFolder(customGroupName(), $event)"
+                                        class="px-2 py-1 rounded bg-(--postonsteroids-accent) text-white font-semibold cursor-pointer shrink-0">
+                                    Create
+                                </button>
+                            </div>
+                            <button type="button" (click)="groupSelectedIntoNewFolder('New Folder', $event)"
+                                    class="w-full px-2 py-1.5 rounded text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-accent) font-medium flex items-center gap-1.5 cursor-pointer">
+                                <mat-icon class="text-[14px]! size-[14px]!">create_new_folder</mat-icon>
+                                <span>Quick New Folder</span>
+                            </button>
+                            @if (tabStateService.activeCapsuleGroups().length > 0) {
+                                <div class="h-px bg-(--postonsteroids-border)/50"></div>
+                                <div class="text-[9px] font-bold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                                    Or Move into Existing Folder
+                                </div>
+                                <div class="max-h-40 overflow-y-auto custom-scrollbar space-y-0.5">
+                                    @for (g of tabStateService.activeCapsuleGroups(); track g.id) {
+                                        @let gFull = tabStateService.getFolderFullPath(g.id);
+                                        <button type="button" (click)="groupSelectedIntoExistingFolder(g.id, $event)"
+                                                [title]="gFull"
+                                                class="w-full px-2 py-1.5 rounded text-left hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-primary) flex items-start gap-1.5 cursor-pointer">
+                                            <mat-icon class="text-[14px]! size-[14px]! text-(--postonsteroids-accent) shrink-0 mt-0.5">folder</mat-icon>
+                                            <span class="break-words leading-snug">{{ gFull }}</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Capsule Requests Tree (supports vertical & horizontal scroll for arbitrary folder nesting) -->
+        <div data-sidebar-scroll="true" class="flex-1 min-h-0 overflow-auto pb-1 pt-0.5 sidebar-scroll" [class.hidden]="!isSidebarOpen()" (click)="onSidebarBackgroundClick($event)">
+
             <!-- Request Tree (Smooth Threshold-Based Draggable Folders + Requests at Any Elevation) -->
-            <div class="flex flex-col">
+            <div class="flex flex-col min-w-full w-max">
                 <div id="sidebar-root-top-slot"
                      class="relative mx-1.5 h-2 -mb-0.5 flex items-center pointer-events-none">
                     @if (dragDropTarget()?.targetType === 'root-top') {
@@ -230,7 +233,7 @@
                      data-tree-type="group"
                      [attr.data-tree-id]="folderNode.group.id"
                      [attr.data-folder-expanded]="folderNode.group.isExpanded !== false"
-                     class="sidebar-tree-row relative flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
+                     class="sidebar-tree-row relative min-w-[205px] flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none hover:bg-(--postonsteroids-bg-hover)/75 transition-colors group/folder"
                      [class.opacity-45]="isDraggingFolder() && draggedGroupId() === folderNode.group.id"
                      [class.cursor-grabbing!]="isDraggingFolder() && draggedGroupId() === folderNode.group.id"
                      [class.ring-1]="isTargetInsideFolder"
@@ -366,7 +369,7 @@
                                 }
                             </div>
                         } @else {
-                            <div class="py-1.5 px-2 text-[10.5px] text-(--postonsteroids-text-muted)/75 italic select-none">
+                            <div class="py-1.5 px-2 min-w-[205px] whitespace-nowrap text-[10.5px] text-(--postonsteroids-text-muted)/75 italic select-none">
                                 Empty folder — drag requests/folders here or add subfolder
                             </div>
                         }
@@ -383,7 +386,7 @@
                      data-tree-row="true"
                      data-tree-type="request"
                      [attr.data-tree-id]="req.id"
-                     class="sidebar-tree-row relative flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)/75"
+                     class="sidebar-tree-row relative min-w-[205px] flex items-center gap-x-1.5 px-2 py-[6px] mx-1.5 rounded-md border border-transparent cursor-pointer select-none transition-colors group/tab hover:bg-(--postonsteroids-bg-hover)/75"
                      [class.opacity-45]="isDraggingRequest() && draggedRequestIds().includes(req.id)"
                      [class.cursor-grabbing!]="isDraggingRequest() && draggedRequestIds().includes(req.id)"
                      [class.border-(--postonsteroids-accent)/65!]="isRequestFocused(req.id) && editingRequestId() !== req.id"

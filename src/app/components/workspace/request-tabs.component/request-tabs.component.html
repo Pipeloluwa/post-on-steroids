@@ -192,11 +192,12 @@
                 }
             </div>
         } @else if (!subscriptionService.isOpenSourceCommunityBuild) {
-            <span title="Environments require Pro or Enterprise subscription"
-                class="h-full px-2.5 inline-flex items-center gap-1 text-[10.5px] font-semibold text-(--postonsteroids-text-muted) select-none shrink-0">
+            <button type="button" (click)="subscriptionService.openUpgradeModal('professional')"
+                title="Environments require Pro ($9/mo Personal) — view plans on OnSteroid Pricing or redeem a registration code"
+                class="h-full px-2.5 inline-flex items-center gap-1 text-[10.5px] font-semibold text-(--postonsteroids-text-muted) hover:text-amber-300 hover:bg-amber-500/10 cursor-pointer transition-colors select-none shrink-0">
                 <mat-icon class="text-[13px]! size-[13px]! text-amber-400">lock</mat-icon>
                 <span>Env (Pro)</span>
-            </span>
+            </button>
         }
     </div>
 

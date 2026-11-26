@@ -100,10 +100,26 @@ export class NavbarComponent {
         this.showDownloadsMenu.update(v => !v);
     }
 
+    openLicenseModal(event?: Event) {
+        event?.stopPropagation();
+        this.showUserMenu.set(false);
+        this.showFileMenu.set(false);
+        this.showDownloadsMenu.set(false);
+        this.subscriptionService.openUpgradeModal();
+    }
+
     switchSubscriptionPlan(plan: EditionTier, event: Event) {
         event.stopPropagation();
-        this.subscriptionService.setTier(plan);
-        this.notificationService.notify(`Subscription plan switched to ${this.subscriptionService.label()}.`, 'success');
+        if (!this.authService.isTestUserSession()) {
+            this.openLicenseModal(event);
+            return;
+        }
+        this.subscriptionService.setTier(plan, plan === 'enterprise'
+            ? { licenseType: 'enterprise', individualType: 'organization' }
+            : plan === 'professional'
+                ? { licenseType: 'individual', individualType: 'personal' }
+                : { licenseType: null, individualType: null });
+        this.notificationService.notify(`QA preview switched to ${this.subscriptionService.label()}.`, 'success');
     }
 
     getDownloadUrl(pkg: DesktopPackage): string {

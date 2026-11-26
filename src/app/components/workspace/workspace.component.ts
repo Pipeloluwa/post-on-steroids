@@ -183,7 +183,7 @@ export class WorkspaceComponent {
         if ((this.isDraggingRequest() || this.isDraggingFolder()) && this.isBrowser) {
             this.dragGhostPos.set({ x: event.clientX, y: event.clientY });
             this.updateDragHoverTarget(event.clientX, event.clientY);
-            this.autoScrollSidebarDuringDrag(event.clientY);
+            this.autoScrollSidebarDuringDrag(event.clientX, event.clientY);
             return;
         }
 
@@ -757,7 +757,7 @@ export class WorkspaceComponent {
         this.dragDropTarget.set({ targetType: 'root-bottom', targetId: null, position: 'after' });
     }
 
-    private autoScrollSidebarDuringDrag(pointerY: number): void {
+    private autoScrollSidebarDuringDrag(pointerX: number, pointerY: number): void {
         if (!this.isBrowser) return;
         const el = document.querySelector<HTMLElement>('[data-sidebar-scroll]');
         if (!el) return;
@@ -767,6 +767,13 @@ export class WorkspaceComponent {
             el.scrollTop = Math.max(0, el.scrollTop - 8);
         } else if (pointerY > rect.bottom - edgeThreshold) {
             el.scrollTop = Math.min(el.scrollHeight, el.scrollTop + 8);
+        }
+        if (el.scrollWidth > el.clientWidth) {
+            if (pointerX < rect.left + edgeThreshold) {
+                el.scrollLeft = Math.max(0, el.scrollLeft - 10);
+            } else if (pointerX > rect.right - edgeThreshold) {
+                el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + 10);
+            }
         }
     }
 
@@ -1686,6 +1693,7 @@ export class WorkspaceComponent {
     }
 
     onBeforeUnload(event: BeforeUnloadEvent) {
+        this.tabStateService.snapshotCurrentSession(undefined, true);
         if (!this.tabStateService.autoSaveEnabled() && this.authService.isLoggedIn()) {
             const hasDirty = this.tabStateService.getAllStates().some(s => s.isDirty);
             if (hasDirty) {
