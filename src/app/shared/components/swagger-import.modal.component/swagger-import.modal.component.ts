@@ -32,7 +32,7 @@ export class SwaggerImportModalComponent {
     isImporting = signal(false);
     saveToBackend = signal(true);
     importIntoActiveCapsule = signal(false);
-    openInTabs = signal(true);
+    openInTabs = signal(false);
     hasActiveCapsule = computed(() => Boolean(this.tabStateService.activeCapsuleId()));
     activeCapsuleName = computed(() => this.tabStateService.activeCapsuleName() || 'Current Capsule');
 
@@ -43,7 +43,7 @@ export class SwaggerImportModalComponent {
         this.hasError.set(false);
         this.saveToBackend.set(true);
         this.importIntoActiveCapsule.set(false);
-        this.openInTabs.set(true);
+        this.openInTabs.set(false);
         setTimeout(() => this.inputRef?.nativeElement?.focus(), 150);
     }
 

@@ -358,6 +358,92 @@ function extractTestCases(req: RequestState): string[] {
     return cases;
 }
 
+interface TableColSpec {
+    colClass: string;
+    weight: number;
+    pct: string;
+}
+
+function computeTableColSpecs(headers: string[]): TableColSpec[] {
+    const specs = headers.map((raw) => {
+        const norm = (raw || '').trim().toLowerCase();
+        if (norm === '#') return { colClass: 'col-compact', weight: 6 };
+        if (norm === 'id' || norm === 'req id' || norm === 'uat id' || norm === 'retries' || norm === 'delay (ms)') {
+            return { colClass: 'col-compact', weight: 9 };
+        }
+        if (norm === 'method' || norm === 'type' || norm === 'priority' || norm === 'version' || norm === 'date') {
+            return { colClass: 'col-compact', weight: 9.5 };
+        }
+        if (norm === 'location' || norm === 'last status') {
+            return { colClass: 'col-compact', weight: 11 };
+        }
+        if (norm === 'encrypted') {
+            return { colClass: 'col-compact', weight: 12 };
+        }
+        if (
+            norm === 'condition' ||
+            norm === 'schedule' ||
+            norm === 'folder' ||
+            norm === 'auth mechanism' ||
+            norm === 'authentication' ||
+            norm === 'category' ||
+            norm === 'role'
+        ) {
+            return { colClass: 'col-meta', weight: 14 };
+        }
+        if (norm === 'attribute' || norm === 'variable' || norm === 'key' || norm === 'header' || norm === 'response header' || norm === 'author') {
+            return { colClass: 'col-label', weight: 19 };
+        }
+        if (
+            norm === 'endpoint' ||
+            norm === 'source endpoint' ||
+            norm === 'endpoint name' ||
+            norm === 'name' ||
+            norm === 'section' ||
+            norm === 'policy / requirement' ||
+            norm === 'reviewer name' ||
+            norm === 'signature / date'
+        ) {
+            return { colClass: 'col-endpoint', weight: 19 };
+        }
+        if (norm === 'field path' || norm === 'parameter') {
+            return { colClass: 'col-field', weight: 23 };
+        }
+        if (
+            norm === 'title' ||
+            norm === 'description' ||
+            norm === 'verification case / assertion' ||
+            norm === 'expected outcome' ||
+            norm === 'target / next action' ||
+            norm === 'target uri' ||
+            norm === 'url' ||
+            norm === 'configured value'
+        ) {
+            return { colClass: 'col-wide', weight: 28 };
+        }
+        if (
+            norm === 'sample / mask' ||
+            norm === 'example / format' ||
+            norm === 'sample value' ||
+            norm === 'value / placeholder' ||
+            norm === 'value'
+        ) {
+            return { colClass: 'col-sample', weight: 29 };
+        }
+        return { colClass: 'col-std', weight: 18 };
+    });
+
+    const total = specs.reduce((sum, s) => sum + s.weight, 0) || 1;
+    let allocated = 0;
+    return specs.map((s, idx) => {
+        const pctNum = idx === specs.length - 1
+            ? Math.max(5, Math.round((100 - allocated) * 10) / 10)
+            : Math.round((s.weight / total) * 1000) / 10;
+        allocated += pctNum;
+        return { ...s, pct: `${pctNum}%` };
+    });
+}
+
 function renderMarkdownTablesAndBlocks(md: string): string {
     const lines = md.split(/\r?\n/);
     const html: string[] = [];
@@ -397,19 +483,27 @@ function renderMarkdownTablesAndBlocks(md: string): string {
                 bodyRows.push(splitRow(lines[i]));
                 i += 1;
             }
-            html.push('<table><thead><tr>');
-            for (const h of headers) {
-                html.push(`<th>${formatInline(h)}</th>`);
+            const colSpecs = computeTableColSpecs(headers);
+            const tableClass = headers.length >= 5 ? 'doc-table doc-table-wide' : 'doc-table';
+            html.push(`<div class="table-wrap"><table class="${tableClass}"><colgroup>`);
+            for (const spec of colSpecs) {
+                html.push(`<col class="${spec.colClass}" style="width: ${spec.pct};" />`);
             }
+            html.push('</colgroup><thead><tr>');
+            headers.forEach((h, idx) => {
+                const spec = colSpecs[idx];
+                html.push(`<th class="${spec?.colClass || 'col-std'}" style="width: ${spec?.pct || 'auto'};">${formatInline(h)}</th>`);
+            });
             html.push('</tr></thead><tbody>');
             for (const row of bodyRows) {
                 html.push('<tr>');
                 for (let c = 0; c < headers.length; c++) {
-                    html.push(`<td>${formatInline(row[c] ?? '')}</td>`);
+                    const spec = colSpecs[c];
+                    html.push(`<td class="${spec?.colClass || 'col-std'}">${formatInline(row[c] ?? '')}</td>`);
                 }
                 html.push('</tr>');
             }
-            html.push('</tbody></table>');
+            html.push('</tbody></table></div>');
             continue;
         }
 
@@ -474,6 +568,7 @@ function formatInline(raw: string): string {
 
 function wrapDocumentHtml(title: string, bodyHtml: string, forWord: boolean): string {
     const styles = `
+        *, *::before, *::after { box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; line-height: 1.55; margin: 32px auto; max-width: 980px; padding: 0 24px; }
         h1 { font-size: 24px; color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 8px; margin-top: 0; }
         h2 { font-size: 18px; color: #1d4ed8; margin-top: 28px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
@@ -481,11 +576,17 @@ function wrapDocumentHtml(title: string, bodyHtml: string, forWord: boolean): st
         h4 { font-size: 13px; color: #334155; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 14px; }
         p { margin: 8px 0; font-size: 13.5px; }
         blockquote { border-left: 3px solid #3b82f6; background: #eff6ff; padding: 8px 12px; margin: 10px 0; color: #1e3a8a; font-size: 13px; }
-        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 12.5px; }
-        th, td { border: 1px solid #cbd5e1; padding: 7px 10px; text-align: left; vertical-align: top; word-break: break-word; }
-        th { background: #f1f5f9; font-weight: 600; color: #0f172a; }
+        .table-wrap { width: 100%; overflow-x: auto; margin: 12px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 0; font-size: 12.5px; table-layout: fixed; }
+        table.doc-table-wide { min-width: 720px; }
+        th, td { border: 1px solid #cbd5e1; padding: 7px 10px; text-align: left; vertical-align: top; word-break: normal; overflow-wrap: break-word; }
+        th { background: #f1f5f9; font-weight: 600; color: #0f172a; overflow-wrap: normal; word-break: normal; }
+        th.col-compact, td.col-compact { white-space: nowrap; padding: 7px 8px; }
+        td.col-field, td.col-sample, td.col-wide { overflow-wrap: anywhere; }
         tr:nth-child(even) td { background: #f8fafc; }
         code { font-family: Consolas, monospace; background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 12px; color: #0f172a; }
+        td code { display: inline-block; max-width: 100%; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; vertical-align: top; }
+        td.col-sample code { word-break: break-all; overflow-wrap: anywhere; }
         pre.code-block { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
         pre.code-block code { background: transparent; color: inherit; padding: 0; }
         .code-lang { font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }

@@ -8,12 +8,12 @@
 
             <input type="file" #fileInput class="hidden" accept=".json,.yaml,.yml,.wsdl,.xml,.wadl,.raml,.har" (change)="onFileSelected($event)" />
 
-            <div class="flex items-center gap-x-4">
+            <div class="flex items-center gap-x-4 min-w-0">
                 <div
-                    class="size-12 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-center text-(--postonsteroids-text-secondary) group-hover:border-(--postonsteroids-accent) group-hover:text-(--postonsteroids-accent) transition-all shadow-xs">
-                    <mat-icon class="text-[22px]">file_upload</mat-icon>
+                    class="size-12 shrink-0 rounded-2xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-center text-(--postonsteroids-text-secondary) group-hover:border-(--postonsteroids-accent) group-hover:text-(--postonsteroids-accent) transition-all shadow-xs">
+                    <mat-icon class="size-[22px]! text-[22px]! leading-[22px]!">file_upload</mat-icon>
                 </div>
-                <div>
+                <div class="min-w-0 flex-1">
                     <h3 class="font-bold text-(--postonsteroids-text-primary)">Import Collection / Spec File</h3>
                     <p class="text-[12px] text-(--postonsteroids-text-secondary)">Upload Postman, Insomnia (v4/v5), OpenAPI (JSON/YAML), Thunder Client, Hoppscotch, Bruno, HAR, WSDL, WADL, or RAML.</p>
                 </div>
@@ -24,12 +24,12 @@
         <div (click)="swaggerModal.open()" (keydown.enter)="swaggerModal.open()" tabindex="0"
             class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative"
             title="Import Swagger, Redoc, Scalar, Stoplight, RapiDoc or SOAP">
-            <div class="flex items-center gap-x-4">
+            <div class="flex items-center gap-x-4 min-w-0">
                 <div
-                    class="size-12 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-center text-(--postonsteroids-text-secondary) group-hover:border-(--postonsteroids-accent) group-hover:text-(--postonsteroids-accent) transition-all shadow-xs">
-                    <mat-icon class="text-[22px]">cloud_download</mat-icon>
+                    class="size-12 shrink-0 rounded-2xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-center text-(--postonsteroids-text-secondary) group-hover:border-(--postonsteroids-accent) group-hover:text-(--postonsteroids-accent) transition-all shadow-xs">
+                    <mat-icon class="size-[22px]! text-[22px]! leading-[22px]!">cloud_download</mat-icon>
                 </div>
-                <div class="flex flex-col gap-y-1">
+                <div class="flex flex-col gap-y-1 min-w-0 flex-1">
                     <h3 class="font-bold text-(--postonsteroids-text-primary)">Import API Docs / SOAP URL</h3>
                     <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a Swagger UI, Redoc, Scalar, Stoplight, RapiDoc, OpenAPI YAML/JSON, or WSDL / ASMX SOAP URL.</p>
                 </div>
@@ -40,12 +40,12 @@
         <div (click)="showShareUrlModal.set(true)" (keydown.enter)="showShareUrlModal.set(true)" tabindex="0"
             class="p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) hover:border-(--postonsteroids-accent) hover:bg-(--postonsteroids-bg-hover) transition-all cursor-pointer group relative"
             title="Import from Share Link">
-            <div class="flex items-center gap-x-4">
+            <div class="flex items-center gap-x-4 min-w-0">
                 <div
-                    class="size-12 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-center text-(--postonsteroids-text-secondary) group-hover:border-(--postonsteroids-accent) group-hover:text-(--postonsteroids-accent) transition-all shadow-xs">
-                    <mat-icon class="text-[22px]">share</mat-icon>
+                    class="size-12 shrink-0 rounded-2xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex items-center justify-center text-(--postonsteroids-text-secondary) group-hover:border-(--postonsteroids-accent) group-hover:text-(--postonsteroids-accent) transition-all shadow-xs">
+                    <mat-icon class="size-[22px]! text-[22px]! leading-[22px]!">share</mat-icon>
                 </div>
-                <div class="flex flex-col gap-y-1">
+                <div class="flex flex-col gap-y-1 min-w-0 flex-1">
                     <h3 class="font-bold text-(--postonsteroids-text-primary)">Import Shared Capsule</h3>
                     <p class="text-[12px] text-(--postonsteroids-text-secondary)">Paste a shared capsule link or share token to import requests directly.</p>
                 </div>
@@ -58,7 +58,7 @@
     <!-- Share Link Import Modal -->
     @if (showShareUrlModal()) {
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fadeIn p-4">
-            <div class="w-full max-w-lg h-[min(78dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col justify-between gap-5 overflow-y-auto">
+            <div class="w-full max-w-lg h-auto max-h-[calc(100dvh-28px)] p-6 rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col gap-5 overflow-y-auto">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2.5">
                         <mat-icon class="text-purple-500">link</mat-icon>
@@ -118,25 +118,25 @@
     <!-- Save to Backend Prompt Modal for JSON Import -->
     @if (showSavePrompt() && pendingImport(); as pending) {
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs animate-fadeIn p-4" (click)="cancelImport()">
-            <div class="w-full max-w-lg h-[min(86dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden" (click)="$event.stopPropagation()">
+            <div class="w-full max-w-lg h-auto max-h-[calc(100dvh-28px)] rounded-2xl bg-(--postonsteroids-bg-secondary) border border-(--postonsteroids-border) shadow-2xl flex flex-col overflow-hidden" (click)="$event.stopPropagation()">
                 <!-- Header -->
-                <div class="px-6 py-4 border-b border-(--postonsteroids-border) flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="size-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-status-purple">
+                <div class="px-6 py-4 border-b border-(--postonsteroids-border) flex items-center justify-between shrink-0">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="size-9 shrink-0 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-status-purple">
                             <mat-icon class="text-[20px]!">cloud_upload</mat-icon>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <h3 class="text-base font-bold text-(--postonsteroids-text-primary)">Save Imported Data to Backend?</h3>
                             <p class="text-xs text-(--postonsteroids-text-secondary)">Choose whether to save to the database or keep in local workspace</p>
                         </div>
                     </div>
-                    <button (click)="cancelImport()" class="p-1 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer" aria-label="Close dialog">
+                    <button (click)="cancelImport()" class="p-1 shrink-0 rounded-lg hover:bg-(--postonsteroids-bg-hover) text-(--postonsteroids-text-muted) hover:text-(--postonsteroids-text-primary) transition-all cursor-pointer" aria-label="Close dialog">
                         <mat-icon>close</mat-icon>
                     </button>
                 </div>
 
                 <!-- Body -->
-                <div class="p-6 flex flex-col gap-4">
+                <div class="p-6 flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto">
                     <!-- File summary card -->
                     <div class="p-4 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) flex flex-col gap-2.5">
                         <div class="flex items-center justify-between text-xs">

@@ -1441,6 +1441,18 @@ export class TabStateService {
             if (capId === this.activeCapsuleId()) {
                 await this.saveToCapsule();
             } else {
+                const targetCapObj = this.capsules().find(c => c.id === capId);
+                if (targetCapObj && !targetCapObj.isLocalOnly && this.isValidGuid(capId)) {
+                    await firstValueFrom(
+                        this.http.put(`${API_BASE_URL}/capsule/${capId}`, {
+                            name: targetCapObj.name,
+                            autoAuthEnabled: targetCapObj.autoAuthEnabled || 'off',
+                            autoAuthEndpointId: targetCapObj.autoAuthEndpointId || null,
+                            lockMode: targetCapObj.lockMode || 'unlocked',
+                            brdSectionsJson: JSON.stringify(sections)
+                        })
+                    ).catch(() => {});
+                }
                 const vs = this.getVariableService();
                 if (vs) {
                     await vs.syncVariablesToBackend(capId).catch(() => {});
@@ -1479,7 +1491,7 @@ export class TabStateService {
         if (payload.brdSections && typeof payload.brdSections === 'object' && this.isBrowser) {
             try {
                 const brdKey = `onsteroids_brd_sections_${capId}`;
-                if (!localStorage.getItem(brdKey)) {
+                if (!localStorage.getItem(brdKey) || remoteTs > localTs) {
                     localStorage.setItem(brdKey, JSON.stringify(payload.brdSections));
                     this.brdSectionsVersion.update(v => v + 1);
                 }
@@ -4967,8 +4979,15 @@ export class TabStateService {
                 preRequest: state.scripts?.preRequest || '',
                 postResponse: state.scripts?.postResponse || '',
                 testScript: state.scripts?.testScript || '',
-                testScriptEnabled: state.scripts?.testScriptEnabled ?? false
+                testScriptEnabled: state.scripts?.testScriptEnabled ?? false,
+                preRequestLanguage: state.scripts?.preRequestLanguage || 'javascript',
+                postResponseLanguage: state.scripts?.postResponseLanguage || 'javascript',
+                testScriptLanguage: state.scripts?.testScriptLanguage || 'javascript'
             },
+            preRequestLanguage: state.scripts?.preRequestLanguage || 'javascript',
+            postResponseLanguage: state.scripts?.postResponseLanguage || 'javascript',
+            testScriptLanguage: state.scripts?.testScriptLanguage || 'javascript',
+            encryptionScriptLanguage: state.encryption?.scriptLanguage || 'javascript',
             encryption: state.encryption || {
                 algorithm: 'none',
                 key: '',
@@ -4976,7 +4995,8 @@ export class TabStateService {
                 autoEncryptHeaders: false,
                 encryptedHeaders: [],
                 encryptedBodyPaths: [],
-                script: ''
+                script: '',
+                scriptLanguage: 'javascript'
             },
             settings: state.settings || {
                 followRedirects: true,
@@ -4985,6 +5005,7 @@ export class TabStateService {
                 bypassCors: true
             },
             postTriggerTabId: state.postTriggerTabId || null,
+            triggerConfig: state.triggerConfig || null,
             autoAuthEnabled: !!state.autoAuthEnabled,
             params: this.serializeNonEmptyKvRows(state.params),
             headers: this.serializeNonEmptyKvRows(state.headers),
@@ -4999,10 +5020,13 @@ export class TabStateService {
             return targetCap;
         }
 
+        const brdSections = this.getBrdSectionsForCapsule(oldId);
         const createPayload: any = {
             name: targetCap.name,
             autoAuthEnabled: targetCap.autoAuthEnabled || 'off',
-            autoAuthEndpointId: null
+            autoAuthEndpointId: null,
+            lockMode: targetCap.lockMode || 'unlocked',
+            brdSectionsJson: JSON.stringify(brdSections)
         };
         if (this.isValidGuid(oldId) && oldId !== '1') {
             createPayload.id = oldId;
@@ -5073,7 +5097,7 @@ export class TabStateService {
             variables?: IGlobalVariable[];
         },
         shouldSaveToBackend: boolean,
-        openTabs = true
+        openTabs = false
     ): Promise<{ capsulesCount: number; requestsCount: number }> {
         const vs = this.getVariableService();
         if (vs) {
@@ -5386,7 +5410,7 @@ export class TabStateService {
         const shouldSaveToBackend = options?.saveToBackend !== undefined
             ? options.saveToBackend
             : (this.isBrowser && this.authService.isLoggedIn());
-        const shouldOpenTabs = options?.openTabs !== false;
+        const shouldOpenTabs = options?.openTabs === true;
 
         if (options?.targetCapsuleId) {
             const targetCap = this.capsules().find(c => c.id === options.targetCapsuleId);
@@ -5823,7 +5847,7 @@ export class TabStateService {
         };
     }
 
-    async importCapsuleFromUrl(urlOrToken: string, targetCapsuleId?: string | null, openTabs = true): Promise<{ capsuleName: string; requestsCount: number }> {
+    async importCapsuleFromUrl(urlOrToken: string, targetCapsuleId?: string | null, openTabs = false): Promise<{ capsuleName: string; requestsCount: number }> {
         let token = urlOrToken.trim();
         let urlLockMode: CapsuleLockMode | undefined;
         if (token.includes('share=')) {
@@ -6753,12 +6777,15 @@ export class TabStateService {
                             prepTasks.push(vs.syncVariablesToBackend(effectiveCapId));
                         }
                         if (!onlyDirty) {
+                            const activeCapObj = this.capsules().find(c => c.id === effectiveCapId);
                             prepTasks.push(
                                 firstValueFrom(
                                     this.http.put(`${API_BASE_URL}/capsule/${effectiveCapId}`, {
                                         name: currentCapName,
                                         autoAuthEnabled: this.autoAuthEnabled(),
-                                        autoAuthEndpointId: this.autoAuthEndpointId()
+                                        autoAuthEndpointId: this.autoAuthEndpointId(),
+                                        lockMode: activeCapObj?.lockMode || 'unlocked',
+                                        brdSectionsJson: JSON.stringify(this.getBrdSectionsForCapsule(effectiveCapId))
                                     })
                                 ).catch(() => {})
                             );
@@ -7042,13 +7069,29 @@ export class TabStateService {
             // 2. Process capsules
             let backendCaps: Capsule[] = [];
             if (capRes?.data && Array.isArray(capRes.data) && capRes.data.length > 0) {
-                backendCaps = capRes.data.map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    autoAuthEnabled: c.autoAuthEnabled || 'off',
-                    autoAuthEndpointId: c.autoAuthEndpointId || null,
-                    createdAt: new Date(c.createdAt).getTime() || Date.now()
-                }));
+                backendCaps = capRes.data.map(c => {
+                    if (this.isBrowser && c.brdSectionsJson) {
+                        try {
+                            const brdKey = `onsteroids_brd_sections_${c.id}`;
+                            if (!localStorage.getItem(brdKey)) {
+                                const parsed = typeof c.brdSectionsJson === 'string'
+                                    ? JSON.parse(c.brdSectionsJson)
+                                    : c.brdSectionsJson;
+                                if (parsed && typeof parsed === 'object') {
+                                    localStorage.setItem(brdKey, JSON.stringify(parsed));
+                                }
+                            }
+                        } catch {}
+                    }
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        autoAuthEnabled: c.autoAuthEnabled || 'off',
+                        autoAuthEndpointId: c.autoAuthEndpointId || null,
+                        lockMode: c.lockMode || 'unlocked',
+                        createdAt: new Date(c.createdAt).getTime() || Date.now()
+                    };
+                });
 
                 const mergedCaps = [...this.capsules()];
                 backendCaps.forEach(bc => {
@@ -7123,12 +7166,20 @@ export class TabStateService {
 
             // 6. Restore open tabs and active tab selection (if user did not already start working offline)
             if (!hadOfflineWorkAtStart) {
+                const currentActiveCapId = this.activeCapsuleId();
+                const savedCapOpen = this.isBrowser && currentActiveCapId
+                    ? localStorage.getItem(`onsteroids_open_tab_ids_${currentActiveCapId}`)
+                    : null;
+                const hasExplicitBackendOpenTabs =
+                    typeof wsRes?.data?.openTabIds === 'string' && wsRes.data.openTabIds.trim().length > 0;
+                const hasExplicitSavedOpenTabs = savedCapOpen !== null || hasExplicitBackendOpenTabs;
+
                 let targetOpenIds = this.openTabIds().filter(id => {
                     const st = this.states().get(id);
-                    return Boolean(st) && (!st!.capsuleId || st!.capsuleId === this.activeCapsuleId());
+                    return Boolean(st) && (!st!.capsuleId || st!.capsuleId === currentActiveCapId);
                 });
-                if (targetOpenIds.length === 0) {
-                    const capRequests = this.savedCapsules().filter(r => r.capsuleId === this.activeCapsuleId());
+                if (targetOpenIds.length === 0 && !hasExplicitSavedOpenTabs) {
+                    const capRequests = this.savedCapsules().filter(r => r.capsuleId === currentActiveCapId);
                     if (capRequests.length > 0) {
                         targetOpenIds = capRequests.map(r => r.id);
                     } else if (this.savedCapsules().length > 0) {
@@ -7136,10 +7187,12 @@ export class TabStateService {
                     }
                 }
 
-                if (targetOpenIds.length > 0) {
+                if (targetOpenIds.length > 0 || hasExplicitSavedOpenTabs) {
                     this.openTabIds.set(targetOpenIds);
                     const currentActive = this.activeTabId();
-                    if (!currentActive || !targetOpenIds.includes(currentActive)) {
+                    if (targetOpenIds.length === 0) {
+                        this.activeTabId.set(null);
+                    } else if (!currentActive || !targetOpenIds.includes(currentActive)) {
                         this.activeTabId.set(targetOpenIds[0] || null);
                     }
                 }
@@ -7438,7 +7491,13 @@ export class TabStateService {
             responseHeaders: cached?.responseHeaders ?? base.responseHeaders,
             testResults: cached?.testResults ?? base.testResults,
             postTriggerTabId: dto.postTriggerTabId || null,
-            triggerConfig: dto.triggerConfig || base.triggerConfig,
+            triggerConfig: (() => {
+                if (dto.triggerConfig && typeof dto.triggerConfig === 'object') return dto.triggerConfig;
+                if (typeof dto.triggerConfigJson === 'string' && dto.triggerConfigJson.trim()) {
+                    try { return JSON.parse(dto.triggerConfigJson); } catch {}
+                }
+                return base.triggerConfig;
+            })(),
             autoAuthEnabled: !!dto.autoAuthEnabled,
             isDirty: false,
             isLoading: false

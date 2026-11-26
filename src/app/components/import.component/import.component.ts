@@ -85,12 +85,12 @@ export class ImportComponent implements OnInit {
     showShareUrlModal = signal<boolean>(false);
     shareUrlInput = signal<string>('');
     importShareIntoActive = signal<boolean>(false);
-    openShareInTabs = signal<boolean>(true);
+    openShareInTabs = signal<boolean>(false);
 
     showSavePrompt = signal<boolean>(false);
     pendingImport = signal<PendingImport | null>(null);
     importFileIntoActive = signal<boolean>(false);
-    openFileInTabs = signal<boolean>(true);
+    openFileInTabs = signal<boolean>(false);
     hasActiveCapsule = computed(() => Boolean(this.tabStateService.activeCapsuleId()));
     activeCapsuleName = computed(() => this.tabStateService.activeCapsuleName() || 'Current Capsule');
 
@@ -173,7 +173,7 @@ export class ImportComponent implements OnInit {
                 
                 this.pendingImport.set(pending);
                 this.importFileIntoActive.set(false);
-                this.openFileInTabs.set(true);
+                this.openFileInTabs.set(false);
                 this.showSavePrompt.set(true);
             } catch (err: any) {
                 console.error('Import validation failed:', err);
@@ -388,7 +388,9 @@ export class ImportComponent implements OnInit {
             });
         }
         else {
-            throw new Error('Unrecognized format. Please provide an OnSteroid export JSON or a Postman Collection (v2.0/v2.1).');
+            throw new Error(
+                'Unrecognized format. Supported formats: OnSteroid JSON, Postman Collection (v2.0/v2.1), OpenAPI / Swagger (JSON/YAML), Insomnia (v4/v5), Thunder Client, Hoppscotch, Bruno, HAR, WSDL (SOAP), WADL, or RAML.'
+            );
         }
 
         const allExtractedVars = groups.flatMap(g => g.variables || []);

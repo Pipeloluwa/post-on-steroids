@@ -1,6 +1,6 @@
 @if (isOpen()) {
 <div class="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4" (click)="close()">
-    <div class="w-full max-w-lg h-[min(82dvh,calc(100dvh-28px))] max-h-[calc(100dvh-28px)] rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-6 shadow-xl flex flex-col overflow-y-auto" (click)="$event.stopPropagation()">
+    <div class="w-full max-w-lg h-auto max-h-[calc(100dvh-28px)] rounded-2xl border border-(--postonsteroids-border) bg-(--postonsteroids-bg-primary) p-6 shadow-xl flex flex-col overflow-y-auto" (click)="$event.stopPropagation()">
         <div class="flex items-start justify-between gap-x-3 mb-4">
             <div>
                 <h3 class="text-lg font-bold text-(--postonsteroids-text-primary)">Import API Docs / SOAP</h3>
