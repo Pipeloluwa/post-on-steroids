@@ -222,21 +222,32 @@ interface UnifiedAutomationLog {
                      [class.border-(--postonsteroids-border)]="cardCycles.length === 0">
 
                   <!-- Card Header: Source Request Selector + Actions -->
-                  <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="flex flex-wrap items-center gap-2 min-w-0 flex-1">
-                      <span class="px-2 py-0.5 rounded font-mono text-[11px] font-bold bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) shrink-0"
-                            [style.color]="getMethodColor(req.method)">
-                        {{ req.method }}
-                      </span>
+                  <div class="flex flex-col gap-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2 min-h-[21px]">
+                      <label [for]="'trigger-source-' + card.cardId"
+                             class="text-[10px] font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted)">
+                        Trigger Source Request ({{ capName }})
+                      </label>
+                      @if (sched) {
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/35 font-semibold flex items-center gap-1 shrink-0">
+                          <span class="size-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          {{ sched.status === 'waiting' ? 'Scheduled' : 'Running' }} · #{{ sched.runCount }}
+                        </span>
+                      }
+                    </div>
 
-                      <div class="min-w-[220px] max-w-[420px] flex-1">
-                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-0.5">
-                          Trigger Source Request ({{ capName }})
-                        </label>
-                        <select aria-label="Trigger source request"
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                      <div class="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                        <span class="h-8 px-2.5 inline-flex items-center justify-center rounded-lg font-mono text-[11px] font-bold bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) shrink-0"
+                              [style.color]="getMethodColor(req.method)">
+                          {{ req.method }}
+                        </span>
+
+                        <select [id]="'trigger-source-' + card.cardId"
+                                aria-label="Trigger source request"
                                 [ngModel]="req.id"
                                 (ngModelChange)="swapCardSourceRequest(card, $event)"
-                                class="w-full bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-lg px-2.5 py-1.5 text-xs font-semibold text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer">
+                                class="h-8 min-w-[220px] max-w-[420px] flex-1 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-lg px-2.5 text-xs font-semibold text-(--postonsteroids-text-primary) outline-none focus:border-(--postonsteroids-accent) cursor-pointer">
                           <option [value]="req.id" class="bg-(--postonsteroids-bg-secondary)">
                             {{ req.method }} · {{ tabState.resolveRequestTitle(req.name, req.url) }}
                           </option>
@@ -246,56 +257,49 @@ interface UnifiedAutomationLog {
                             </option>
                           }
                         </select>
-                      </div>
 
-                      <div class="text-[11px] font-mono text-(--postonsteroids-text-muted) truncate max-w-md pt-3">
-                        {{ req.url || 'No URL configured' }}
-                      </div>
-
-                      @if (sched) {
-                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/35 font-semibold flex items-center gap-1 shrink-0 mt-3">
-                          <span class="size-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                          {{ sched.status === 'waiting' ? 'Scheduled' : 'Running' }} · #{{ sched.runCount }}
+                        <span class="text-[11px] font-mono text-(--postonsteroids-text-muted) truncate max-w-md">
+                          {{ req.url || 'No URL configured' }}
                         </span>
-                      }
-                    </div>
+                      </div>
 
-                    <div class="flex flex-wrap items-center gap-1.5 shrink-0">
-                      <button type="button" (click)="runRequestOnce(req)" [disabled]="isRunningThis"
-                              class="px-2.5 py-1.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-emerald-500/50 hover:text-emerald-400 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50">
-                        @if (isRunningThis) {
-                          <mat-icon class="text-[14px]! size-[14px]! animate-spin text-emerald-400">sync</mat-icon>
-                          <span>Running...</span>
-                        } @else {
-                          <mat-icon class="text-[14px]! size-[14px]! text-emerald-400">play_arrow</mat-icon>
-                          <span>Run Now</span>
-                        }
-                      </button>
+                      <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                        <button type="button" (click)="runRequestOnce(req)" [disabled]="isRunningThis"
+                                class="h-8 px-2.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-emerald-500/50 hover:text-emerald-400 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50">
+                          @if (isRunningThis) {
+                            <mat-icon class="text-[14px]! size-[14px]! animate-spin text-emerald-400">sync</mat-icon>
+                            <span>Running...</span>
+                          } @else {
+                            <mat-icon class="text-[14px]! size-[14px]! text-emerald-400">play_arrow</mat-icon>
+                            <span>Run Now</span>
+                          }
+                        </button>
 
-                      <button type="button" (click)="toggleRequestSchedule(req)"
-                              class="px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                              [class.bg-emerald-500/15]="sched !== null"
-                              [class.border-emerald-500/40]="sched !== null"
-                              [class.text-emerald-400]="sched !== null"
-                              [class.bg-(--postonsteroids-bg-tertiary)]="sched === null"
-                              [class.border-(--postonsteroids-border)]="sched === null"
-                              [class.text-(--postonsteroids-text-primary)]="sched === null">
-                        <mat-icon class="text-[14px]! size-[14px]!">{{ sched ? 'stop' : 'schedule' }}</mat-icon>
-                        <span>{{ sched ? 'Stop Schedule' : 'Start Schedule' }}</span>
-                      </button>
+                        <button type="button" (click)="toggleRequestSchedule(req)"
+                                class="h-8 px-2.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                [class.bg-emerald-500/15]="sched !== null"
+                                [class.border-emerald-500/40]="sched !== null"
+                                [class.text-emerald-400]="sched !== null"
+                                [class.bg-(--postonsteroids-bg-tertiary)]="sched === null"
+                                [class.border-(--postonsteroids-border)]="sched === null"
+                                [class.text-(--postonsteroids-text-primary)]="sched === null">
+                          <mat-icon class="text-[14px]! size-[14px]!">{{ sched ? 'stop' : 'schedule' }}</mat-icon>
+                          <span>{{ sched ? 'Stop Schedule' : 'Start Schedule' }}</span>
+                        </button>
 
-                      <button type="button" (click)="openRequestInWorkspace(req)"
-                              title="Open request in OnSteroid workspace"
-                              class="px-2.5 py-1.5 rounded-lg bg-(--postonsteroids-accent)/15 border border-(--postonsteroids-accent)/40 text-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent)/25 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors">
-                        <mat-icon class="text-[14px]! size-[14px]!">open_in_new</mat-icon>
-                        <span>Open</span>
-                      </button>
+                        <button type="button" (click)="openRequestInWorkspace(req)"
+                                title="Open request in OnSteroid workspace"
+                                class="h-8 px-2.5 rounded-lg bg-(--postonsteroids-accent)/15 border border-(--postonsteroids-accent)/40 text-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent)/25 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer transition-colors">
+                          <mat-icon class="text-[14px]! size-[14px]!">open_in_new</mat-icon>
+                          <span>Open</span>
+                        </button>
 
-                      <button type="button" (click)="removeTriggerCard(card)"
-                              title="Reset trigger rules and remove card"
-                              class="px-2 py-1.5 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-status-danger/50 hover:text-status-danger text-xs cursor-pointer transition-colors flex items-center gap-1">
-                        <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
-                      </button>
+                        <button type="button" (click)="removeTriggerCard(card)"
+                                title="Reset trigger rules and remove card"
+                                class="h-8 px-2 rounded-lg bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) hover:border-status-danger/50 hover:text-status-danger text-xs cursor-pointer transition-colors inline-flex items-center justify-center">
+                          <mat-icon class="text-[14px]! size-[14px]!">delete</mat-icon>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
