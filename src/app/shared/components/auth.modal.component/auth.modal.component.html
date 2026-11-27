@@ -47,107 +47,19 @@
 
             @switch (authService.authStep()) {
                 @case ('email') {
-                <div class="space-y-3.5">
-                    <!-- Plan Selector: Free (Sign Up/In), Pro (Personal · Sign Up/In), Enterprise (Sign In Only) -->
-                    <div class="space-y-2">
-                        <div class="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border)">
-                            <button type="button" (click)="authService.setAuthIntent('free')"
-                                class="py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                                [class.bg-(--postonsteroids-accent)]="authService.authIntent() === 'free'"
-                                [class.text-white]="authService.authIntent() === 'free'"
-                                [class.text-(--postonsteroids-text-muted)]="authService.authIntent() !== 'free'">
-                                Free
-                            </button>
-                            <button type="button" (click)="authService.setAuthIntent('pro')"
-                                class="py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                                [class.bg-sky-600]="authService.authIntent() === 'pro'"
-                                [class.text-white]="authService.authIntent() === 'pro'"
-                                [class.text-(--postonsteroids-text-muted)]="authService.authIntent() !== 'pro'">
-                                Pro · Personal
-                            </button>
-                            <button type="button" (click)="authService.setAuthIntent('enterprise')"
-                                class="py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                                [class.bg-amber-600]="authService.authIntent() === 'enterprise'"
-                                [class.text-white]="authService.authIntent() === 'enterprise'"
-                                [class.text-(--postonsteroids-text-muted)]="authService.authIntent() !== 'enterprise'">
-                                Enterprise
-                            </button>
-                        </div>
-
-                        @if (authService.authIntent() === 'enterprise') {
-                            <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-100 space-y-1">
-                                <div class="font-bold text-amber-300 flex items-center gap-1.5">
-                                    <mat-icon class="text-[14px]! size-[14px]!">verified_user</mat-icon>
-                                    <span>Enterprise · Sign In Only</span>
-                                </div>
-                                <p class="leading-relaxed text-amber-100/85">
-                                    Public Sign Up is unavailable for Enterprise. First-time corporate email sign-ins automatically receive an OTP to register a password under your domain license.
-                                </p>
-                            </div>
-                        } @else {
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <button type="button" (click)="authService.setAuthAction('signin')"
-                                    class="py-1.5 px-3 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer"
-                                    [class.bg-(--postonsteroids-accent)/15]="authService.authAction() === 'signin'"
-                                    [class.border-(--postonsteroids-accent)]="authService.authAction() === 'signin'"
-                                    [class.text-(--postonsteroids-accent)]="authService.authAction() === 'signin'"
-                                    [class.border-(--postonsteroids-border)]="authService.authAction() !== 'signin'"
-                                    [class.text-(--postonsteroids-text-muted)]="authService.authAction() !== 'signin'">
-                                    Sign In
-                                </button>
-                                <button type="button" (click)="authService.setAuthAction('signup')"
-                                    class="py-1.5 px-3 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer"
-                                    [class.bg-(--postonsteroids-accent)/15]="authService.authAction() === 'signup'"
-                                    [class.border-(--postonsteroids-accent)]="authService.authAction() === 'signup'"
-                                    [class.text-(--postonsteroids-accent)]="authService.authAction() === 'signup'"
-                                    [class.border-(--postonsteroids-border)]="authService.authAction() !== 'signup'"
-                                    [class.text-(--postonsteroids-text-muted)]="authService.authAction() !== 'signup'">
-                                    Sign Up ({{ authService.authIntent() === 'pro' ? 'Pro' : 'Free' }})
-                                </button>
-                            </div>
-                        }
-                    </div>
-
+                <div class="space-y-4">
+                    <p class="text-[13px] text-(--postonsteroids-text-secondary)">Enter your email to sign in or get started.</p>
                     <div class="relative">
-                        <input #emailInput type="email" [(ngModel)]="userEmail" (keydown.enter)="onSendOtp.emit()"
-                            [placeholder]="authService.authIntent() === 'enterprise' ? 'you@yourcompany.com' : 'name@company.com'"
+                        <input #emailInput type="email" [(ngModel)]="userEmail" (keydown.enter)="onSendOtp.emit()" placeholder="name@company.com"
                             class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[14px] outline-none focus:border-(--postonsteroids-accent) transition-all" />
                     </div>
-
-                    @if (authService.authIntent() === 'pro') {
-                        <div class="p-2.5 rounded-xl bg-sky-500/8 border border-sky-500/30 space-y-1.5">
-                            <div class="flex items-center justify-between gap-2 text-[10.5px]">
-                                <span class="font-bold text-sky-300">Pro Key (Optional · Personal)</span>
-                                <a [href]="pricingPlansUrl" target="_blank" rel="noopener noreferrer"
-                                   class="font-semibold text-indigo-300 hover:text-indigo-200 underline inline-flex items-center gap-0.5">
-                                    <span>Pricing &amp; Plans</span>
-                                    <mat-icon class="text-[11px]! size-[11px]!">open_in_new</mat-icon>
-                                </a>
-                            </div>
-                            <input type="text"
-                                [ngModel]="authService.pendingLicenseCode()"
-                                (ngModelChange)="onPendingLicenseInput($event)"
-                                placeholder="ONST-PRO-XXXX-XXXX-XXXX-XXXX"
-                                autocomplete="off" spellcheck="false"
-                                class="w-full h-9 px-3 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) text-[12px] font-mono tracking-wider text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)/60 outline-none focus:border-sky-500" />
-                        </div>
-                    }
-
                     <button (click)="onSendOtp.emit()" [disabled]="isAuthenticating() || !userEmail()"
                         class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/20 flex items-center justify-center gap-x-2 cursor-pointer">
                         @if (isAuthenticating()) {
                         <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                         <span>Checking...</span>
                         } @else {
-                        <span>
-                            @if (authService.authIntent() === 'enterprise') {
-                                Sign In to Enterprise
-                            } @else if (authService.authAction() === 'signup') {
-                                Sign Up &amp; Verify Email
-                            } @else {
-                                Continue to Sign In
-                            }
-                        </span>
+                        <span>Continue</span>
                         <mat-icon class="text-[18px]! size-[18px]!">arrow_forward</mat-icon>
                         }
                     </button>
@@ -648,7 +560,7 @@
         <div class="bg-(--postonsteroids-bg-tertiary) p-3 sm:p-4 border-t border-(--postonsteroids-border) shrink-0">
             <p class="text-[11px] text-center text-(--postonsteroids-text-muted)">
                 @if (appEdition.isProOrHigher) {
-                    Sign in required for {{ appEdition.label }} Edition. Test user: {{ testUserEmail }} / {{ testUserPassword }}
+                    Sign in with your email to access OnSteroid. New accounts start Free by default.
                 } @else {
                     You can use OnSteroid as a guest. Signing in is only needed to persist capsules to the cloud.
                 }

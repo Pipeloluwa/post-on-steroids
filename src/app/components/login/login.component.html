@@ -3,7 +3,7 @@
     <div class="absolute -top-32 -left-32 w-96 h-96 bg-(--postonsteroids-accent)/15 rounded-full blur-3xl pointer-events-none"></div>
     <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-(--postonsteroids-accent)/10 rounded-full blur-3xl pointer-events-none"></div>
 
-    <div class="w-full max-w-[460px] bg-(--postonsteroids-bg-secondary) rounded-2xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden relative z-10 transition-all">
+    <div class="w-full max-w-[440px] bg-(--postonsteroids-bg-secondary) rounded-2xl border border-(--postonsteroids-border) shadow-2xl overflow-hidden relative z-10 transition-all">
         <!-- Brand Header -->
         <div class="p-8 pb-6 border-b border-(--postonsteroids-border) text-center">
             <div class="inline-flex items-center justify-center mb-4">
@@ -11,16 +11,18 @@
             </div>
             <h1 class="text-2xl font-black tracking-tight text-(--postonsteroids-text-primary)">
                 OnSteroid<span class="text-(--postonsteroids-accent)">.</span>
+                @if (!appEdition.isProOrHigher) {
                 <span class="ml-1.5 align-middle text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-(--postonsteroids-accent)/15 text-(--postonsteroids-accent) border border-(--postonsteroids-accent)/30">
                     {{ appEdition.label }}
                 </span>
+                }
             </h1>
             <p class="text-[13px] font-medium text-(--postonsteroids-text-secondary) mt-1">
                 @switch (authService.authStep()) {
                     @case ('otp') { Verify your identity }
                     @case ('create-password') { {{ authService.isPasswordResetFlow() ? 'Set a new password for your account' : 'Create your account password' }} }
                     @case ('login-password') { Welcome back — enter your password }
-                    @default { {{ appEdition.isProOrHigher ? 'Sign in required to access ' + appEdition.label + ' workspace' : 'Sign in to sync your capsules, or continue as guest' }} }
+                    @default { {{ appEdition.isProOrHigher ? 'Enter your email to sign in or get started' : 'Sign in to sync your capsules, or continue as guest' }} }
                 }
             </p>
         </div>
@@ -45,155 +47,60 @@
 
             @switch (authService.authStep()) {
                 @case ('email') {
-                <!-- Step 1: Plan Selector + Auth Mode + Email Form -->
-                <div class="space-y-4">
-                    <!-- Plan Selector: Free (Sign Up/In), Pro (Personal · Sign Up/In), Enterprise (Sign In Only) -->
-                    <div class="space-y-2">
-                        <div class="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border)">
-                            <button type="button" (click)="authService.setAuthIntent('free')"
-                                class="py-1.5 px-2 rounded-lg text-[11.5px] font-bold transition-all cursor-pointer"
-                                [class.bg-(--postonsteroids-accent)]="authService.authIntent() === 'free'"
-                                [class.text-white]="authService.authIntent() === 'free'"
-                                [class.text-(--postonsteroids-text-muted)]="authService.authIntent() !== 'free'">
-                                Free
-                            </button>
-                            <button type="button" (click)="authService.setAuthIntent('pro')"
-                                class="py-1.5 px-2 rounded-lg text-[11.5px] font-bold transition-all cursor-pointer"
-                                [class.bg-sky-600]="authService.authIntent() === 'pro'"
-                                [class.text-white]="authService.authIntent() === 'pro'"
-                                [class.text-(--postonsteroids-text-muted)]="authService.authIntent() !== 'pro'">
-                                Pro · Personal
-                            </button>
-                            <button type="button" (click)="authService.setAuthIntent('enterprise')"
-                                class="py-1.5 px-2 rounded-lg text-[11.5px] font-bold transition-all cursor-pointer"
-                                [class.bg-amber-600]="authService.authIntent() === 'enterprise'"
-                                [class.text-white]="authService.authIntent() === 'enterprise'"
-                                [class.text-(--postonsteroids-text-muted)]="authService.authIntent() !== 'enterprise'">
-                                Enterprise
-                            </button>
+                <!-- Step 1: Single Consolidated Email Entry -->
+                <form (ngSubmit)="onSendOtp(false)" class="space-y-4">
+                    <div>
+                        <label for="user-email" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-2">
+                            Work or Personal Email
+                        </label>
+                        <div class="relative">
+                            <input id="user-email" type="email" [ngModel]="authService.userEmail()"
+                                (ngModelChange)="authService.userEmail.set($event)" name="email" required
+                                placeholder="name@company.com"
+                                autocomplete="email"
+                                class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
                         </div>
-
-                        @if (authService.authIntent() === 'enterprise') {
-                            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11.5px] text-amber-100 space-y-1">
-                                <div class="font-bold text-amber-300 flex items-center gap-1.5">
-                                    <mat-icon class="text-[14px]! size-[14px]!">verified_user</mat-icon>
-                                    <span>Enterprise · Sign In Only</span>
-                                </div>
-                                <p class="text-[11px] leading-relaxed text-amber-100/85">
-                                    Public Sign Up is disabled for Enterprise. Enter your company email — if it is your first sign-in, we will send a one-time OTP to verify your domain and register your password automatically.
-                                </p>
-                            </div>
-                        } @else {
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <button type="button" (click)="authService.setAuthAction('signin')"
-                                    class="py-1.5 px-3 rounded-lg text-[11.5px] font-semibold border transition-all cursor-pointer"
-                                    [class.bg-(--postonsteroids-accent)/15]="authService.authAction() === 'signin'"
-                                    [class.border-(--postonsteroids-accent)]="authService.authAction() === 'signin'"
-                                    [class.text-(--postonsteroids-accent)]="authService.authAction() === 'signin'"
-                                    [class.border-(--postonsteroids-border)]="authService.authAction() !== 'signin'"
-                                    [class.text-(--postonsteroids-text-muted)]="authService.authAction() !== 'signin'">
-                                    Sign In
-                                </button>
-                                <button type="button" (click)="authService.setAuthAction('signup')"
-                                    class="py-1.5 px-3 rounded-lg text-[11.5px] font-semibold border transition-all cursor-pointer"
-                                    [class.bg-(--postonsteroids-accent)/15]="authService.authAction() === 'signup'"
-                                    [class.border-(--postonsteroids-accent)]="authService.authAction() === 'signup'"
-                                    [class.text-(--postonsteroids-accent)]="authService.authAction() === 'signup'"
-                                    [class.border-(--postonsteroids-border)]="authService.authAction() !== 'signup'"
-                                    [class.text-(--postonsteroids-text-muted)]="authService.authAction() !== 'signup'">
-                                    Sign Up ({{ authService.authIntent() === 'pro' ? 'Pro' : 'Free' }})
-                                </button>
-                            </div>
-                        }
                     </div>
 
-                    <form (ngSubmit)="onSendOtp(false)" class="space-y-3.5">
-                        <div>
-                            <label for="user-email" class="block text-xs font-semibold uppercase tracking-wider text-(--postonsteroids-text-muted) mb-1.5">
-                                {{ authService.authIntent() === 'enterprise' ? 'Corporate Work Email' : 'Work or Personal Email' }}
-                            </label>
-                            <div class="relative">
-                                <input id="user-email" type="email" [ngModel]="authService.userEmail()"
-                                    (ngModelChange)="authService.userEmail.set($event)" name="email" required
-                                    [placeholder]="authService.authIntent() === 'enterprise' ? 'you@yourcompany.com' : 'name@company.com'"
-                                    autocomplete="email"
-                                    class="w-full h-12 bg-(--postonsteroids-bg-tertiary) border border-(--postonsteroids-border) rounded-xl px-4 text-[14px] text-(--postonsteroids-text-primary) placeholder-(--postonsteroids-text-muted) outline-none focus:border-(--postonsteroids-accent) focus:ring-2 focus:ring-(--postonsteroids-accent)/20 transition-all" />
-                            </div>
-                        </div>
-
-                        @if (authService.authIntent() === 'pro') {
-                            <div class="p-3 rounded-xl bg-sky-500/8 border border-sky-500/30 space-y-2">
-                                <div class="flex items-center justify-between gap-2 text-[11px]">
-                                    <label for="login-pro-key" class="font-bold text-sky-300">
-                                        Pro Key (Optional)
-                                    </label>
-                                    <a [href]="pricingPlansUrl" target="_blank" rel="noopener noreferrer"
-                                       class="font-semibold text-indigo-300 hover:text-indigo-200 underline inline-flex items-center gap-1">
-                                        <span>Pricing &amp; Plans ($9/mo)</span>
-                                        <mat-icon class="text-[12px]! size-[12px]!">open_in_new</mat-icon>
-                                    </a>
-                                </div>
-                                <input id="login-pro-key" type="text"
-                                    [ngModel]="authService.pendingLicenseCode()"
-                                    (ngModelChange)="onPendingLicenseInput($event)"
-                                    name="pendingLicenseCode"
-                                    placeholder="ONST-PRO-XXXX-XXXX-XXXX-XXXX"
-                                    autocomplete="off" spellcheck="false"
-                                    class="w-full h-9 px-3 rounded-lg border border-(--postonsteroids-border) bg-(--postonsteroids-bg-secondary) text-[12px] font-mono tracking-wider text-(--postonsteroids-text-primary) placeholder:text-(--postonsteroids-text-muted)/60 outline-none focus:border-sky-500" />
-                                <p class="text-[10.5px] text-sky-200/80">
-                                    Pro is Personal by default (single user). Skip if you want to sign up now and activate Pro later via OnSteroid Pricing.
-                                </p>
-                            </div>
+                    <button type="submit" [disabled]="authService.isAuthenticating() || !authService.userEmail()"
+                        class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
+                        @if (authService.isAuthenticating()) {
+                        <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Checking Account...</span>
+                        } @else {
+                        <span>Continue</span>
+                        <mat-icon class="text-[18px]! size-[18px]!">arrow_forward</mat-icon>
                         }
+                    </button>
 
-                        <button type="submit" [disabled]="authService.isAuthenticating() || !authService.userEmail()"
-                            class="w-full h-12 bg-(--postonsteroids-accent) hover:bg-(--postonsteroids-accent-hover) disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-(--postonsteroids-accent)/25 flex items-center justify-center gap-x-2 cursor-pointer">
-                            @if (authService.isAuthenticating()) {
-                            <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            <span>Checking Account...</span>
-                            } @else {
-                            <span>
-                                @if (authService.authIntent() === 'enterprise') {
-                                    Sign In to Enterprise
-                                } @else if (authService.authAction() === 'signup') {
-                                    Sign Up &amp; Verify Email
-                                } @else {
-                                    Continue to Sign In
-                                }
-                            </span>
-                            <mat-icon class="text-[18px]! size-[18px]!">arrow_forward</mat-icon>
-                            }
+                    @if (authService.userEmail()) {
+                    <div class="text-center pt-1 space-y-2">
+                        <button type="button" (click)="onForgotPassword()"
+                            [disabled]="authService.isAuthenticating() || authService.isOtpRateLimited()"
+                            class="text-xs text-(--postonsteroids-accent) hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
+                            Forgot your password? Reset via email OTP
                         </button>
+                    </div>
+                    }
 
-                        @if (authService.userEmail()) {
-                        <div class="text-center pt-1 space-y-2">
-                            <button type="button" (click)="onForgotPassword()"
-                                [disabled]="authService.isAuthenticating() || authService.isOtpRateLimited()"
-                                class="text-xs text-(--postonsteroids-accent) hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">
-                                Forgot your password? Reset via email OTP
-                            </button>
+                    @if (authService.isOtpRateLimited()) {
+                    <div class="p-3 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-2 animate-in fade-in">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
+                                <mat-icon class="text-[14px]! size-[14px]! text-status-warning">hourglass_top</mat-icon>
+                                <span>Next OTP request available in</span>
+                            </span>
+                            <span class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-status-warning font-mono font-bold">
+                                {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
+                            </span>
                         </div>
-                        }
-
-                        @if (authService.isOtpRateLimited()) {
-                        <div class="p-3 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-2 animate-in fade-in">
-                            <div class="flex items-center justify-between text-[11px]">
-                                <span class="flex items-center gap-1.5 text-(--postonsteroids-text-secondary) font-medium">
-                                    <mat-icon class="text-[14px]! size-[14px]! text-status-warning">hourglass_top</mat-icon>
-                                    <span>Next OTP request available in</span>
-                                </span>
-                                <span class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-status-warning font-mono font-bold">
-                                    {{ authService.otpCooldownFormatted() }} ({{ authService.otpCooldownSeconds() }}s)
-                                </span>
-                            </div>
-                            <div class="w-full h-1.5 bg-(--postonsteroids-border)/60 rounded-full overflow-hidden">
-                                <div class="h-full bg-amber-400 rounded-full transition-all duration-500"
-                                     [style.width.%]="authService.otpCooldownProgress()"></div>
-                            </div>
+                        <div class="w-full h-1.5 bg-(--postonsteroids-border)/60 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-400 rounded-full transition-all duration-500"
+                                 [style.width.%]="authService.otpCooldownProgress()"></div>
                         </div>
-                        }
-                    </form>
-                </div>
+                    </div>
+                    }
+                </form>
                 }
 
                 @case ('otp') {
@@ -488,28 +395,6 @@
                 }
             }
 
-            <!-- Built-in Test Account Quick Sign-In -->
-            <div class="p-3 rounded-xl bg-amber-500/8 border border-amber-500/30 space-y-2 text-[11.5px]">
-                <div class="flex items-center justify-between gap-2">
-                    <span class="font-bold text-amber-400 uppercase tracking-wider text-[10px]">Test Account (QA / Preview)</span>
-                    <span class="font-mono text-[10px] text-(--postonsteroids-text-muted)">OTP: 123456</span>
-                </div>
-                <div class="font-mono text-[11px] text-(--postonsteroids-text-secondary) flex flex-col gap-0.5">
-                    <span>Email: <strong class="text-(--postonsteroids-text-primary) select-all">{{ testUserEmail }}</strong></span>
-                    <span>Password: <strong class="text-(--postonsteroids-text-primary) select-all">{{ testUserPassword }}</strong></span>
-                </div>
-                <div class="flex items-center gap-2 pt-0.5">
-                    <button type="button" (click)="fillTestCredentials()"
-                        class="flex-1 py-1.5 px-2.5 rounded-lg bg-(--postonsteroids-bg-tertiary) hover:bg-(--postonsteroids-bg-hover) border border-(--postonsteroids-border) text-[11px] font-semibold text-(--postonsteroids-text-primary) cursor-pointer transition-colors">
-                        Fill Credentials
-                    </button>
-                    <button type="button" (click)="quickSignInTestUser()"
-                        class="flex-1 py-1.5 px-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold cursor-pointer transition-colors">
-                        Sign In as Test User
-                    </button>
-                </div>
-            </div>
-
             @if (!appEdition.isProOrHigher) {
             <!-- Continue without logging in (Community Edition only) -->
             <div class="pt-2 border-t border-(--postonsteroids-border)/60">
@@ -526,7 +411,7 @@
         <div class="bg-(--postonsteroids-bg-tertiary) p-4 border-t border-(--postonsteroids-border) text-center">
             <p class="text-[11px] text-(--postonsteroids-text-muted)">
                 @if (appEdition.isProOrHigher) {
-                    Authentication is mandatory in OnSteroid {{ appEdition.label }} Edition. Workspace UI &amp; source remain protected until signed in.
+                    Sign in with your email to access OnSteroid. New accounts start Free by default.
                 } @else {
                     You can use OnSteroid as a guest. Signing in is only needed to persist capsules to the cloud.
                 }

@@ -51,8 +51,6 @@ export interface ApiResponse<T> {
 }
 
 export type AuthStep = 'email' | 'otp' | 'create-password' | 'login-password' | 'change-password';
-export type AuthPlanIntent = 'free' | 'pro' | 'enterprise';
-export type AuthActionMode = 'signin' | 'signup';
 
 export interface PasswordValidationState {
     minLength: boolean;
@@ -110,11 +108,6 @@ export class AuthService {
     confirmPassword = signal<string>('');
 
     authStep = signal<AuthStep>('email');
-    authIntent = signal<AuthPlanIntent>(
-        APP_EDITION.id === 'enterprise' ? 'enterprise' : APP_EDITION.id === 'professional' ? 'pro' : 'free'
-    );
-    authAction = signal<AuthActionMode>('signin');
-    pendingLicenseCode = signal<string>('');
     isOtpSent = signal<boolean>(false);
     isPasswordResetFlow = signal<boolean>(false);
     isAuthenticating = signal<boolean>(false);
@@ -463,31 +456,6 @@ export class AuthService {
         return true;
     }
 
-    setAuthIntent(intent: AuthPlanIntent, action?: AuthActionMode) {
-        this.authIntent.set(intent);
-        if (intent === 'enterprise') {
-            // Enterprise supports Sign In only; new company users are automatically OTP-verified & registered on first sign-in.
-            this.authAction.set('signin');
-        } else if (action) {
-            this.authAction.set(action);
-        }
-        if (intent !== 'pro') {
-            this.pendingLicenseCode.set('');
-        }
-        this.errorMessage.set(null);
-        this.successMessage.set(null);
-    }
-
-    setAuthAction(action: AuthActionMode) {
-        if (this.authIntent() === 'enterprise') {
-            this.authAction.set('signin');
-            return;
-        }
-        this.authAction.set(action);
-        this.errorMessage.set(null);
-        this.successMessage.set(null);
-    }
-
     resetToEmailStep() {
         this.authStep.set('email');
         this.isOtpSent.set(false);
@@ -496,7 +464,6 @@ export class AuthService {
         this.currentPassword.set('');
         this.password.set('');
         this.confirmPassword.set('');
-        this.pendingLicenseCode.set('');
         this.errorMessage.set(null);
         this.successMessage.set(null);
     }
@@ -518,7 +485,7 @@ export class AuthService {
                 this.isOtpSent.set(true);
                 this.authStep.set('otp');
                 this.otp.set('');
-                this.successMessage.set(`Test verification code is ${AuthService.TEST_USER_OTP} (or sign in with password ${AuthService.TEST_USER_PASSWORD}).`);
+                this.successMessage.set(`Verification code sent to ${email}`);
                 return true;
             }
             this.isOtpSent.set(false);
@@ -536,16 +503,11 @@ export class AuthService {
                     this.http.post<ApiResponse<SendOtpResponseData>>(`${API_BASE_URL}/auth/check-email`, { email, forceOtp: false })
                 );
                 if (checkRes?.data?.hasPassword) {
-                    const wasSignupChoice = this.authIntent() !== 'enterprise' && this.authAction() === 'signup';
                     this.isOtpSent.set(false);
                     this.authStep.set('login-password');
                     this.password.set('');
                     this.confirmPassword.set('');
-                    this.successMessage.set(
-                        wasSignupChoice
-                            ? 'This email already has an account — enter your password to sign in.'
-                            : null
-                    );
+                    this.successMessage.set(null);
                     this.isAuthenticating.set(false);
                     return true;
                 }
@@ -574,9 +536,7 @@ export class AuthService {
                     this.authStep.set('otp');
                     this.otp.set('');
                     this.startOtpCooldown(data?.retryAfterSeconds ?? 60);
-                    this.successMessage.set(res.message || (this.authIntent() === 'enterprise'
-                        ? `First-time Enterprise verification code sent to ${email}`
-                        : `Verification code sent to ${email}`));
+                    this.successMessage.set(res.message || `Verification code sent to ${email}`);
                     this.isAuthenticating.set(false);
                     resolve(true);
                 },
@@ -658,7 +618,7 @@ export class AuthService {
                 this.otp.set('');
                 return this.loginAsTestUser(email);
             }
-            this.errorMessage.set(`For the built-in test user, enter OTP ${AuthService.TEST_USER_OTP}.`);
+            this.errorMessage.set('Invalid or expired OTP. Please try again.');
             this.otp.set('');
             return false;
         }
@@ -682,9 +642,7 @@ export class AuthService {
                         res.message ||
                         (this.isPasswordResetFlow()
                             ? 'Code verified! Enter your new password below.'
-                            : this.authIntent() === 'enterprise'
-                                ? 'Corporate email OTP verified! Create your password to finish Enterprise registration.'
-                                : 'Email verified! Create a strong password to complete your account.')
+                            : 'Email verified! Create a strong password to complete your account.')
                     );
                     resolve(false);
                 },
@@ -834,7 +792,7 @@ export class AuthService {
             if (this.isTestUserPassword(password)) {
                 return this.loginAsTestUser(email);
             }
-            this.errorMessage.set(`Invalid password for test user. Expected ${AuthService.TEST_USER_PASSWORD}.`);
+            this.errorMessage.set('Invalid email or password.');
             return false;
         }
 
@@ -858,18 +816,8 @@ export class AuthService {
         });
     }
 
-    private async activatePendingProKeyAfterAuth(code: string): Promise<void> {
-        const res = await this.subscriptionService.activateRegistrationCode(code);
-        if (res.ok) {
-            this.notificationService.notify('Pro (Personal) license activated!', 'success');
-        } else if (res.message) {
-            this.notificationService.notify(`Signed in, but Pro key could not be activated: ${res.message}`, 'warning');
-        }
-    }
-
     private finalizeLogin(data: AuthLoginResponseData) {
         const prevUser = this.currentUser();
-        const pendingProCode = this.authIntent() === 'pro' ? this.pendingLicenseCode().trim() : '';
 
         if (prevUser && prevUser.id !== data.user.id) {
             this.onLogout.next(prevUser);
@@ -883,13 +831,8 @@ export class AuthService {
         this.showAuthModal.set(false);
         const isTest = (data.token || '').startsWith('onsteroid-test-token-');
         this.syncSubscriptionFromUser(data.user, isTest);
-        this.pendingLicenseCode.set('');
         if (!isTest) {
-            if (pendingProCode) {
-                void this.activatePendingProKeyAfterAuth(pendingProCode);
-            } else {
-                void this.subscriptionService.refreshStatusFromBackend();
-            }
+            void this.subscriptionService.refreshStatusFromBackend();
         }
         this.authStep.set('email');
         this.isOtpSent.set(false);

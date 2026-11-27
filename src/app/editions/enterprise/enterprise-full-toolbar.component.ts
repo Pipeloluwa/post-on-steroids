@@ -29,19 +29,25 @@ import { TabStateService } from '../../shared/services/tab.state.service';
       } @else if (!subscription.isOpenSourceCommunityBuild) {
         @if (!subscription.isProOrHigher()) {
           <button type="button" (click)="subscription.openHomepagePricing('pro')"
-                  title="Activate Pro ($9/mo Personal) on OnSteroid Pricing & Plans"
+                  title="Upgrade to Pro on OnSteroid Pricing & Plans"
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-[10.5px] font-bold text-indigo-300 cursor-pointer transition-colors shrink-0">
             <mat-icon class="text-[13px]! size-[13px]!">rocket_launch</mat-icon>
-            <span>Activate Pro</span>
+            <span>Upgrade Pro</span>
           </button>
         }
+        <button type="button" (click)="subscription.openHomepagePricing('enterprise')"
+                title="Explore Enterprise plans on OnSteroid Pricing"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-[10.5px] font-bold text-amber-300 cursor-pointer transition-colors shrink-0">
+          <mat-icon class="text-[13px]! size-[13px]!">business</mat-icon>
+          <span>Enterprise</span>
+        </button>
         <button type="button" (click)="subscription.openUpgradeModal(subscription.isProOrHigher() ? 'enterprise' : 'professional')"
                 [title]="subscription.isPersonalLicense()
-                  ? 'Personal Pro license active — Enterprise features cannot be bypassed'
-                  : (subscription.isProOrHigher() ? 'Enterprise requires OTP-verified organization license' : 'Enter an existing Pro or Enterprise Registration Key')"
+                  ? 'Personal Pro license active — click for Enterprise info or key entry'
+                  : 'Enter a Pro or Enterprise Registration Key'"
                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-(--postonsteroids-bg-tertiary) hover:bg-amber-500/15 border border-(--postonsteroids-border) hover:border-amber-500/40 text-[10.5px] font-semibold text-(--postonsteroids-text-muted) hover:text-amber-300 cursor-pointer transition-colors shrink-0">
           <mat-icon class="text-[13px]! size-[13px]! text-amber-400">{{ subscription.isPersonalLicense() ? 'lock' : 'vpn_key' }}</mat-icon>
-          <span>{{ subscription.isPersonalLicense() ? 'Personal · Ent Locked' : (subscription.isProOrHigher() ? 'Suite (Ent)' : 'Redeem Key') }}</span>
+          <span>{{ subscription.isPersonalLicense() ? 'Personal · Ent Locked' : 'Key' }}</span>
         </button>
       }
     </div>

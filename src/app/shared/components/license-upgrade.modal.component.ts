@@ -57,7 +57,7 @@ const TIER_CARDS: TierCardSpec[] = [
     highlights: [
       'Full Documentation & Enterprise BRD Studio',
       'TestRail suite & PDF/HTML compliance exports',
-      'Domain OTP enrollment & multi-seat volume keys',
+      'Organization team & multi-seat volume licensing',
     ],
   },
 ];
@@ -112,7 +112,7 @@ const TIER_CARDS: TierCardSpec[] = [
                   </span>
                 </div>
                 <p class="text-[11.5px] text-(--postonsteroids-text-muted) truncate mt-0.5">
-                  Activate a key or automatically work under an OTP-verified organization email domain license.
+                  Activate a license key or visit OnSteroid Pricing to upgrade to Pro or Enterprise.
                 </p>
               </div>
             </div>
@@ -234,7 +234,7 @@ const TIER_CARDS: TierCardSpec[] = [
               </div>
             }
 
-            <!-- Requested Feature Callout / Free -> Pro Pricing Routing -->
+            <!-- Requested Feature Callout / Website Upgrade Routing -->
             @if (subscription.requestedPlan(); as reqPlan) {
               <div class="rounded-xl border border-indigo-500/30 bg-indigo-500/8 px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-[12px] text-indigo-200">
                 <div class="flex items-center gap-2">
@@ -245,31 +245,42 @@ const TIER_CARDS: TierCardSpec[] = [
                     license{{ subscription.isPersonalLicense() && reqPlan === 'enterprise' ? ' — Personal individual licenses cannot unlock Enterprise.' : '.' }}
                   </span>
                 </div>
-                @if (reqPlan === 'professional' && subscription.tier() === 'community') {
-                  <a [href]="subscription.getHomepagePricingUrl('pro')"
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold shrink-0 no-underline transition-colors">
-                    <span>Get Pro on Pricing &amp; Plans</span>
-                    <mat-icon class="text-[13px]! size-[13px]!">open_in_new</mat-icon>
-                  </a>
-                }
+                <a [href]="subscription.getHomepagePricingUrl(reqPlan === 'enterprise' ? 'enterprise' : 'pro')"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-[11px] font-bold shrink-0 no-underline transition-colors"
+                   [class.bg-amber-600]="reqPlan === 'enterprise'"
+                   [class.hover:bg-amber-500]="reqPlan === 'enterprise'"
+                   [class.bg-indigo-600]="reqPlan !== 'enterprise'"
+                   [class.hover:bg-indigo-500]="reqPlan !== 'enterprise'">
+                  <span>{{ reqPlan === 'enterprise' ? 'Get Enterprise on Website' : 'Upgrade to Pro on Website' }}</span>
+                  <mat-icon class="text-[13px]! size-[13px]!">open_in_new</mat-icon>
+                </a>
               </div>
             } @else if (subscription.tier() === 'community') {
               <div class="rounded-xl border border-indigo-500/30 bg-indigo-500/8 px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-[12px] text-indigo-200">
                 <div class="flex items-center gap-2">
                   <mat-icon class="text-[16px]! size-[16px]! text-indigo-400 shrink-0">rocket_launch</mat-icon>
                   <span>
-                    Using <strong>Free (Community)</strong>? Activate <strong>Pro (Personal · $9/mo or $84/yr)</strong> from the OnSteroid Homepage Pricing page and redeem your key below.
+                    New accounts start on <strong>Free (Community)</strong>. Upgrade to <strong>Pro ($9/mo)</strong> or inquire about <strong>Enterprise</strong> on the OnSteroid website, then redeem your key below.
                   </span>
                 </div>
-                <a [href]="subscription.getHomepagePricingUrl('pro')"
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold shrink-0 no-underline transition-colors">
-                  <span>View Pricing &amp; Get Pro</span>
-                  <mat-icon class="text-[13px]! size-[13px]!">open_in_new</mat-icon>
-                </a>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <a [href]="subscription.getHomepagePricingUrl('pro')"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold no-underline transition-colors">
+                    <span>Upgrade Pro</span>
+                    <mat-icon class="text-[13px]! size-[13px]!">open_in_new</mat-icon>
+                  </a>
+                  <a [href]="subscription.getHomepagePricingUrl('enterprise')"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold no-underline transition-colors">
+                    <span>Enterprise</span>
+                    <mat-icon class="text-[13px]! size-[13px]!">open_in_new</mat-icon>
+                  </a>
+                </div>
               </div>
             }
 
@@ -489,18 +500,22 @@ const TIER_CARDS: TierCardSpec[] = [
                       </span>
                     } @else if (card.id === 'community') {
                       <span>Included with every account</span>
-                    } @else if (card.id === 'enterprise' && subscription.isPersonalLicense()) {
-                      <span class="text-sky-300 font-semibold">Blocked on Personal Individual keys</span>
-                    } @else if (card.id === 'professional') {
+                    } @else if (card.id === 'enterprise') {
+                      <span class="text-sky-300 font-semibold">{{ subscription.isPersonalLicense() ? 'Blocked on Personal Pro' : 'Organization license' }}</span>
+                      <a [href]="subscription.getHomepagePricingUrl('enterprise')"
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         class="text-amber-400 hover:text-amber-300 font-bold underline shrink-0">
+                        Get Enterprise ↗
+                      </a>
+                    } @else {
                       <span>Personal key (<code class="font-mono">ONST-PRO-...</code>)</span>
                       <a [href]="subscription.getHomepagePricingUrl('pro')"
                          target="_blank"
                          rel="noopener noreferrer"
                          class="text-indigo-400 hover:text-indigo-300 font-bold underline shrink-0">
-                        Pricing ↗
+                        Upgrade Pro ↗
                       </a>
-                    } @else {
-                      <span>Sign in with OTP-verified company email</span>
                     }
                   </div>
                 </div>

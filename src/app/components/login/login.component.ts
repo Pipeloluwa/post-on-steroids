@@ -4,8 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { AuthService } from '../../shared/services/auth.service';
-import { DESKTOP_DOWNLOADS_CONFIG } from '../../shared/constants/desktop-downloads.constants';
-import { formatRegistrationCodeInput } from '../../shared/utils/license-code.util';
 import { APP_EDITION } from '../../../environments/edition';
 
 @Component({
@@ -18,9 +16,6 @@ export class LoginComponent implements OnInit {
     authService = inject(AuthService);
     private router = inject(Router);
     readonly appEdition = APP_EDITION;
-    readonly pricingPlansUrl = `${DESKTOP_DOWNLOADS_CONFIG.homepagePricingUrl}?plan=pro`;
-    readonly testUserEmail = AuthService.TEST_USER_EMAIL;
-    readonly testUserPassword = AuthService.TEST_USER_PASSWORD;
 
     isOtpMasked = signal<boolean>(true);
     isPasswordMasked = signal<boolean>(true);
@@ -85,23 +80,8 @@ export class LoginComponent implements OnInit {
         }
     }
 
-    fillTestCredentials() {
-        this.authService.fillTestUserCredentials();
-    }
-
-    quickSignInTestUser() {
-        const ok = this.authService.loginAsTestUser();
-        if (ok) {
-            this.router.navigate(['/']);
-        }
-    }
-
     async onForgotPassword() {
         await this.authService.startPasswordReset();
-    }
-
-    onPendingLicenseInput(raw: string) {
-        this.authService.pendingLicenseCode.set(formatRegistrationCodeInput(raw));
     }
 
     onBackToEmail() {
